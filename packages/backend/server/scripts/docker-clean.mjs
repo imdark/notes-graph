@@ -1,5 +1,6 @@
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
@@ -22,6 +23,31 @@ const COMPRESSIBLE_EXTS = new Set([
 ]);
 // Below this, the compressed header overhead isn't worth a second file.
 const MIN_COMPRESS_BYTES = 1024;
+
+/**
+ * Brotli quality. 10 rather than 11 on purpose.
+ *
+ * Measured on a real 7.33 MiB prod bundle: q11 took 5.9s for 1.18 MiB, q10
+ * took 2.5s for 1.20 MiB. That is 2.4x the speed for 1.7% more bytes. q9 is
+ * faster again (0.2s) but 11% larger, which is the wrong trade on an
+ * egress-throttled box where these bytes are the whole point.
+ *
+ * This step used to dominate a deploy - ~20 minutes pinning one core, with the
+ * build log silent throughout.
+ */
+const BROTLI_QUALITY = Number(process.env.NOTESGRAPH_BROTLI_QUALITY) || 10;
+
+/**
+ * How many files to compress at once.
+ *
+ * The old code awaited each file in turn, so one core did all the work while
+ * the other sat idle. Default to the core count; brotli+gzip per file is two
+ * libuv tasks, which matches the default UV_THREADPOOL_SIZE of 4 on the
+ * 2-core prod box.
+ */
+const COMPRESS_CONCURRENCY =
+  Number(process.env.NOTESGRAPH_COMPRESS_CONCURRENCY) ||
+  Math.max(1, os.cpus().length);
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_APP_ROOT = path.resolve(SCRIPT_DIR, '..');
@@ -112,13 +138,13 @@ async function deleteFilesByExtension(rootDir, extension) {
 
 // Write `<file>.br` and `<file>.gz` next to every compressible static asset so
 // the server can serve them directly (see selfhost/static.ts). Runs once, at
-// image-build time, so we can afford brotli's slow max quality.
-async function precompressStatic(rootDir) {
-  if (!(await exists(rootDir))) {
-    return 0;
-  }
-
-  let compressed = 0;
+// image-build time.
+//
+// Two passes: collect the candidates, then compress them with bounded
+// concurrency. Walking and compressing in one serial loop left a core idle and
+// made this the slowest step of a deploy by a wide margin.
+async function collectCompressible(rootDir) {
+  const files = [];
   const stack = [rootDir];
 
   while (stack.length) {
@@ -147,43 +173,90 @@ async function precompressStatic(rootDir) {
         if (!COMPRESSIBLE_EXTS.has(path.extname(dirent.name))) {
           continue;
         }
-
-        let buf;
-        try {
-          buf = await fs.readFile(fullPath);
-        } catch (err) {
-          debug(`failed to read ${fullPath}: ${err?.message ?? String(err)}`);
-          continue;
-        }
-        if (buf.length < MIN_COMPRESS_BYTES) {
-          continue;
-        }
-
-        try {
-          const [br, gz] = await Promise.all([
-            brotliCompress(buf, {
-              params: {
-                [zlib.constants.BROTLI_PARAM_QUALITY]: 11,
-                [zlib.constants.BROTLI_PARAM_SIZE_HINT]: buf.length,
-              },
-            }),
-            gzipCompress(buf, { level: 9 }),
-          ]);
-          await Promise.all([
-            fs.writeFile(`${fullPath}.br`, br),
-            fs.writeFile(`${fullPath}.gz`, gz),
-          ]);
-          compressed += 1;
-        } catch (err) {
-          debug(
-            `failed to compress ${fullPath}: ${err?.message ?? String(err)}`
-          );
-        }
+        files.push(fullPath);
       }
     } finally {
       await dir.close().catch(() => {});
     }
   }
+
+  return files;
+}
+
+async function compressOne(fullPath) {
+  let buf;
+  try {
+    buf = await fs.readFile(fullPath);
+  } catch (err) {
+    debug(`failed to read ${fullPath}: ${err?.message ?? String(err)}`);
+    return false;
+  }
+  if (buf.length < MIN_COMPRESS_BYTES) {
+    return false;
+  }
+
+  try {
+    const [br, gz] = await Promise.all([
+      brotliCompress(buf, {
+        params: {
+          [zlib.constants.BROTLI_PARAM_QUALITY]: BROTLI_QUALITY,
+          [zlib.constants.BROTLI_PARAM_SIZE_HINT]: buf.length,
+        },
+      }),
+      gzipCompress(buf, { level: 9 }),
+    ]);
+    await Promise.all([
+      fs.writeFile(`${fullPath}.br`, br),
+      fs.writeFile(`${fullPath}.gz`, gz),
+    ]);
+    return true;
+  } catch (err) {
+    debug(`failed to compress ${fullPath}: ${err?.message ?? String(err)}`);
+    return false;
+  }
+}
+
+async function precompressStatic(rootDir) {
+  if (!(await exists(rootDir))) {
+    return 0;
+  }
+
+  const files = await collectCompressible(rootDir);
+  if (!files.length) {
+    return 0;
+  }
+
+  // Biggest first: with a fixed number of workers, starting the long jobs last
+  // leaves everyone waiting on one straggler at the end.
+  const sized = await Promise.all(
+    files.map(async file => {
+      const stat = await fs.stat(file).catch(() => null);
+      return { file, size: stat?.size ?? 0 };
+    })
+  );
+  sized.sort((a, b) => b.size - a.size);
+
+  const started = Date.now();
+  let compressed = 0;
+  let next = 0;
+
+  const worker = async () => {
+    while (next < sized.length) {
+      const { file } = sized[next++];
+      if (await compressOne(file)) {
+        compressed += 1;
+      }
+    }
+  };
+
+  const workers = Math.min(COMPRESS_CONCURRENCY, sized.length);
+  await Promise.all(Array.from({ length: workers }, worker));
+
+  log(
+    `precompressed ${compressed} files (brotli q${BROTLI_QUALITY}, ${workers} workers) in ${Math.round(
+      (Date.now() - started) / 1000
+    )}s`
+  );
 
   return compressed;
 }
