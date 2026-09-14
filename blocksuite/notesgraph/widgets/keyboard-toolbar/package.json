@@ -1,0 +1,52 @@
+{
+  "name": "@blocksuite/notesgraph-widget-keyboard-toolbar",
+  "description": "NotesGraph keyboard toolbar widget.",
+  "type": "module",
+  "scripts": {
+    "build": "tsc"
+  },
+  "sideEffects": false,
+  "keywords": [],
+  "author": "toeverything",
+  "license": "MIT",
+  "dependencies": {
+    "@blocksuite/data-view": "workspace:*",
+    "@blocksuite/global": "workspace:*",
+    "@blocksuite/icons": "^2.2.17",
+    "@blocksuite/notesgraph-block-attachment": "workspace:*",
+    "@blocksuite/notesgraph-block-database": "workspace:*",
+    "@blocksuite/notesgraph-block-embed": "workspace:*",
+    "@blocksuite/notesgraph-block-image": "workspace:*",
+    "@blocksuite/notesgraph-block-latex": "workspace:*",
+    "@blocksuite/notesgraph-block-list": "workspace:*",
+    "@blocksuite/notesgraph-block-note": "workspace:*",
+    "@blocksuite/notesgraph-block-paragraph": "workspace:*",
+    "@blocksuite/notesgraph-block-surface": "workspace:*",
+    "@blocksuite/notesgraph-block-surface-ref": "workspace:*",
+    "@blocksuite/notesgraph-block-table": "workspace:*",
+    "@blocksuite/notesgraph-components": "workspace:*",
+    "@blocksuite/notesgraph-ext-loader": "workspace:*",
+    "@blocksuite/notesgraph-fragment-doc-title": "workspace:*",
+    "@blocksuite/notesgraph-inline-latex": "workspace:*",
+    "@blocksuite/notesgraph-inline-link": "workspace:*",
+    "@blocksuite/notesgraph-inline-preset": "workspace:*",
+    "@blocksuite/notesgraph-model": "workspace:*",
+    "@blocksuite/notesgraph-rich-text": "workspace:*",
+    "@blocksuite/notesgraph-shared": "workspace:*",
+    "@blocksuite/std": "workspace:*",
+    "@preact/signals-core": "^1.8.0",
+    "@toeverything/theme": "workspace:*",
+    "lit": "^3.2.0"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./view": "./src/view.ts"
+  },
+  "files": [
+    "src",
+    "dist",
+    "!src/__tests__",
+    "!dist/__tests__"
+  ],
+  "version": "0.26.3"
+}

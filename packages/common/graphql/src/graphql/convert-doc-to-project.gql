@@ -1,0 +1,10 @@
+mutation convertDocToProject($input: ConvertDocToProjectInput!) {
+  convertDocToProject(input: $input) {
+    id
+    workspaceId
+    name
+    createdBy
+    createdAt
+    docIds
+  }
+}

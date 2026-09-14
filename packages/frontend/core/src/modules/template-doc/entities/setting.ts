@@ -1,0 +1,35 @@
+import { Entity } from '@notesgraph/infra';
+
+import type { TemplateDocSettingStore } from '../store/setting';
+
+export class TemplateDocSetting extends Entity {
+  constructor(private readonly store: TemplateDocSettingStore) {
+    super();
+  }
+
+  loading$ = this.store.watchIsLoading();
+  setting$ = this.store.watchSetting();
+  enablePageTemplate$ = this.store.watchSettingKey('enablePageTemplate');
+  pageTemplateDocId$ = this.store.watchSettingKey('pageTemplateId');
+  journalTemplateDocId$ = this.store.watchSettingKey('journalTemplateId');
+  // Defaults to on when unset.
+  enableJournalProjectSections$ = this.store
+    .watchSettingKey('journalProjectSections')
+    .map(value => value ?? true);
+
+  togglePageTemplate(enable: boolean) {
+    this.store.updateSetting('enablePageTemplate', enable);
+  }
+
+  toggleJournalProjectSections(enable: boolean) {
+    this.store.updateSetting('journalProjectSections', enable);
+  }
+
+  updatePageTemplateDocId(id?: string) {
+    this.store.updateSetting('pageTemplateId', id);
+  }
+
+  updateJournalTemplateDocId(id?: string) {
+    this.store.updateSetting('journalTemplateId', id);
+  }
+}

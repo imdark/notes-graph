@@ -1,0 +1,33 @@
+{
+  "manifest_version": 3,
+  "name": "NotesGraph Web Clipper",
+  "version": "0.1.0",
+  "description": "Clip the current page — its text and images — into NotesGraph, from your own logged-in browser session (so it works on LinkedIn/Facebook, where servers can't reach).",
+  "permissions": ["activeTab", "scripting", "tabs", "storage"],
+  "host_permissions": ["<all_urls>"],
+  "background": { "service_worker": "background.js" },
+  "content_scripts": [
+    {
+      "matches": [
+        "*://*.linkedin.com/*",
+        "*://*.facebook.com/*",
+        "*://*.fb.watch/*"
+      ],
+      "js": ["mse-hook.js"],
+      "run_at": "document_start",
+      "world": "MAIN",
+      "all_frames": true
+    }
+  ],
+  "action": {
+    "default_title": "Clip to NotesGraph",
+    "default_popup": "popup.html"
+  },
+  "options_page": "options.html",
+  "commands": {
+    "clip-page": {
+      "suggested_key": { "default": "Ctrl+Shift+Y", "mac": "Command+Shift+Y" },
+      "description": "Clip the current page to NotesGraph"
+    }
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "name": "@types/notesgraph__env",
+  "private": true,
+  "types": "./__all.d.ts",
+  "type": "module",
+  "dependencies": {
+    "@blocksuite/notesgraph": "workspace:*",
+    "@notesgraph/env": "workspace:*"
+  },
+  "version": "0.26.3"
+}

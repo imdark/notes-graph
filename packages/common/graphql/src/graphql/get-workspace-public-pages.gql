@@ -1,0 +1,9 @@
+query getWorkspacePublicPages($workspaceId: String!) {
+  workspace(id: $workspaceId) {
+    publicDocs {
+      id
+      mode
+      publicRole
+    }
+  }
+}

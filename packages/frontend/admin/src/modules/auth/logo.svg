@@ -1,0 +1,14 @@
+<svg width="256" height="256" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="ngv-accent" x1="80" y1="80" x2="176" y2="176" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#7C6CFF"/>
+      <stop offset="1" stop-color="#22D3EE"/>
+    </linearGradient>
+  </defs>
+  <rect width="256" height="256" rx="59" fill="#14141C"/>
+  <path d="M80 176V80M80 80l96 96M176 176V80" stroke="#8B7DFF" stroke-width="16" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="80" cy="80" r="23" fill="#E7E7F2"/>
+  <circle cx="80" cy="176" r="23" fill="#E7E7F2"/>
+  <circle cx="176" cy="176" r="23" fill="#E7E7F2"/>
+  <circle cx="176" cy="80" r="28" fill="url(#ngv-accent)"/>
+</svg>

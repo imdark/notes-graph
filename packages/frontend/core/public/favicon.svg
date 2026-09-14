@@ -1,0 +1,11 @@
+<svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="ngStroke" x1="18" y1="33" x2="30" y2="15" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#8B7DFF"/>
+      <stop offset="1" stop-color="#32C1F1"/>
+    </linearGradient>
+  </defs>
+  <rect width="48" height="48" rx="11" fill="#14141C"/>
+  <path d="M18 33V15l12 18V15" stroke="url(#ngStroke)" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="30" cy="15" r="4" fill="#32C1F1"/>
+</svg>

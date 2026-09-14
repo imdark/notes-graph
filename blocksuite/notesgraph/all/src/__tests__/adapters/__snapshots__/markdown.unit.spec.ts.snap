@@ -1,0 +1,94 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`snapshot to markdown > imports obsidian vault fixtures 1`] = `
+{
+  "entry": {
+    "children": [
+      {
+        "children": [
+          {
+            "children": [
+              {
+                "delta": [
+                  {
+                    "insert": "Panel
+Body line",
+                  },
+                ],
+                "flavour": "notesgraph:paragraph",
+                "type": "text",
+              },
+            ],
+            "emoji": "💡",
+            "flavour": "notesgraph:callout",
+          },
+          {
+            "flavour": "notesgraph:attachment",
+            "name": "archive.zip",
+            "style": "horizontalThin",
+          },
+          {
+            "delta": [
+              {
+                "footnote": {
+                  "label": "1",
+                  "reference": {
+                    "title": "reference body",
+                    "type": "url",
+                  },
+                },
+                "insert": " ",
+              },
+            ],
+            "flavour": "notesgraph:paragraph",
+            "type": "text",
+          },
+          {
+            "flavour": "notesgraph:divider",
+          },
+          {
+            "delta": [
+              {
+                "insert": "after note",
+              },
+            ],
+            "flavour": "notesgraph:paragraph",
+            "type": "text",
+          },
+          {
+            "delta": [
+              {
+                "insert": " ",
+                "reference": {
+                  "page": "linked",
+                  "type": "LinkedPage",
+                },
+              },
+            ],
+            "flavour": "notesgraph:paragraph",
+            "type": "text",
+          },
+          {
+            "delta": [
+              {
+                "insert": "Sources",
+              },
+            ],
+            "flavour": "notesgraph:paragraph",
+            "type": "h6",
+          },
+          {
+            "flavour": "notesgraph:bookmark",
+          },
+        ],
+        "flavour": "notesgraph:note",
+      },
+    ],
+    "flavour": "notesgraph:page",
+  },
+  "titles": [
+    "entry",
+    "linked",
+  ],
+}
+`;

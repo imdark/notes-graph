@@ -1,0 +1,42 @@
+{
+  "name": "@notesgraph/android",
+  "version": "0.26.3",
+  "description": "NotesGraph Desktop Web application",
+  "private": true,
+  "scripts": {
+    "build": "notesgraph bundle && node prune-dist.mjs",
+    "dev": "notesgraph bundle --dev",
+    "sync": "cap sync",
+    "sync:dev": "CAP_SERVER_URL=http://10.0.2.2:8080 cap sync",
+    "studio": "cap open android"
+  },
+  "dependencies": {
+    "@blocksuite/notesgraph": "workspace:*",
+    "@capacitor/android": "^7.0.0",
+    "@capacitor/app": "^7.0.0",
+    "@capacitor/core": "^7.0.0",
+    "@capacitor/keyboard": "^7.0.0",
+    "@capacitor/status-bar": "^7.0.0",
+    "@capgo/inappbrowser": "^8.0.0",
+    "@notesgraph/component": "workspace:*",
+    "@notesgraph/core": "workspace:*",
+    "@notesgraph/env": "workspace:*",
+    "@notesgraph/i18n": "workspace:*",
+    "@notesgraph/infra": "workspace:*",
+    "@notesgraph/mobile-shared": "workspace:*",
+    "@notesgraph/nbstore": "workspace:*",
+    "@notesgraph/track": "workspace:*",
+    "async-call-rpc": "^6.4.2",
+    "idb": "^8.0.0",
+    "next-themes": "^0.4.4",
+    "react": "^19.2.1",
+    "react-dom": "^19.2.1",
+    "react-router-dom": "^6.30.4"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^7.6.5",
+    "@types/react": "^19.0.1",
+    "@types/react-dom": "^19.0.2",
+    "typescript": "^5.9.3"
+  }
+}

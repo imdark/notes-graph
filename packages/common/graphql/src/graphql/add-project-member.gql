@@ -1,0 +1,9 @@
+mutation addProjectMember(
+  $projectId: String!
+  $userId: String!
+  $role: ProjectMemberRole
+) {
+  addProjectMember(
+    input: { projectId: $projectId, userId: $userId, role: $role }
+  )
+}

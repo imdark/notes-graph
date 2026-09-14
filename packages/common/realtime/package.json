@@ -1,0 +1,13 @@
+{
+  "name": "@notesgraph/realtime",
+  "type": "module",
+  "version": "0.26.3",
+  "private": true,
+  "sideEffects": false,
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@notesgraph/graphql": "workspace:*"
+  }
+}

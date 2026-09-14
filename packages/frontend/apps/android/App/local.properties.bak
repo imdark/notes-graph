@@ -1,0 +1,3 @@
+sdk.dir=/opt/homebrew/share/android-commandlinetools
+rust.cargoCommand=/Users/imdark/.cargo/bin/cargo
+rust.rustcCommand=/Users/imdark/.cargo/bin/rustc

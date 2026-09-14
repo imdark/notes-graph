@@ -1,0 +1,151 @@
+// @generated
+// This file was automatically generated and should not be edited.
+
+@_exported import ApolloAPI
+
+public class MatchFilesQuery: GraphQLQuery {
+  public static let operationName: String = "matchFiles"
+  public static let operationDocument: ApolloAPI.OperationDocument = .init(
+    definition: .init(
+      #"query matchFiles($contextId: String, $workspaceId: String, $content: String!, $limit: SafeInt, $scopedThreshold: Float, $threshold: Float) { currentUser { __typename copilot(workspaceId: $workspaceId) { __typename contexts(contextId: $contextId) { __typename matchFiles( content: $content limit: $limit scopedThreshold: $scopedThreshold threshold: $threshold ) { __typename fileId blobId chunk content distance } } } } }"#
+    ))
+
+  public var contextId: GraphQLNullable<String>
+  public var workspaceId: GraphQLNullable<String>
+  public var content: String
+  public var limit: GraphQLNullable<SafeInt>
+  public var scopedThreshold: GraphQLNullable<Double>
+  public var threshold: GraphQLNullable<Double>
+
+  public init(
+    contextId: GraphQLNullable<String>,
+    workspaceId: GraphQLNullable<String>,
+    content: String,
+    limit: GraphQLNullable<SafeInt>,
+    scopedThreshold: GraphQLNullable<Double>,
+    threshold: GraphQLNullable<Double>
+  ) {
+    self.contextId = contextId
+    self.workspaceId = workspaceId
+    self.content = content
+    self.limit = limit
+    self.scopedThreshold = scopedThreshold
+    self.threshold = threshold
+  }
+
+  public var __variables: Variables? { [
+    "contextId": contextId,
+    "workspaceId": workspaceId,
+    "content": content,
+    "limit": limit,
+    "scopedThreshold": scopedThreshold,
+    "threshold": threshold
+  ] }
+
+  public struct Data: NotesGraphGraphQL.SelectionSet {
+    public let __data: DataDict
+    public init(_dataDict: DataDict) { __data = _dataDict }
+
+    public static var __parentType: any ApolloAPI.ParentType { NotesGraphGraphQL.Objects.Query }
+    public static var __selections: [ApolloAPI.Selection] { [
+      .field("currentUser", CurrentUser?.self),
+    ] }
+    public static var __fulfilledFragments: [any ApolloAPI.SelectionSet.Type] { [
+      MatchFilesQuery.Data.self
+    ] }
+
+    /// Get current user
+    public var currentUser: CurrentUser? { __data["currentUser"] }
+
+    /// CurrentUser
+    ///
+    /// Parent Type: `UserType`
+    public struct CurrentUser: NotesGraphGraphQL.SelectionSet {
+      public let __data: DataDict
+      public init(_dataDict: DataDict) { __data = _dataDict }
+
+      public static var __parentType: any ApolloAPI.ParentType { NotesGraphGraphQL.Objects.UserType }
+      public static var __selections: [ApolloAPI.Selection] { [
+        .field("__typename", String.self),
+        .field("copilot", Copilot.self, arguments: ["workspaceId": .variable("workspaceId")]),
+      ] }
+      public static var __fulfilledFragments: [any ApolloAPI.SelectionSet.Type] { [
+        MatchFilesQuery.Data.CurrentUser.self
+      ] }
+
+      public var copilot: Copilot { __data["copilot"] }
+
+      /// CurrentUser.Copilot
+      ///
+      /// Parent Type: `Copilot`
+      public struct Copilot: NotesGraphGraphQL.SelectionSet {
+        public let __data: DataDict
+        public init(_dataDict: DataDict) { __data = _dataDict }
+
+        public static var __parentType: any ApolloAPI.ParentType { NotesGraphGraphQL.Objects.Copilot }
+        public static var __selections: [ApolloAPI.Selection] { [
+          .field("__typename", String.self),
+          .field("contexts", [Context].self, arguments: ["contextId": .variable("contextId")]),
+        ] }
+        public static var __fulfilledFragments: [any ApolloAPI.SelectionSet.Type] { [
+          MatchFilesQuery.Data.CurrentUser.Copilot.self
+        ] }
+
+        /// Get the context list of a session
+        public var contexts: [Context] { __data["contexts"] }
+
+        /// CurrentUser.Copilot.Context
+        ///
+        /// Parent Type: `CopilotContext`
+        public struct Context: NotesGraphGraphQL.SelectionSet {
+          public let __data: DataDict
+          public init(_dataDict: DataDict) { __data = _dataDict }
+
+          public static var __parentType: any ApolloAPI.ParentType { NotesGraphGraphQL.Objects.CopilotContext }
+          public static var __selections: [ApolloAPI.Selection] { [
+            .field("__typename", String.self),
+            .field("matchFiles", [MatchFile].self, arguments: [
+              "content": .variable("content"),
+              "limit": .variable("limit"),
+              "scopedThreshold": .variable("scopedThreshold"),
+              "threshold": .variable("threshold")
+            ]),
+          ] }
+          public static var __fulfilledFragments: [any ApolloAPI.SelectionSet.Type] { [
+            MatchFilesQuery.Data.CurrentUser.Copilot.Context.self
+          ] }
+
+          /// match file in context
+          public var matchFiles: [MatchFile] { __data["matchFiles"] }
+
+          /// CurrentUser.Copilot.Context.MatchFile
+          ///
+          /// Parent Type: `ContextMatchedFileChunk`
+          public struct MatchFile: NotesGraphGraphQL.SelectionSet {
+            public let __data: DataDict
+            public init(_dataDict: DataDict) { __data = _dataDict }
+
+            public static var __parentType: any ApolloAPI.ParentType { NotesGraphGraphQL.Objects.ContextMatchedFileChunk }
+            public static var __selections: [ApolloAPI.Selection] { [
+              .field("__typename", String.self),
+              .field("fileId", String.self),
+              .field("blobId", String.self),
+              .field("chunk", NotesGraphGraphQL.SafeInt.self),
+              .field("content", String.self),
+              .field("distance", Double?.self),
+            ] }
+            public static var __fulfilledFragments: [any ApolloAPI.SelectionSet.Type] { [
+              MatchFilesQuery.Data.CurrentUser.Copilot.Context.MatchFile.self
+            ] }
+
+            public var fileId: String { __data["fileId"] }
+            public var blobId: String { __data["blobId"] }
+            public var chunk: NotesGraphGraphQL.SafeInt { __data["chunk"] }
+            public var content: String { __data["content"] }
+            public var distance: Double? { __data["distance"] }
+          }
+        }
+      }
+    }
+  }
+}

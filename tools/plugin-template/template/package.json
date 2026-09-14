@@ -1,0 +1,19 @@
+{
+  "name": "__PLUGIN_NAME__",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "dev": "notesgraph plugin dev",
+    "publish": "notesgraph plugin publish"
+  },
+  "dependencies": {
+    "@notesgraph/plugin-sdk": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.0",
+    "esbuild": "^0.25.0",
+    "react": "^19.0.0"
+  }
+}

@@ -1,0 +1,17 @@
+mutation publishPage(
+  $workspaceId: String!
+  $pageId: String!
+  $mode: PublicDocMode = Page
+  $publicRole: DocRole = Reader
+) {
+  publishDoc(
+    workspaceId: $workspaceId
+    docId: $pageId
+    mode: $mode
+    publicRole: $publicRole
+  ) {
+    id
+    mode
+    publicRole
+  }
+}

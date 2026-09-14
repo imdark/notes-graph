@@ -1,0 +1,56 @@
+[package]
+edition = "2024"
+name    = "notesgraph_nbstore"
+publish = false
+version = "0.0.0"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[features]
+default    = []
+napi       = ["notesgraph_common/napi"]
+use-as-lib = ["napi-derive/noop", "napi/noop"]
+
+[dependencies]
+anyhow = { workspace = true }
+bincode = { version = "2.0.1", features = ["serde"] }
+chrono = { workspace = true }
+memory-indexer = { workspace = true }
+napi = { workspace = true }
+napi-derive = { workspace = true }
+notesgraph_common = { workspace = true, features = ["ydoc-loader"] }
+notesgraph_schema = { path = "../schema" }
+serde = { workspace = true, features = ["derive"] }
+sqlx = { workspace = true, default-features = false, features = [
+  "chrono",
+  "macros",
+  "migrate",
+  "runtime-tokio",
+  "sqlite",
+] }
+thiserror = { workspace = true }
+tokio = { workspace = true, features = ["full"] }
+y-octo = { workspace = true }
+zstd = "0.13"
+
+[target.'cfg(any(target_os = "ios", target_os = "android"))'.dependencies]
+uniffi = { workspace = true }
+
+[build-dependencies]
+dotenvy = { workspace = true }
+napi-build = { workspace = true }
+notesgraph_schema = { path = "../schema" }
+sqlx = { workspace = true, default-features = false, features = [
+  "chrono",
+  "macros",
+  "migrate",
+  "runtime-tokio",
+  "sqlite",
+] }
+tokio = { workspace = true, features = ["full"] }
+
+
+[dev-dependencies]
+serde_json = { workspace = true }
+uuid       = { workspace = true, features = ["v4"] }

@@ -1,0 +1,48 @@
+{
+  "name": "@blocksuite/notesgraph-block-code",
+  "description": "Code block for BlockSuite.",
+  "type": "module",
+  "scripts": {
+    "build": "tsc"
+  },
+  "sideEffects": false,
+  "keywords": [],
+  "author": "toeverything",
+  "license": "MIT",
+  "dependencies": {
+    "@blocksuite/global": "workspace:*",
+    "@blocksuite/icons": "^2.2.17",
+    "@blocksuite/notesgraph-components": "workspace:*",
+    "@blocksuite/notesgraph-ext-loader": "workspace:*",
+    "@blocksuite/notesgraph-gfx-turbo-renderer": "workspace:*",
+    "@blocksuite/notesgraph-inline-comment": "workspace:*",
+    "@blocksuite/notesgraph-inline-latex": "workspace:*",
+    "@blocksuite/notesgraph-inline-link": "workspace:*",
+    "@blocksuite/notesgraph-inline-preset": "workspace:*",
+    "@blocksuite/notesgraph-model": "workspace:*",
+    "@blocksuite/notesgraph-rich-text": "workspace:*",
+    "@blocksuite/notesgraph-shared": "workspace:*",
+    "@blocksuite/notesgraph-widget-slash-menu": "workspace:*",
+    "@blocksuite/std": "workspace:*",
+    "@blocksuite/store": "workspace:*",
+    "@floating-ui/dom": "^1.6.13",
+    "@preact/signals-core": "^1.8.0",
+    "@types/mdast": "^4.0.4",
+    "lit": "^3.2.0",
+    "shiki": "^3.19.0",
+    "zod": "^3.25.76"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./turbo-painter": "./src/turbo/code-painter.worker.ts",
+    "./view": "./src/view.ts",
+    "./store": "./src/store.ts"
+  },
+  "files": [
+    "src",
+    "dist",
+    "!src/__tests__",
+    "!dist/__tests__"
+  ],
+  "version": "0.26.3"
+}

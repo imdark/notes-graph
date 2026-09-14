@@ -1,0 +1,70 @@
+import { effects as dataViewEffects } from '@blocksuite/data-view/effects';
+import { BlockSelection } from '@blocksuite/notesgraph-components/block-selection';
+import { BlockZeroWidth } from '@blocksuite/notesgraph-components/block-zero-width';
+import { effects as componentCaptionEffects } from '@blocksuite/notesgraph-components/caption';
+import { effects as componentCardStyleDropdownMenuEffects } from '@blocksuite/notesgraph-components/card-style-dropdown-menu';
+import { effects as componentCitationEffects } from '@blocksuite/notesgraph-components/citation';
+import { effects as componentColorPickerEffects } from '@blocksuite/notesgraph-components/color-picker';
+import { effects as componentContextMenuEffects } from '@blocksuite/notesgraph-components/context-menu';
+import { effects as componentDatePickerEffects } from '@blocksuite/notesgraph-components/date-picker';
+import { effects as componentDropIndicatorEffects } from '@blocksuite/notesgraph-components/drop-indicator';
+import { effects as componentEdgelessLineStylesEffects } from '@blocksuite/notesgraph-components/edgeless-line-styles-panel';
+import { effects as componentEdgelessLineWidthEffects } from '@blocksuite/notesgraph-components/edgeless-line-width-panel';
+import { effects as componentEdgelessShapeColorPickerEffects } from '@blocksuite/notesgraph-components/edgeless-shape-color-picker';
+import { effects as componentEmbedCardModalEffects } from '@blocksuite/notesgraph-components/embed-card-modal';
+import { FilterableListComponent } from '@blocksuite/notesgraph-components/filterable-list';
+import { effects as componentHighlightDropdownMenuEffects } from '@blocksuite/notesgraph-components/highlight-dropdown-menu';
+import { IconButton } from '@blocksuite/notesgraph-components/icon-button';
+import { effects as componentLinkPreviewEffects } from '@blocksuite/notesgraph-components/link-preview';
+import { effects as componentLinkedDocTitleEffects } from '@blocksuite/notesgraph-components/linked-doc-title';
+import { effects as componentOpenDocDropdownMenuEffects } from '@blocksuite/notesgraph-components/open-doc-dropdown-menu';
+import { effects as componentPortalEffects } from '@blocksuite/notesgraph-components/portal';
+import { effects as componentResourceEffects } from '@blocksuite/notesgraph-components/resource';
+import { effects as componentSizeDropdownMenuEffects } from '@blocksuite/notesgraph-components/size-dropdown-menu';
+import { effects as componentSliderEffects } from '@blocksuite/notesgraph-components/slider';
+import { SmoothCorner } from '@blocksuite/notesgraph-components/smooth-corner';
+import { effects as componentToggleButtonEffects } from '@blocksuite/notesgraph-components/toggle-button';
+import { ToggleSwitch } from '@blocksuite/notesgraph-components/toggle-switch';
+import { effects as componentToolbarEffects } from '@blocksuite/notesgraph-components/toolbar';
+import { effects as componentTooltipContentWithShortcutEffects } from '@blocksuite/notesgraph-components/tooltip-content-with-shortcut';
+import { effects as componentViewDropdownMenuEffects } from '@blocksuite/notesgraph-components/view-dropdown-menu';
+import { effects as richTextEffects } from '@blocksuite/notesgraph-rich-text/effects';
+import { effects as stdEffects } from '@blocksuite/std/effects';
+
+export function effects() {
+  stdEffects();
+
+  dataViewEffects();
+  richTextEffects();
+
+  componentCaptionEffects();
+  componentContextMenuEffects();
+  componentDatePickerEffects();
+  componentPortalEffects();
+  componentToolbarEffects();
+  componentDropIndicatorEffects();
+  componentToggleButtonEffects();
+  componentColorPickerEffects();
+  componentEmbedCardModalEffects();
+  componentLinkPreviewEffects();
+  componentLinkedDocTitleEffects();
+  componentCardStyleDropdownMenuEffects();
+  componentCitationEffects();
+  componentHighlightDropdownMenuEffects();
+  componentViewDropdownMenuEffects();
+  componentTooltipContentWithShortcutEffects();
+  componentSizeDropdownMenuEffects();
+  componentSliderEffects();
+  componentEdgelessLineWidthEffects();
+  componentEdgelessLineStylesEffects();
+  componentEdgelessShapeColorPickerEffects();
+  componentOpenDocDropdownMenuEffects();
+  componentResourceEffects();
+
+  customElements.define('icon-button', IconButton);
+  customElements.define('smooth-corner', SmoothCorner);
+  customElements.define('toggle-switch', ToggleSwitch);
+  customElements.define('notesgraph-filterable-list', FilterableListComponent);
+  customElements.define('block-zero-width', BlockZeroWidth);
+  customElements.define('notesgraph-block-selection', BlockSelection);
+}

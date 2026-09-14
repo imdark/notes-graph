@@ -1,0 +1,30 @@
+name: 'Prepare Server Test Environment'
+description: 'Prepare Server Test Environment'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Initialize database
+      shell: bash
+      run: |
+        psql -h localhost -U postgres -c "CREATE DATABASE notesgraph;"
+        psql -h localhost -U postgres -c "CREATE USER notesgraph WITH PASSWORD 'notesgraph';"
+        psql -h localhost -U postgres -c "ALTER USER notesgraph WITH SUPERUSER;"
+      env:
+        PGPASSWORD: notesgraph
+
+    - name: Run init-db script
+      shell: bash
+      env:
+        NODE_ENV: test
+      run: |
+        yarn notesgraph @notesgraph/server prisma generate
+        yarn notesgraph @notesgraph/server prisma migrate deploy
+        yarn notesgraph @notesgraph/server data-migration run
+
+    - name: Import config
+      shell: bash
+      env:
+        DEFAULT_CONFIG: '{}'
+      run: |
+        printf '%s\n' "${SERVER_CONFIG:-$DEFAULT_CONFIG}" > ./packages/backend/server/config.json

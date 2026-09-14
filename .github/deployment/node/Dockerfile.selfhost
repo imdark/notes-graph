@@ -1,0 +1,87 @@
+# syntax=docker/dockerfile:1.7
+#
+# Self-contained production build of the NotesGraph server image.
+#
+# Mirrors what redeploy.sh + image-build.sh do on the prod box, but does the
+# ENTIRE build (yarn install, Rust native addon, web/admin/mobile/server
+# bundles, prod-dep assembly) INSIDE the image. That means it can be built
+# for linux/amd64 on any host — e.g. an arm64 Mac via `docker buildx
+# --platform linux/amd64` — so the RAM-heavy bundling never runs on the
+# 7.6 GB prod box (two concurrent box builds OOM'd it on 2026-07-20).
+#
+#   docker buildx build --platform linux/amd64 \
+#     -f .github/deployment/node/Dockerfile.selfhost -t notesgraph:prod --load .
+#
+# Produces the same runtime layer as .github/deployment/node/Dockerfile.
+
+FROM node:22-trixie-slim AS builder
+WORKDIR /app
+
+# Build toolchains: Rust (napi native addon) + node-gyp deps.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      curl ca-certificates build-essential python3 pkg-config libssl-dev git \
+ && rm -rf /var/lib/apt/lists/*
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal
+ENV PATH="/root/.cargo/bin:${PATH}"
+# Match the box's node heap ceiling for the bundlers.
+ENV NODE_OPTIONS="--max-old-space-size=6144"
+# Under emulation, libgit2's vendored TLS throws "SSL error: syscall failure"
+# on cargo's index/git fetches — use the git CLI + the sparse index instead.
+ENV CARGO_NET_GIT_FETCH_WITH_CLI=true \
+    CARGO_REGISTRIES_CRATES_IO_PROTOCOL=sparse
+
+COPY . .
+
+RUN corepack enable && yarn install --immutable
+
+# Native addon — inside linux/amd64 this compiles natively for the target
+# (no cross-compile), just emulated when the host is arm64. The loader wants
+# arch-suffixed filenames (CI artifact naming).
+RUN yarn workspace @notesgraph/server-native build \
+ && cd packages/backend/native \
+ && cp -f server-native.node server-native.x64.node \
+ && cp -f server-native.node server-native.arm64.node \
+ && cp -f server-native.node server-native.armv7.node
+
+# Front-end + server bundles (stable, self-hosted).
+RUN BUILD_TYPE=stable SELF_HOSTED=true yarn notesgraph bundle -p @notesgraph/web \
+ && BUILD_TYPE=stable SELF_HOSTED=true yarn notesgraph bundle -p @notesgraph/admin \
+ && BUILD_TYPE=stable SELF_HOSTED=true yarn notesgraph bundle -p @notesgraph/mobile \
+ && yarn workspace @notesgraph/server build
+
+# The bundler exits 0 even on compile errors — verify the outputs exist.
+RUN test -f packages/backend/server/dist/main.js \
+ && test -f packages/frontend/apps/web/dist/selfhost.html \
+ && test -d packages/frontend/admin/dist \
+ && test -d packages/frontend/apps/mobile/dist
+
+# Prod-only server deps staged into the server package (mirror image-build.sh).
+RUN yarn workspaces focus @notesgraph/server --production \
+ && yarn workspace @notesgraph/server prisma generate \
+ && rm -rf packages/backend/server/node_modules \
+ && mv node_modules packages/backend/server/node_modules
+
+# ---- assets stage: identical shape to .github/deployment/node/Dockerfile ----
+FROM node:22-trixie-slim AS assets
+WORKDIR /app
+COPY --from=builder /app/packages/backend/server /app
+COPY --from=builder /app/packages/frontend/apps/web/dist /app/static
+COPY --from=builder /app/packages/frontend/admin/dist /app/static/admin
+COPY --from=builder /app/packages/frontend/apps/mobile/dist /app/static/mobile
+ARG TARGETARCH
+ARG TARGETVARIANT
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends openssl ca-certificates && \
+    rm -rf /var/lib/apt/lists/*
+RUN NOTESGRAPH_DOCKER_CLEAN=1 TARGETARCH="${TARGETARCH}" TARGETVARIANT="${TARGETVARIANT}" \
+    node ./scripts/docker-clean.mjs
+
+FROM node:22-trixie-slim
+WORKDIR /app
+COPY --from=assets /app /app
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends openssl libjemalloc2 && \
+    rm -rf /var/lib/apt/lists/*
+ENV LD_PRELOAD=libjemalloc.so.2
+EXPOSE 3010
+CMD ["node", "./dist/main.js"]

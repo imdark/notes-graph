@@ -1,0 +1,9 @@
+mutation createProject($workspaceId: String!, $name: String!) {
+  createProject(input: { workspaceId: $workspaceId, name: $name }) {
+    id
+    workspaceId
+    name
+    createdBy
+    createdAt
+  }
+}

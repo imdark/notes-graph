@@ -1,0 +1,16 @@
+{
+  "nodes": [
+    { "_id": "root", "name": "My Knowledge Base", "description": "Root note." },
+    { "_id": "a", "name": "Topic A", "description": "About topic A." },
+    {
+      "_id": "b",
+      "name": "Topic B",
+      "description": "About topic B, links to A."
+    }
+  ],
+  "links": [
+    { "source": "root", "target": "a" },
+    { "source": "root", "target": "b" },
+    { "source": "b", "target": "a" }
+  ]
+}

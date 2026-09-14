@@ -1,0 +1,3 @@
+mutation disconnectDirectoryAccount($accountId: String!) {
+  disconnectDirectoryAccount(accountId: $accountId)
+}

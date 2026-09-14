@@ -1,0 +1,10 @@
+mutation inviteByEmails(
+  $workspaceId: String!
+  $emails: [String!]!
+  $role: WorkspaceRole
+) {
+  inviteMembers(workspaceId: $workspaceId, emails: $emails, role: $role) {
+    email
+    inviteId
+  }
+}

@@ -1,0 +1,71 @@
+global:
+  app:
+    buildType: 'stable'
+  ingress:
+    enabled: false
+    className: ''
+    # hosts for ingress rules
+    # e.g.
+    # hosts:
+    #  - notesgraph.com
+    #  - www.notesgraph.com
+    hosts:
+      - notesgraph.com
+    tls: []
+  secret:
+    secretName: 'server-private-key'
+    privateKey: ''
+  database:
+    user: 'postgres'
+    host: 'pg-postgresql'
+    port: '5432'
+    name: 'notesgraph'
+    password: ''
+  redis:
+    host: 'redis-master'
+    port: '6379'
+    username: ''
+    password: ''
+    database: 0
+  indexer:
+    provider: ''
+    endpoint: ''
+    username: ''
+    password: ''
+  docService:
+    name: 'notesgraph-doc'
+    port: 3020
+  deployment:
+    # change to 'selfhosted' and 'unknown' if this chart is ready to be used for selfhosted deployment
+    type: 'notesgraph'
+    platform: 'gcp'
+
+graphql:
+  service:
+    type: ClusterIP
+    port: 3000
+    annotations:
+      cloud.google.com/backend-config: '{"default": "notesgraph-api-backendconfig"}'
+
+front:
+  services:
+    sync:
+      name: notesgraph-sync
+      type: ClusterIP
+      port: 3010
+      annotations:
+        cloud.google.com/backend-config: '{"default": "notesgraph-api-backendconfig"}'
+    renderer:
+      name: notesgraph-renderer
+      type: ClusterIP
+      port: 3000
+      annotations:
+        cloud.google.com/backend-config: '{"default": "notesgraph-api-backendconfig"}'
+    web:
+      name: notesgraph-web
+      type: ClusterIP
+      port: 8080
+    doc:
+      type: ClusterIP
+      annotations:
+        cloud.google.com/backend-config: '{"default": "notesgraph-api-backendconfig"}'

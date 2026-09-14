@@ -1,0 +1,4 @@
+export const NOTESGRAPH_SLASH_MENU_WIDGET = 'notesgraph-slash-menu-widget';
+export const NOTESGRAPH_SLASH_MENU_TRIGGER_KEY = '/';
+export const NOTESGRAPH_SLASH_MENU_TOOLTIP_TIMEOUT = 800;
+export const NOTESGRAPH_SLASH_MENU_MAX_HEIGHT = 390;

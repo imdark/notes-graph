@@ -1,0 +1,12 @@
+mutation createAnonymousComment($input: AnonymousCommentCreateInput!) {
+  createAnonymousComment(input: $input) {
+    id
+    content
+    createdAt
+    user {
+      id
+      name
+      avatarUrl
+    }
+  }
+}

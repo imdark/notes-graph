@@ -1,0 +1,1 @@
+{"id":"com.notesgraph.hello","name":"Hello Plugin","version":"0.0.1","description":"Minimal NotesGraph dev plugin: a command that greets and counts.","author":"NotesGraph","platforms":["web","desktop","mobile"],"permissions":["ui","storage","docs","backend"],"entry":{"client":"index.js","server":"server.js"}}

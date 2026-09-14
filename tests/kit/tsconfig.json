@@ -1,0 +1,14 @@
+{
+  "extends": "../../tsconfig.web.json",
+  "compilerOptions": {
+    "rootDir": "./src",
+    "outDir": "./dist",
+    "tsBuildInfoFile": "./dist/tsconfig.tsbuildinfo"
+  },
+  "include": ["./src"],
+  "references": [
+    { "path": "../../blocksuite/notesgraph/all" },
+    { "path": "../../tools/utils" },
+    { "path": "../../packages/common/infra" }
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "name": "@notesgraph/reader",
+  "type": "module",
+  "version": "0.26.3",
+  "private": true,
+  "sideEffects": false,
+  "module": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./dist": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "notesgraph bundle -p @notesgraph/reader",
+    "bundle": "notesgraph bundle -p @notesgraph/reader"
+  },
+  "dependencies": {
+    "lodash-es": "^4.17.23",
+    "yjs": "^13.6.27"
+  },
+  "devDependencies": {
+    "@blocksuite/notesgraph": "workspace:*",
+    "vitest": "^4.1.8"
+  },
+  "peerDependencies": {
+    "@blocksuite/notesgraph": "workspace:*"
+  }
+}

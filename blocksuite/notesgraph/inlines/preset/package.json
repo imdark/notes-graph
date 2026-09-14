@@ -1,0 +1,44 @@
+{
+  "name": "@blocksuite/notesgraph-inline-preset",
+  "description": "Inline preset for BlockSuite.",
+  "type": "module",
+  "scripts": {
+    "build": "tsc"
+  },
+  "sideEffects": false,
+  "keywords": [],
+  "author": "toeverything",
+  "license": "MIT",
+  "dependencies": {
+    "@blocksuite/notesgraph-components": "workspace:*",
+    "@blocksuite/notesgraph-ext-loader": "workspace:*",
+    "@blocksuite/notesgraph-inline-comment": "workspace:*",
+    "@blocksuite/notesgraph-inline-footnote": "workspace:*",
+    "@blocksuite/notesgraph-inline-latex": "workspace:*",
+    "@blocksuite/notesgraph-inline-link": "workspace:*",
+    "@blocksuite/notesgraph-inline-mention": "workspace:*",
+    "@blocksuite/notesgraph-inline-reference": "workspace:*",
+    "@blocksuite/notesgraph-model": "workspace:*",
+    "@blocksuite/notesgraph-rich-text": "workspace:*",
+    "@blocksuite/notesgraph-shared": "workspace:*",
+    "@blocksuite/std": "workspace:*",
+    "@blocksuite/store": "workspace:*",
+    "@toeverything/theme": "workspace:*",
+    "@types/hast": "^3.0.4",
+    "collapse-white-space": "^2.1.0",
+    "lit": "^3.2.0",
+    "zod": "^3.25.76"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./store": "./src/store.ts",
+    "./view": "./src/view.ts"
+  },
+  "files": [
+    "src",
+    "dist",
+    "!src/__tests__",
+    "!dist/__tests__"
+  ],
+  "version": "0.26.3"
+}

@@ -1,0 +1,51 @@
+{
+  "name": "@blocksuite/notesgraph-block-note",
+  "description": "Note block for BlockSuite.",
+  "type": "module",
+  "scripts": {
+    "build": "tsc"
+  },
+  "sideEffects": false,
+  "keywords": [],
+  "author": "toeverything",
+  "license": "MIT",
+  "dependencies": {
+    "@blocksuite/global": "workspace:*",
+    "@blocksuite/icons": "^2.2.17",
+    "@blocksuite/notesgraph-block-embed": "workspace:*",
+    "@blocksuite/notesgraph-block-surface": "workspace:*",
+    "@blocksuite/notesgraph-components": "workspace:*",
+    "@blocksuite/notesgraph-ext-loader": "workspace:*",
+    "@blocksuite/notesgraph-fragment-doc-title": "workspace:*",
+    "@blocksuite/notesgraph-gfx-turbo-renderer": "workspace:*",
+    "@blocksuite/notesgraph-inline-preset": "workspace:*",
+    "@blocksuite/notesgraph-model": "workspace:*",
+    "@blocksuite/notesgraph-rich-text": "workspace:*",
+    "@blocksuite/notesgraph-shared": "workspace:*",
+    "@blocksuite/notesgraph-widget-slash-menu": "workspace:*",
+    "@blocksuite/std": "workspace:*",
+    "@blocksuite/store": "workspace:*",
+    "@lit/context": "^1.1.2",
+    "@preact/signals-core": "^1.8.0",
+    "@toeverything/theme": "workspace:*",
+    "@types/lodash-es": "^4.17.12",
+    "@types/mdast": "^4.0.4",
+    "@vanilla-extract/css": "^1.17.0",
+    "lit": "^3.2.0",
+    "lodash-es": "^4.17.23",
+    "zod": "^3.25.76"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./turbo-painter": "./src/turbo/note-painter.worker.ts",
+    "./store": "./src/store.ts",
+    "./view": "./src/view.ts"
+  },
+  "files": [
+    "src",
+    "dist",
+    "!src/__tests__",
+    "!dist/__tests__"
+  ],
+  "version": "0.26.3"
+}

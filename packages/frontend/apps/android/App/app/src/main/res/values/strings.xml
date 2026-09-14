@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">NotesGraph</string>
+    <string name="title_activity_main">NotesGraph</string>
+    <string name="package_name">app.notesgraph.pro</string>
+    <string name="custom_url_scheme">app.notesgraph.pro</string>
+</resources>

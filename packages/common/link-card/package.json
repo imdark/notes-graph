@@ -1,0 +1,28 @@
+{
+  "name": "@notesgraph/link-card",
+  "type": "module",
+  "version": "0.26.3",
+  "private": true,
+  "sideEffects": false,
+  "module": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./screenshot": "./src/screenshot.ts"
+  },
+  "dependencies": {
+    "@mozilla/readability": "^0.6.0",
+    "@resvg/resvg-js": "^2.6.2",
+    "linkedom": "^0.18.12",
+    "satori": "^0.26.0",
+    "satori-html": "^0.3.2",
+    "sharp": "^0.35.2"
+  },
+  "peerDependencies": {
+    "playwright": "^1.58.2"
+  },
+  "peerDependenciesMeta": {
+    "playwright": {
+      "optional": true
+    }
+  }
+}

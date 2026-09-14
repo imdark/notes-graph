@@ -1,0 +1,34 @@
+{
+  "name": "@notesgraph/electron-renderer",
+  "private": true,
+  "version": "0.26.3",
+  "type": "module",
+  "scripts": {
+    "build": "notesgraph bundle",
+    "dev": "notesgraph bundle --dev"
+  },
+  "dependencies": {
+    "@blocksuite/notesgraph": "workspace:*",
+    "@emotion/react": "^11.14.0",
+    "@notesgraph/component": "workspace:*",
+    "@notesgraph/core": "workspace:*",
+    "@notesgraph/debug": "workspace:*",
+    "@notesgraph/electron-api": "workspace:*",
+    "@notesgraph/i18n": "workspace:*",
+    "@notesgraph/infra": "workspace:*",
+    "@notesgraph/nbstore": "workspace:*",
+    "@notesgraph/track": "workspace:*",
+    "@toeverything/theme": "workspace:*",
+    "@vanilla-extract/css": "^1.17.0",
+    "next-themes": "^0.4.4",
+    "react": "^19.2.1",
+    "react-dom": "^19.2.1",
+    "react-router-dom": "^6.30.4",
+    "uuid": "^14.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.1",
+    "@types/react-dom": "^19.0.2",
+    "typescript": "^5.9.3"
+  }
+}

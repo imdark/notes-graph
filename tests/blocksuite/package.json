@@ -1,0 +1,17 @@
+{
+  "name": "@notesgraph-test/blocksuite",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "yarn playwright test"
+  },
+  "dependencies": {
+    "@blocksuite/integration-test": "workspace:*",
+    "@blocksuite/notesgraph": "workspace:*",
+    "@notesgraph-test/kit": "workspace:*",
+    "@playwright/test": "=1.58.2",
+    "@toeverything/theme": "workspace:*",
+    "json-stable-stringify": "^1.2.1"
+  },
+  "version": "0.26.3"
+}

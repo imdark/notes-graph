@@ -1,0 +1,33 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(scripts/build-android.sh*)",
+      "Bash(scripts/task-git.sh *)",
+      "Bash(scripts/deploy-bg.sh*)",
+      "Bash(scripts/deploy-watch.sh*)",
+      "Bash(node scripts/add-i18n.mjs *)",
+      "Bash(scripts/debug-local-web-dev.sh*)",
+      "Bash(scripts/typecheck.sh*)",
+      "Bash(scripts/check-syntax.sh*)",
+      "Bash(scripts/mobile-emulator.sh *)",
+      "Bash(adb *)",
+      "Bash(yarn notesgraph bundle *)",
+      "Bash(python3 tools/generate-android-launcher-icon.py*)",
+      "Bash(python3 tools/generate-brand-favicons.py*)",
+      "Bash(npx tsc --noEmit *)",
+      "Bash(cargo test *)",
+      "Bash(grep *)",
+      "Bash(rg *)",
+      "Bash(find *)",
+      "Bash(ls *)",
+      "Bash(cat *)",
+      "Bash(head *)",
+      "Bash(tail *)",
+      "Bash(wc *)",
+      "Bash(sort *)",
+      "Bash(uniq *)",
+      "Bash(cut *)",
+      "Bash(jq *)"
+    ]
+  }
+}

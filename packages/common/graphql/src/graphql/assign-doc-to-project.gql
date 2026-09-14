@@ -1,0 +1,9 @@
+mutation assignDocToProject(
+  $workspaceId: String!
+  $docId: String!
+  $projectId: String!
+) {
+  assignDocToProject(
+    input: { workspaceId: $workspaceId, docId: $docId, projectId: $projectId }
+  )
+}

@@ -1,0 +1,49 @@
+{
+  "name": "@notesgraph/ios",
+  "version": "0.26.3",
+  "description": "NotesGraph Desktop Web application",
+  "type": "module",
+  "private": true,
+  "browser": "src/index.tsx",
+  "scripts": {
+    "build": "notesgraph bundle",
+    "dev": "notesgraph bundle --dev",
+    "sync": "cap sync",
+    "sync:dev": "CAP_SERVER_URL=http://localhost:8080 cap sync",
+    "xcode": "cap open ios",
+    "codegen": "r ./codegen.ts"
+  },
+  "dependencies": {
+    "@blocksuite/notesgraph": "workspace:*",
+    "@capacitor/app": "^7.0.0",
+    "@capacitor/browser": "^7.0.0",
+    "@capacitor/core": "^7.0.0",
+    "@capacitor/haptics": "^7.0.0",
+    "@capacitor/ios": "^7.0.0",
+    "@capacitor/keyboard": "^7.0.0",
+    "@notesgraph/component": "workspace:*",
+    "@notesgraph/core": "workspace:*",
+    "@notesgraph/env": "workspace:*",
+    "@notesgraph/graphql": "workspace:*",
+    "@notesgraph/i18n": "workspace:*",
+    "@notesgraph/infra": "workspace:^",
+    "@notesgraph/mobile-shared": "workspace:*",
+    "@notesgraph/nbstore": "workspace:*",
+    "@notesgraph/track": "workspace:*",
+    "async-call-rpc": "^6.4.2",
+    "capacitor-plugin-app-tracking-transparency": "^3.0.0",
+    "idb": "^8.0.0",
+    "next-themes": "^0.4.4",
+    "react": "^19.2.1",
+    "react-dom": "^19.2.1",
+    "react-router-dom": "^6.30.4"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^7.6.5",
+    "@notesgraph-tools/cli": "workspace:*",
+    "@notesgraph-tools/utils": "workspace:*",
+    "@types/react": "^19.0.1",
+    "@types/react-dom": "^19.0.2",
+    "typescript": "^5.9.3"
+  }
+}

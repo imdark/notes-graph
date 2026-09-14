@@ -1,0 +1,12 @@
+query directoryAvailableOrgUnits($workspaceId: String!) {
+  workspace(id: $workspaceId) {
+    directoryAccount {
+      id
+      availableOrgUnits {
+        externalId
+        path
+        name
+      }
+    }
+  }
+}

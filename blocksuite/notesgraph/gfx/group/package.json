@@ -1,0 +1,43 @@
+{
+  "name": "@blocksuite/notesgraph-gfx-group",
+  "description": "Gfx group for BlockSuite.",
+  "type": "module",
+  "scripts": {
+    "build": "tsc"
+  },
+  "sideEffects": false,
+  "keywords": [],
+  "author": "toeverything",
+  "license": "MIT",
+  "dependencies": {
+    "@blocksuite/global": "workspace:*",
+    "@blocksuite/icons": "^2.2.17",
+    "@blocksuite/notesgraph-block-surface": "workspace:*",
+    "@blocksuite/notesgraph-components": "workspace:*",
+    "@blocksuite/notesgraph-ext-loader": "workspace:*",
+    "@blocksuite/notesgraph-gfx-text": "workspace:*",
+    "@blocksuite/notesgraph-model": "workspace:*",
+    "@blocksuite/notesgraph-rich-text": "workspace:*",
+    "@blocksuite/notesgraph-shared": "workspace:*",
+    "@blocksuite/notesgraph-widget-edgeless-toolbar": "workspace:*",
+    "@blocksuite/std": "workspace:*",
+    "@lit/context": "^1.1.2",
+    "fractional-indexing": "^3.2.0",
+    "lit": "^3.2.0"
+  },
+  "devDependencies": {
+    "vitest": "^4.1.8"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./view": "./src/view.ts",
+    "./store": "./src/store.ts"
+  },
+  "files": [
+    "src",
+    "dist",
+    "!src/__tests__",
+    "!dist/__tests__"
+  ],
+  "version": "0.26.3"
+}

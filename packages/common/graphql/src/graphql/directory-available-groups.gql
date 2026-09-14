@@ -1,0 +1,12 @@
+query directoryAvailableGroups($workspaceId: String!) {
+  workspace(id: $workspaceId) {
+    directoryAccount {
+      id
+      availableGroups {
+        externalId
+        email
+        name
+      }
+    }
+  }
+}

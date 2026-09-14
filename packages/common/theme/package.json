@@ -1,0 +1,44 @@
+{
+  "name": "@toeverything/theme",
+  "version": "1.1.23",
+  "type": "module",
+  "description": "Vendored snapshot of @toeverything/theme (from toeverything/design @ tag 1.1.23), built locally from source.",
+  "repository": "toeverything/design",
+  "scripts": {
+    "build": "vite build && tsc --project tsconfig.build.json"
+  },
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./style.css": "./dist/style.css",
+    "./v2": {
+      "types": "./dist/v2/index.d.ts",
+      "import": "./dist/v2/index.js",
+      "require": "./dist/v2/index.cjs"
+    },
+    "./typography": {
+      "types": "./dist/presets/typography.css.d.ts",
+      "import": "./dist/presets/typography.js",
+      "require": "./dist/presets/typography.cjs"
+    },
+    "./fonts": "./fonts",
+    "./fonts.css": "./fonts/fonts.css"
+  },
+  "files": [
+    "dist",
+    "fonts",
+    "src"
+  ],
+  "devDependencies": {
+    "@vanilla-extract/css": "^1.11.1",
+    "@vanilla-extract/vite-plugin": "^3.8.2",
+    "typescript": "^5.0.0",
+    "vite": "^4.3.9"
+  }
+}

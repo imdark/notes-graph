@@ -1,0 +1,16 @@
+{
+  "name": "@notesgraph/plugin-server",
+  "type": "module",
+  "version": "0.26.3",
+  "private": true,
+  "description": "NotesGraph plugin marketplace registry (publish/discover/download, auto-sign + curation scaffold).",
+  "scripts": {
+    "start": "r ./src/server.ts"
+  },
+  "dependencies": {
+    "@notesgraph/plugin-sdk": "workspace:*"
+  },
+  "devDependencies": {
+    "@notesgraph-tools/cli": "workspace:*"
+  }
+}

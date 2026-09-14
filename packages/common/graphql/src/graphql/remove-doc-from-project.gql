@@ -1,0 +1,3 @@
+mutation removeDocFromProject($projectId: String!, $docId: String!) {
+  removeDocFromProject(projectId: $projectId, docId: $docId)
+}

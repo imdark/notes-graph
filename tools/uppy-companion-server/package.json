@@ -1,0 +1,16 @@
+{
+  "name": "@notesgraph/uppy-companion-server",
+  "type": "module",
+  "version": "0.26.3",
+  "private": true,
+  "scripts": {
+    "start": "r ./src/server.ts",
+    "build": "tsc -b tsconfig.json"
+  },
+  "dependencies": {
+    "@uppy/companion": "^6.2.2"
+  },
+  "devDependencies": {
+    "@notesgraph-tools/cli": "workspace:*"
+  }
+}

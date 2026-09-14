@@ -1,0 +1,9 @@
+{
+  "id": "__PLUGIN_ID__",
+  "name": "__PLUGIN_NAME__",
+  "version": "0.0.1",
+  "description": "An NotesGraph plugin.",
+  "platforms": ["web", "desktop", "mobile"],
+  "permissions": ["ui", "storage", "backend"],
+  "entry": { "client": "dist/index.js", "server": "dist/server.js" }
+}

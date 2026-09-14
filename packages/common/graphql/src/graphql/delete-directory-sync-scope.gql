@@ -1,0 +1,3 @@
+mutation deleteDirectorySyncScope($scopeId: String!) {
+  deleteDirectorySyncScope(scopeId: $scopeId)
+}

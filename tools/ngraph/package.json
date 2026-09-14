@@ -1,0 +1,25 @@
+{
+  "name": "@notesgraph/ngraph",
+  "version": "0.26.3",
+  "private": true,
+  "type": "module",
+  "description": "ngraph — CLI + TUI to list, search, view, edit and connect NotesGraph notes",
+  "bin": "./bin/ngraph.js",
+  "scripts": {
+    "ngraph": "r ./src/index.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "@notesgraph-tools/cli": "workspace:*",
+    "ink": "^5.1.0",
+    "ink-text-input": "^6.0.0",
+    "react": "^18.3.1",
+    "yjs": "^13.6.27",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/react": "^18.3.12",
+    "typescript": "^5.9.3"
+  }
+}

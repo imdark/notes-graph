@@ -1,0 +1,17 @@
+query workspaceProjects($workspaceId: String!) {
+  workspace(id: $workspaceId) {
+    projects {
+      id
+      workspaceId
+      name
+      createdBy
+      createdAt
+      members {
+        userId
+        role
+        createdAt
+      }
+      docIds
+    }
+  }
+}

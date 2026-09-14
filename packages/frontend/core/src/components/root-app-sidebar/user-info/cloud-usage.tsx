@@ -1,0 +1,75 @@
+import { ErrorMessage, Skeleton } from '@notesgraph/component';
+import { UserQuotaService } from '@notesgraph/core/modules/cloud';
+import { WorkspaceDialogService } from '@notesgraph/core/modules/dialogs';
+import { useI18n } from '@notesgraph/i18n';
+import { useLiveData, useService } from '@notesgraph/infra';
+import { assignInlineVars } from '@vanilla-extract/dynamic';
+import clsx from 'clsx';
+import { useEffect } from 'react';
+
+import { useCatchEventCallback } from '../../hooks/use-catch-event-hook';
+import { UserPlanButton } from '../../notesgraph/auth/user-plan-button';
+import * as styles from './index.css';
+
+export const CloudUsage = () => {
+  const t = useI18n();
+  const quota = useService(UserQuotaService).quota;
+  const quotaError = useLiveData(quota.error$);
+
+  const workspaceDialogService = useService(WorkspaceDialogService);
+  const handleClick = useCatchEventCallback(() => {
+    workspaceDialogService.open('setting', {
+      activeTab: 'plans',
+      scrollAnchor: 'cloudPricingPlan',
+    });
+  }, [workspaceDialogService]);
+
+  useEffect(() => {
+    // revalidate quota to get the latest status
+    quota.revalidate();
+  }, [quota]);
+  const color = useLiveData(quota.color$);
+  const usedFormatted = useLiveData(quota.usedFormatted$);
+  const maxFormatted = useLiveData(quota.maxFormatted$);
+  const percent = useLiveData(quota.percent$);
+
+  if (percent === null) {
+    if (quotaError) {
+      return <ErrorMessage>Failed to load quota</ErrorMessage>;
+    }
+    return (
+      <div>
+        <Skeleton height={15} width={50} />
+        <Skeleton height={10} style={{ marginTop: 4 }} />
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className={clsx(styles.usageBlock, styles.cloudUsageBlock)}
+      style={assignInlineVars({
+        [styles.progressColorVar]: color,
+      })}
+    >
+      <div className={styles.usageLabel}>
+        <div>
+          <span className={styles.usageLabelTitle}>
+            {t['com.notesgraph.user-info.usage.cloud']()}
+          </span>
+          <span>{usedFormatted}</span>
+          <span>&nbsp;/&nbsp;</span>
+          <span>{maxFormatted}</span>
+        </div>
+        <UserPlanButton onClick={handleClick} />
+      </div>
+
+      <div className={styles.cloudUsageBar}>
+        <div
+          className={styles.cloudUsageBarInner}
+          style={{ width: `${percent}%` }}
+        />
+      </div>
+    </div>
+  );
+};

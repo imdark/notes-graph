@@ -1,0 +1,41 @@
+import { SafeArea, useThemeColorV2 } from '@notesgraph/component';
+import { NavigationPanelNotes } from '@notesgraph/core/desktop/components/navigation-panel';
+
+import { AppTabs } from '../../components';
+import {
+  NavigationPanelCollections,
+  NavigationPanelFavorites,
+  NavigationPanelOrganize,
+  NavigationPanelProjects,
+  NavigationPanelTags,
+} from '../../components/navigation';
+import { HomeHeader, RecentDocs } from '../../views';
+
+export const Component = () => {
+  useThemeColorV2('layer/background/mobile/primary');
+
+  return (
+    <>
+      <HomeHeader />
+      <RecentDocs />
+      <SafeArea bottom>
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 32,
+            padding: '0 8px 32px 8px',
+          }}
+        >
+          <NavigationPanelFavorites />
+          <NavigationPanelProjects />
+          <NavigationPanelNotes />
+          <NavigationPanelOrganize />
+          <NavigationPanelCollections />
+          <NavigationPanelTags />
+        </div>
+      </SafeArea>
+      <AppTabs />
+    </>
+  );
+};

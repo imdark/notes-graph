@@ -1,0 +1,14 @@
+mutation createDirectorySyncScope($input: CreateDirectorySyncScopeInput!) {
+  createDirectorySyncScope(input: $input) {
+    id
+    directoryAccountId
+    projectId
+    scopeType
+    externalId
+    label
+    status
+    lastError
+    lastSyncAt
+    memberCount
+  }
+}

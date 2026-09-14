@@ -1,0 +1,21 @@
+{
+  "name": "@notesgraph/plugin-sdk",
+  "type": "module",
+  "version": "0.26.3",
+  "private": true,
+  "description": "SDK, manifest schema and capability types for NotesGraph plugins (client + server).",
+  "exports": {
+    ".": "./src/index.ts",
+    "./client": "./src/client.ts",
+    "./server": "./src/server.ts"
+  },
+  "dependencies": {
+    "zod": "^3.25.76"
+  },
+  "peerDependencies": {
+    "react": "^19.2.1"
+  },
+  "devDependencies": {
+    "react": "^19.2.1"
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "//": "Self-contained config used ONLY by the `build` script's `tsc --emitDeclarationOnly` step to emit dist/*.d.ts. Intentionally NOT named tsconfig.json so `notesgraph init` does not register this package in the root `tsc -b` graph — consumers resolve theme types via the generated dist/*.d.ts, exactly as they did for the external npm package.",
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "Node",
+    "lib": ["ESNext", "DOM", "DOM.Iterable"],
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "rootDir": "./src",
+    "outDir": "./dist",
+    "strict": false,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "resolveJsonModule": true,
+    "types": []
+  },
+  "include": ["src"]
+}

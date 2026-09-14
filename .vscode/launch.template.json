@@ -1,0 +1,35 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Launch NotesGraph Cloud",
+      "type": "node",
+      "request": "launch",
+      "runtimeExecutable": "yarn",
+      "cwd": "${workspaceFolder}",
+      "runtimeArgs": [
+        "notesgraph",
+        "@notesgraph/server",
+        "dev"
+      ]
+    },
+    {
+      "name": "Lanuch NotesGraph Web",
+      "type": "node",
+      "request": "launch",
+      "runtimeExecutable": "yarn",
+      "cwd": "${workspaceFolder}",
+      "runtimeArgs": [
+        "notesgraph",
+        "@notesgraph/web",
+        "dev"
+      ]
+    },
+    {
+      "type": "chrome",
+      "request": "launch",
+      "name": "Debug NotesGraph Web",
+      "url": "http://localhost:8080"
+    }
+  ]
+}

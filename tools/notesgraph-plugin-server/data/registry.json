@@ -1,0 +1,55 @@
+[
+  {
+    "id": "com.notesgraph.hello",
+    "version": "0.0.1",
+    "name": "Hello Plugin",
+    "description": "Minimal NotesGraph dev plugin: a command that greets and counts.",
+    "author": "NotesGraph",
+    "platforms": [
+      "web",
+      "desktop",
+      "mobile"
+    ],
+    "permissions": [
+      "ui",
+      "storage",
+      "docs",
+      "backend"
+    ],
+    "clientEntry": "index.js",
+    "serverEntry": "server.js",
+    "hasServer": true,
+    "files": [
+      "manifest.json",
+      "index.js",
+      "server.js"
+    ],
+    "status": "approved",
+    "signature": "+ZJEu2Qc5uoov7jlD4aui7EdDDkwyk6WZyZldRDnU2tMigh/9RXXlxt0yRqRICLHoa122Y+7dfUCulT74APIDg==",
+    "publishedAt": 1782426508885
+  },
+  {
+    "id": "com.notesgraph.notes-graph-import",
+    "version": "0.0.1",
+    "name": "Notes Graph Import",
+    "description": "Import a mind-link notes-graph export ({ nodes, links } JSON) as NotesGraph docs with links.",
+    "author": "NotesGraph",
+    "platforms": [
+      "web",
+      "desktop"
+    ],
+    "permissions": [
+      "ui",
+      "docs"
+    ],
+    "clientEntry": "index.js",
+    "hasServer": false,
+    "files": [
+      "manifest.json",
+      "index.js"
+    ],
+    "status": "approved",
+    "signature": "ZRxJzuVXMiC9ymOo1wvR39q7bvsAuh+8myOD8zYeRxtlp/pqRN/k5/LBIF+nd7ALNxVgpO99ZERKbQDRAFO4DQ==",
+    "publishedAt": 1782426508887
+  }
+]

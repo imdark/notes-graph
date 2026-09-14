@@ -1,0 +1,25 @@
+query workspaceDirectoryAccount($workspaceId: String!) {
+  workspace(id: $workspaceId) {
+    directoryAccount {
+      id
+      provider
+      domain
+      status
+      lastError
+      lastSyncAt
+      createdAt
+      syncScopes {
+        id
+        directoryAccountId
+        projectId
+        scopeType
+        externalId
+        label
+        status
+        lastError
+        lastSyncAt
+        memberCount
+      }
+    }
+  }
+}

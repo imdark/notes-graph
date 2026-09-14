@@ -1,0 +1,157 @@
+/**
+ * NotesGraph "Night Grid" palette — a retro-futurist cyberpunk reskin layered on
+ * top of @toeverything/theme, matching the notesgraph.com landing page. Imported
+ * AFTER the base theme (and theme.css.ts) so these rules win at equal specificity
+ * (both use the [data-theme=...] attribute selector). We retune brand/accent plus
+ * the surfaces for BOTH modes; semantic status colors (success/error/warning) are
+ * intentionally inherited from the base theme so meaning stays legible.
+ *
+ * Identity:
+ *   - neon pink   #ff2d78  → brand / primary / buttons / focus / active states
+ *   - neon cyan   #00e5ff  → links / doc references / graph edges (relational)
+ *   - violet-black surfaces in dark; a cool daylight-violet in light.
+ *
+ * Light mode deepens the accents for contrast on bright surfaces
+ * (pink #e6165f, cyan #0e7490) so text and links stay readable.
+ */
+
+/* ======================================================================
+   DARK — "Night Grid" (the flagship look; mirrors the landing page)
+   ====================================================================== */
+[data-theme='dark'] {
+  /* accent */
+  --notesgraph-brand-color: #ff2d78;
+  --notesgraph-primary-color: #ff2d78;
+  --notesgraph-primary-color-04: rgba(255, 45, 120, 0.04);
+
+  /* surfaces — violet-black */
+  --notesgraph-background-primary-color: #0b0714;
+  --notesgraph-background-secondary-color: #120b20;
+  --notesgraph-background-tertiary-color: #1a1230;
+  --notesgraph-background-overlay-panel-color: #120b20;
+  --notesgraph-background-code-block: #0e0a1a;
+  --notesgraph-background-modal-color: rgba(4, 2, 10, 0.75);
+  --notesgraph-hover-color: rgba(255, 45, 120, 0.1);
+  --notesgraph-hover-color-filled: rgba(255, 45, 120, 0.14);
+
+  /* text + lines */
+  --notesgraph-text-primary-color: #e6e9f5;
+  --notesgraph-text-secondary-color: #9b93b8;
+  --notesgraph-text-disable-color: #5d5580;
+  --notesgraph-placeholder-color: #5d5580;
+  --notesgraph-icon-color: #9b93b8;
+  --notesgraph-border-color: #2a1b45;
+  --notesgraph-divider-color: #2a1b45;
+
+  /* relational accent → neon cyan */
+  --notesgraph-text-emphasis-color: #22d3ee;
+  --notesgraph-link-color: #22d3ee;
+
+  /* v2 accent → neon pink */
+  --notesgraph-v2-button-primary: #ff2d78;
+  --notesgraph-v2-button-actionActive: #ff2d78;
+  --notesgraph-v2-button-checkBox: #ff2d78;
+  --notesgraph-v2-icon-activated: #ff2d78;
+  --notesgraph-v2-input-border-active: #ff2d78;
+  --notesgraph-v2-layer-insideBorder-primaryBorder: #ff2d78;
+  --notesgraph-v2-loading-foreground: #ff2d78;
+  --notesgraph-v2-radio-active-chekced: #ff2d78;
+  --notesgraph-v2-database-focusBackground: rgba(255, 45, 120, 0.08);
+  --notesgraph-v2-table-focusBackground: rgba(255, 45, 120, 0.08);
+  --notesgraph-v2-table-focusBorder: #ff2d78;
+  --notesgraph-v2-table-indicator-activated: #ff2d78;
+  --notesgraph-v2-tab-divider-indicator: #ff2d78;
+  --notesgraph-v2-toggle-background: #ff2d78;
+  --notesgraph-v2-edgeless-frame-border-active: #ff2d78;
+  --notesgraph-v2-edgeless-group-border-active: #ff2d78;
+  --notesgraph-v2-edgeless-group-fontColor-active: #ff2d78;
+  --notesgraph-v2-edgeless-selection-selectionMarqueeBorder: #ff2d78;
+  --notesgraph-v2-edgeless-selection-selectionMarqueeBackground: rgba(255, 45, 120, 0.08);
+
+  /* v2 surfaces */
+  --notesgraph-v2-layer-background-primary: #0b0714;
+  --notesgraph-v2-layer-background-secondary: #120b20;
+  --notesgraph-v2-layer-background-tertiary: #1a1230;
+  --notesgraph-v2-layer-background-overlayPanel: #120b20;
+  --notesgraph-v2-layer-background-codeBlock: #0e0a1a;
+  --notesgraph-v2-layer-background-modal: rgba(4, 2, 10, 0.75);
+  --notesgraph-v2-layer-insideBorder-border: #2a1b45;
+  --notesgraph-v2-text-primary: #e6e9f5;
+  --notesgraph-v2-text-secondary: #9b93b8;
+
+  /* v2 relational accent → neon cyan */
+  --notesgraph-v2-text-emphasis: #22d3ee;
+  --notesgraph-v2-text-link: #22d3ee;
+  --notesgraph-v2-backlinks-blockBorder: rgba(34, 211, 238, 0.4);
+}
+
+/* ======================================================================
+   LIGHT — "Daybreak Grid" (cyberpunk in daylight: cool violet-white
+   surfaces, deepened pink + cyan accents for contrast)
+   ====================================================================== */
+[data-theme='light'] {
+  /* accent (deepened for readability on bright surfaces) */
+  --notesgraph-brand-color: #e6165f;
+  --notesgraph-primary-color: #e6165f;
+  --notesgraph-primary-color-04: rgba(230, 22, 95, 0.04);
+
+  /* surfaces — cool daylight violet-white */
+  --notesgraph-background-primary-color: #faf9fd;
+  --notesgraph-background-secondary-color: #f1eff8;
+  --notesgraph-background-tertiary-color: #e9e6f3;
+  --notesgraph-background-overlay-panel-color: #ffffff;
+  --notesgraph-background-code-block: #f3f1fa;
+  --notesgraph-background-modal-color: rgba(11, 7, 20, 0.55);
+  --notesgraph-hover-color: rgba(230, 22, 95, 0.06);
+  --notesgraph-hover-color-filled: #f1eff8;
+
+  /* text + lines */
+  --notesgraph-text-primary-color: #17131f;
+  --notesgraph-text-secondary-color: #615c73;
+  --notesgraph-text-disable-color: #a8a3bd;
+  --notesgraph-placeholder-color: #a8a3bd;
+  --notesgraph-icon-color: #615c73;
+  --notesgraph-border-color: #e3dfef;
+  --notesgraph-divider-color: #e3dfef;
+
+  /* relational accent → deep cyan */
+  --notesgraph-text-emphasis-color: #0e7490;
+  --notesgraph-link-color: #0e7490;
+
+  /* v2 accent → deepened pink */
+  --notesgraph-v2-button-primary: #e6165f;
+  --notesgraph-v2-button-actionActive: #e6165f;
+  --notesgraph-v2-button-checkBox: #e6165f;
+  --notesgraph-v2-icon-activated: #e6165f;
+  --notesgraph-v2-input-border-active: #e6165f;
+  --notesgraph-v2-layer-insideBorder-primaryBorder: #e6165f;
+  --notesgraph-v2-loading-foreground: #e6165f;
+  --notesgraph-v2-radio-active-chekced: #e6165f;
+  --notesgraph-v2-database-focusBackground: rgba(230, 22, 95, 0.06);
+  --notesgraph-v2-table-focusBackground: rgba(230, 22, 95, 0.06);
+  --notesgraph-v2-table-focusBorder: #e6165f;
+  --notesgraph-v2-table-indicator-activated: #e6165f;
+  --notesgraph-v2-tab-divider-indicator: #e6165f;
+  --notesgraph-v2-toggle-background: #e6165f;
+  --notesgraph-v2-edgeless-frame-border-active: #e6165f;
+  --notesgraph-v2-edgeless-group-border-active: #e6165f;
+  --notesgraph-v2-edgeless-group-fontColor-active: #e6165f;
+  --notesgraph-v2-edgeless-selection-selectionMarqueeBorder: #e6165f;
+  --notesgraph-v2-edgeless-selection-selectionMarqueeBackground: rgba(230, 22, 95, 0.06);
+
+  /* v2 surfaces */
+  --notesgraph-v2-layer-background-primary: #faf9fd;
+  --notesgraph-v2-layer-background-secondary: #f1eff8;
+  --notesgraph-v2-layer-background-tertiary: #e9e6f3;
+  --notesgraph-v2-layer-background-overlayPanel: #ffffff;
+  --notesgraph-v2-layer-background-codeBlock: #f3f1fa;
+  --notesgraph-v2-layer-background-modal: rgba(11, 7, 20, 0.55);
+  --notesgraph-v2-layer-insideBorder-border: #e3dfef;
+  --notesgraph-v2-text-primary: #17131f;
+  --notesgraph-v2-text-secondary: #615c73;
+
+  /* v2 relational accent → deep cyan */
+  --notesgraph-v2-text-emphasis: #0e7490;
+  --notesgraph-v2-text-link: #0e7490;
+  --notesgraph-v2-backlinks-blockBorder: rgba(14, 116, 144, 0.4);
+}

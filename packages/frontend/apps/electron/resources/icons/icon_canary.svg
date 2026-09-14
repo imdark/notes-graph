@@ -1,0 +1,15 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1024" height="1024" rx="224" fill="#14141C"/>
+  <!-- tail -->
+  <path d="M340 560 L150 650 L350 645 Z" fill="#F4B400"/>
+  <!-- body -->
+  <ellipse cx="500" cy="540" rx="220" ry="195" fill="#FFD43B"/>
+  <!-- head -->
+  <circle cx="650" cy="420" r="140" fill="#FFD43B"/>
+  <!-- wing -->
+  <ellipse cx="470" cy="560" rx="135" ry="82" fill="#F4B400" transform="rotate(18 470 560)"/>
+  <!-- beak -->
+  <path d="M782 400 L884 432 L780 463 Z" fill="#FF9F1C"/>
+  <!-- eye -->
+  <circle cx="702" cy="404" r="22" fill="#14141C"/>
+</svg>

@@ -1,0 +1,26 @@
+query publicDocComments(
+  $workspaceId: String!
+  $docId: String!
+  $pagination: PaginationInput
+) {
+  publicDocComments(
+    workspaceId: $workspaceId
+    docId: $docId
+    pagination: $pagination
+  ) {
+    totalCount
+    edges {
+      cursor
+      node {
+        id
+        content
+        createdAt
+        user {
+          id
+          name
+          avatarUrl
+        }
+      }
+    }
+  }
+}

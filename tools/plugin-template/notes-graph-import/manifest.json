@@ -1,0 +1,10 @@
+{
+  "id": "com.notesgraph.notes-graph-import",
+  "name": "Notes Graph Import",
+  "version": "0.0.1",
+  "description": "Import a mind-link notes-graph export ({ nodes, links } JSON) as NotesGraph docs with links.",
+  "author": "NotesGraph",
+  "platforms": ["web", "desktop"],
+  "permissions": ["ui", "docs"],
+  "entry": { "client": "index.js" }
+}

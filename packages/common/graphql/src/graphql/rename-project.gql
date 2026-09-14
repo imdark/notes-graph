@@ -1,0 +1,6 @@
+mutation renameProject($id: String!, $name: String!) {
+  renameProject(id: $id, name: $name) {
+    id
+    name
+  }
+}

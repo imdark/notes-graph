@@ -1,0 +1,6 @@
+{
+  "$schema": "https://github.com/notesgraph/notesgraph/releases/latest/download/config.schema.json",
+  "server": {
+    "name": "NotesGraph Self Hosted Server"
+  }
+}
