@@ -96,6 +96,48 @@ ensure_ssh_access() {
 echo "==> deploying to $HOST"
 ensure_ssh_access
 
+# Build the three frontend bundles here instead of on the box.
+#
+# They are plain JS/CSS - nothing in them is architecture-specific - and this
+# machine has several fast cores against the box's two. Measured locally:
+# web ~13s, mobile ~11s, admin ~6s.
+#
+# The server bundle is NOT built here on purpose: it resolves
+# ./server-native.<arch>.node, so a local build would embed this machine's
+# addon instead of the box's linux/x64 one.
+build_frontend_bundles() {
+  echo "==> building frontend bundles locally (web, admin, mobile)"
+  cd "$REPO_ROOT"
+  for pkg in web admin mobile; do
+    echo "--> $pkg"
+    BUILD_TYPE=stable SELF_HOSTED=true yarn notesgraph bundle -p "@notesgraph/$pkg" \
+      || { echo "!! local $pkg bundle failed" >&2; exit 1; }
+  done
+
+  # The bundler can exit 0 having produced nothing (same trap redeploy.sh
+  # guards against), so check the outputs rather than the exit code.
+  for marker in \
+    packages/frontend/apps/web/dist/selfhost.html \
+    packages/frontend/admin/dist \
+    packages/frontend/apps/mobile/dist; do
+    [[ -e "$REPO_ROOT/$marker" ]] \
+      || { echo "!! local bundle produced no $marker" >&2; exit 1; }
+  done
+}
+
+# Ship those dists. sync_source excludes every dist/, so they need their own
+# pass; --delete keeps stale hashed chunks from piling up on the box.
+sync_frontend_dists() {
+  echo "==> uploading prebuilt frontend bundles"
+  for d in \
+    packages/frontend/apps/web/dist \
+    packages/frontend/admin/dist \
+    packages/frontend/apps/mobile/dist; do
+    rsync -az --delete -e "ssh -i $SSH_KEY" \
+      "$REPO_ROOT/$d/" "ubuntu@$HOST:/home/ubuntu/notes-graph/$d/"
+  done
+}
+
 sync_source() {
   echo "==> rsync source"
   rsync -az --delete \
@@ -180,6 +222,14 @@ deploy_download() {
   echo "==> download deployed -> https://notesgraph.com/download"
 }
 
+# Opt-in: build the frontend bundles here and ship them, rather than rebuilding
+# them on the box. Off by default - the all-on-box path stays the safe default.
+LOCAL_BUNDLES=0
+if [[ "${1:-}" == "--local-bundles" ]]; then
+  LOCAL_BUNDLES=1
+  shift
+fi
+
 if [[ "${1:-}" == "--landing" ]]; then
   deploy_landing
   exit 0
@@ -190,7 +240,14 @@ if [[ "${1:-}" == "--download" ]]; then
   exit 0
 fi
 
+if [[ "$LOCAL_BUNDLES" == "1" ]]; then
+  build_frontend_bundles
+fi
+
 sync_source
+if [[ "$LOCAL_BUNDLES" == "1" ]]; then
+  sync_frontend_dists
+fi
 deploy_landing
 
 # Concurrency guard: the box has only ~7.6 GB RAM and each full build runs
@@ -208,7 +265,7 @@ echo "==> remote build + restart (log: /home/ubuntu/deploy.log on the box)"
 # Hold the lock for the whole remote build so a concurrent deploy is blocked.
 # Runs the version-controlled scripts/prod/redeploy.sh (rsynced above), which
 # also takes a pre-migration DB + config backup into /opt/notesgraph/backups.
-"${SSH[@]}" 'exec 9>/tmp/notesgraph-deploy.lock; flock -n 9 || { echo "LOCK-LOST"; exit 17; }; bash /home/ubuntu/notes-graph/scripts/prod/redeploy.sh 2>&1 | tee /home/ubuntu/deploy.log | grep -E "^===|BUILD-ALL-DONE|DEPLOY-DONE|Error|error TS|FAILED" || true'
+"${SSH[@]}" 'exec 9>/tmp/notesgraph-deploy.lock; flock -n 9 || { echo "LOCK-LOST"; exit 17; }; NOTESGRAPH_SKIP_FRONTEND_BUNDLES='"$LOCAL_BUNDLES"' bash /home/ubuntu/notes-graph/scripts/prod/redeploy.sh 2>&1 | tee /home/ubuntu/deploy.log | grep -E "^===|BUILD-ALL-DONE|DEPLOY-DONE|Error|error TS|FAILED" || true'
 
 # redeploy.sh aborts on build failure (set -e), but the grep pipeline above
 # swallows its exit code — gate on the completion marker so a failed build
