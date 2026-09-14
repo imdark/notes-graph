@@ -99,9 +99,26 @@ export const empty = style({
 export const editor = style({
   display: 'flex',
   flexDirection: 'column',
-  gap: 16,
   minWidth: 480,
   maxWidth: 560,
+  // Cap the dialog and scroll the fields inside it. Without this the form
+  // grows past the viewport on a short window and the actions below it become
+  // unreachable - there is no way to save.
+  maxHeight: 'min(70vh, 660px)',
+});
+
+/** The scrolling half: every field lives here, the actions stay pinned. */
+export const editorBody = style({
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 16,
+  flex: 1,
+  // Without an explicit floor a flex child refuses to shrink below its content,
+  // which would defeat the overflow.
+  minHeight: 0,
+  overflowY: 'auto',
+  // Keep the scrollbar off the inputs.
+  paddingRight: 4,
 });
 
 export const field = style({
@@ -161,7 +178,88 @@ export const editorActions = style({
   display: 'flex',
   justifyContent: 'flex-end',
   gap: 8,
+  flexShrink: 0,
+  paddingTop: 16,
   marginTop: 4,
+  borderTop: `1px solid ${cssVarV2('layer/insideBorder/border')}`,
+});
+
+// --- tag input ---
+
+export const tagInput = style({
+  display: 'flex',
+  flexWrap: 'wrap',
+  alignItems: 'center',
+  gap: 6,
+  padding: 6,
+  minHeight: 36,
+  borderRadius: 8,
+  border: `1px solid ${cssVarV2('layer/insideBorder/border')}`,
+  background: cssVarV2('layer/background/primary'),
+});
+
+export const tag = style({
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 4,
+  padding: '2px 4px 2px 8px',
+  borderRadius: 6,
+  fontSize: cssVar('fontXs'),
+  color: cssVarV2('text/primary'),
+  background: cssVarV2('layer/background/hoverOverlay'),
+  selectors: {
+    // Tools that change the user's files read differently from read-only ones.
+    '&[data-mutates="true"]': {
+      color: cssVarV2('status/error'),
+      background: cssVarV2('layer/background/error'),
+    },
+  },
+});
+
+export const tagRemove = style({
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  width: 16,
+  height: 16,
+  border: 'none',
+  padding: 0,
+  borderRadius: 4,
+  cursor: 'pointer',
+  color: 'inherit',
+  background: 'transparent',
+  fontSize: 12,
+  lineHeight: 1,
+  selectors: {
+    '&:hover': { background: cssVarV2('layer/background/hoverOverlay') },
+  },
+});
+
+export const tagAdd = style({
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 4,
+  padding: '3px 8px',
+  borderRadius: 6,
+  border: `1px dashed ${cssVarV2('layer/insideBorder/border')}`,
+  background: 'transparent',
+  color: cssVarV2('text/secondary'),
+  fontSize: cssVar('fontXs'),
+  cursor: 'pointer',
+  selectors: {
+    '&:hover': { color: cssVarV2('text/primary') },
+  },
+});
+
+export const tagMenuItem = style({
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 1,
+});
+
+export const tagMenuDesc = style({
+  fontSize: cssVar('fontXs'),
+  color: cssVarV2('text/tertiary'),
 });
 
 export const scopeBadge = style({
