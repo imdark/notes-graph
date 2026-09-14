@@ -111,13 +111,32 @@ export const suggestedParentFloat = style({
   right: 16,
   width: 300,
   maxWidth: 'calc(100% - 32px)',
-  // Don't let a tall suggestion list swallow the banner; scroll within if needed.
-  maxHeight: 220,
-  overflowY: 'auto',
   pointerEvents: 'auto',
   '@media': {
     'screen and (max-width: 640px)': {
       display: 'none',
     },
   },
+});
+
+/**
+ * Don't let a tall suggestion list swallow the banner; scroll within if needed.
+ *
+ * The cap sits on the scrolling viewport rather than on the card above it:
+ * Radix's viewport takes `height: 100%`, and with no definite height to
+ * resolve against it grows to its full content height, reports no overflow,
+ * and leaves the scrollbar stuck hidden however long the list is.
+ */
+export const suggestedParentScroller = style({
+  maxHeight: 220,
+});
+
+/**
+ * The shared viewport style is `height: 100%`, which resolves to zero inside
+ * this floating card because the card has no height of its own - collapsing
+ * the banner entirely. Size to content instead, bounded by the cap above.
+ * The doubled class beats the shared rule without relying on source order.
+ */
+globalStyle(`${suggestedParentScroller}${suggestedParentScroller}`, {
+  height: 'auto',
 });

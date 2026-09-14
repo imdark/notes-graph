@@ -423,11 +423,27 @@ const DetailPageImpl = memo(function DetailPageImpl() {
                     they shouldn't be nudged to adopt a suggested parent. */}
                 {!readonly && !isJournal ? (
                   <div className={styles.suggestedParentAnchor}>
+                    {/* A plain overflow:auto div scrolls here with no visible
+                        bar at all - global.css turns native scrollbars off
+                        app-wide - so a long list just looked like it ended.
+                        Scrollable (type="auto") shows one only when the list
+                        actually overflows. */}
                     <div
                       className={styles.suggestedParentFloat}
                       data-testid="suggested-parent-float"
                     >
-                      <SuggestedParentBanner docId={doc.id} />
+                      {/* Scrollable sits inside the floating card, never on
+                          it: Radix puts `position: relative` inline on its
+                          root, which would override the card's absolute
+                          positioning and drop it out of its anchor. */}
+                      <Scrollable.Root type="auto">
+                        <Scrollable.Viewport
+                          className={styles.suggestedParentScroller}
+                        >
+                          <SuggestedParentBanner docId={doc.id} />
+                        </Scrollable.Viewport>
+                        <Scrollable.Scrollbar />
+                      </Scrollable.Root>
                     </div>
                   </div>
                 ) : null}

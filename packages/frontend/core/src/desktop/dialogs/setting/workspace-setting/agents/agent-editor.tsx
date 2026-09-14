@@ -8,6 +8,7 @@ import {
   Menu,
   MenuItem,
   Modal,
+  Scrollable,
   Switch,
 } from '@notesgraph/component';
 import { AiIconGenerator } from '@notesgraph/core/blocksuite/block-suite-editor/doc-banner';
@@ -204,7 +205,13 @@ export const AgentEditor = ({
       width={560}
     >
       <div className={styles.editor}>
-        <div className={styles.editorBody}>
+        {/* A plain overflow:auto div shows nothing here: global.css sets
+            `* { scrollbar-width: none }` and zeroes ::-webkit-scrollbar, so
+            native scrollbars are off app-wide. Scrollable is the app's way
+            back to a visible one; type="auto" shows it only when the form
+            actually overflows. */}
+        <Scrollable.Root type="auto" className={styles.editorScrollRoot}>
+          <Scrollable.Viewport className={styles.editorBody}>
           <div className={styles.field}>
             <span className={styles.label}>Name</span>
             <Input
@@ -427,7 +434,9 @@ export const AgentEditor = ({
               How many times the agent may call a tool before it has to answer.
             </span>
           </div>
-        </div>
+          </Scrollable.Viewport>
+          <Scrollable.Scrollbar />
+        </Scrollable.Root>
 
         <div className={styles.editorActions}>
           <Button onClick={() => onOpenChange(false)}>Cancel</Button>

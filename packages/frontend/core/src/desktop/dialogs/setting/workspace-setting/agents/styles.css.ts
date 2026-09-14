@@ -1,6 +1,6 @@
 import { cssVar } from '@toeverything/theme';
 import { cssVarV2 } from '@toeverything/theme/v2';
-import { style } from '@vanilla-extract/css';
+import { globalStyle, style } from '@vanilla-extract/css';
 
 export const main = style({
   display: 'flex',
@@ -101,24 +101,49 @@ export const editor = style({
   flexDirection: 'column',
   minWidth: 480,
   maxWidth: 560,
-  // Cap the dialog and scroll the fields inside it. Without this the form
-  // grows past the viewport on a short window and the actions below it become
-  // unreachable - there is no way to save.
-  maxHeight: 'min(70vh, 660px)',
 });
 
-/** The scrolling half: every field lives here, the actions stay pinned. */
+/**
+ * The scrolling half: every field lives here, the actions stay pinned.
+ *
+ * Scrolling is Radix's (via Scrollable), not the browser's - global.css turns
+ * native scrollbars off app-wide, so an overflow:auto div here would scroll
+ * with no visible bar at all.
+ */
+export const editorScrollRoot = style({
+  minHeight: 0,
+});
+
 export const editorBody = style({
-  display: 'flex',
+  /**
+   * The cap lives here, on the element that actually scrolls.
+   *
+   * Capping an ancestor and letting Radix's viewport inherit `height: 100%`
+   * does not work: the percentage has no definite box to resolve against, so
+   * the viewport grows to its full content height, gets clipped by the root's
+   * overflow:hidden, and reports no overflow - leaving the scrollbar stuck at
+   * data-state="hidden" no matter how long the form is.
+   */
+  maxHeight: 'min(58vh, 520px)',
+  // Keep the scrollbar clear of the inputs.
+  paddingRight: 8,
+});
+
+/**
+ * Radix measures overflow with a ResizeObserver on the content wrapper it puts
+ * inside the viewport, but the shared Scrollable style collapses that wrapper
+ * with `display: contents !important`. A box with no size reports no overflow,
+ * so the scrollbar stays `data-state="hidden"` however tall the form gets -
+ * which is exactly the "it doesn't look scrollable" complaint.
+ *
+ * Give the wrapper a real box back (and carry the field layout on it). The
+ * doubled class is what wins against the shared rule's !important without
+ * depending on stylesheet order.
+ */
+globalStyle(`${editorBody}${editorBody} > :first-child`, {
+  display: 'flex !important',
   flexDirection: 'column',
   gap: 16,
-  flex: 1,
-  // Without an explicit floor a flex child refuses to shrink below its content,
-  // which would defeat the overflow.
-  minHeight: 0,
-  overflowY: 'auto',
-  // Keep the scrollbar off the inputs.
-  paddingRight: 4,
 });
 
 export const field = style({
