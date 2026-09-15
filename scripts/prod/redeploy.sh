@@ -98,7 +98,40 @@ test -d packages/frontend/apps/mobile/dist || { echo "FATAL: mobile dist missing
 
 # image assembly the way CI does it (prod-only deps staged into the server pkg)
 /opt/notesgraph/image-build.sh
-step "linkcard sidecar image"; docker build -f tools/link-card-server/Dockerfile -t notesgraph-linkcard:prod . || echo "WARN linkcard image build failed"
+step "linkcard sidecar image"
+# Measured at 374s, rebuilt on every single deploy, for a sidecar that rarely
+# changes. Docker's own layer cache cannot help: the Dockerfile does `COPY . .`
+# from the repo root, so any change anywhere in the tree invalidates the layer
+# above the expensive RUN (yarn workspaces focus + playwright install webkit +
+# esbuild).
+#
+# So hash only the inputs that actually determine this image and stamp it on
+# the built image as a label. The closure is small and checked: the entry
+# imports @notesgraph/link-card, which itself pulls in no other workspace
+# package - only npm deps, which yarn.lock pins.
+linkcard_src_hash() {
+  {
+    find tools/link-card-server packages/common/link-card \
+      -type f -not -path '*/node_modules/*' -not -path '*/dist/*' -print0 \
+      2>/dev/null | sort -z | xargs -0 sha256sum
+    sha256sum yarn.lock package.json .yarnrc.yml 2>/dev/null
+  } | sha256sum | cut -d' ' -f1
+}
+LINKCARD_HASH="$(linkcard_src_hash || true)"
+LINKCARD_PREV="$(docker image inspect notesgraph-linkcard:prod \
+  --format '{{ index .Config.Labels "notesgraph.src-hash" }}' 2>/dev/null || true)"
+
+if [ "${NOTESGRAPH_FORCE_LINKCARD:-0}" != "1" ] \
+  && [ -n "$LINKCARD_HASH" ] \
+  && [ "$LINKCARD_HASH" = "$LINKCARD_PREV" ]; then
+  echo "linkcard image already matches source (${LINKCARD_HASH:0:12}), skipping rebuild"
+else
+  # The label is what the next deploy compares against. A failed build leaves
+  # no new label, so the rebuild is retried rather than silently skipped.
+  docker build -f tools/link-card-server/Dockerfile \
+    --label "notesgraph.src-hash=$LINKCARD_HASH" \
+    -t notesgraph-linkcard:prod . || echo "WARN linkcard image build failed"
+fi
 step_end
 echo "BUILD-ALL-DONE"
 
