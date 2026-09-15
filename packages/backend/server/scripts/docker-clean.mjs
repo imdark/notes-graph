@@ -183,7 +183,39 @@ async function collectCompressible(rootDir) {
   return files;
 }
 
+/**
+ * True when `<file>.br` and `<file>.gz` already exist and are at least as new
+ * as the file itself.
+ *
+ * Lets a deploy that shipped pre-compressed dists skip the work entirely. The
+ * mtime comparison is the safety part: a `.br` older than its source means the
+ * source changed afterwards, so it is stale and gets redone rather than
+ * shipped. Assets are content-hashed in their filenames, so in practice a
+ * changed file is a new name anyway.
+ */
+async function alreadyCompressed(fullPath) {
+  try {
+    const [src, br, gz] = await Promise.all([
+      fs.stat(fullPath),
+      fs.stat(`${fullPath}.br`),
+      fs.stat(`${fullPath}.gz`),
+    ]);
+    return (
+      br.size > 0 &&
+      gz.size > 0 &&
+      br.mtimeMs >= src.mtimeMs &&
+      gz.mtimeMs >= src.mtimeMs
+    );
+  } catch {
+    return false;
+  }
+}
+
 async function compressOne(fullPath) {
+  if (await alreadyCompressed(fullPath)) {
+    return false;
+  }
+
   let buf;
   try {
     buf = await fs.readFile(fullPath);
@@ -481,6 +513,30 @@ async function prunePrismaEngines(appRoot, targetKey) {
 }
 
 const targetKey = normalizeTargetKey(TARGETARCH, TARGETVARIANT);
+
+/**
+ * `--precompress <dir>`: run only the pre-compression, over one directory.
+ *
+ * The image's /app/static is exactly the three frontend dists, which
+ * deploy-prod.sh --local-bundles already builds on the dev machine. Letting it
+ * compress them here too means the box finds the .br/.gz already present and
+ * skips ~8 minutes of brotli. Sharing this entry point (rather than a second
+ * script) keeps the quality and worker settings identical on both sides.
+ *
+ * Non-destructive, so it deliberately runs without the NOTESGRAPH_DOCKER_CLEAN
+ * guard that protects the pruning paths below.
+ */
+const precompressArg = process.argv.indexOf('--precompress');
+if (precompressArg !== -1) {
+  const target = process.argv[precompressArg + 1];
+  if (!target) {
+    log('--precompress needs a directory');
+    process.exit(1);
+  }
+  const n = await precompressStatic(path.resolve(target));
+  log(`pre-compressed ${n} files under ${target}`);
+  process.exit(0);
+}
 
 log(`root=${APP_ROOT} target=${targetKey || '(unknown)'}`);
 

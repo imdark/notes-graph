@@ -96,7 +96,12 @@ test -f packages/frontend/apps/web/dist/selfhost.html || { echo "FATAL: web dist
 test -d packages/frontend/admin/dist || { echo "FATAL: admin dist missing"; exit 1; }
 test -d packages/frontend/apps/mobile/dist || { echo "FATAL: mobile dist missing"; exit 1; }
 
-# image assembly the way CI does it (prod-only deps staged into the server pkg)
+# image assembly the way CI does it (prod-only deps staged into the server pkg).
+# Timed as one step: image-build.sh is box-local (/opt/notesgraph, not synced
+# from the repo) and prints its own "=== ... ===" lines without calling step(),
+# so without this its time was silently attributed to the server bundle -
+# "server bundle done in 724s" was really the bundle plus this whole block.
+step "image assembly (prod deps, prisma, docker image)"
 /opt/notesgraph/image-build.sh
 step "linkcard sidecar image"
 # Measured at 374s, rebuilt on every single deploy, for a sidecar that rarely

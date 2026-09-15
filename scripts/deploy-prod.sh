@@ -123,6 +123,21 @@ build_frontend_bundles() {
     [[ -e "$REPO_ROOT/$marker" ]] \
       || { echo "!! local bundle produced no $marker" >&2; exit 1; }
   done
+
+  # Pre-compress here too. The image's /app/static is exactly these three
+  # dists, and compressing them on the box cost ~8 min of brotli on two cores.
+  # Done here they ride along in the same rsync, and docker-clean.mjs skips any
+  # file that already has fresh .br/.gz siblings. Same script, so the settings
+  # cannot drift between the two sides.
+  echo "==> pre-compressing bundles locally"
+  for d in \
+    packages/frontend/apps/web/dist \
+    packages/frontend/admin/dist \
+    packages/frontend/apps/mobile/dist; do
+    node "$REPO_ROOT/packages/backend/server/scripts/docker-clean.mjs" \
+      --precompress "$REPO_ROOT/$d" \
+      || { echo "!! local pre-compression of $d failed" >&2; exit 1; }
+  done
 }
 
 # Ship those dists. sync_source excludes every dist/, so they need their own
