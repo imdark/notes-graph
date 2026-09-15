@@ -42,8 +42,11 @@ export const databaseTitleStyles = css({
   overflow: 'hidden',
 });
 
+// The header's vertical rhythm goes through variables so the list (task) view
+// can tighten it without touching table/kanban, which need the roomier
+// default. See databaseContentListStyles for the overrides.
 export const databaseHeaderContainerStyles = css({
-  marginBottom: '16px',
+  marginBottom: 'var(--notesgraph-db-header-gap, 16px)',
   display: 'flex',
   flexDirection: 'column',
 });
@@ -51,7 +54,7 @@ export const databaseHeaderContainerStyles = css({
 export const databaseTitleRowStyles = css({
   display: 'flex',
   gap: '12px',
-  marginBottom: '8px',
+  marginBottom: 'var(--notesgraph-db-header-row-gap, 8px)',
   alignItems: 'center',
 });
 
@@ -78,7 +81,14 @@ export const databaseContentListStyles = css({
   backgroundColor: 'var(--notesgraph-background-secondary-color)',
   border: '1px solid var(--notesgraph-border-color)',
   borderRadius: '8px',
-  padding: '12px 16px',
+  // A task list is usually short - often a single row - and the default
+  // header rhythm put ~120px of chrome (title row, scope bar, view bar, and
+  // the gaps between them) above ~36px of content, which reads as a mostly
+  // empty box. Tighten the gaps here only; the wider spacing still applies to
+  // table and kanban, where the header sits above much more content.
+  '--notesgraph-db-header-gap': '8px',
+  '--notesgraph-db-header-row-gap': '4px',
+  padding: '8px 12px',
 });
 
 export const dbCollapseToggleStyles = css({
@@ -120,7 +130,7 @@ export const queryScopeBarStyles = css({
   alignItems: 'center',
   flexWrap: 'wrap',
   gap: '6px',
-  marginBottom: '8px',
+  marginBottom: 'var(--notesgraph-db-header-row-gap, 8px)',
   fontSize: 'var(--notesgraph-font-xs)',
   color: 'var(--notesgraph-text-secondary-color)',
 });

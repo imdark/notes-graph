@@ -14,9 +14,9 @@ export const listViewStyles = css`
 
   .dv-list-row {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     gap: 8px;
-    padding: 6px 8px;
+    padding: 5px 8px;
     border-radius: 6px;
     cursor: pointer;
     font-size: var(--notesgraph-font-sm);
@@ -33,13 +33,54 @@ export const listViewStyles = css`
     border-radius: 4px;
     border: 1.5px solid var(--notesgraph-text-secondary-color);
     flex-shrink: 0;
+    /* Nudge onto the title's baseline now the row aligns to the top. */
+    margin-top: 2px;
+  }
+
+  /* Title + breadcrumb stack. align-items on the row is center, so this keeps
+     the checkbox aligned to the title rather than to the pair's midpoint. */
+  .dv-list-main {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
   }
 
   .dv-list-text {
-    flex: 1;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  /* Where the task lives: project › note › parent task. Secondary and small -
+     it is orientation, not content, and must not make rows twice as tall. */
+  .dv-list-breadcrumb {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    overflow: hidden;
+    white-space: nowrap;
+    font-size: var(--notesgraph-font-xs);
+    line-height: 1.3;
+    color: var(--notesgraph-text-secondary-color);
+  }
+
+  .dv-list-crumb {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* The last segment is the most specific, so let it keep its width and
+     squeeze the outer ones first. */
+  .dv-list-crumb:last-child {
+    flex-shrink: 0;
+    max-width: 60%;
+  }
+
+  .dv-list-crumb-sep {
+    flex-shrink: 0;
+    opacity: 0.6;
   }
 
   .dv-list-empty {

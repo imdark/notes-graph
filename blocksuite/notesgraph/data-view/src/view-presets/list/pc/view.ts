@@ -97,6 +97,19 @@ export class ListViewUI extends DataViewUIBase<ListViewUILogic> {
     </div>`;
   }
 
+  /**
+   * Breadcrumb segments for a row, when the data source can supply them.
+   *
+   * Duck-typed like openRowSource: a plain database has no cross-doc context
+   * to offer, so it simply doesn't implement this and rows render bare.
+   */
+  private rowBreadcrumb(rowId: string): string[] {
+    const dataSource = this.logic.view.manager.dataSource as {
+      rowBreadcrumb?: (id: string) => string[];
+    };
+    return dataSource.rowBreadcrumb?.(rowId) ?? [];
+  }
+
   private openRow(rowId: string) {
     // Query rows are real blocks in other docs — prefer navigating to the
     // source block over the in-database row detail (which is empty for a
@@ -153,12 +166,29 @@ export class ListViewUI extends DataViewUIBase<ListViewUILogic> {
                   ? view.cellGetOrCreate(row.rowId, titleColumn).stringValue$
                       .value
                   : '';
+                const crumbs = this.rowBreadcrumb(row.rowId);
                 return html`<div
                   class="dv-list-row"
                   @click=${() => this.openRow(row.rowId)}
                 >
                   <span class="dv-list-checkbox"></span>
-                  <span class="dv-list-text">${title || 'Untitled'}</span>
+                  <span class="dv-list-main">
+                    <span class="dv-list-text">${title || 'Untitled'}</span>
+                    ${crumbs.length
+                      ? html`<span
+                          class="dv-list-breadcrumb"
+                          title=${crumbs.join(' › ')}
+                          >${crumbs.map(
+                            (crumb, i) =>
+                              html`${i > 0
+                                ? html`<span class="dv-list-crumb-sep">›</span>`
+                                : nothing}<span class="dv-list-crumb"
+                                  >${crumb}</span
+                                >`
+                          )}</span
+                        >`
+                      : nothing}
+                  </span>
                 </div>`;
               }
             )}

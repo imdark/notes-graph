@@ -71,6 +71,8 @@ const MAX_RESOLVED_HITS = 200;
  */
 export class QueryListDataSource extends OrgTaskRowsDataSource {
   private readonly hits$ = signal<BlockTaskHit[]>([]);
+  // Hoisted out of the init closure so rowBreadcrumb can name a row's project.
+  private readonly projects$ = signal<ProjectInfo[]>([]);
   // Bumped on every hits$ change so a still-running batch resolution from a
   // superseded query can tell it's stale and stop writing.
   private _resolveGeneration = 0;
@@ -92,7 +94,7 @@ export class QueryListDataSource extends OrgTaskRowsDataSource {
       if (!provider) return;
       // A project scope resolves live to that project's docIds.
       const projectsProvider = this.serviceGet(ProjectsProvider);
-      const projects$ = signal<ProjectInfo[]>([]);
+      const projects$ = this.projects$;
       if (projectsProvider) {
         projectsProvider.projects$().subscribe(list => {
           projects$.value = list;
@@ -137,6 +139,52 @@ export class QueryListDataSource extends OrgTaskRowsDataSource {
    * (via the reference-node slot), not the in-database row detail. Returns
    * false if the row's source can't be resolved so the caller can fall back.
    */
+  /**
+   * Where a row's task actually lives, as breadcrumb segments.
+   *
+   * A query board pulls tasks from all over the workspace, so a bare title
+   * ("logs collection") gives no clue which note it came from. Segments are
+   * ordered outermost-first: project (when the source doc belongs to one),
+   * then the doc, then the nearest ancestor task above it - the sub-heading a
+   * task sits under is usually the most useful context of all.
+   *
+   * Returns [] when nothing can be resolved, so the view simply renders no
+   * breadcrumb rather than an empty chevron trail.
+   */
+  rowBreadcrumb(rowId: string): string[] {
+    const model = this.getModelById(rowId);
+    if (!model) return [];
+
+    const segments: string[] = [];
+    const docId = model.store.id;
+
+    const project = this.projects$.value.find(p => p.docIds.includes(docId));
+    if (project?.name) segments.push(project.name);
+
+    const docTitle = model.store.workspace.meta.docMetas.find(
+      meta => meta.id === docId
+    )?.title;
+    if (docTitle) segments.push(docTitle);
+
+    // The ancestor chain the indexer already computed for exactly this
+    // purpose (BlockTaskHit.trail, "for display"), rather than re-walking
+    // parents here: it is precomputed, survives without the doc being loaded,
+    // and goes deeper than one level.
+    const trail = this.hits$.value.find(
+      hit => QueryListDataSource.hitKey(hit) === rowId
+    )?.trail;
+    if (trail) {
+      segments.push(
+        ...trail
+          .split('›')
+          .map(part => part.trim())
+          .filter(Boolean)
+      );
+    }
+
+    return segments;
+  }
+
   openRowSource(rowId: string): boolean {
     const model = this.getModelById(rowId);
     if (!model) return false;
