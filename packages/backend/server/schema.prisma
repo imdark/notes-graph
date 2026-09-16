@@ -173,6 +173,7 @@ model Workspace {
   docAccessPolicies          DocAccessPolicy[]
   docGrants                  DocGrant[]
   projects                   Project[]
+  inventoryDevices           InventoryDevice[]
   projectDocs                ProjectDoc[]
   directoryAccounts          DirectoryAccount[]
 
@@ -1684,4 +1685,44 @@ model DirectorySyncedUser {
   @@index([scopeId, status])
   @@index([workspaceUserId])
   @@map("directory_synced_users")
+}
+
+// A machine, or a folder on one, registered as a deployment and agent
+// execution target. Written by external tooling (the `wf` CLI) through the
+// inventory API; the workspace is the tenancy boundary, and `key` is the
+// caller's own stable identifier so re-registering a device updates it
+// rather than creating a second row.
+model InventoryDevice {
+  id            String    @id @default(uuid()) @db.VarChar
+  workspaceId   String    @map("workspace_id") @db.VarChar
+  key           String    @db.VarChar
+  name          String    @db.VarChar
+  kind          String    @default("machine") @db.VarChar
+  host          String    @default("") @db.VarChar
+  user          String    @default("") @db.VarChar
+  port          Int       @default(22)
+  parentKey     String?   @map("parent_key") @db.VarChar
+  path          String?   @db.Text
+  recipe        String    @default("generic") @db.VarChar
+  repo          String?   @db.Text
+  branch        String    @default("main") @db.VarChar
+  channel       String    @default("stable") @db.VarChar
+  pin           String?   @db.VarChar
+  agentTarget   Boolean   @default(false) @map("agent_target")
+  labels        Json      @default("{}")
+  state         String    @default("unknown") @db.VarChar
+  statusDetail  String?   @map("status_detail") @db.Text
+  version       String?   @db.VarChar
+  checkedAt     DateTime? @map("checked_at") @db.Timestamptz(3)
+  checks        Json      @default("[]")
+  registeredBy  String?   @map("registered_by") @db.VarChar
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, key])
+  @@index([workspaceId, kind])
+  @@index([workspaceId, agentTarget])
+  @@map("inventory_devices")
 }
