@@ -2,7 +2,11 @@ import type {
   BlockTaskFilter,
   BlockTaskHit,
 } from '@blocksuite/notesgraph/shared/services';
-import { BlockTaskIndexProvider } from '@blocksuite/notesgraph/shared/services';
+import {
+  BlockTaskIndexProvider,
+  trailHasSection,
+  trailSections,
+} from '@blocksuite/notesgraph/shared/services';
 import type { ExtensionType } from '@blocksuite/notesgraph/store';
 import { DocsSearchService } from '@notesgraph/core/modules/docs-search';
 import type { FrameworkProvider } from '@notesgraph/infra';
@@ -31,12 +35,29 @@ export function patchBlockTaskIndexService(
 
   const provider: BlockTaskIndexProvider = {
     queryTaskBlocks$: (filter: BlockTaskFilter) => {
+      // A section scope (tasks nested under a named heading, e.g. a journal's
+      // per-project sections) can't be pushed into the index query: todoTrail
+      // is stored unindexed. So when one is present the doc scope has to come
+      // off the query too and both are applied to the returned hits instead —
+      // otherwise the index would drop the journal tasks before we could
+      // match their trail.
+      const sectionName = filter.sectionName?.trim().toLowerCase();
+      const excludeSections = new Set(
+        (filter.excludeSectionNames ?? [])
+          .map(name => name.trim().toLowerCase())
+          .filter(Boolean)
+      );
+
       // A defined-but-empty docId scope (e.g. an empty project) matches
-      // nothing — short-circuit rather than emit an unconstrained query.
-      if (filter.docIds && filter.docIds.length === 0) {
+      // nothing — short-circuit rather than emit an unconstrained query. With
+      // a section scope it is not empty: the project may still own tasks
+      // written under its heading in a journal.
+      if (filter.docIds && filter.docIds.length === 0 && !sectionName) {
         return of({ hits: [], complete: true });
       }
       const wantedDocIds = filter.docIds ? new Set(filter.docIds) : null;
+
+
 
       // Status scope: incomplete checkboxes only, any checkbox, or (legacy,
       // for query boards) any block carrying an org status.
@@ -68,8 +89,9 @@ export function patchBlockTaskIndexService(
           ...(filter.props ?? []).map(
             prop => ({ type: 'match', field: 'props', match: prop }) as const
           ),
-          // Scope to a set of docs (a project's members) — any-of.
-          ...(filter.docIds
+          // Scope to a set of docs (a project's members) — any-of. Skipped
+          // when a section scope is active; see above.
+          ...(filter.docIds && !sectionName
             ? [
                 {
                   type: 'boolean' as const,
@@ -109,8 +131,25 @@ export function patchBlockTaskIndexService(
           // server path), so re-check the tokens verbatim
           const nodeTags = toArray(node.fields.tags);
           const nodeProps = toArray(node.fields.props);
+          const trail = firstString(node.fields.todoTrail);
+
+          // In scope if the doc is in scope, OR the task sits under the named
+          // section wherever it was written (the journal case).
+          const inDocScope = !wantedDocIds || wantedDocIds.has(docId);
+          const inSectionScope = sectionName
+            ? trailHasSection(trail, sectionName)
+            : false;
+          // Inbox: a task under some project's heading belongs to that
+          // project, not here, even though its doc has no project.
+          const excludedBySection =
+            excludeSections.size > 0 &&
+            trailSections(trail).some(part =>
+              excludeSections.has(part.toLowerCase())
+            );
+
           if (
-            (!wantedDocIds || wantedDocIds.has(docId)) &&
+            (inDocScope || inSectionScope) &&
+            !excludedBySection &&
             wantedTags.every(tag => nodeTags.includes(tag)) &&
             wantedProps.every(prop => nodeProps.includes(prop))
           ) {
@@ -118,7 +157,7 @@ export function patchBlockTaskIndexService(
               docId,
               blockId,
               text: firstString(node.fields.content),
-              trail: firstString(node.fields.todoTrail),
+              trail,
             });
           }
         }

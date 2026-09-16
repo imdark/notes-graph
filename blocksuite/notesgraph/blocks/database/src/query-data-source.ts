@@ -5,6 +5,7 @@ import {
   BlockTaskIndexProvider,
   type ProjectInfo,
   ProjectsProvider,
+  trailSections,
 } from '@blocksuite/notesgraph-shared/services';
 import {
   findOrgTimestampIn,
@@ -112,10 +113,19 @@ export class QueryListDataSource extends OrgTaskRowsDataSource {
           const project = projects$.value.find(p => p.id === projectId);
           // Unknown project (not loaded yet / deleted) → match nothing.
           filter.docIds = project ? project.docIds : [];
+          // A journal belongs to every project and none, so its tasks are
+          // claimed by position instead: anything nested under this project's
+          // heading counts, wherever it was written.
+          if (project?.name) filter.sectionName = project.name;
         } else if (this._model.props.queryNoProject$.value) {
           excludeDocIds = new Set(
             projects$.value.flatMap(project => project.docIds)
           );
+          // ...and the mirror of the above, so a journal task written under a
+          // project heading doesn't also land in Inbox.
+          filter.excludeSectionNames = projects$.value
+            .map(project => project.name)
+            .filter(Boolean);
         }
         const subscription = provider
           .queryTaskBlocks$(filter)
@@ -173,14 +183,7 @@ export class QueryListDataSource extends OrgTaskRowsDataSource {
     const trail = this.hits$.value.find(
       hit => QueryListDataSource.hitKey(hit) === rowId
     )?.trail;
-    if (trail) {
-      segments.push(
-        ...trail
-          .split('›')
-          .map(part => part.trim())
-          .filter(Boolean)
-      );
-    }
+    segments.push(...trailSections(trail));
 
     return segments;
   }

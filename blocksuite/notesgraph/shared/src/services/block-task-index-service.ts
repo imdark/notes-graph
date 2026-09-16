@@ -15,6 +15,34 @@ export interface BlockTaskHit {
   trail?: string;
 }
 
+/** Separator the indexer joins `todoTrail` segments with. */
+const TRAIL_SEPARATOR = '\u203a';
+
+/**
+ * Split an indexer `todoTrail` into its section names.
+ *
+ * One definition shared by the two things that read a trail — matching a
+ * section scope, and rendering a row's breadcrumb — so a task can never be
+ * claimed by a project it doesn't visibly sit under, or vice versa.
+ */
+export function trailSections(trail: string | undefined): string[] {
+  if (!trail) return [];
+  return trail
+    .split(TRAIL_SEPARATOR)
+    .map(part => part.trim())
+    .filter(Boolean);
+}
+
+/** Case-insensitive test for "this task sits under a section called `name`". */
+export function trailHasSection(
+  trail: string | undefined,
+  name: string
+): boolean {
+  const wanted = name.trim().toLowerCase();
+  if (!wanted) return false;
+  return trailSections(trail).some(part => part.toLowerCase() === wanted);
+}
+
 /**
  * Filter for querying task blocks across the workspace. All tokens must
  * match (AND semantics). Tags and props are the lowercase-normalized
@@ -29,6 +57,30 @@ export interface BlockTaskFilter {
    * array matches nothing; omit the field to match any doc.
    */
   docIds?: string[];
+  /**
+   * Also match tasks that sit *under a section with this heading text*, even
+   * when their doc isn't in `docIds`.
+   *
+   * This is what makes a journal work. A journal is scaffolded with one
+   * section per project, so it belongs to every project and none: scoping it
+   * by doc would pull every task in the day - including other projects' and
+   * Inbox's - into whichever project owned the doc. Position is the real
+   * signal, so a task nested under the "Ai" heading belongs to Ai wherever it
+   * was written.
+   *
+   * Matched against the indexer's `todoTrail` (the ancestor-text breadcrumb),
+   * which is stored unindexed - so a section scope cannot be pushed into the
+   * index query and is applied to the returned hits instead.
+   */
+  sectionName?: string;
+  /**
+   * Exclude tasks under a section named by one of these (case-insensitive).
+   *
+   * The Inbox counterpart of `sectionName`: without it, a journal task
+   * written under a project heading would show up both in that project *and*
+   * in Inbox, since its doc belongs to no project.
+   */
+  excludeSectionNames?: string[];
   /**
    * How to scope by task status:
    * - `true`  → incomplete checkboxes only (`todoStatus === 'todo'`)

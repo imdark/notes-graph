@@ -315,29 +315,42 @@ export class DocsService extends Service {
           { type: 'h2', text: new Text(text) },
           note.id
         );
-      const addEmptyChecklistItem = () =>
+      /**
+       * The empty checkbox goes *under* its heading, not beside it.
+       *
+       * This is what makes the section mean something. A project scope claims
+       * tasks whose ancestor trail names it (see BlockTaskFilter.sectionName),
+       * and the indexer builds that trail by walking parents — so a checkbox
+       * that is a sibling of the "Ai" heading has an empty trail and belongs
+       * to nothing, while a child of it belongs to Ai wherever it was written.
+       * Scoping the journal by doc instead can't work: it has a section per
+       * project, so it belongs to all of them and none.
+       */
+      const addEmptyChecklistItem = (parentId: string) =>
         bsDoc.addBlock(
           'notesgraph:list' as never, // TODO(eyhn): fix type
           { type: 'todo', text: new Text('') },
-          note.id
+          parentId
         );
 
       for (const section of sections) {
-        addHeading(section.name);
+        const headingId = addHeading(section.name);
         addProjectTaskListBlock(bsDoc, note.id, {
           projectId: section.id,
           name: 'todos:',
         });
-        addEmptyChecklistItem();
+        addEmptyChecklistItem(headingId);
       }
 
-      // Everything not owned by a project.
-      addHeading('Inbox');
+      // Everything not owned by a project. Nested for the same reason, so the
+      // Inbox board can tell "written under Inbox" from "written under a
+      // project" in the same journal.
+      const inboxHeadingId = addHeading('Inbox');
       addProjectTaskListBlock(bsDoc, note.id, {
         noProject: true,
         name: 'todos:',
       });
-      addEmptyChecklistItem();
+      addEmptyChecklistItem(inboxHeadingId);
     } finally {
       release();
     }
