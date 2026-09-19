@@ -138,6 +138,34 @@ else
     -t notesgraph-linkcard:prod . || echo "WARN linkcard image build failed"
 fi
 step_end
+
+step "plugin marketplace image"
+# Same rebuild-only-when-source-changed trick as the linkcard image above, for
+# the same reason: the Dockerfile does `COPY . .`, so Docker's layer cache is
+# useless here. The closure is the sidecar, the SDK it bundles, and the
+# plugin-template folder baked in as the first-party seed.
+plugin_src_hash() {
+  {
+    find tools/notesgraph-plugin-server packages/common/plugin-sdk tools/plugin-template \
+      -type f -not -path '*/node_modules/*' -not -path '*/dist/*' -print0 \
+      2>/dev/null | sort -z | xargs -0 sha256sum
+    sha256sum yarn.lock package.json .yarnrc.yml 2>/dev/null
+  } | sha256sum | cut -d' ' -f1
+}
+PLUGINSRV_HASH="$(plugin_src_hash || true)"
+PLUGINSRV_PREV="$(docker image inspect notesgraph-plugin-server:prod \
+  --format '{{ index .Config.Labels "notesgraph.src-hash" }}' 2>/dev/null || true)"
+
+if [ "${NOTESGRAPH_FORCE_PLUGIN_SERVER:-0}" != "1" ] \
+  && [ -n "$PLUGINSRV_HASH" ] \
+  && [ "$PLUGINSRV_HASH" = "$PLUGINSRV_PREV" ]; then
+  echo "plugin marketplace image already matches source (${PLUGINSRV_HASH:0:12}), skipping rebuild"
+else
+  docker build -f tools/notesgraph-plugin-server/Dockerfile \
+    --label "notesgraph.src-hash=$PLUGINSRV_HASH" \
+    -t notesgraph-plugin-server:prod . || echo "WARN plugin marketplace image build failed"
+fi
+step_end
 echo "BUILD-ALL-DONE"
 
 cd /opt/notesgraph

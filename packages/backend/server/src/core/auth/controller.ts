@@ -272,4 +272,25 @@ export class AuthController {
   async currentSessionUser(@CurrentUser() user?: CurrentUser) {
     return { user };
   }
+
+  /**
+   * A bare "is this request authenticated?" check, for a reverse proxy that
+   * gates a sidecar on it (Caddy's `forward_auth` on `/market/*`, which fronts
+   * the plugin marketplace). It answers 204 signed in and 401 signed out.
+   *
+   * `/session` cannot be used for this: it is `@Public()` and answers 200 with
+   * `{ user: undefined }` when signed out, so a proxy reading only the status
+   * would wave every anonymous request through.
+   *
+   * Deliberately not `@Public()` — the guard does the work, and it accepts any
+   * credential the guard accepts (cookie session, JWT, or a PAT bearer token,
+   * so CLI publishing works too).
+   */
+  @UseNamedGuard('version')
+  @Throttle('default', { limit: 1200 })
+  @Get('/check')
+  @Header('Cache-Control', 'no-store')
+  async check(@Res() res: Response) {
+    res.status(HttpStatus.NO_CONTENT).send();
+  }
 }

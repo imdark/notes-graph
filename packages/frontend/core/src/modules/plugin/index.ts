@@ -1,5 +1,6 @@
 import type { Framework } from '@notesgraph/infra';
 
+import { DefaultServerService } from '../cloud';
 import { GlobalContextService } from '../global-context';
 import { ImportRegistryService } from '../import';
 import { GlobalState } from '../storage';
@@ -28,5 +29,5 @@ export function configurePluginModule(framework: Framework) {
       ImportRegistryService,
     ])
     .service(PluginService, [PluginContextFactory, GlobalState])
-    .service(PluginMarketplaceService, [PluginService]);
+    .service(PluginMarketplaceService, [PluginService, DefaultServerService]);
 }

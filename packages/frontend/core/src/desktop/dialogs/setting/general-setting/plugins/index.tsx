@@ -20,14 +20,26 @@ export const PluginsSettings = () => {
   const [loading, setLoading] = useState(false);
   const [available, setAvailable] = useState<MarketplaceEntry[] | null>(null);
   const [installingId, setInstallingId] = useState<string | null>(null);
+  const [marketplaceError, setMarketplaceError] = useState<string | null>(null);
 
   const installed = new Set(plugins.map(p => p.manifest.id));
 
   const refreshMarketplace = useCallback(() => {
+    setMarketplaceError(null);
     marketplaceService
       .listAvailable()
-      .then(setAvailable)
-      .catch(() => setAvailable([]));
+      .then(entries => {
+        setAvailable(entries);
+      })
+      .catch((err: unknown) => {
+        // Swallowing this used to render an unreachable marketplace as an empty
+        // one, so a signed-out session, a dead sidecar and a genuinely empty
+        // registry were indistinguishable — say which it is.
+        setAvailable([]);
+        setMarketplaceError(
+          err instanceof Error ? err.message : 'Could not reach the marketplace.'
+        );
+      });
   }, [marketplaceService]);
 
   useEffect(() => {
@@ -80,10 +92,14 @@ export const PluginsSettings = () => {
       <SettingWrapper title="Marketplace">
         {available === null ? (
           <SettingRow name="Loading…" desc="Fetching available plugins." />
+        ) : marketplaceError ? (
+          <SettingRow name="Marketplace unavailable" desc={marketplaceError}>
+            <Button onClick={refreshMarketplace}>Try again</Button>
+          </SettingRow>
         ) : available.length === 0 ? (
           <SettingRow
             name="No plugins available"
-            desc="The marketplace is empty or unreachable."
+            desc="The marketplace is reachable but has nothing published yet."
           />
         ) : (
           available.map(entry => (
