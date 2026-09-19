@@ -41,6 +41,28 @@
     <meta property="og:description" content="<%= DESCRIPTION %>" />
     <meta property="og:url" content="https://app.notesgraph.com/" />
     <meta property="og:image" content="https://notesgraph.com/og.jpeg" />
+
+    <!--
+      Plugins are loaded with a bare import() from a URL. Without this they
+      bundle their own React, and a second React instance cannot render hooks
+      into the host's tree - the dispatcher it reads is not the one the host's
+      renderer installed. These shims forward the host's single instance
+      (published on a global by modules/plugin/runtime.ts).
+
+      Inert for the app itself: its own scripts are classic, not modules, and
+      rspack resolves their imports at build time. Only plugin import() calls
+      consult this map. It must appear before any module resolution happens,
+      hence its position in <head>.
+    -->
+    <script type="importmap">
+      {
+        "imports": {
+          "react": "/plugin-runtime/react.js",
+          "react/jsx-runtime": "/plugin-runtime/jsx-runtime.js",
+          "react/jsx-dev-runtime": "/plugin-runtime/jsx-dev-runtime.js"
+        }
+      }
+    </script>
   </head>
 
   <body>

@@ -61,6 +61,9 @@ export default defineConfig({
       // rootDir cannot be used as a pattern on windows
       fg.convertPathToPattern(rootDir) +
         'packages/{common,frontend}/**/*.spec.{ts,tsx}',
+      // Bundled plugins live under tools/, and are tested with the harness in
+      // @notesgraph/plugin-sdk/testing.
+      fg.convertPathToPattern(rootDir) + 'tools/**/*.spec.{ts,tsx}',
     ],
     exclude: [
       '**/node_modules',

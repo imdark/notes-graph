@@ -1,3 +1,7 @@
+// Side effect: publishes the host's React to plugins before any can be
+// imported. Must come before PluginService is constructed.
+import './runtime';
+
 import type { Framework } from '@notesgraph/infra';
 
 import { DefaultServerService } from '../cloud';

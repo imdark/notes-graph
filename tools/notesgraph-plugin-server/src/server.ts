@@ -36,7 +36,12 @@ const BUNDLED_PLUGINS_DIR =
 const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type',
+  // The app's FetchService stamps every request with x-notesgraph-version, and
+  // a header the preflight does not allow makes the browser block the request
+  // outright — the symptom is a bare "Failed to fetch" with no status. Only
+  // bites a cross-origin registry (a dev override, or a shared one): in prod
+  // the marketplace is same-origin behind /market, so there is no preflight.
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, x-notesgraph-version',
 };
 
 type Status = 'pending' | 'approved' | 'rejected';

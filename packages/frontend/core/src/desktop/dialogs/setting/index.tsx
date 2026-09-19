@@ -32,6 +32,7 @@ import { flushSync } from 'react-dom';
 
 import { AccountSetting } from './account-setting';
 import { GeneralSetting } from './general-setting';
+import { isPluginSetting, PluginSetting } from './plugin-setting';
 import { IssueFeedbackModal } from './issue-feedback-modal';
 import { SettingSidebar } from './setting-sidebar';
 import { StarNotesGraphModal } from './star-notesgraph-modal';
@@ -218,6 +219,8 @@ const SettingModalInner = ({
                   {settingState.activeTab === 'account' &&
                   loginStatus === 'authenticated' ? (
                     <AccountSetting onChangeSettingState={setSettingState} />
+                  ) : isPluginSetting(settingState.activeTab) ? (
+                    <PluginSetting activeTab={settingState.activeTab} />
                   ) : isWorkspaceSetting(settingState.activeTab) ? (
                     <WorkspaceSetting
                       activeTab={settingState.activeTab}

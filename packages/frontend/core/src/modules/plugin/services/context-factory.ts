@@ -25,6 +25,7 @@ import type {
   PluginEvent,
   StorageApi,
   UiApi,
+  WorkspaceApi,
 } from '@notesgraph/plugin-sdk/client';
 
 import { DesktopApiService } from '../../desktop-api';
@@ -370,6 +371,22 @@ export class PluginContextFactory extends Service {
       },
     };
 
+    /**
+     * Read per call, not captured: the context is built once at activation but
+     * the user can switch workspace while the plugin stays active.
+     *
+     * Has its own capability rather than riding on `docs`: a plugin that only
+     * needs to scope a request to a workspace should not have to ask for the
+     * right to read every note in it.
+     */
+    const workspace: WorkspaceApi = {
+      getCurrent: async () => {
+        req('workspace');
+        const id = this.globalContext.globalContext.workspaceId.get();
+        return id ? { id } : null;
+      },
+    };
+
     const docs: DocsApi = {
       list: async () => {
         req('docs');
@@ -503,6 +520,7 @@ export class PluginContextFactory extends Service {
       platform,
       grantedPermissions: granted,
       docs,
+      workspace,
       ui,
       editor,
       docModes,

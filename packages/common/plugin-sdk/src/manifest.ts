@@ -3,6 +3,12 @@ import { z } from 'zod';
 /** Capabilities a plugin can request; the host only exposes granted ones. */
 export const capabilitySchema = z.enum([
   'docs',
+  /**
+   * Which workspace the user is currently in. Deliberately separate from
+   * `docs`: a plugin that only needs to scope a request to a workspace should
+   * not have to ask for the right to read every note in it.
+   */
+  'workspace',
   'ui',
   'editor',
   'docModes',

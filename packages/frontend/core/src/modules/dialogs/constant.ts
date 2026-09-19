@@ -15,7 +15,13 @@ export type SettingTab =
   | 'account'
   | 'meetings'
   | 'plugins'
-  | `workspace:${'preference' | 'properties' | 'members' | 'storage' | 'billing' | 'license' | 'integrations' | 'embedding' | 'byok' | 'search' | 'agents' | 'folder-sync' | 'inventory'}`;
+  | `workspace:${'preference' | 'properties' | 'members' | 'storage' | 'billing' | 'license' | 'integrations' | 'embedding' | 'byok' | 'search' | 'agents' | 'folder-sync'}`
+  /**
+   * A settings page contributed by a plugin via `ui.addSettingsPage`. Open
+   * ended by nature — the id is the plugin's own, so these cannot be
+   * enumerated here the way the built-in tabs are.
+   */
+  | `plugin:${string}`;
 
 export type GLOBAL_DIALOG_SCHEMA = {
   'create-workspace': (props: { serverId?: string }) => {

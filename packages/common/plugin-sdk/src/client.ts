@@ -207,6 +207,20 @@ export interface BackendApi {
   invoke<T = unknown>(fn: string, payload?: unknown): Promise<T>;
 }
 
+export interface PluginWorkspace {
+  id: string;
+}
+
+export interface WorkspaceApi {
+  /**
+   * The workspace the user is currently in, or null when they are not in one.
+   *
+   * Read it per call rather than caching: a plugin's context is created once
+   * at activation, but the user can switch workspace underneath it.
+   */
+  getCurrent(): Promise<PluginWorkspace | null>;
+}
+
 export interface NetApi {
   /** Proxied fetch (avoids CORS / mixed-content; subject to host policy). */
   fetch(url: string, init?: RequestInit): Promise<Response>;
@@ -230,6 +244,7 @@ export interface PluginContext {
   readonly platform: Platform;
   readonly grantedPermissions: Capability[];
   readonly docs: DocsApi;
+  readonly workspace: WorkspaceApi;
   readonly ui: UiApi;
   readonly editor: EditorApi;
   readonly docModes: DocModesApi;
