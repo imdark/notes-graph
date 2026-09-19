@@ -53,6 +53,19 @@ export class PluginMarketplaceService extends Service {
           : `Marketplace request failed (${res.status}).`
       );
     }
+    /**
+     * A 200 is not proof we reached the registry. When the proxy has no
+     * `/market` route the request falls through to the SPA, which answers 200
+     * with index.html — and parsing that yields `Unexpected token '<'`, which
+     * tells the reader nothing about the actual problem.
+     */
+    const contentType = res.headers.get('content-type') ?? '';
+    if (!contentType.includes('application/json')) {
+      throw new Error(
+        'The plugin marketplace is not configured on this server: the request ' +
+          'reached the app instead of the registry.'
+      );
+    }
     const data = (await res.json()) as { plugins: MarketplaceEntry[] };
     return data.plugins;
   }
