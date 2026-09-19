@@ -1,6 +1,7 @@
 import {
   AiEmbeddingIcon,
   CollaborationIcon,
+  ComputerPanelIcon,
   FolderIcon,
   IntegrationsIcon,
   PaymentIcon,
@@ -24,6 +25,7 @@ import { WorkspaceSettingAgents } from './agents';
 import { WorkspaceSettingBilling } from './billing';
 import { WorkspaceSettingFolderSync } from './folder-sync';
 import { IntegrationSetting } from './integration';
+import { WorkspaceSettingInventory } from './inventory';
 import { WorkspaceSettingLicense } from './license';
 import { MembersPanel } from './members';
 import { WorkspaceSettingDetail } from './preference';
@@ -67,6 +69,8 @@ export const WorkspaceSetting = ({
       return <WorkspaceSettingAgents />;
     case 'workspace:folder-sync':
       return <WorkspaceSettingFolderSync />;
+    case 'workspace:inventory':
+      return <WorkspaceSettingInventory />;
     default:
       return null;
   }
@@ -125,6 +129,12 @@ export const useWorkspaceSettingList = (): SettingSidebarItem[] => {
         title: 'Folder sync',
         icon: <FolderIcon />,
         testId: 'workspace-setting:folder-sync',
+      },
+      {
+        key: 'workspace:inventory',
+        title: 'Devices',
+        icon: <ComputerPanelIcon />,
+        testId: 'workspace-setting:inventory',
       },
       {
         key: 'workspace:storage',

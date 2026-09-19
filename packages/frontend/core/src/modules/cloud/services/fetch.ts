@@ -30,6 +30,39 @@ export class FetchService extends Service {
    * fetch with custom custom timeout and error handling.
    */
   fetch = async (input: string, init?: FetchInit): Promise<Response> => {
+    const res = await this.fetchRaw(input, init);
+
+    if (!res.ok) {
+      if (res.status === 504) {
+        const error = new Error('Gateway Timeout');
+        logger.debug('network error', error);
+        throw new UserFriendlyError({
+          status: 504,
+          code: 'NETWORK_ERROR',
+          type: 'NETWORK_ERROR',
+          name: 'NETWORK_ERROR',
+          message: 'Gateway Timeout',
+          stacktrace: error.stack,
+        });
+      } else {
+        if (res.headers.get('Content-Type')?.startsWith('application/json')) {
+          throw UserFriendlyError.fromAny(await res.json());
+        } else {
+          throw UserFriendlyError.fromAny(await res.text());
+        }
+      }
+    }
+
+    return res;
+  };
+
+  /**
+   * Same timeout, base url and headers as {@link fetch}, but a non-2xx status
+   * comes back as a {@link Response} instead of a throw — for callers that
+   * treat a particular status as an answer rather than a failure (a 404 from
+   * an optional plugin's API, say). Network and abort failures still throw.
+   */
+  fetchRaw = async (input: string, init?: FetchInit): Promise<Response> => {
     logger.debug('fetch', input);
     const externalSignal = init?.signal;
     if (externalSignal?.aborted) {
@@ -82,27 +115,6 @@ export class FetchService extends Service {
       });
     } finally {
       clearTimeout(timeoutId);
-    }
-
-    if (!res.ok) {
-      if (res.status === 504) {
-        const error = new Error('Gateway Timeout');
-        logger.debug('network error', error);
-        throw new UserFriendlyError({
-          status: 504,
-          code: 'NETWORK_ERROR',
-          type: 'NETWORK_ERROR',
-          name: 'NETWORK_ERROR',
-          message: 'Gateway Timeout',
-          stacktrace: error.stack,
-        });
-      } else {
-        if (res.headers.get('Content-Type')?.startsWith('application/json')) {
-          throw UserFriendlyError.fromAny(await res.json());
-        } else {
-          throw UserFriendlyError.fromAny(await res.text());
-        }
-      }
     }
 
     return res;

@@ -11,6 +11,7 @@ import {
 } from './ai-button';
 import { configureAgentsModule } from './agents';
 import { configureFolderSyncModule } from './folder-sync';
+import { configureInventoryModule } from './inventory';
 import { configureAiLocalModule } from './ai-local';
 import { configureAppSidebarModule } from './app-sidebar';
 import { configAtMenuConfigModule } from './at-menu-config';
@@ -103,6 +104,7 @@ export function configureCommonModules(framework: Framework) {
   configureProjectsModule(framework);
   configureAgentsModule(framework);
   configureFolderSyncModule(framework);
+  configureInventoryModule(framework);
   configureDirectoryModule(framework);
   configureVirtualViewsModule(framework);
   configureDocModeRegistryModule(framework);
