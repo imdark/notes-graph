@@ -168,7 +168,17 @@ interface PublishBody {
   manifest?: unknown;
   files?: Record<string, string>;
 }
-function publish(body: PublishBody): { status: number; body: unknown } {
+/**
+ * `trusted` marks a bundle that shipped inside this image rather than arriving
+ * over the wire. Curation exists to hold *submissions* until a human looks at
+ * them; a first-party plugin baked into the build has already been through
+ * that, and leaving it `pending` under AUTO_APPROVE=false silently empties the
+ * marketplace of exactly the plugins that are meant to always be there.
+ */
+function publish(
+  body: PublishBody,
+  { trusted = false }: { trusted?: boolean } = {}
+): { status: number; body: unknown } {
   const parsed = safeParseManifest(body.manifest);
   if (!parsed.success) {
     return {
@@ -224,7 +234,7 @@ function publish(body: PublishBody): { status: number; body: unknown } {
     serverEntry,
     hasServer: Boolean(serverEntry),
     files: Object.keys(allFiles),
-    status: AUTO_APPROVE ? 'approved' : 'pending',
+    status: AUTO_APPROVE || trusted ? 'approved' : 'pending',
     signature: signBundle(manifest, allFiles),
     publishedAt: Date.now(),
   };
@@ -278,7 +288,7 @@ function seedBundledPlugins() {
     }
     if (missing) continue;
 
-    const result = publish({ manifest: raw, files });
+    const result = publish({ manifest: raw, files }, { trusted: true });
     if (result.status === 200) {
       console.log(
         `[plugin-server] seeded bundled plugin ${manifest.id}@${manifest.version}`

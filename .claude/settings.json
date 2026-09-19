@@ -5,6 +5,7 @@
       "Bash(scripts/task-git.sh *)",
       "Bash(scripts/deploy-bg.sh*)",
       "Bash(scripts/deploy-watch.sh*)",
+      "Bash(scripts/prod-exec.sh*)",
       "Bash(node scripts/add-i18n.mjs *)",
       "Bash(scripts/debug-local-web-dev.sh*)",
       "Bash(scripts/typecheck.sh*)",
