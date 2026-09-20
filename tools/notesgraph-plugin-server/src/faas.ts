@@ -21,6 +21,35 @@ import type {
  * NOTE: v1 runs handlers in-process (no isolation). Running untrusted server
  * code requires real isolation (worker_threads/isolated-vm/container) before
  * an open/public backend — tracked as a hardening follow-up.
+ *
+ * TODO(plugin-db): give a backend plugin limited Postgres access.
+ *
+ * Today a plugin's server code gets fs-backed KV/blob/secrets and nothing
+ * else, which is why anything with real data still has to be a *server*
+ * plugin compiled into the app — machine inventory is the worked example:
+ * `packages/backend/server/src/plugins/inventory` owns an `InventoryDevice`
+ * table and its permission checks, while the marketplace plugin
+ * `com.notesgraph.inventory` is only a UI that calls `/api/inventory`. That
+ * split means a plugin author who needs to store more than a blob cannot
+ * ship it through the marketplace at all.
+ *
+ * "Limited" is the whole design problem; the shape worth aiming at:
+ *   - a schema (or table prefix) per plugin, created and migrated from the
+ *     manifest, so a plugin can never read another's tables or the app's;
+ *   - a connection role with rights only on that schema — no superuser, no
+ *     access to `users`, `workspaces`, `snapshots`;
+ *   - every row scoped to (plugin, workspace), enforced server-side rather
+ *     than trusted from the handler, so a plugin cannot read across the
+ *     workspaces it was installed into;
+ *   - quotas (row count, storage, statement timeout) as a matter of course —
+ *     this is a shared database and a plugin is untrusted code;
+ *   - a migration story, since plugin versions come and go independently of
+ *     the app's own migrations.
+ *
+ * Prerequisite, not optional: handler isolation (the NOTE above). Handing a
+ * database connection to code running in-process in this sidecar would mean
+ * any published plugin could reach the whole cluster. Isolation first, then
+ * a scoped role, then this.
  */
 export function createFaas(pluginsDir: string) {
   const defs = new Map<string, PluginServerDefinition>();
