@@ -45,11 +45,7 @@ export const QuotaCheck = ({
       return;
     }
     if (
-      dialog.some(
-        d =>
-          (d.type === 'setting' && d.props.activeTab === 'plans') ||
-          (d.type === 'setting' && d.props.activeTab === 'workspace:license')
-      )
+      dialog.some(d => d.type === 'setting' && d.props.activeTab === 'plans')
     ) {
       return;
     }

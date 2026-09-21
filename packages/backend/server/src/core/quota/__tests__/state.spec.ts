@@ -458,6 +458,46 @@ test('reconciles quota states from entitlements and business tables', async t =>
   }
 });
 
+test('selfhosted workspaces have no seat cap', async t => {
+  const previousDeploymentType = globalThis.env.DEPLOYMENT_TYPE;
+  // @ts-expect-error test mutates env singleton for deployment-specific quota semantics
+  globalThis.env.DEPLOYMENT_TYPE = 'selfhosted';
+  try {
+    const { workspace } = await createWorkspace(t);
+    // selfhost_free resolves to the Pro quota (10 seats); go well past it.
+    await addAcceptedMembers(t, workspace.id, 15);
+
+    const state = await t.context.state.reconcileWorkspaceQuotaState(
+      workspace.id
+    );
+
+    // The cap is gone, so overflow can never put the workspace read-only -
+    // which matters because self-hosting has no licence to buy its way out.
+    t.is(state.overcapacityMemberCount, 0);
+    t.false(state.readonly);
+    t.false(state.readonlyReasons.includes('member_overflow'));
+    // ...and inviting past the limit is allowed.
+    t.true(await t.context.quota.tryCheckSeat(workspace.id));
+  } finally {
+    // @ts-expect-error restore mutable test env singleton
+    globalThis.env.DEPLOYMENT_TYPE = previousDeploymentType;
+  }
+});
+
+test('cloud workspaces still enforce the seat cap', async t => {
+  const { workspace } = await createWorkspace(t);
+  await addAcceptedMembers(t, workspace.id, 15);
+
+  const state = await t.context.state.reconcileWorkspaceQuotaState(
+    workspace.id
+  );
+
+  // The self-host exemption must not leak into cloud.
+  t.true(state.overcapacityMemberCount > 0);
+  t.true(state.readonlyReasons.includes('member_overflow'));
+  t.false(await t.context.quota.tryCheckSeat(workspace.id));
+});
+
 async function createWorkspace(t: ExecutionContext<Context>) {
   const owner = await t.context.models.user.create({
     email: `${randomUUID()}@notesgraph.com`,

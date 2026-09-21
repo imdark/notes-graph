@@ -13,7 +13,6 @@ import { WorkspaceModule } from '../../core/workspaces';
 import { StripeWebhookController } from './controller';
 import { SubscriptionCronJobs } from './cron';
 import { PaymentEventHandlers } from './event';
-import { LicenseController } from './license/controller';
 import {
   SelfhostTeamSubscriptionManager,
   UserSubscriptionManager,
@@ -62,7 +61,6 @@ import { StripeWebhook } from './webhook';
   ],
   controllers: [
     StripeWebhookController,
-    LicenseController,
     RevenueCatWebhookController,
   ],
 })

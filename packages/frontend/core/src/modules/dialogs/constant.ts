@@ -15,7 +15,7 @@ export type SettingTab =
   | 'account'
   | 'meetings'
   | 'plugins'
-  | `workspace:${'preference' | 'properties' | 'members' | 'storage' | 'billing' | 'license' | 'integrations' | 'embedding' | 'byok' | 'search' | 'agents' | 'folder-sync'}`
+  | `workspace:${'preference' | 'properties' | 'members' | 'storage' | 'billing' | 'integrations' | 'embedding' | 'byok' | 'search' | 'agents' | 'folder-sync'}`
   /**
    * A settings page contributed by a plugin via `ui.addSettingsPage`. Open
    * ended by nature — the id is the plugin's own, so these cannot be

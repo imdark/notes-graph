@@ -254,7 +254,9 @@ export class WorkspaceMemberResolver {
             inviteId: role.id,
           });
         } else {
-          const needMoreSeat = quota.memberCount + idx + 1 > quota.memberLimit;
+          // Self-hosting has no seat cap — see QuotaStateService.
+          const needMoreSeat =
+            !env.selfhosted && quota.memberCount + idx + 1 > quota.memberLimit;
           if (needMoreSeat) {
             throw new NoMoreSeat({ spaceId: workspaceId });
           } else {
@@ -411,7 +413,8 @@ export class WorkspaceMemberResolver {
             }
           );
         } else {
-          if (quota.memberCount >= quota.memberLimit) {
+          // Self-hosting has no seat cap — see QuotaStateService.
+          if (!env.selfhosted && quota.memberCount >= quota.memberLimit) {
             throw new NoMoreSeat({ spaceId: workspaceId });
           } else {
             await this.models.workspaceUser.setStatus(

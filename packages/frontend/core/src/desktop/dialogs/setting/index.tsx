@@ -15,7 +15,6 @@ import type {
 } from '@notesgraph/core/modules/dialogs/constant';
 import { GlobalContextService } from '@notesgraph/core/modules/global-context';
 import { createIsland, type Island } from '@notesgraph/core/utils/island';
-import { ServerDeploymentType } from '@notesgraph/graphql';
 import { Trans, useTranslation } from '@notesgraph/i18n';
 import { FrameworkScope, useLiveData, useService } from '@notesgraph/infra';
 import { debounce } from 'lodash-es';
@@ -87,11 +86,6 @@ const SettingModalInner = ({
     ) ?? defaultServerService.server;
   const loginStatus = useLiveData(
     currentServer.scope.get(AuthService).session.status$
-  );
-  const isSelfhosted = useLiveData(
-    currentServer.config$.selector(
-      c => c.type === ServerDeploymentType.Selfhosted
-    )
   );
 
   const modalContentRef = useRef<HTMLDivElement>(null);
@@ -171,16 +165,6 @@ const SettingModalInner = ({
       }) satisfies SubPageContextType,
     [subPageIslands, addSubPageIsland]
   );
-
-  useEffect(() => {
-    if (
-      isSelfhosted &&
-      (settingState.activeTab === 'plans' ||
-        settingState.activeTab === 'workspace:billing')
-    ) {
-      setSettingState({ activeTab: 'workspace:license' });
-    }
-  }, [isSelfhosted, settingState.activeTab]);
 
   useEffect(() => {
     if (settingState.scrollAnchor) {

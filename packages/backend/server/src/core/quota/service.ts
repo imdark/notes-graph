@@ -106,6 +106,13 @@ export class QuotaService {
   }
 
   async tryCheckSeat(workspaceId: string, excludeSelf = false) {
+    // No seat cap when self-hosting — see the note in QuotaStateService. This
+    // is the invite-time half; the other half keeps the workspace out of
+    // read-only.
+    if (env.selfhosted) {
+      return true;
+    }
+
     const quota = await this.getWorkspaceSeatQuota(workspaceId);
 
     return quota.memberCount - (excludeSelf ? 1 : 0) < quota.memberLimit;

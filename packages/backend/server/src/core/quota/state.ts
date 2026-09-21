@@ -115,7 +115,19 @@ export class QuotaStateService {
       : workspaceStorageUsage;
     const storageQuota = BigInt(quota.storageQuota);
     const seatLimit = quota.seatLimit ?? 0;
-    const overcapacityMemberCount = Math.max(memberCount - seatLimit, 0);
+    /**
+     * Self-hosting has no seat cap.
+     *
+     * Upstream ties seats to a signed commercial licence, and overflow does
+     * not merely block invites — it puts 'member_overflow' in readonlyReasons
+     * and turns the whole workspace read-only. On a self-hosted instance there
+     * is no licence to buy and `grantAdminEntitlement` refuses to raise the
+     * limit ("Self-hosted commercial entitlements require a signed license"),
+     * so an instance that outgrew its plan would have had no way back.
+     */
+    const overcapacityMemberCount = env.selfhosted
+      ? 0
+      : Math.max(memberCount - seatLimit, 0);
     const readonlyReasons = [
       overcapacityMemberCount > 0 ? 'member_overflow' : null,
       usedStorageQuota > storageQuota ? 'storage_overflow' : null,

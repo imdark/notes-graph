@@ -116,9 +116,12 @@ export const CloudWorkspaceMembersPanel = ({
 
   const { openConfirmModal, closeConfirmModal } = useConfirmModal();
   const goToTeamBilling = useCallback(() => {
-    onChangeSettingState({
-      activeTab: isSelfhosted ? 'workspace:license' : 'workspace:billing',
-    });
+    // Self-hosting has neither a billing page nor a licence to buy, and no
+    // seat cap to escape — there is nowhere to send them.
+    if (isSelfhosted) {
+      return;
+    }
+    onChangeSettingState({ activeTab: 'workspace:billing' });
   }, [isSelfhosted, onChangeSettingState]);
   const [idempotencyKey, setIdempotencyKey] = useState(nanoid());
   const resume = useAsyncCallback(async () => {
