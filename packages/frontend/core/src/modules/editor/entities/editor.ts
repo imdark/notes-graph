@@ -285,8 +285,21 @@ export class Editor extends Entity {
     const gfx = editorContainer.host?.std.get(GfxControllerIdentifier);
 
     // ----- Scroll Position and Selection -----
-    // if we have default scroll position, we should restore it
-    if (this.mode$.value === 'page' && this.scrollPosition.page !== null) {
+    //
+    // An explicit target wins over the remembered position. Opening a doc
+    // *at a block* (`?blockIds=...` - clicking a row in a task list, a
+    // backlink, a search hit) is a destination the user just chose;
+    // restoring where they happened to be last time is only a fallback for
+    // when they chose nothing. These used to be mutually exclusive with the
+    // restore first, and since the focusAt$ subscription below skips its
+    // initial value, the target was then dropped entirely: the block got
+    // highlighted but the viewport sat wherever the doc was last left -
+    // the end of the page, for one previously read to the bottom.
+    const initialFocusAt = this.focusAt$.value;
+
+    if (initialFocusAt !== null) {
+      this.handleFocusAt(initialFocusAt);
+    } else if (this.mode$.value === 'page' && this.scrollPosition.page !== null) {
       scrollViewport?.scrollTo(0, this.scrollPosition.page);
     } else if (
       this.mode$.value === 'edgeless' &&
@@ -298,24 +311,18 @@ export class Editor extends Entity {
         this.scrollPosition.edgeless.centerY,
       ]);
     } else {
-      // if we don't have default scroll position, we should focus on the title
-      const initialFocusAt = this.focusAt$.value;
-
-      if (initialFocusAt === null) {
-        const title = docTitle?.querySelector<
-          HTMLElement & { inlineEditor: InlineEditor | null }
-        >('rich-text');
-        // Only focus on the title when it's empty on mobile edition.
-        if (BUILD_CONFIG.isMobileEdition) {
-          const titleText = this.doc.title$.value;
-          if (!titleText?.length) {
-            title?.inlineEditor?.focusEnd();
-          }
-        } else {
+      // Nothing to restore and nowhere to jump: focus the title.
+      const title = docTitle?.querySelector<
+        HTMLElement & { inlineEditor: InlineEditor | null }
+      >('rich-text');
+      // Only focus on the title when it's empty on mobile edition.
+      if (BUILD_CONFIG.isMobileEdition) {
+        const titleText = this.doc.title$.value;
+        if (!titleText?.length) {
           title?.inlineEditor?.focusEnd();
         }
       } else {
-        this.handleFocusAt(initialFocusAt);
+        title?.inlineEditor?.focusEnd();
       }
     }
 
