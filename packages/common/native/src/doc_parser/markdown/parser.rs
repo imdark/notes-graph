@@ -786,6 +786,18 @@ fn validate_markdown_inner(markdown: &str) -> Result<(), ParseError> {
         if is_supported_inline_html(&html) {
           continue;
         }
+        // Text that merely looks like a tag is prose, not markup: `Vec<T>`
+        // in a code discussion, `<rig>` in a config path, the
+        // `<system-reminder>` blocks an agent transcript is full of. The
+        // parser already keeps those as literal text, so refusing the whole
+        // document over one of them lost the document for nothing.
+        //
+        // Real elements still stop here. This arm is what refuses an
+        // `<iframe>` that `parse_iframe_tag` declined for being http or
+        // self-referencing, so it must not turn into a blanket allow.
+        if !is_known_html_element(&html) {
+          continue;
+        }
         return Err(ParseError::ParserError("unsupported_markdown:html".into()));
       }
       Event::FootnoteReference(_) => {
@@ -1244,6 +1256,43 @@ fn handle_inline_html_tag(html: &str, inline: &mut InlineState, span_stack: &mut
   }
 }
 
+/// Whether `html` names a real HTML element, as opposed to tag-shaped prose.
+///
+/// The validator refuses elements it cannot represent; it should not refuse
+/// a document because someone wrote `Vec<String>` or a path containing
+/// `<rig>`. Unknown names are prose and are kept as text by the parser.
+fn is_known_html_element(html: &str) -> bool {
+  const HTML_ELEMENTS: &[&str] = &[
+    "a", "abbr", "address", "area", "article", "aside", "audio", "b", "base", "bdi", "bdo",
+    "blockquote", "body", "br", "button", "canvas", "caption", "cite", "code", "col", "colgroup",
+    "data", "datalist", "dd", "del", "details", "dfn", "dialog", "div", "dl", "dt", "em", "embed",
+    "fieldset", "figcaption", "figure", "footer", "form", "h1", "h2", "h3", "h4", "h5", "h6",
+    "head", "header", "hgroup", "hr", "html", "i", "iframe", "img", "input", "ins", "kbd",
+    "label", "legend", "li", "link", "main", "map", "mark", "menu", "meta", "meter", "nav",
+    "noscript", "object", "ol", "optgroup", "option", "output", "p", "param", "picture", "pre",
+    "progress", "q", "rp", "rt", "ruby", "s", "samp", "script", "search", "section", "select",
+    "slot", "small", "source", "span", "strong", "style", "sub", "summary", "sup", "table",
+    "tbody", "td", "template", "textarea", "tfoot", "th", "thead", "time", "title", "tr",
+    "track", "u", "ul", "var", "video", "wbr",
+  ];
+  html_element_name(html).is_some_and(|name| HTML_ELEMENTS.contains(&name.as_str()))
+}
+
+/// The element name at the start of `html`, lowercased.
+///
+/// Deliberately not `parse_html_tag`, which expects one whole tag and
+/// nothing else: a block event carries its content too, so `<div>x</div>`
+/// would yield the name `div>x</div` and match nothing.
+fn html_element_name(html: &str) -> Option<String> {
+  let rest = html.trim_start().strip_prefix('<')?;
+  let rest = rest.strip_prefix('/').unwrap_or(rest);
+  let name: String = rest
+    .chars()
+    .take_while(|c| c.is_ascii_alphanumeric() || *c == '-')
+    .collect();
+  (!name.is_empty()).then(|| name.to_ascii_lowercase())
+}
+
 fn is_supported_inline_html(html: &str) -> bool {
   let Some(tag) = parse_html_tag(html) else {
     return false;
@@ -1638,6 +1687,45 @@ mod tests {
     let markdown = "# Title\n\n| A | B |\n| --- | --- |\n| 1<br />2 | 3 |";
     let result = validate_markdown(markdown);
     assert!(result.is_ok());
+  }
+
+  #[test]
+  fn test_validate_markdown_allows_tag_shaped_prose() {
+    // Text that merely looks like a tag is kept as literal text by the
+    // parser, so the validator must not reject the document over it. These
+    // all returned unsupported_markdown:html, which reached callers as a
+    // 500 and lost the whole document.
+    for markdown in [
+      "Read configs/gello/rigs/<rig>.yaml first",
+      "the signature is Vec<String>",
+      "an agent transcript full of <system-reminder> blocks",
+    ] {
+      assert!(
+        validate_markdown(markdown).is_ok(),
+        "should accept tag-shaped prose: {markdown}"
+      );
+    }
+  }
+
+  #[test]
+  fn test_tag_shaped_prose_survives_as_text() {
+    let doc = parse_markdown("the signature is Vec<String> here").unwrap();
+    let rendered = format!("{doc:?}");
+    assert!(
+      rendered.contains("Vec") && rendered.contains("String"),
+      "tag-shaped text should reach the document, got: {rendered}"
+    );
+  }
+
+  #[test]
+  fn test_validate_markdown_still_rejects_real_html() {
+    // Relaxing the rule for tag-shaped prose must not become a blanket
+    // allow: this arm is what refuses an iframe the iframe parser declined.
+    assert!(validate_markdown("# T\n\n<div>HTML</div>").is_err());
+    assert!(
+      validate_markdown("# T\n\n<iframe src=\"http://example.com/e\"></iframe>").is_err(),
+      "an http iframe must still be refused"
+    );
   }
 
   #[test]

@@ -1,7 +1,7 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { nanoid } from 'nanoid';
 
-import { EventBus } from '../../base';
+import { BadRequest, EventBus } from '../../base';
 import {
   addDocToRootDoc,
   createDocWithMarkdown,
@@ -34,6 +34,35 @@ declare global {
       timestamp: number;
       editor?: string;
     };
+  }
+}
+
+/**
+ * Markdown the converter refuses is bad input, not a server fault.
+ *
+ * The native parser signals it with `unsupported_markdown:<what>` through a
+ * generic napi failure, which would otherwise be reported as a 500 — so a
+ * caller sending a footnote got "An internal error occurred" and no way to
+ * know which part of their document was the problem.
+ *
+ * `BadRequest`, not Nest's `BadRequestException`: the global filter's
+ * `mapAnyError` passes through only UserFriendlyError, NotFoundException,
+ * ZodError and HttpError, and turns anything else — a plain HttpException
+ * included — into a 500. Throwing the Nest exception here looked right, and
+ * still surfaced as "an internal error occurred".
+ */
+function asClientError<T>(run: () => T): T {
+  try {
+    return run();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    const match = /unsupported_markdown:(\w+)/.exec(message);
+    if (match) {
+      throw new BadRequest(
+        `This markdown uses ${match[1]}, which documents can't represent yet.`
+      );
+    }
+    throw error;
   }
 }
 
@@ -85,7 +114,9 @@ export class DocWriter {
     );
 
     // Convert markdown to y-octo binary using the provided title
-    const binary = createDocWithMarkdown(title, markdown, docId);
+    const binary = asClientError(() =>
+      createDocWithMarkdown(title, markdown, docId)
+    );
 
     // Prepare root doc update to register the new document
     const rootDocUpdate = addDocToRootDoc(rootDocBin, docId, title);
@@ -175,7 +206,9 @@ export class DocWriter {
           existingDoc.bin.byteOffset,
           existingDoc.bin.byteLength
         );
-    const delta = updateDocWithMarkdown(existingBinary, markdown, docId);
+    const delta = asClientError(() =>
+      updateDocWithMarkdown(existingBinary, markdown, docId)
+    );
 
     // Push only the delta changes
     const timestamp = await this.storage.pushDocUpdates(

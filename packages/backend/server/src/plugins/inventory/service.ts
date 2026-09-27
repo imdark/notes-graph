@@ -1,6 +1,11 @@
-import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 
-import { Config } from '../../base';
+// `BadRequest`, not Nest's `BadRequestException`: the global filter's
+// `mapAnyError` passes through only UserFriendlyError, NotFoundException,
+// ZodError and HttpError. A plain HttpException falls to its else branch and
+// is reported as a 500, so a caller is told "an internal error occurred"
+// about input that is entirely their own to fix.
+import { BadRequest, Config } from '../../base';
 import { Models } from '../../models';
 import {
   DEVICE_KINDS,
@@ -29,12 +34,12 @@ export class InventoryService {
   private normalizeKey(raw: string | undefined): string {
     const key = (raw ?? '').trim();
     if (!key) {
-      throw new BadRequestException('key is required');
+      throw new BadRequest('key is required');
     }
     // Keys land in URL paths, so keep them to a conservative alphabet. The
     // colon is allowed because folder targets are namespaced `machine:folder`.
     if (!/^[A-Za-z0-9._:-]{1,128}$/.test(key)) {
-      throw new BadRequestException(
+      throw new BadRequest(
         'key must be 1-128 chars of letters, digits, dot, dash, underscore or colon'
       );
     }
@@ -50,15 +55,15 @@ export class InventoryService {
 
     const kind = body.kind ?? 'machine';
     if (!DEVICE_KINDS.includes(kind as never)) {
-      throw new BadRequestException(`kind must be one of ${DEVICE_KINDS.join(', ')}`);
+      throw new BadRequest(`kind must be one of ${DEVICE_KINDS.join(', ')}`);
     }
     if (kind === 'folder' && !body.path) {
-      throw new BadRequestException('folder targets require a path');
+      throw new BadRequest('folder targets require a path');
     }
 
     const port = body.port ?? 22;
     if (!Number.isInteger(port) || port < 1 || port > 65535) {
-      throw new BadRequestException('port must be between 1 and 65535');
+      throw new BadRequest('port must be between 1 and 65535');
     }
 
     // Only count against the cap when this is a new device, so re-registering
@@ -68,7 +73,7 @@ export class InventoryService {
       const max = this.config.inventory.maxDevicesPerWorkspace;
       const count = (await this.models.inventoryDevice.list(workspaceId)).length;
       if (count >= max) {
-        throw new BadRequestException(
+        throw new BadRequest(
           `Workspace already holds ${count} inventory devices (max ${max})`
         );
       }
@@ -122,7 +127,7 @@ export class InventoryService {
   ): Promise<DeviceDto | null> {
     const state = body.state ?? 'unknown';
     if (!DEVICE_STATES.includes(state as never)) {
-      throw new BadRequestException(`state must be one of ${DEVICE_STATES.join(', ')}`);
+      throw new BadRequest(`state must be one of ${DEVICE_STATES.join(', ')}`);
     }
 
     const device = await this.models.inventoryDevice.updateStatus(

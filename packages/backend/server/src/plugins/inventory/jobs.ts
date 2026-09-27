@@ -1,6 +1,9 @@
-import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import type { InventoryJob } from '@prisma/client';
 
+// See the note in service.ts: a plain HttpException is reported as a 500 by
+// the global filter, so bad input has to be a UserFriendlyError.
+import { BadRequest } from '../../base';
 import { Models } from '../../models';
 import { JOB_TERMINAL } from '../../models/inventory-job';
 
@@ -75,27 +78,27 @@ export class InventoryJobService {
   ): Promise<JobDto> {
     const device = await this.models.inventoryDevice.get(workspaceId, deviceKey);
     if (!device) {
-      throw new BadRequestException(`No device '${deviceKey}' in this workspace`);
+      throw new BadRequest(`No device '${deviceKey}' in this workspace`);
     }
     // Registering a device is not consent to run code on it. That is a
     // separate opt-in, and it is checked here rather than in the UI so a
     // direct API call cannot skip it.
     if (!device.agentTarget) {
-      throw new BadRequestException(
+      throw new BadRequest(
         `Device '${deviceKey}' is not an agent target. Re-register it with agent execution allowed.`
       );
     }
 
     const instructions = String(body.instructions ?? '').trim();
     if (!instructions) {
-      throw new BadRequestException('instructions are required');
+      throw new BadRequest('instructions are required');
     }
     if (instructions.length > MAX_INSTRUCTIONS) {
-      throw new BadRequestException(`instructions exceed ${MAX_INSTRUCTIONS} characters`);
+      throw new BadRequest(`instructions exceed ${MAX_INSTRUCTIONS} characters`);
     }
     const context = String(body.context ?? '');
     if (context.length > MAX_CONTEXT) {
-      throw new BadRequestException(`context exceeds ${MAX_CONTEXT} characters`);
+      throw new BadRequest(`context exceeds ${MAX_CONTEXT} characters`);
     }
 
     const job = await this.models.inventoryJob.create({
@@ -147,7 +150,7 @@ export class InventoryJobService {
   ): Promise<JobDto | null> {
     const status = body.status ? String(body.status) : undefined;
     if (status && !['running', ...JOB_TERMINAL].includes(status)) {
-      throw new BadRequestException(
+      throw new BadRequest(
         `status must be one of running, ${JOB_TERMINAL.join(', ')}`
       );
     }
