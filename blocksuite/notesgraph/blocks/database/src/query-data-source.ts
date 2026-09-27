@@ -5,6 +5,8 @@ import {
   BlockTaskIndexProvider,
   type ProjectInfo,
   ProjectsProvider,
+  type TaskBodyDelta,
+  taskBodyIsEmpty,
   trailSections,
 } from '@blocksuite/notesgraph-shared/services';
 import {
@@ -222,7 +224,25 @@ export class QueryListDataSource extends OrgTaskRowsDataSource {
     return null;
   }
 
+  /**
+   * True for a checkbox with nothing in it: no body text and no children.
+   *
+   * These are the half-typed rows you get from pressing enter on a todo
+   * list and not filling it in. In the doc an empty checkbox is fine;
+   * collected into a task view it renders as "Untitled" with nothing to act
+   * on. Filtered rather than deleted - `sourceRowModels$` re-runs on text
+   * edits, so one reappears the moment it is given content.
+   */
+  private isEmptyTask(model: BlockModel): boolean {
+    if (model.children.length > 0) return false;
+    const text = model.text;
+    if (!text) return true;
+    return taskBodyIsEmpty(text.toDelta() as TaskBodyDelta[]);
+  }
+
   private matchesCriteria(model: BlockModel): boolean {
+    if (this.isEmptyTask(model)) return false;
+
     const statuses = this._model.props.queryStatus$.value;
     if (statuses && statuses.length > 0) {
       const statusText = this.modelStatusText(model);
