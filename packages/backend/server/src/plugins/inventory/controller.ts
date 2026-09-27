@@ -187,7 +187,21 @@ export class InventoryController {
     return { job };
   }
 
-  /** A device asks for its next job. Returns `{ job: null }` when idle. */
+  /**
+   * A device asks for its next job. Returns `{ job: null }` when idle.
+   *
+   * Workspace.Read, not Settings.Update: this is a runner doing the work it
+   * was already given, and a polling machine holds this credential
+   * permanently. Requiring settings-update would mean every device in the
+   * field carried a token that could also register and remove devices across
+   * the whole workspace - one compromised machine would take the fleet with
+   * it. Dispatching work (enqueue) and stopping it (cancel) stay privileged.
+   *
+   * The residual gap is that any workspace member can now claim or report,
+   * so a member could take work or file a false result. Closing that needs a
+   * per-device credential rather than a user token; this at least stops a
+   * runner's token from being an admin one.
+   */
   @Post('/workspaces/:workspaceId/devices/:key/jobs/claim')
   async claimJob(
     @CurrentUser() user: CurrentUserType,
@@ -196,10 +210,7 @@ export class InventoryController {
     @Body() body: { runnerId?: string; leaseSeconds?: number }
   ) {
     this.assertEnabled();
-    await this.ac
-      .user(user.id)
-      .workspace(workspaceId)
-      .assert('Workspace.Settings.Update');
+    await this.ac.user(user.id).workspace(workspaceId).assert('Workspace.Read');
     const job = await this.jobs.claim(
       workspaceId, key, body?.runnerId ?? 'runner', body?.leaseSeconds
     );
@@ -215,10 +226,9 @@ export class InventoryController {
     @Body() body: Record<string, unknown>
   ) {
     this.assertEnabled();
-    await this.ac
-      .user(user.id)
-      .workspace(workspaceId)
-      .assert('Workspace.Settings.Update');
+    // Workspace.Read for the same reason as claim above - a runner reporting
+    // on its own job should not need a token that can rewrite the fleet.
+    await this.ac.user(user.id).workspace(workspaceId).assert('Workspace.Read');
     const job = await this.jobs.report(workspaceId, jobId, body ?? {});
     if (!job) {
       throw new NotFoundException(`No job '${jobId}' in this workspace`);
