@@ -1,6 +1,11 @@
 export { Agents } from './entities/agents';
 export { AgentIcon, agentIconData } from './views/agent-icon';
 export { AgentsService, DEFAULT_AGENT_TOOLS } from './services/agents';
+export {
+  type EnqueueRemoteJob,
+  type RemoteJob,
+  RemoteAgentRunnerService,
+} from './services/remote-runner';
 export { AgentContextService } from './services/context';
 export {
   AgentFileToolError,
@@ -33,15 +38,17 @@ export {
 import { type Framework } from '@notesgraph/infra';
 
 import { AiBackendService, LocalLLMService } from '../ai-local';
+import { FetchService } from '../cloud';
 import { WorkspaceDBService } from '../db';
 import { DocsService } from '../doc';
 import { FolderSyncService } from '../folder-sync';
-import { WorkspaceScope } from '../workspace';
+import { WorkspaceScope, WorkspaceService } from '../workspace';
 import { Agents } from './entities/agents';
 import { AgentsService } from './services/agents';
 import { AgentContextService } from './services/context';
 import { AgentFileToolsService } from './services/file-tools';
 import { AgentExecutorService } from './services/executor';
+import { RemoteAgentRunnerService } from './services/remote-runner';
 import { AgentRunSessionService } from './services/run-session';
 import { AgentRunsStore } from './stores/agent-runs';
 import { AgentsStore } from './stores/agents';
@@ -52,12 +59,15 @@ export function configureAgentsModule(framework: Framework) {
     .service(AgentsService, [AgentsStore, Agents])
     .service(AgentContextService, [DocsService])
     .service(AgentFileToolsService, [FolderSyncService])
+    .service(RemoteAgentRunnerService, [FetchService])
     .service(AgentExecutorService, [
       AgentContextService,
       AgentRunsStore,
       LocalLLMService,
       AiBackendService,
       AgentFileToolsService,
+      RemoteAgentRunnerService,
+      WorkspaceService,
     ])
     .service(AgentRunSessionService, [AgentExecutorService])
     .store(AgentsStore, [WorkspaceDBService])

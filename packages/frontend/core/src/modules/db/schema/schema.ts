@@ -34,11 +34,17 @@ const agentTable = {
   /** The system prompt, authored by the reader. */
   instructions: f.string(),
   /**
-   * Which runtime executes this agent: 'on-device' (WebLLM in the browser) or
-   * 'cloud' (the server's copilot). Unset follows the workspace's own AI
-   * backend setting, which is what every agent did before this existed.
+   * Which runtime executes this agent: 'on-device' (WebLLM in the browser),
+   * 'cloud' (the server's copilot), or 'remote' (a machine registered in the
+   * device inventory). Unset follows the workspace's own AI backend setting,
+   * which is what every agent did before this existed.
    */
   harness: f.string().optional(),
+  /**
+   * For a 'remote' harness: the inventory key of the device to run on.
+   * Ignored by every other harness.
+   */
+  deviceKey: f.string().optional(),
   /** Model id within that harness. Unset uses the harness default. */
   model: f.string().optional(),
   /**

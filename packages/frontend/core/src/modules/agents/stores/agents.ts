@@ -16,8 +16,13 @@ export type AgentOutput = 'panel';
  * Which runtime executes an agent. `undefined` means "whatever the workspace's
  * AI backend is set to", which is how every agent behaved before this was
  * selectable.
+ *
+ * `remote` runs the agent on a machine registered in the device inventory:
+ * the run is queued against a device and that device claims it. Nothing
+ * here connects outward, so a machine behind NAT works the same as one on
+ * the desk.
  */
-export type AgentHarness = 'on-device' | 'cloud';
+export type AgentHarness = 'on-device' | 'cloud' | 'remote';
 
 export interface Agent {
   id: string;
@@ -34,6 +39,8 @@ export interface Agent {
   targets: AgentTargetKind[];
   output: AgentOutput;
   maxSteps: number;
+  /** For `remote` agents: the inventory key of the device to run on. */
+  deviceKey?: string;
   enabled: boolean;
   createdAt: number;
   createdBy?: string;
@@ -57,6 +64,7 @@ interface AgentRowShape {
   targets: string[];
   output: string;
   maxSteps: number;
+  deviceKey?: string | null;
   enabled: boolean;
   createdAt: number;
   createdBy?: string | null;
@@ -91,7 +99,9 @@ export class AgentsStore extends Store {
       emoji: row.emoji ?? undefined,
       instructions: row.instructions,
       harness:
-        row.harness === 'on-device' || row.harness === 'cloud'
+        row.harness === 'on-device' ||
+        row.harness === 'cloud' ||
+        row.harness === 'remote'
           ? row.harness
           : undefined,
       model: row.model ?? undefined,
@@ -104,6 +114,7 @@ export class AgentsStore extends Store {
       ),
       output: 'panel',
       maxSteps: row.maxSteps ?? DEFAULT_MAX_STEPS,
+      deviceKey: row.deviceKey ?? undefined,
       enabled: row.enabled ?? true,
       createdAt: row.createdAt ?? 0,
       createdBy: row.createdBy ?? undefined,
@@ -117,6 +128,7 @@ export class AgentsStore extends Store {
       emoji: draft.emoji,
       instructions: draft.instructions,
       harness: draft.harness,
+      deviceKey: draft.deviceKey,
       model: draft.model,
       tools: draft.tools,
       targets: draft.targets,

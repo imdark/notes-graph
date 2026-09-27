@@ -174,6 +174,7 @@ model Workspace {
   docGrants                  DocGrant[]
   projects                   Project[]
   inventoryDevices           InventoryDevice[]
+  inventoryJobs              InventoryJob[]
   projectDocs                ProjectDoc[]
   directoryAccounts          DirectoryAccount[]
 
@@ -1725,4 +1726,43 @@ model InventoryDevice {
   @@index([workspaceId, kind])
   @@index([workspaceId, agentTarget])
   @@map("inventory_devices")
+}
+
+// A unit of agent work dispatched to a registered device.
+//
+// The device polls for these rather than being called: a machine in the
+// field sits behind NAT, and having it initiate every connection means the
+// server never needs a route in. A claim takes a lease so two runners on
+// the same device cannot pick up the same job.
+model InventoryJob {
+  id             String    @id @default(uuid()) @db.VarChar
+  workspaceId    String    @map("workspace_id") @db.VarChar
+  deviceKey      String    @map("device_key") @db.VarChar
+  agentId        String    @map("agent_id") @db.VarChar
+  agentName      String    @map("agent_name") @db.VarChar
+  instructions   String    @db.Text
+  context        String    @db.Text
+  model          String?   @db.VarChar
+  tools          Json      @default("[]")
+  maxSteps       Int       @default(8) @map("max_steps")
+  targetKind     String?   @map("target_kind") @db.VarChar
+  docId          String?   @map("doc_id") @db.VarChar
+  blockId        String?   @map("block_id") @db.VarChar
+  status         String    @default("queued") @db.VarChar
+  result         String?   @db.Text
+  error          String?   @db.Text
+  steps          Int       @default(0)
+  claimedBy      String?   @map("claimed_by") @db.VarChar
+  leaseExpiresAt DateTime? @map("lease_expires_at") @db.Timestamptz(3)
+  createdBy      String?   @map("created_by") @db.VarChar
+  startedAt      DateTime? @map("started_at") @db.Timestamptz(3)
+  finishedAt     DateTime? @map("finished_at") @db.Timestamptz(3)
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, deviceKey, status])
+  @@index([workspaceId, status, createdAt])
+  @@map("inventory_jobs")
 }

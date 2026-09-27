@@ -1,7 +1,11 @@
 import { Service } from '@notesgraph/infra';
 
 import type { AiBackendService, LocalLLMService } from '../../ai-local';
-import { type Agent, DEFAULT_MAX_STEPS } from '../stores/agents';
+import {
+  type Agent,
+  type AgentHarness,
+  DEFAULT_MAX_STEPS,
+} from '../stores/agents';
 import type { AgentRunsStore } from '../stores/agent-runs';
 import type { AgentContextService } from './context';
 import {
@@ -9,6 +13,8 @@ import {
   FILE_TOOL_NAMES,
   FILE_TOOLS,
 } from './file-tools';
+import type { WorkspaceService } from '../../workspace';
+import { RemoteAgentRunnerService } from './remote-runner';
 import { type AgentTarget, agentTargetKey } from './target';
 import {
   buildToolPrompt,
@@ -60,9 +66,16 @@ export class AgentExecutorService extends Service implements AgentExecutor {
     private readonly runsStore: AgentRunsStore,
     private readonly localLLM: LocalLLMService,
     private readonly aiBackend: AiBackendService,
-    private readonly fileTools: AgentFileToolsService
+    private readonly fileTools: AgentFileToolsService,
+    private readonly remoteRunner: RemoteAgentRunnerService,
+    private readonly workspaceService: WorkspaceService
   ) {
     super();
+  }
+
+  /** The workspace a remote job is queued against. */
+  private get workspaceId(): string | undefined {
+    return this.workspaceService.workspace?.id;
   }
 
   /**
@@ -156,7 +169,7 @@ export class AgentExecutorService extends Service implements AgentExecutor {
    * The runtime an agent will actually use: its own choice, else the
    * workspace's AI backend setting.
    */
-  harnessFor(agent: Agent): 'on-device' | 'cloud' {
+  harnessFor(agent: Agent): AgentHarness {
     if (agent.harness) return agent.harness;
     return this.aiBackend.backend$.value === 'local' ? 'on-device' : 'cloud';
   }
@@ -182,16 +195,32 @@ export class AgentExecutorService extends Service implements AgentExecutor {
     signal.addEventListener('abort', onOuterAbort);
 
     let output = '';
+    let steps = 0;
     try {
-      // Only the on-device harness exists so far. Fail loudly rather than
-      // silently running somewhere the agent wasn't configured to run.
+      // Fail loudly rather than silently running somewhere the agent wasn't
+      // configured to run. `cloud` is still declared and unimplemented.
       const harness = this.harnessFor(agent);
-      if (harness !== 'on-device') {
+      if (harness !== 'on-device' && harness !== 'remote') {
         throw new Error(
           `This agent is set to run on ${harness}, which isn't available here yet. Switch it to on-device in Settings → Agents.`
         );
       }
       const context = await this.contextService.build(target);
+
+      if (harness === 'remote') {
+        for await (const event of this.runRemote(
+          agent,
+          context.text,
+          controller.signal
+        )) {
+          if (event.type === 'step') steps = event.index + 1;
+          if (event.type === 'text') output += event.delta;
+          if (event.type === 'done') output = event.output;
+          yield event;
+        }
+        this.runsStore.finish(runId, { status: 'done', output, steps });
+        return;
+      }
 
       // An agent given file tools, in a workspace with a folder bound, runs
       // the tool loop; everything else keeps the original text-only path.
@@ -201,7 +230,6 @@ export class AgentExecutorService extends Service implements AgentExecutor {
       const useTools = fileTools.length > 0 && this.fileTools.available;
 
       if (useTools) {
-        let steps = 0;
         for await (const event of this.runWithTools(
           agent,
           context.text,
@@ -268,6 +296,60 @@ export class AgentExecutorService extends Service implements AgentExecutor {
       clearTimeout(deadline);
       signal.removeEventListener('abort', onOuterAbort);
       this.inFlight.delete(key);
+    }
+  }
+
+  /**
+   * Run on a machine from the device inventory.
+   *
+   * The job is queued and the device claims it; this never connects to the
+   * machine. Progress arrives by polling the job, which is why the event
+   * stream here is coarser than the on-device one -- status changes rather
+   * than token deltas.
+   */
+  private async *runRemote(
+    agent: Agent,
+    context: string,
+    signal: AbortSignal
+  ): AsyncIterable<AgentEvent> {
+    const workspaceId = this.workspaceId;
+    if (!workspaceId) {
+      throw new Error('No workspace is open, so there is nowhere to queue the run.');
+    }
+    if (!agent.deviceKey) {
+      throw new Error(
+        `"${agent.name}" has no device selected. Pick one in Settings → Agents.`
+      );
+    }
+
+    const job = await this.remoteRunner.enqueue(workspaceId, {
+      deviceKey: agent.deviceKey,
+      agentId: agent.id,
+      agentName: agent.name,
+      instructions: agent.instructions,
+      context,
+      model: agent.model,
+      tools: agent.tools,
+      maxSteps: agent.maxSteps,
+    });
+
+    yield { type: 'text', delta: `Queued on ${agent.deviceKey}…\n` };
+
+    for await (const update of this.remoteRunner.watch(workspaceId, job.id, signal)) {
+      if (update.status === 'running') {
+        yield { type: 'step', index: Math.max(0, update.steps - 1) };
+        continue;
+      }
+      if (update.status === 'done') {
+        yield { type: 'done', output: update.result ?? '' };
+        return;
+      }
+      if (update.status === 'error') {
+        throw new Error(update.error || `The run failed on ${agent.deviceKey}.`);
+      }
+      if (update.status === 'cancelled') {
+        throw new Error('The run was cancelled.');
+      }
     }
   }
 }

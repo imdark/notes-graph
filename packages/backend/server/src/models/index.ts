@@ -11,6 +11,7 @@ import { AccessTokenModel } from './access-token';
 import { BlobModel } from './blob';
 import { CalendarAccountModel } from './calendar-account';
 import { InventoryDeviceModel } from './inventory-device';
+import { InventoryJobModel } from './inventory-job';
 import { CalendarEventModel } from './calendar-event';
 import { CalendarEventInstanceModel } from './calendar-event-instance';
 import { CalendarSubscriptionModel } from './calendar-subscription';
@@ -96,6 +97,7 @@ const MODELS = {
   accessToken: AccessTokenModel,
   calendarAccount: CalendarAccountModel,
   inventoryDevice: InventoryDeviceModel,
+  inventoryJob: InventoryJobModel,
   calendarSubscription: CalendarSubscriptionModel,
   calendarEvent: CalendarEventModel,
   calendarEventInstance: CalendarEventInstanceModel,

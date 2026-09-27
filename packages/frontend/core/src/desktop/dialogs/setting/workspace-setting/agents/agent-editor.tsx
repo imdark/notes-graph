@@ -21,14 +21,16 @@ import {
   type AgentTargetKind,
   DEFAULT_MAX_STEPS,
   FILE_TOOLS,
+  RemoteAgentRunnerService,
 } from '@notesgraph/core/modules/agents';
 import {
   AIModelService,
   LOCAL_MODELS,
 } from '@notesgraph/core/modules/ai-button/services/models';
 import { useSignalValue } from '@notesgraph/core/modules/doc-info/utils';
+import { WorkspaceService } from '@notesgraph/core/modules/workspace';
 import { useService } from '@notesgraph/infra';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 import * as styles from './styles.css';
 
@@ -95,6 +97,11 @@ const HARNESSES: {
     label: 'Cloud (server copilot)',
     note: 'Requires the server to advertise Copilot',
   },
+  {
+    value: 'remote',
+    label: 'Remote device',
+    note: 'Runs on a machine registered in the device inventory',
+  },
 ];
 
 const TARGETS: { kind: AgentTargetKind; label: string }[] = [
@@ -139,7 +146,40 @@ export const AgentEditor = ({
     agent?.harness
   );
   const [model, setModel] = useState<string | undefined>(agent?.model);
+  const [deviceKey, setDeviceKey] = useState<string | undefined>(
+    agent?.deviceKey
+  );
   const modelService = useService(AIModelService);
+  const remoteRunner = useService(RemoteAgentRunnerService);
+  const workspaceService = useService(WorkspaceService);
+  const [devices, setDevices] = useState<
+    { key: string; name: string; state: string; kind: string }[]
+  >([]);
+  const [devicesError, setDevicesError] = useState<string | undefined>();
+
+  // Load the fleet only once "Remote device" is actually chosen: most agents
+  // never are, and this is a network call.
+  useEffect(() => {
+    if (harness !== 'remote') return;
+    const workspaceId = workspaceService.workspace?.id;
+    if (!workspaceId) return;
+
+    let cancelled = false;
+    setDevicesError(undefined);
+    remoteRunner
+      .agentTargets(workspaceId)
+      .then(list => {
+        if (!cancelled) setDevices(list);
+      })
+      .catch((error: Error) => {
+        // An unreachable inventory shouldn't blank the form — say so and
+        // leave whatever device was already selected intact.
+        if (!cancelled) setDevicesError(error.message);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [harness, remoteRunner, workspaceService]);
   // A plain `.value` read wouldn't re-render when the list loads — the models
   // arrive asynchronously and depend on which backend is selected.
   const backendModels = useSignalValue(modelService.models) ?? [];
@@ -159,8 +199,13 @@ export const AgentEditor = ({
   }, []);
 
   // A nameless agent is unpickable in a menu, and one with no target can never
-  // be offered anywhere — block both rather than letting them be saved.
-  const canSave = name.trim().length > 0 && targets.length > 0;
+  // be offered anywhere — block both rather than letting them be saved. A
+  // remote agent with no device would fail at run time instead, which is a
+  // worse place to find out.
+  const canSave =
+    name.trim().length > 0 &&
+    targets.length > 0 &&
+    (harness !== 'remote' || !!deviceKey);
 
   const handleSubmit = useCallback(() => {
     if (!canSave) return;
@@ -169,6 +214,9 @@ export const AgentEditor = ({
       icon,
       instructions: instructions.trim(),
       harness,
+      // Only meaningful for a remote agent; don't leave a stale key behind
+      // on one that has been switched back to running locally.
+      deviceKey: harness === 'remote' ? deviceKey : undefined,
       model,
       tools,
       targets,
@@ -180,6 +228,7 @@ export const AgentEditor = ({
   }, [
     agent,
     canSave,
+    deviceKey,
     harness,
     icon,
     instructions,
@@ -390,10 +439,48 @@ export const AgentEditor = ({
               ))}
             </div>
             <span className={styles.hint}>
-              Only the on-device model runs agents today. Cloud needs the server
-              to offer Copilot, which this one doesn't yet.
+              On-device runs in this browser. Remote runs on a machine you have
+              registered in the device inventory. Cloud needs the server to
+              offer Copilot, which this one doesn't yet.
             </span>
           </div>
+
+          {harness === 'remote' ? (
+            <div className={styles.field}>
+              <span className={styles.label}>Device</span>
+              <select
+                className={styles.select}
+                value={deviceKey ?? ''}
+                onChange={e => setDeviceKey(e.target.value || undefined)}
+                data-testid="agent-editor-device"
+              >
+                <option value="">Pick a device…</option>
+                {/* A device already chosen but no longer listed — offline, or
+                    its agent opt-in was revoked — stays selectable so opening
+                    the editor can't silently clear it. */}
+                {deviceKey && !devices.some(d => d.key === deviceKey) ? (
+                  <option value={deviceKey}>{deviceKey} (unavailable)</option>
+                ) : null}
+                {devices.map(device => (
+                  <option key={device.key} value={device.key}>
+                    {device.name || device.key}
+                    {device.state && device.state !== 'online'
+                      ? ` · ${device.state}`
+                      : ''}
+                  </option>
+                ))}
+              </select>
+              <span className={styles.hint}>
+                {devicesError
+                  ? `Couldn't load devices: ${devicesError}`
+                  : devices.length === 0
+                    ? 'No devices accept agent work yet. Register one with ' +
+                      '`wf deploy add <user>@<host> --agent`.'
+                    : 'The device claims the run and reports back; nothing ' +
+                      'connects to it from here.'}
+              </span>
+            </div>
+          ) : null}
 
           <div className={styles.field}>
             <span className={styles.label}>Model</span>
