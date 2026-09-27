@@ -438,6 +438,51 @@ export abstract class OrgTaskRowsDataSource extends DatabaseBlockDataSource {
     return super.cellValueGet(rowId, propertyId);
   }
 
+  /** The Status select this source seeds, if the view still has one. */
+  private orgStatusPropertyId(): string | undefined {
+    return this.properties$.value.find(id => this.isOrgStatusProperty(id));
+  }
+
+  /**
+   * Whether this row's task is done, for a view that wants to show a tick.
+   *
+   * Reads the same annotation the Status cell does rather than the native
+   * checkbox, so a task written as `DONE` and one written as `[X]` agree.
+   */
+  taskDoneGet(rowId: string): boolean | undefined {
+    this.sourceTextVersion$.value;
+    const statusText =
+      this.rowOrgStatus(rowId)?.statusText ?? this.nativeCheckboxOrgText(rowId);
+    if (!statusText) return undefined;
+    return orgStatusLabel(statusText) === 'Done';
+  }
+
+  /**
+   * Tick or untick a row.
+   *
+   * Routed through `cellValueChange` on the Status property rather than
+   * writing the text directly, so ticking from a list does exactly what
+   * changing the Status cell does: rewrite the chip, stamp CLOSED (or clear
+   * it on reopen) and keep the native checkbox in sync.
+   */
+  taskDoneSet(rowId: string, done: boolean): void {
+    const propertyId = this.orgStatusPropertyId();
+    if (!propertyId) return;
+
+    const options = this.statusOptions(propertyId);
+    const wanted = done ? 'done' : 'todo';
+    const option = options.find(
+      candidate =>
+        ((candidate as { role?: LaneRole }).role ??
+          inferLaneRole(candidate.value)) === wanted
+    );
+    // No lane for the state being asked for: unticking a board whose only
+    // lanes are done-ish would otherwise silently do nothing sensible, so
+    // clear the annotation instead (cellValueChange treats undefined as
+    // "remove the status").
+    this.cellValueChange(rowId, propertyId, option?.id);
+  }
+
   override cellValueChange(
     rowId: string,
     propertyId: string,

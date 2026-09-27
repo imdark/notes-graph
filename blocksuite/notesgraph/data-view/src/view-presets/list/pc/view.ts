@@ -127,8 +127,28 @@ export class ListViewUI extends DataViewUIBase<ListViewUILogic> {
     });
   }
 
+  /**
+   * Tick or untick a row from the list.
+   *
+   * `stopPropagation` because the whole row opens the task on click - without
+   * it, ticking would also navigate away from the list you are working
+   * through, which is the opposite of what a checkbox is for.
+   *
+   * Nothing is removed here. When the view filters to incomplete tasks the
+   * row leaves on its own, because the source re-runs its criteria on the
+   * text edit this write makes.
+   */
+  private toggleDone(event: Event, rowId: string): void {
+    event.stopPropagation();
+    const dataSource = this.logic.view.manager.dataSource;
+    if (!dataSource.taskDoneSet) return;
+    dataSource.taskDoneSet(rowId, !dataSource.taskDoneGet?.(rowId));
+  }
+
   override render(): TemplateResult {
     const view = this.logic.view;
+    const dataSource = view.manager.dataSource;
+    const canToggle = !!dataSource.taskDoneSet;
     const titleColumn = view.mainProperties$.value.titleColumn;
     const rows = view.rows$.value;
 
@@ -167,11 +187,24 @@ export class ListViewUI extends DataViewUIBase<ListViewUILogic> {
                       .value
                   : '';
                 const crumbs = this.rowBreadcrumb(row.rowId);
+                const done = dataSource.taskDoneGet?.(row.rowId) ?? false;
                 return html`<div
                   class="dv-list-row"
                   @click=${() => this.openRow(row.rowId)}
                 >
-                  <span class="dv-list-checkbox"></span>
+                  ${canToggle
+                    ? html`<button
+                        class="dv-list-checkbox"
+                        type="button"
+                        role="checkbox"
+                        aria-checked=${done ? 'true' : 'false'}
+                        aria-label=${done
+                          ? 'Mark task as not done'
+                          : 'Mark task as done'}
+                        ?data-checked=${done}
+                        @click=${(e: Event) => this.toggleDone(e, row.rowId)}
+                      ></button>`
+                    : html`<span class="dv-list-checkbox"></span>`}
                   <span class="dv-list-main">
                     <span class="dv-list-text">${title || 'Untitled'}</span>
                     ${crumbs.length

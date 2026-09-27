@@ -35,6 +35,53 @@ export const listViewStyles = css`
     flex-shrink: 0;
     /* Nudge onto the title's baseline now the row aligns to the top. */
     margin-top: 2px;
+    /* Reset the button: it is a box, not a control with chrome. */
+    padding: 0;
+    background: transparent;
+    appearance: none;
+  }
+
+  /* Only the interactive one gets a pointer and a hit area worth aiming at;
+     a source without task status still renders the plain box. */
+  button.dv-list-checkbox {
+    cursor: pointer;
+    position: relative;
+  }
+
+  button.dv-list-checkbox::after {
+    /* Invisible padding so the 14px box is comfortably clickable without
+       growing the row or overlapping the title. */
+    content: '';
+    position: absolute;
+    inset: -6px;
+  }
+
+  button.dv-list-checkbox:hover {
+    border-color: var(--notesgraph-primary-color);
+  }
+
+  button.dv-list-checkbox:focus-visible {
+    outline: 2px solid var(--notesgraph-primary-color);
+    outline-offset: 2px;
+  }
+
+  button.dv-list-checkbox[data-checked] {
+    background: var(--notesgraph-primary-color);
+    border-color: var(--notesgraph-primary-color);
+  }
+
+  /* The tick. A bare rotated rectangle beats an inline SVG here: it scales
+     with the box and needs no asset. */
+  button.dv-list-checkbox[data-checked]::before {
+    content: '';
+    position: absolute;
+    left: 3.5px;
+    top: 0.5px;
+    width: 4px;
+    height: 8px;
+    border: solid var(--notesgraph-white, #fff);
+    border-width: 0 1.5px 1.5px 0;
+    transform: rotate(45deg);
   }
 
   /* Title + breadcrumb stack. align-items on the row is center, so this keeps

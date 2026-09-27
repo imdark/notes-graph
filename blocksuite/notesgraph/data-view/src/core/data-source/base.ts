@@ -15,10 +15,29 @@ import type { ViewConvertConfig } from '../view/convert.js';
 import type { DataViewDataType, ViewMeta } from '../view/data-view.js';
 import type { ViewManager } from '../view-manager/view-manager.js';
 
+/**
+ * Optional "these rows are tasks" capability.
+ *
+ * A source whose rows have a done/not-done state can implement this, and a
+ * view may then offer a tick affordance without knowing anything about how
+ * the state is stored - for org tasks it is an annotation in the item's own
+ * text, not a cell. Sources that are not task lists leave it undefined and
+ * views fall back to rendering no control.
+ */
+export interface TaskStatusSource {
+  /** Undefined when this row has no task status at all. */
+  taskDoneGet(rowId: string): boolean | undefined;
+  taskDoneSet(rowId: string, done: boolean): void;
+}
+
 export interface DataSource {
   readonly$: ReadonlySignal<boolean>;
   properties$: ReadonlySignal<string[]>;
   featureFlags$: ReadonlySignal<DatabaseFlags>;
+
+  /** See {@link TaskStatusSource}. Absent on sources that are not tasks. */
+  taskDoneGet?(rowId: string): boolean | undefined;
+  taskDoneSet?(rowId: string, done: boolean): void;
 
   cellValueGet(rowId: string, propertyId: string): unknown;
   cellValueGet$(
