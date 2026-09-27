@@ -38,7 +38,7 @@ export {
 import { type Framework } from '@notesgraph/infra';
 
 import { AiBackendService, LocalLLMService } from '../ai-local';
-import { FetchService } from '../cloud';
+import { WorkspaceServerService } from '../cloud';
 import { WorkspaceDBService } from '../db';
 import { DocsService } from '../doc';
 import { FolderSyncService } from '../folder-sync';
@@ -59,7 +59,7 @@ export function configureAgentsModule(framework: Framework) {
     .service(AgentsService, [AgentsStore, Agents])
     .service(AgentContextService, [DocsService])
     .service(AgentFileToolsService, [FolderSyncService])
-    .service(RemoteAgentRunnerService, [FetchService])
+    .service(RemoteAgentRunnerService, [WorkspaceServerService])
     .service(AgentExecutorService, [
       AgentContextService,
       AgentRunsStore,

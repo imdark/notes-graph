@@ -1,6 +1,6 @@
 import { Service } from '@notesgraph/infra';
 
-import type { FetchService } from '../../cloud';
+import { FetchService, type WorkspaceServerService } from '../../cloud';
 
 /**
  * Runs an agent on a registered device instead of in this browser.
@@ -38,8 +38,24 @@ export interface EnqueueRemoteJob {
 const POLL_MS = 1500;
 
 export class RemoteAgentRunnerService extends Service {
-  constructor(private readonly fetchService: FetchService) {
+  constructor(
+    private readonly workspaceServerService: WorkspaceServerService
+  ) {
     super();
+  }
+
+  /**
+   * FetchService lives in the server scope, not the workspace scope this
+   * service is registered in, so it has to be reached through the
+   * workspace's server rather than injected. Taking it as a constructor
+   * dependency compiles fine and then throws
+   * "Missing dependency [FetchService]" the first time anything resolves
+   * this service - which is at render, so the settings pane crashes.
+   *
+   * Null for a local workspace: there is no server to run anything on.
+   */
+  private get fetchService(): FetchService | undefined {
+    return this.workspaceServerService.server?.scope.get(FetchService);
   }
 
   private base(workspaceId: string) {
@@ -47,7 +63,13 @@ export class RemoteAgentRunnerService extends Service {
   }
 
   private async json<T>(url: string, init?: RequestInit): Promise<T> {
-    const response = await this.fetchService.fetch(url, {
+    const fetchService = this.fetchService;
+    if (!fetchService) {
+      throw new Error(
+        'This workspace is local, so there is no server to run an agent on.'
+      );
+    }
+    const response = await fetchService.fetch(url, {
       ...init,
       headers: { 'content-type': 'application/json', ...(init?.headers ?? {}) },
     });
