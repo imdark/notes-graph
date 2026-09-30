@@ -113,8 +113,9 @@ deploy_landing() {
   # Privacy policy. Google's OAuth verification requires one reachable on the
   # same domain as the app, so it ships with the landing page rather than
   # living somewhere that can drift out of date.
-  "${SSH[@]}" "mkdir -p /opt/notesgraph/landing/privacy"
+  "${SSH[@]}" "mkdir -p /opt/notesgraph/landing/privacy /opt/notesgraph/landing/terms"
   scp -q -i "$SSH_KEY" "$REPO_ROOT/landing/privacy/index.html" "ubuntu@$HOST:/opt/notesgraph/landing/privacy/index.html"
+  scp -q -i "$SSH_KEY" "$REPO_ROOT/landing/terms/index.html" "ubuntu@$HOST:/opt/notesgraph/landing/terms/index.html"
   echo "==> landing deployed"
 }
 
