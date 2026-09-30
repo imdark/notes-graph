@@ -23,6 +23,7 @@ import dayjs from 'dayjs';
 import type { Location } from 'history';
 import { useCallback, useLayoutEffect, useRef, useState } from 'react';
 
+import { DayCalendarSection } from '../detail-page/day-calendar-section';
 import { DayScheduleSection } from '../detail-page/day-schedule-section';
 import { AllDocSidebarTabs } from '../layouts/all-doc-sidebar-tabs';
 import * as styles from './index.css';
@@ -58,6 +59,7 @@ export const JournalPlaceholder = ({ dateString }: { dateString: string }) => {
           date={dateString}
           overrideClassName={styles.docTitleContainer}
         />
+        <DayCalendarSection date={dateString} />
         <DayScheduleSection date={dateString} />
         <div className={styles.placeholder}>
           <div className={styles.placeholderIcon}>

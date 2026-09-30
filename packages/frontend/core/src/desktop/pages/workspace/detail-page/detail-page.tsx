@@ -81,6 +81,7 @@ import { useParams } from 'react-router-dom';
 import type { Subscription } from 'rxjs';
 
 import { PageNotFound } from '../../404';
+import { DayCalendarSection } from './day-calendar-section';
 import { DayScheduleSection } from './day-schedule-section';
 import * as styles from './detail-page.css';
 import { DetailPageHeader } from './detail-page-header';
@@ -446,6 +447,9 @@ const DetailPageImpl = memo(function DetailPageImpl() {
                       </Scrollable.Root>
                     </div>
                   </div>
+                ) : null}
+                {journalDate ? (
+                  <DayCalendarSection date={journalDate} />
                 ) : null}
                 {journalDate ? <DayScheduleSection date={journalDate} /> : null}
                 <PageDetailEditor onLoad={onLoad} readonly={readonly} />
