@@ -110,6 +110,11 @@ deploy_landing() {
   scp -q -i "$SSH_KEY" "$REPO_ROOT/landing/manifest.json" "ubuntu@$HOST:/opt/notesgraph/landing/manifest.json"
   "${SSH[@]}" "mkdir -p /opt/notesgraph/landing/icons"
   scp -q -i "$SSH_KEY" "$REPO_ROOT"/landing/icons/* "ubuntu@$HOST:/opt/notesgraph/landing/icons/"
+  # Privacy policy. Google's OAuth verification requires one reachable on the
+  # same domain as the app, so it ships with the landing page rather than
+  # living somewhere that can drift out of date.
+  "${SSH[@]}" "mkdir -p /opt/notesgraph/landing/privacy"
+  scp -q -i "$SSH_KEY" "$REPO_ROOT/landing/privacy/index.html" "ubuntu@$HOST:/opt/notesgraph/landing/privacy/index.html"
   echo "==> landing deployed"
 }
 
