@@ -122,3 +122,6 @@ doordash-out/
 
 # Local screen recordings (scripts/record-flow.mjs) — large binaries, never committed.
 .recordings/
+
+# python bytecode from the tools/ generators
+__pycache__/

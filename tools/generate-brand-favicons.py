@@ -79,13 +79,14 @@ def emit(folder: str, sizes: list[int], with_32: bool):
     print("wrote", folder)
 
 
-emit("landing/icons", [36, 48, 72, 96, 144, 192], with_32=False)
-emit("packages/frontend/core/public", [36, 48, 72, 96, 144, 192], with_32=True)
-emit("packages/frontend/apps/electron/resources/web-static",
-     [36, 48, 72, 96, 144, 192], with_32=True)
+if __name__ == "__main__":
+    emit("landing/icons", [36, 48, 72, 96, 144, 192], with_32=False)
+    emit("packages/frontend/core/public", [36, 48, 72, 96, 144, 192], with_32=True)
+    emit("packages/frontend/apps/electron/resources/web-static",
+         [36, 48, 72, 96, 144, 192], with_32=True)
 
-# electron web-static also carries favicon.svg — copy the canonical one
-import shutil
-shutil.copy("packages/frontend/core/public/favicon.svg",
-            "packages/frontend/apps/electron/resources/web-static/favicon.svg")
-print("done")
+    # electron web-static also carries favicon.svg — copy the canonical one
+    import shutil
+    shutil.copy("packages/frontend/core/public/favicon.svg",
+                "packages/frontend/apps/electron/resources/web-static/favicon.svg")
+    print("done")
