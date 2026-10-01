@@ -49,7 +49,7 @@ export const DayCalendarSection = ({ date }: { date: string }) => {
   if (events.length === 0) return null;
 
   return (
-    <div className={styles.wrapper}>
+    <div className={styles.wrapper} data-testid="day-calendar-section">
       <div className={styles.section}>
         <div className={styles.header}>
           {t['com.notesgraph.integration.calendar.name']()}
