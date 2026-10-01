@@ -160,11 +160,41 @@ export class CalendarIntegration extends Entity {
     return updated;
   }
 
+  private calendarsLoaded: Promise<void> | null = null;
+
+  /**
+   * Events are fetched per workspace calendar, and named/coloured from the
+   * account calendars - neither of which is loaded on app start. Without this
+   * an event request after a page refresh found no workspace calendar and
+   * returned nothing until something else (the settings panel) loaded them.
+   *
+   * Loaded once and shared, not per request. Not tied to a caller's abort
+   * signal: one journal day being flicked past must not cancel the load for
+   * the next. A failure is forgotten so the next request retries it.
+   */
+  private ensureCalendarsLoaded() {
+    this.calendarsLoaded ??= Promise.all([
+      this.revalidateWorkspaceCalendars(),
+      // Names and colours only; events still show without them, e.g. for a
+      // member who did not connect the account.
+      this.loadAccountCalendars().catch(() => undefined),
+    ]).then(
+      () => undefined,
+      error => {
+        this.calendarsLoaded = null;
+        throw error;
+      }
+    );
+    return this.calendarsLoaded;
+  }
+
   async revalidateEventsRange(
     rangeStart: Dayjs,
     rangeEnd: Dayjs,
     signal?: AbortSignal
   ) {
+    await this.ensureCalendarsLoaded();
+    signal?.throwIfAborted();
     const start = rangeStart.startOf('day');
     const end = rangeEnd.endOf('day');
     const workspaceCalendarId = this.workspaceCalendars$.value[0]?.id;
