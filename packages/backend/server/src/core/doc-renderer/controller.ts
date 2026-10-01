@@ -12,6 +12,7 @@ import { htmlSanitize } from '../../native';
 import { Public } from '../auth';
 import { DocReader } from '../doc';
 import { PermissionService } from '../permission';
+import { extractImportMap } from './import-map';
 
 interface RenderOptions {
   title: string;
@@ -25,6 +26,8 @@ interface HtmlAssets {
   publicPath: string;
   gitHash: string;
   description: string;
+  /** see extractImportMap */
+  importMap: string;
 }
 
 const defaultAssets: HtmlAssets = {
@@ -33,6 +36,7 @@ const defaultAssets: HtmlAssets = {
   publicPath: '/',
   gitHash: '',
   description: '',
+  importMap: '',
 };
 
 // TODO(@forehalo): reuse routes with frontend
@@ -236,6 +240,7 @@ export class DocRendererController {
     <link rel="icon" sizes="192x192" href="/favicon-192.png" />
     <link rel="shortcut icon" href="/favicon.ico?v=2" />
     <meta name="emotion-insertion-point" content="" />
+    ${assets.importMap}
     ${!opts ? '<meta name="robots" content="noindex, nofollow" />' : ''}
     <meta
       name="twitter:title"
@@ -276,6 +281,16 @@ export class DocRendererController {
       assets.publicPath = publicPath;
       assets.js = assets.js.map(path => publicPath + path);
       assets.css = assets.css.map(path => publicPath + path);
+      try {
+        assets.importMap = extractImportMap(
+          readFileSync(join(path, 'index.html'), 'utf-8')
+        );
+      } catch {
+        // No built HTML beside the manifest: render without the map rather
+        // than fail startup. Plugins then cannot load on /workspace routes.
+        assets.importMap = '';
+        this.logger.warn(`no index.html in ${path}; plugin import map omitted`);
+      }
 
       return assets;
     } catch (e) {
