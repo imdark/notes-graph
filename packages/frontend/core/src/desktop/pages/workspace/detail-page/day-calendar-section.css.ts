@@ -40,15 +40,30 @@ export const count = style({
   fontWeight: 400,
 });
 
+/** A whole row is the target for the event's note, hence a button. */
 export const row = style({
   display: 'flex',
   alignItems: 'center',
   gap: '8px',
+  width: '100%',
   padding: '6px 8px',
+  border: 'none',
   borderRadius: '6px',
+  background: 'transparent',
+  font: 'inherit',
   fontSize: cssVar('fontSm'),
-  // Read-only for now: no hover affordance, because there is nothing to click.
-  cursor: 'default',
+  color: 'inherit',
+  textAlign: 'left',
+  cursor: 'pointer',
+  selectors: {
+    '&:hover': {
+      background: cssVar('hoverColor'),
+    },
+    '&:focus-visible': {
+      outline: `2px solid ${cssVar('primaryColor')}`,
+      outlineOffset: '-2px',
+    },
+  },
 });
 
 /** The calendar's own colour, so two calendars are distinguishable at a glance. */
@@ -88,4 +103,27 @@ export const calendarName = style({
   whiteSpace: 'nowrap',
   flexShrink: 2,
   minWidth: 0,
+});
+
+/**
+ * "Open note" / "Add note". An event that has a note always says so - that is
+ * worth seeing while scanning the day - while "Add note" waits for hover or
+ * focus, so a day of note-less events is not a column of identical buttons.
+ */
+export const noteAction = style({
+  display: 'flex',
+  alignItems: 'center',
+  gap: '4px',
+  flexShrink: 0,
+  fontSize: cssVar('fontXs'),
+  color: cssVar('textSecondaryColor'),
+  opacity: 0,
+  selectors: {
+    [`${row}[data-has-note="true"] &`]: {
+      opacity: 1,
+    },
+    [`${row}:hover &, ${row}:focus-visible &`]: {
+      opacity: 1,
+    },
+  },
 });

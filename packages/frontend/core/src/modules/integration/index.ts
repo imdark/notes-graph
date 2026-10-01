@@ -10,13 +10,14 @@ import { CalendarIntegration } from './entities/calendar';
 import { ReadwiseIntegration } from './entities/readwise';
 import { ReadwiseCrawler } from './entities/readwise-crawler';
 import { IntegrationWriter } from './entities/writer';
+import { CalendarEventNoteService } from './services/calendar-event-note';
 import { IntegrationService } from './services/integration';
 import { IntegrationPropertyService } from './services/integration-property';
 import { CalendarStore } from './store/calendar';
 import { IntegrationRefStore } from './store/integration-ref';
 import { ReadwiseStore } from './store/readwise';
 
-export { IntegrationService };
+export { CalendarEventNoteService, IntegrationService };
 export { CalendarIntegration } from './entities/calendar';
 export type { CalendarEvent } from './type';
 export { IntegrationTypeIcon } from './views/icon';
@@ -41,6 +42,7 @@ export function configureIntegrationModule(framework: Framework) {
     ])
     .store(CalendarStore, [WorkspaceService, WorkspaceServerService])
     .entity(CalendarIntegration, [CalendarStore])
+    .service(CalendarEventNoteService, [DocsService])
     .scope(DocScope)
     .service(IntegrationPropertyService, [DocService]);
 }

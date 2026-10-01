@@ -103,6 +103,8 @@ export interface ReadwiseConfig {
 export type CalendarEvent = {
   id: string;
   subscriptionId: string;
+  /** The provider's id for this event (instance), stable across re-syncs. */
+  externalEventId: string;
   title: string;
   startAt: Dayjs;
   endAt: Dayjs;

@@ -98,6 +98,7 @@ export class CalendarIntegration extends Entity {
           return {
             id: event.id,
             subscriptionId: event.subscriptionId,
+            externalEventId: event.externalEventId,
             title: event.title ?? '',
             startAt: dayjs(event.startAtUtc),
             endAt: dayjs(event.endAtUtc),

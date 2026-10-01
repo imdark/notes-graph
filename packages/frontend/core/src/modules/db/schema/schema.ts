@@ -108,6 +108,17 @@ export const NotesGraph_WORKSPACE_DB_SCHEMA = {
     // "Publish this doc + its descendants as a site" settings, stored on the
     // root doc only (see modules/share-doc/publish-site-types).
     publishSite: f.json<PublishSiteSettings>().optional(),
+    // a note attached to a synced calendar event. Keyed by the provider's own
+    // event id (per-instance for recurring events) rather than our row or
+    // subscription ids, both of which are recreated when a calendar is
+    // re-subscribed. Local only: nothing is written back to the calendar.
+    calendarEvent: f
+      .json<{
+        externalEventId: string;
+        // YYYY-MM-DD the event fell on when the note was made
+        date: string;
+      }>()
+      .optional(),
   }),
   docCustomPropertyInfo: {
     id: f.string().primaryKey().optional().default(nanoid),

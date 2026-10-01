@@ -1,17 +1,23 @@
-import { IntegrationService } from '@notesgraph/core/modules/integration';
+import { PageIcon, PlusIcon } from '@blocksuite/icons/rc';
+import {
+  type CalendarEvent,
+  CalendarEventNoteService,
+  IntegrationService,
+} from '@notesgraph/core/modules/integration';
+import { PeekViewService } from '@notesgraph/core/modules/peek-view';
 import { useI18n } from '@notesgraph/i18n';
 import { useLiveData, useService } from '@notesgraph/infra';
 import dayjs from 'dayjs';
-import { useEffect, useMemo } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
 
 import * as styles from './day-calendar-section.css';
 
 /**
  * One day's calendar events, shown on a journal page above the written notes.
  *
- * Read-only on purpose: events are mirrored from Google/CalDAV, and nothing
- * here writes back. Until there is a defined answer for what editing a synced
- * event should do upstream, showing them is the honest half of the feature.
+ * The events themselves are read-only: they are mirrored from Google/CalDAV
+ * and nothing here writes back. What you can do is attach a note to an event -
+ * an ordinary NotesGraph doc that stays here (see CalendarEventNoteService).
  *
  * Takes a date rather than assuming today, so it works on whichever journal
  * day is open - past days included.
@@ -56,29 +62,75 @@ export const DayCalendarSection = ({ date }: { date: string }) => {
           <span className={styles.count}>{events.length}</span>
         </div>
         {events.map(event => (
-          <div key={event.id} className={styles.row}>
-            <span
-              className={styles.dot}
-              style={
-                event.calendarColor
-                  ? { background: event.calendarColor }
-                  : undefined
-              }
-            />
-            <span className={styles.time}>
-              {event.allDay
-                ? t['com.notesgraph.integration.calendar.all-day']()
-                : `${event.startAt.format('HH:mm')} – ${event.endAt.format('HH:mm')}`}
-            </span>
-            <span className={styles.title}>
-              {event.title || t['Untitled']()}
-            </span>
-            {showCalendarName && event.calendarName ? (
-              <span className={styles.calendarName}>{event.calendarName}</span>
-            ) : null}
-          </div>
+          <EventRow
+            key={event.id}
+            event={event}
+            showCalendarName={showCalendarName}
+          />
         ))}
       </div>
     </div>
+  );
+};
+
+/**
+ * One event. Clicking it opens the event's note in the peek view, making the
+ * note first if there is none - so the row is the whole target, and a second
+ * click on the same event lands on the same note rather than a new one.
+ */
+const EventRow = ({
+  event,
+  showCalendarName,
+}: {
+  event: CalendarEvent;
+  showCalendarName: boolean;
+}) => {
+  const t = useI18n();
+  const notes = useService(CalendarEventNoteService);
+  const peekView = useService(PeekViewService).peekView;
+  const note = useLiveData(
+    useMemo(
+      () => notes.note$(event.externalEventId),
+      [notes, event.externalEventId]
+    )
+  );
+
+  const openNote = useCallback(() => {
+    const doc = notes.ensureNote(event, t['Untitled']());
+    peekView.open({ docRef: { docId: doc.id } }).catch(console.error);
+  }, [event, notes, peekView, t]);
+
+  const noteLabel = note
+    ? t['com.notesgraph.integration.calendar.open-note']()
+    : t['com.notesgraph.integration.calendar.add-note']();
+
+  return (
+    <button
+      type="button"
+      className={styles.row}
+      data-has-note={!!note}
+      onClick={openNote}
+      aria-label={`${event.title || t['Untitled']()} – ${noteLabel}`}
+    >
+      <span
+        className={styles.dot}
+        style={
+          event.calendarColor ? { background: event.calendarColor } : undefined
+        }
+      />
+      <span className={styles.time}>
+        {event.allDay
+          ? t['com.notesgraph.integration.calendar.all-day']()
+          : `${event.startAt.format('HH:mm')} – ${event.endAt.format('HH:mm')}`}
+      </span>
+      <span className={styles.title}>{event.title || t['Untitled']()}</span>
+      {showCalendarName && event.calendarName ? (
+        <span className={styles.calendarName}>{event.calendarName}</span>
+      ) : null}
+      <span className={styles.noteAction}>
+        {note ? <PageIcon /> : <PlusIcon />}
+        {noteLabel}
+      </span>
+    </button>
   );
 };
