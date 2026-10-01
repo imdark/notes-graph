@@ -101,6 +101,8 @@ body::after {
 /* ————— nav ————— */
 .nav { position: absolute; top: 0; left: 0; right: 0; z-index: 5; }
 .nav-inner { display: flex; align-items: center; gap: 2rem; padding: 1.4rem 0; }
+.brand { display: inline-flex; align-items: center; gap: 0.6rem; text-decoration: none; }
+.brand-logo { width: 30px; height: 30px; border-radius: 7px; display: block; }
 .wordmark {
   font-family: var(--display); font-weight: 900; font-size: 0.98rem;
   letter-spacing: 0.1em; text-transform: uppercase; text-decoration: none;
@@ -396,7 +398,11 @@ footer { border-top: 1px solid var(--panel-edge); padding: 2.2rem 0 2.8rem; back
   <canvas id="grid-canvas" aria-hidden="true"></canvas>
   <nav class="nav">
     <div class="wrap nav-inner">
-      <a class="wordmark" href="#">NotesGraph<span class="pro">.com</span></a>
+      <a class="brand" href="/">
+        <img class="brand-logo" src="/icons/app-logo-192.png"
+             width="30" height="30" alt="NotesGraph logo" />
+        <span class="wordmark">NotesGraph<span class="pro">.com</span></span>
+      </a>
       <span class="nav-kana" aria-hidden="true">ノーツグラフ</span>
       <div class="nav-links">
         <a href="#district">Why</a>
