@@ -119,3 +119,6 @@ storageState.json
 
 # DoorDash crawler output (personal order data — never commit)
 doordash-out/
+
+# Local screen recordings (scripts/record-flow.mjs) — large binaries, never committed.
+.recordings/
