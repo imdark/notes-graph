@@ -217,3 +217,46 @@ test('should refuse to refresh a jwt whose underlying session is gone', async t 
     message: 'You must sign in first to access this resource.',
   });
 });
+
+test('should keep an in-use native session alive past its original expiry', async t => {
+  // A session signed in 13 days ago: 2 days left of its 15, inside the 7-day
+  // refresh window. Before, nothing on the JWT path extended it, so the app
+  // was logged out on day 15 however often it had refreshed.
+  const nearExpiry = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000);
+  await t.context.db.userSession.updateMany({
+    where: { userId: t.context.user.id, sessionId: t.context.sessionId },
+    data: { expiresAt: nearExpiry },
+  });
+  const signed = t.context.jwtSession.sign(
+    t.context.user.id,
+    t.context.sessionId
+  );
+
+  await t.context.jwtSession.refresh(signed.token);
+
+  const row = await t.context.db.userSession.findFirstOrThrow({
+    where: { userId: t.context.user.id, sessionId: t.context.sessionId },
+  });
+  t.true(
+    row.expiresAt!.getTime() > Date.now() + 14 * 24 * 60 * 60 * 1000,
+    'refresh slides the session back out to the full 15 days'
+  );
+});
+
+test('should not rewrite a session that is nowhere near expiry', async t => {
+  const before = await t.context.db.userSession.findFirstOrThrow({
+    where: { userId: t.context.user.id, sessionId: t.context.sessionId },
+  });
+  const signed = t.context.jwtSession.sign(
+    t.context.user.id,
+    t.context.sessionId
+  );
+
+  await t.context.jwtSession.refresh(signed.token);
+
+  const after = await t.context.db.userSession.findFirstOrThrow({
+    where: { userId: t.context.user.id, sessionId: t.context.sessionId },
+  });
+  // refreshes come every ~15 min; a DB write on each would be pure churn
+  t.deepEqual(after.expiresAt, before.expiresAt);
+});

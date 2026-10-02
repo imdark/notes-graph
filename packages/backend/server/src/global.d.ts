@@ -3,6 +3,11 @@ declare namespace Express {
     session?: import('./core/auth/session').Session;
     token?: import('./core/auth/session').TokenSession;
     authType?: 'jwt' | 'session' | 'access_token';
+    /**
+     * A public route ignored a bearer JWT that was genuine but expired. See
+     * AuthController.currentSessionUser for why that is worth remembering.
+     */
+    expiredJwt?: boolean;
   }
 }
 

@@ -15,6 +15,7 @@ import type { Request, Response } from 'express';
 
 import {
   ActionForbidden,
+  AuthenticationRequired,
   EmailTokenNotFound,
   getRequestCookie,
   InvalidAuthState,
@@ -269,7 +270,17 @@ export class AuthController {
   @Public()
   @Get('/session')
   @Header('Cache-Control', 'no-store')
-  async currentSessionUser(@CurrentUser() user?: CurrentUser) {
+  async currentSessionUser(
+    @Req() req: Request,
+    @CurrentUser() user?: CurrentUser
+  ) {
+    // A native client's JWT lives 15 minutes. Being public, this route ignores
+    // an expired one and would answer 200 `{ user: undefined }` - which the
+    // app reads as signed out, and its refresh-on-401 never fires. So every
+    // return to the Android app after 15+ minutes away could log the user out.
+    // Answer 401 instead so the client refreshes and retries; a refresh that
+    // fails (session really gone) still ends in a sign-out.
+    if (!user && req.expiredJwt) throw new AuthenticationRequired();
     return { user };
   }
 

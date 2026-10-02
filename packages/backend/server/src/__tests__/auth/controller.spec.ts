@@ -4,10 +4,12 @@ import { IncomingMessage } from 'node:http';
 import { HttpStatus } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
 import ava, { ExecutionContext, TestFn } from 'ava';
+import jwt from 'jsonwebtoken';
 import Sinon from 'sinon';
 import supertest from 'supertest';
 
 import { ConfigFactory } from '../../base';
+import { CryptoHelper } from '../../base/helpers';
 import {
   getRequestCookie,
   getRequestHeader,
@@ -968,4 +970,82 @@ test('should lock magic link OTP after too many attempts', async t => {
 
   const session = await currentUser(app);
   t.falsy(session);
+});
+
+// The Android app holds a 15-minute JWT and refreshes it only when a request
+// comes back 401. /api/auth/session is public, so it used to ignore an expired
+// token and answer 200 `{ user: undefined }` - the app read that as signed
+// out, and coming back to it after 15+ minutes away logged the user out.
+async function signInNative(app: TestingApp) {
+  const u1 = await app.createUser('u1@notesgraph.com');
+  const signInRes = await supertest(app.getHttpServer())
+    .post('/api/auth/sign-in')
+    .set('x-notesgraph-client-kind', 'native')
+    .send({ email: u1.email, password: u1.password })
+    .expect(200);
+  const token: string = (
+    await exchangeSession(app, signInRes.body.exchangeCode)
+  ).body.token;
+  return { u1, token };
+}
+
+function expire(app: TestingApp, token: string) {
+  const payload = jwt.decode(token) as jwt.JwtPayload;
+  return jwt.sign(
+    { sid: payload.sid, typ: payload.typ },
+    Buffer.concat([
+      Buffer.from('notesgraph:user-session-jwt:v1:'),
+      app.get(CryptoHelper).keyPair.sha256.privateKey,
+    ]),
+    {
+      algorithm: 'HS256',
+      audience: 'notesgraph-client',
+      issuer: 'notesgraph',
+      subject: payload.sub,
+      expiresIn: -1,
+    }
+  );
+}
+
+test('should answer 401 to a session check with an expired jwt, so the app refreshes', async t => {
+  const { app } = t.context;
+  const { token } = await signInNative(app);
+
+  const res = await supertest(app.getHttpServer())
+    .get('/api/auth/session')
+    .set('Authorization', `Bearer ${expire(app, token)}`);
+  t.is(res.status, 401);
+});
+
+test('should still refresh an expired jwt, and the session check then succeeds', async t => {
+  const { app } = t.context;
+  const { u1, token } = await signInNative(app);
+
+  // the refresh endpoint is public too and carries the expired token in the
+  // same header - it must not be caught by the new 401
+  const refreshRes = await supertest(app.getHttpServer())
+    .post('/api/auth/native/refresh')
+    .set('Authorization', `Bearer ${expire(app, token)}`)
+    .expect(201);
+
+  const sessionRes = await supertest(app.getHttpServer())
+    .get('/api/auth/session')
+    .set('Authorization', `Bearer ${refreshRes.body.token}`)
+    .expect(200);
+  t.is(sessionRes.body.user.id, u1.id);
+});
+
+test('should keep ignoring a forged jwt on the public session check', async t => {
+  const { app } = t.context;
+  const forged = jwt.sign({ sid: 'x', typ: 'user_session' }, 'not-our-key', {
+    audience: 'notesgraph-client',
+    issuer: 'notesgraph',
+    subject: 'u',
+  });
+
+  const res = await supertest(app.getHttpServer())
+    .get('/api/auth/session')
+    .set('Authorization', `Bearer ${forged}`)
+    .expect(200);
+  t.falsy(res.body.user);
 });

@@ -147,6 +147,7 @@ export class AuthGuard implements CanActivate, OnModuleInit {
       } catch (err) {
         if (!isPublic) throw err;
         ignoredInvalidPublicJwt = true;
+        req.expiredJwt = this.jwtSession.isExpired(bearer);
       }
     }
 
