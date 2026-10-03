@@ -121,8 +121,8 @@ export const EditorAgentsPanel = () => {
               New agent
             </Button>
             <span className={styles.hint}>
-              To run one on a single block, type <code>/</code> in the editor
-              and pick it there.
+              To run one on a block or a selection, press <code>Ctrl/⌘ K</code>{' '}
+              (or type <code>/</code>) in the editor and pick it there.
             </span>
           </div>
 
