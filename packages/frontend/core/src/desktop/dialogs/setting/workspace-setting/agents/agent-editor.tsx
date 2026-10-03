@@ -106,8 +106,8 @@ const ENVIRONMENTS: {
 }[] = [
   {
     value: undefined,
-    label: 'Workspace default',
-    note: "Follows the workspace's AI backend setting",
+    label: 'Default',
+    note: 'On-device until a cloud runtime is available',
   },
   {
     value: 'on-device',
@@ -208,12 +208,14 @@ export const AgentEditor = ({
   // Follow the agent's own harness, not the workspace's backend setting —
   // picking "on-device" should offer on-device models even when the workspace
   // is pointed at the cloud.
+  // The default harness runs on-device (see `harnessFor`), so it gets the
+  // on-device models too.
   const availableHarnesses =
-    harness === 'on-device'
-      ? LOCAL_MODELS
-      : harness === 'remote'
-        ? REMOTE_HARNESSES
-        : backendModels;
+    harness === 'remote'
+      ? REMOTE_HARNESSES
+      : harness === 'cloud'
+        ? backendModels
+        : LOCAL_MODELS;
 
   // Tools not yet picked, so the menu only ever offers something new.
   const unusedTools = ALL_TOOLS.filter(tool => !tools.includes(tool.name));

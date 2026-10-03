@@ -1,6 +1,6 @@
 import { Service } from '@notesgraph/infra';
 
-import type { AiBackendService, LocalLLMService } from '../../ai-local';
+import type { LocalLLMService } from '../../ai-local';
 import {
   type Agent,
   type AgentHarness,
@@ -74,6 +74,15 @@ const logLine = (text: string): AgentEvent => ({
   text: text.endsWith('\n') ? text : `${text}\n`,
 });
 
+/**
+ * The agent's model, if WebLLM can load it. An agent saved while the default
+ * harness meant cloud may carry a server model id; on-device that would fail
+ * to load, so it falls back to the default local model instead. Every WebLLM
+ * prebuilt id ends in `-MLC`.
+ */
+const onDeviceModel = (agent: Agent) =>
+  agent.model?.endsWith('-MLC') ? agent.model : undefined;
+
 const clip = (text: string, limit: number) =>
   text.length > limit ? `${text.slice(0, limit - 1)}…` : text;
 
@@ -102,7 +111,6 @@ export class AgentExecutorService extends Service implements AgentExecutor {
     private readonly runsStore: AgentRunsStore,
     private readonly runLogs: AgentRunLogsStore,
     private readonly localLLM: LocalLLMService,
-    private readonly aiBackend: AiBackendService,
     private readonly fileTools: AgentFileToolsService,
     private readonly remoteRunner: RemoteAgentRunnerService,
     private readonly workspaceService: WorkspaceService
@@ -154,7 +162,7 @@ export class AgentExecutorService extends Service implements AgentExecutor {
       let reply = '';
       for await (const delta of this.localLLM.chatStream(messages, {
         signal,
-        model: agent.model,
+        model: onDeviceModel(agent),
       })) {
         reply += delta;
       }
@@ -213,12 +221,15 @@ export class AgentExecutorService extends Service implements AgentExecutor {
   private readonly inFlight = new Set<string>();
 
   /**
-   * The runtime an agent will actually use: its own choice, else the
-   * workspace's AI backend setting.
+   * The runtime an agent will actually use: its own choice, else on-device.
+   *
+   * The default used to follow the workspace's AI backend, but that is `cloud`
+   * unless someone switched it, and the cloud harness doesn't exist yet — so
+   * every agent left on the default failed before it started. Only an agent
+   * explicitly set to cloud gets that error now.
    */
   harnessFor(agent: Agent): AgentHarness {
-    if (agent.harness) return agent.harness;
-    return this.aiBackend.backend$.value === 'local' ? 'on-device' : 'cloud';
+    return agent.harness ?? 'on-device';
   }
 
   async *run(
@@ -346,7 +357,7 @@ export class AgentExecutorService extends Service implements AgentExecutor {
 
       for await (const delta of this.localLLM.chatStream(messages, {
         signal: controller.signal,
-        model: agent.model,
+        model: onDeviceModel(agent),
       })) {
         output += delta;
         log += delta;
