@@ -19,6 +19,7 @@ import {
   type AgentHarness,
   type AgentScope,
   type AgentTargetKind,
+  CLAUDE_CODE_MODEL,
   DEFAULT_MAX_STEPS,
   FILE_TOOLS,
   RemoteAgentRunnerService,
@@ -76,6 +77,18 @@ const ALL_TOOLS: ToolChoice[] = [
 
 const toolByName = (name: string): ToolChoice | undefined =>
   ALL_TOOLS.find(tool => tool.name === name);
+
+/**
+ * What a remote agent can run as. Blank is whatever the device is set up to
+ * use (`ai.provider` in its wf config).
+ */
+const REMOTE_MODELS = [
+  {
+    id: CLAUDE_CODE_MODEL,
+    name: 'Claude Code',
+    category: 'asks you, remembers in your notes',
+  },
+];
 
 const HARNESSES: {
   value: AgentHarness | undefined;
@@ -187,7 +200,11 @@ export const AgentEditor = ({
   // picking "on-device" should offer on-device models even when the workspace
   // is pointed at the cloud.
   const availableModels =
-    harness === 'on-device' ? LOCAL_MODELS : backendModels;
+    harness === 'on-device'
+      ? LOCAL_MODELS
+      : harness === 'remote'
+        ? REMOTE_MODELS
+        : backendModels;
 
   // Tools not yet picked, so the menu only ever offers something new.
   const unusedTools = ALL_TOOLS.filter(tool => !tools.includes(tool.name));
@@ -217,7 +234,9 @@ export const AgentEditor = ({
       // Only meaningful for a remote agent; don't leave a stale key behind
       // on one that has been switched back to running locally.
       deviceKey: harness === 'remote' ? deviceKey : undefined,
-      model,
+      // Claude Code only exists on a device; don't carry it to a runtime
+      // that would read it as an unknown model name.
+      model: model === CLAUDE_CODE_MODEL && harness !== 'remote' ? undefined : model,
       tools,
       targets,
       output: 'panel',
@@ -499,7 +518,13 @@ export const AgentEditor = ({
               ))}
             </select>
             <span className={styles.hint}>
-              A different on-device model is downloaded the first time it runs.
+              {harness === 'remote'
+                ? model === CLAUDE_CODE_MODEL
+                  ? 'Runs the claude CLI on the device with your notes as tools. ' +
+                    'When it needs a fact or a permission it asks you here, then ' +
+                    'saves the answer to your notes so it does not ask again.'
+                  : "Default runs the device's configured AI provider."
+                : 'A different on-device model is downloaded the first time it runs.'}
             </span>
           </div>
 

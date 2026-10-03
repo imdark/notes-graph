@@ -6,7 +6,11 @@ import { WorkspaceServerService } from '@notesgraph/core/modules/cloud/services/
 import { Framework } from '@notesgraph/infra';
 import { describe, expect, test } from 'vitest';
 
-import { RemoteAgentRunnerService, type RemoteJob } from './remote-runner';
+import {
+  openQuestions,
+  RemoteAgentRunnerService,
+  type RemoteJob,
+} from './remote-runner';
 
 const job = (overrides: Partial<RemoteJob>): RemoteJob => ({
   id: 'job-1',
@@ -104,5 +108,43 @@ describe('RemoteAgentRunnerService.watch', () => {
       url: '/api/inventory/workspaces/ws-1/jobs/job-1/cancel',
       method: 'POST',
     });
+  });
+});
+
+describe('RemoteAgentRunnerService questions', () => {
+  const question = {
+    id: 'q1',
+    kind: 'question' as const,
+    text: 'Who is Cosmo, and how old?',
+    detail: null,
+    answer: null,
+    allowed: null,
+    createdAt: 0,
+    answeredAt: null,
+  };
+
+  test('a question opening is an update even with no new log text', async () => {
+    const { runner } = createRunner([
+      () => job({ log: '', logEnd: 0 }),
+      () => job({ log: '', logEnd: 0, questions: [question] }),
+      () => job({ log: '', logEnd: 0, questions: [{ ...question, answer: 'My son, 7', answeredAt: 1 }] }),
+      () => job({ status: 'done', result: 'Bluey', log: '', logEnd: 0 }),
+    ]);
+
+    const open: string[][] = [];
+    for await (const { job: update } of runner.watch('ws-1', 'job-1', new AbortController().signal)) {
+      open.push(openQuestions(update).map(q => q.text));
+    }
+
+    // running, then waiting on Cosmo, then answered, then done.
+    expect(open).toEqual([[], ['Who is Cosmo, and how old?'], [], []]);
+  });
+
+  test('answering posts to the question', async () => {
+    const { runner, requests } = createRunner([() => job({})]);
+    await runner.answer('ws-1', 'job-1', 'q1', { answer: 'My son, 7' });
+    expect(requests).toEqual([
+      { url: '/api/inventory/workspaces/ws-1/jobs/job-1/questions/q1/answer', method: 'POST' },
+    ]);
   });
 });

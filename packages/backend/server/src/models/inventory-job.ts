@@ -1,11 +1,17 @@
 import { Injectable } from '@nestjs/common';
-import type { InventoryJob, Prisma } from '@prisma/client';
+import type {
+  InventoryJob,
+  InventoryJobQuestion,
+  Prisma,
+} from '@prisma/client';
 
 import { BaseModel } from './base';
 
 /** Terminal states: a job in one of these is never handed out again. */
 export const JOB_TERMINAL = ['done', 'error', 'cancelled'] as const;
 export const JOB_STATUSES = ['queued', 'running', ...JOB_TERMINAL] as const;
+export const QUESTION_KINDS = ['question', 'permission'] as const;
+export type QuestionKind = (typeof QUESTION_KINDS)[number];
 
 export interface CreateInventoryJobInput {
   workspaceId: string;
@@ -191,6 +197,65 @@ export class InventoryJobModel extends BaseModel {
           "log_dropped" = "log_dropped"
             + GREATEST(0, LENGTH("log") + LENGTH(${text}::text) - ${JOB_LOG_CAP}::int)
       WHERE "id" = ${id}`;
+  }
+
+  /** Record a question from a running job. The runner then polls for it. */
+  async ask(
+    jobId: string,
+    input: { kind: QuestionKind; text: string; detail?: string | null }
+  ): Promise<InventoryJobQuestion> {
+    return this.db.inventoryJobQuestion.create({
+      data: {
+        jobId,
+        kind: input.kind,
+        text: input.text,
+        detail: input.detail ?? null,
+      },
+    });
+  }
+
+  async getQuestion(
+    jobId: string,
+    questionId: string
+  ): Promise<InventoryJobQuestion | null> {
+    const question = await this.db.inventoryJobQuestion.findUnique({
+      where: { id: questionId },
+    });
+    // Same scoping as `get`: a question id under the wrong job is absent.
+    return question && question.jobId === jobId ? question : null;
+  }
+
+  async listQuestions(jobId: string): Promise<InventoryJobQuestion[]> {
+    return this.db.inventoryJobQuestion.findMany({
+      where: { jobId },
+      orderBy: { createdAt: 'asc' },
+    });
+  }
+
+  /**
+   * Answer a question once. Conditional on it still being open, so two tabs
+   * answering at the same moment cannot both win and hand the runner one
+   * answer while the other person sees theirs as accepted.
+   */
+  async answer(
+    jobId: string,
+    questionId: string,
+    input: { answer?: string | null; allowed?: boolean | null },
+    userId: string
+  ): Promise<InventoryJobQuestion | null> {
+    const { count } = await this.db.inventoryJobQuestion.updateMany({
+      where: { id: questionId, jobId, answeredAt: null },
+      data: {
+        answer: input.answer ?? null,
+        allowed: input.allowed ?? null,
+        answeredBy: userId,
+        answeredAt: new Date(),
+      },
+    });
+    if (count === 0) {
+      return null;
+    }
+    return this.db.inventoryJobQuestion.findUnique({ where: { id: questionId } });
   }
 
   async cancel(workspaceId: string, id: string): Promise<InventoryJob | null> {

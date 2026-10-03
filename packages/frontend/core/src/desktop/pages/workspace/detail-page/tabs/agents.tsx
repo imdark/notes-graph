@@ -13,6 +13,7 @@ import { DocService } from '@notesgraph/core/modules/doc';
 import { useLiveData, useService } from '@notesgraph/infra';
 import { useCallback, useMemo, useState } from 'react';
 
+import { AgentQuestionCard } from './agent-question';
 import { AgentRunLogDialog } from './agent-run-log';
 import * as styles from './agents.css';
 
@@ -131,6 +132,16 @@ export const EditorAgentsPanel = () => {
                 {session.agentName} · {session.targetLabel}
               </span>
 
+              {session.remoteJobId
+                ? session.questions.map(question => (
+                    <AgentQuestionCard
+                      key={question.id}
+                      jobId={session.remoteJobId as string}
+                      question={question}
+                    />
+                  ))
+                : null}
+
               {session.error ? (
                 <p className={styles.error} data-testid="agent-error">
                   {session.error}
@@ -141,7 +152,11 @@ export const EditorAgentsPanel = () => {
                 </p>
               ) : (
                 <p className={styles.empty}>
-                  {running ? 'Working…' : 'No answer.'}
+                  {!running
+                    ? 'No answer.'
+                    : session.questions.length > 0
+                      ? 'Waiting for you…'
+                      : 'Working…'}
                 </p>
               )}
 

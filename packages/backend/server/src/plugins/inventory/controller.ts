@@ -261,4 +261,55 @@ export class InventoryController {
     }
     return { job };
   }
+
+  /**
+   * A running job asks its starter something and then polls for the answer.
+   * Workspace.Read, like claim and report: it is the runner's own side of a
+   * job it was already given.
+   */
+  @Post('/workspaces/:workspaceId/jobs/:jobId/questions')
+  async askQuestion(
+    @CurrentUser() user: CurrentUserType,
+    @Param('workspaceId') workspaceId: string,
+    @Param('jobId') jobId: string,
+    @Body() body: Record<string, unknown>
+  ) {
+    this.assertEnabled();
+    await this.ac.user(user.id).workspace(workspaceId).assert('Workspace.Read');
+    return { question: await this.jobs.ask(workspaceId, jobId, body ?? {}) };
+  }
+
+  @Get('/workspaces/:workspaceId/jobs/:jobId/questions/:questionId')
+  async getQuestion(
+    @CurrentUser() user: CurrentUserType,
+    @Param('workspaceId') workspaceId: string,
+    @Param('jobId') jobId: string,
+    @Param('questionId') questionId: string
+  ) {
+    this.assertEnabled();
+    await this.ac.user(user.id).workspace(workspaceId).assert('Workspace.Read');
+    return this.jobs.getQuestion(workspaceId, jobId, questionId);
+  }
+
+  /** Answering is narrower still: the service only lets the job's starter. */
+  @Post('/workspaces/:workspaceId/jobs/:jobId/questions/:questionId/answer')
+  async answerQuestion(
+    @CurrentUser() user: CurrentUserType,
+    @Param('workspaceId') workspaceId: string,
+    @Param('jobId') jobId: string,
+    @Param('questionId') questionId: string,
+    @Body() body: Record<string, unknown>
+  ) {
+    this.assertEnabled();
+    await this.ac.user(user.id).workspace(workspaceId).assert('Workspace.Read');
+    return {
+      question: await this.jobs.answer(
+        workspaceId,
+        jobId,
+        questionId,
+        user.id,
+        body ?? {}
+      ),
+    };
+  }
 }

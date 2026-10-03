@@ -1766,9 +1766,33 @@ model InventoryJob {
   createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspace Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  questions InventoryJobQuestion[]
 
   @@index([workspaceId, deviceKey, status])
   @@index([workspaceId, status, createdAt])
   @@map("inventory_jobs")
+}
+
+/// Something a running agent asked the person who started it: a question it
+/// needs answered, or permission for a tool. The runner blocks until it is
+/// answered, so a run can pause for a person without losing its place.
+model InventoryJobQuestion {
+  id         String    @id @default(uuid()) @db.VarChar
+  jobId      String    @map("job_id") @db.VarChar
+  /// 'question' (free-text answer) or 'permission' (allow / deny).
+  kind       String    @default("question") @db.VarChar
+  text       String    @db.Text
+  /// For a permission: the tool input, so the person can see what they allow.
+  detail     String?   @db.Text
+  answer     String?   @db.Text
+  allowed    Boolean?
+  answeredBy String?   @map("answered_by") @db.VarChar
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  answeredAt DateTime? @map("answered_at") @db.Timestamptz(3)
+
+  job InventoryJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([jobId, createdAt])
+  @@map("inventory_job_questions")
 }

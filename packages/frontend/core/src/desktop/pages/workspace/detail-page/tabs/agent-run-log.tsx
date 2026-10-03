@@ -4,7 +4,9 @@ import {
   AgentRunLogsStore,
   AgentRunSessionService,
   AgentRunsStore,
+  openQuestions,
   RemoteAgentRunnerService,
+  type RemoteQuestion,
 } from '@notesgraph/core/modules/agents';
 import { WorkspaceService } from '@notesgraph/core/modules/workspace';
 import { useLiveData, useService } from '@notesgraph/infra';
@@ -17,12 +19,15 @@ import {
   useState,
 } from 'react';
 
+import { AgentQuestionCard } from './agent-question';
 import * as styles from './agents.css';
 
 interface RunLogState {
   log: string;
   /** Set for a remote run once its device has started it in tmux. */
   tmuxSession: string | null;
+  /** What a remote run is waiting for the reader to answer. */
+  questions: RemoteQuestion[];
   /** Why there is no log to show, when there isn't. */
   note: string | null;
   loading: boolean;
@@ -31,6 +36,7 @@ interface RunLogState {
 const EMPTY: RunLogState = {
   log: '',
   tmuxSession: null,
+  questions: [],
   note: null,
   loading: true,
 };
@@ -85,6 +91,7 @@ const useRunLog = (run: AgentRun | undefined): RunLogState => {
           setState(prev => ({
             log: prev.log + logDelta,
             tmuxSession: job.tmuxSession,
+            questions: openQuestions(job),
             note:
               job.status === 'queued'
                 ? 'Waiting for the device to pick this up…'
@@ -111,6 +118,7 @@ const useRunLog = (run: AgentRun | undefined): RunLogState => {
           setState({
             log: text ?? '',
             tmuxSession: null,
+            questions: [],
             note:
               text !== undefined
                 ? null
@@ -137,7 +145,13 @@ const useRunLog = (run: AgentRun | undefined): RunLogState => {
   ]);
 
   if (live) {
-    return { log: live.log, tmuxSession: null, note: null, loading: false };
+    return {
+      log: live.log,
+      tmuxSession: null,
+      questions: [],
+      note: null,
+      loading: false,
+    };
   }
   return state;
 };
@@ -168,7 +182,9 @@ export const AgentRunLogDialog = ({
       [runsStore, runId]
     )
   );
-  const { log, tmuxSession, note, loading } = useRunLog(run ?? undefined);
+  const { log, tmuxSession, questions, note, loading } = useRunLog(
+    run ?? undefined
+  );
 
   // Follow the end of the log while the reader is at the end; once they
   // scroll up to read something, stop yanking them back down.
@@ -225,6 +241,16 @@ export const AgentRunLogDialog = ({
             </Button>
           </div>
         ) : null}
+
+        {run?.remoteJobId
+          ? questions.map(question => (
+              <AgentQuestionCard
+                key={question.id}
+                jobId={run.remoteJobId as string}
+                question={question}
+              />
+            ))
+          : null}
 
         {run?.status === 'error' && run.error ? (
           <p className={styles.error}>{run.error}</p>

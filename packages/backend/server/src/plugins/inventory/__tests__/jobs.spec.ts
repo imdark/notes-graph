@@ -187,3 +187,116 @@ test('a report passes log text and the tmux session to the model', async t => {
   t.is(received.tmuxSession, 'wf-job-1234abcd');
   t.is(job?.tmuxSession, 'wf-job-1234abcd');
 });
+
+function questionService(job: any, question?: any) {
+  const answered: any[] = [];
+  const models: any = {
+    inventoryJob: {
+      get: async () => job,
+      ask: async (jobId: string, input: any) => ({
+        id: 'q1',
+        jobId,
+        ...input,
+        answer: null,
+        allowed: null,
+        createdAt: new Date(0),
+        answeredAt: null,
+      }),
+      getQuestion: async () => question ?? null,
+      // Mirrors the model's conditional update: only an open question wins.
+      answer: async (_jobId: string, _qid: string, input: any) => {
+        if (question.answeredAt) return null;
+        answered.push(input);
+        return { ...question, ...input, answeredAt: new Date(1000) };
+      },
+    },
+  };
+  return { service: new InventoryJobService(models), answered };
+}
+
+const openQuestion = (overrides: Record<string, unknown> = {}) => ({
+  id: 'q1',
+  jobId: 'job-1',
+  kind: 'question',
+  text: 'Who is Cosmo, and how old?',
+  detail: null,
+  answer: null,
+  allowed: null,
+  createdAt: new Date(0),
+  answeredAt: null,
+  ...overrides,
+});
+
+test('a running job can ask its starter a question', async t => {
+  const { service } = questionService(storedJob({ createdBy: userId }));
+  const question = await service.ask(workspaceId, 'job-1', {
+    text: 'Who is Cosmo, and how old?',
+  });
+  t.is(question.kind, 'question');
+  t.is(question.text, 'Who is Cosmo, and how old?');
+  t.is(question.answeredAt, null);
+});
+
+test('a finished job cannot ask anything', async t => {
+  const { service } = questionService(storedJob({ status: 'done' }));
+  await t.throwsAsync(service.ask(workspaceId, 'job-1', { text: 'still there?' }), {
+    message: /is done, not running/,
+  });
+});
+
+test('only the person who started the run can answer it', async t => {
+  // A permission answered by someone else would run a tool on the
+  // starter's machine on a stranger's say-so.
+  const { service, answered } = questionService(
+    storedJob({ createdBy: userId }),
+    openQuestion()
+  );
+  await t.throwsAsync(
+    service.answer(workspaceId, 'job-1', 'q1', 'someone-else', { answer: 'x' }),
+    { message: /Only the person who started this run/ }
+  );
+  t.deepEqual(answered, []);
+});
+
+test('the starter answers a question with text', async t => {
+  const { service, answered } = questionService(
+    storedJob({ createdBy: userId }),
+    openQuestion()
+  );
+  const question = await service.answer(workspaceId, 'job-1', 'q1', userId, {
+    answer: '  My son, 7  ',
+  });
+  t.deepEqual(answered, [{ answer: 'My son, 7' }]);
+  t.is(question.answer, 'My son, 7');
+});
+
+test('a permission needs an explicit allow or deny', async t => {
+  const { service, answered } = questionService(
+    storedJob({ createdBy: userId }),
+    openQuestion({ kind: 'permission', text: 'Run Bash?', detail: '{"command":"ls"}' })
+  );
+  await t.throwsAsync(
+    service.answer(workspaceId, 'job-1', 'q1', userId, { answer: 'sure' }),
+    { message: /allowed \(true or false\)/ }
+  );
+  await service.answer(workspaceId, 'job-1', 'q1', userId, { allowed: false });
+  t.deepEqual(answered, [{ allowed: false, answer: undefined }]);
+});
+
+test('a question is answered once', async t => {
+  const { service } = questionService(
+    storedJob({ createdBy: userId }),
+    openQuestion({ answeredAt: new Date(5), answer: 'first' })
+  );
+  await t.throwsAsync(
+    service.answer(workspaceId, 'job-1', 'q1', userId, { answer: 'second' }),
+    { message: /already been answered/ }
+  );
+});
+
+test('a single job carries its questions; a listing does not', t => {
+  const questions = [openQuestion()] as any;
+  t.is(toJobDto(storedJob(), { logFrom: 0, questions }).questions?.[0].text,
+    'Who is Cosmo, and how old?');
+  t.is(toJobDto(storedJob()).questions, undefined);
+});

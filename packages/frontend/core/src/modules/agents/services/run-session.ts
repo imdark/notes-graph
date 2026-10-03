@@ -1,6 +1,7 @@
 import { LiveData, Service } from '@notesgraph/infra';
 
 import type { Agent } from '../stores/agents';
+import type { RemoteQuestion } from './remote-runner';
 import { AgentAlreadyRunningError, type AgentExecutorService } from './executor';
 import type { AgentTarget } from './target';
 
@@ -16,6 +17,10 @@ export interface AgentRunSession {
   output: string;
   /** Transcript so far — tool calls, results, the answer. */
   log: string;
+  /** The device job, for a remote run; what questions are answered against. */
+  remoteJobId: string | null;
+  /** What the run is waiting for the reader to answer. */
+  questions: RemoteQuestion[];
   error: string | null;
   running: boolean;
 }
@@ -66,6 +71,8 @@ export class AgentRunSessionService extends Service {
       targetLabel: targetLabel(target),
       output: '',
       log: '',
+      remoteJobId: null,
+      questions: [],
       error: null,
       running: true,
     });
@@ -85,6 +92,12 @@ export class AgentRunSessionService extends Service {
       )) {
         if (event.type === 'started') {
           patch(prev => ({ ...prev, runId: event.runId }));
+        } else if (event.type === 'waiting') {
+          patch(prev => ({
+            ...prev,
+            remoteJobId: event.jobId,
+            questions: event.questions,
+          }));
         } else if (event.type === 'log') {
           patch(prev => ({ ...prev, log: prev.log + event.text }));
         } else if (event.type === 'text') {
@@ -103,7 +116,7 @@ export class AgentRunSessionService extends Service {
       patch(prev => ({ ...prev, error: message }));
     } finally {
       if (this.controller === controller) this.controller = null;
-      patch(prev => ({ ...prev, running: false }));
+      patch(prev => ({ ...prev, running: false, questions: [] }));
     }
   }
 

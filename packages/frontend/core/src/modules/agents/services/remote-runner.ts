@@ -11,6 +11,27 @@ import { FetchService, type WorkspaceServerService } from '../../cloud';
  * the server never needs a route in, and no credential for it lives here.
  */
 
+/**
+ * The model a remote agent names to run as Claude Code on the device, with
+ * NotesGraph's tools and a way to ask the reader things (`wf agent serve`
+ * keys on this exact string).
+ */
+export const CLAUDE_CODE_MODEL = 'claude-code';
+
+/** Something a running job asked the person who started it. */
+export interface RemoteQuestion {
+  id: string;
+  /** 'question' wants text back; 'permission' wants allow or deny. */
+  kind: 'question' | 'permission';
+  text: string;
+  /** For a permission: the tool input being approved. */
+  detail: string | null;
+  answer: string | null;
+  allowed: boolean | null;
+  createdAt: number;
+  answeredAt: number | null;
+}
+
 export interface RemoteJob {
   id: string;
   deviceKey: string;
@@ -26,7 +47,12 @@ export interface RemoteJob {
   logEnd?: number;
   startedAt: number | null;
   finishedAt: number | null;
+  /** Present on single-job reads. */
+  questions?: RemoteQuestion[];
 }
+
+export const openQuestions = (job: RemoteJob): RemoteQuestion[] =>
+  (job.questions ?? []).filter(q => !q.answeredAt);
 
 /** One step of {@link RemoteAgentRunnerService.watch}. */
 export interface RemoteJobUpdate {
@@ -144,6 +170,20 @@ export class RemoteAgentRunnerService extends Service {
     return data.job;
   }
 
+  /** Answer a question a job asked; only its starter is allowed to. */
+  async answer(
+    workspaceId: string,
+    jobId: string,
+    questionId: string,
+    answer: { answer?: string; allowed?: boolean }
+  ): Promise<RemoteQuestion> {
+    const data = await this.json<{ question: RemoteQuestion }>(
+      `${this.base(workspaceId)}/jobs/${encodeURIComponent(jobId)}/questions/${encodeURIComponent(questionId)}/answer`,
+      { method: 'POST', body: JSON.stringify(answer) }
+    );
+    return data.question;
+  }
+
   async cancel(workspaceId: string, jobId: string): Promise<void> {
     await this.json(`${this.base(workspaceId)}/jobs/${encodeURIComponent(jobId)}/cancel`, {
       method: 'POST',
@@ -151,9 +191,9 @@ export class RemoteAgentRunnerService extends Service {
   }
 
   /**
-   * Poll a job to completion, yielding whenever its status changes or its
-   * transcript grows. Only the new part of the transcript is fetched each
-   * time.
+   * Poll a job to completion, yielding whenever its status changes, its
+   * transcript grows, or what it is waiting to be answered changes. Only
+   * the new part of the transcript is fetched each time.
    *
    * With `cancelOnAbort` (the default — the tab that started the run), an
    * abort cancels the job server-side before returning: leaving a device
@@ -168,14 +208,19 @@ export class RemoteAgentRunnerService extends Service {
     { cancelOnAbort = true }: { cancelOnAbort?: boolean } = {}
   ): AsyncIterable<RemoteJobUpdate> {
     let lastStatus = '';
+    let lastOpen = '';
     let logFrom = 0;
     try {
       while (!signal.aborted) {
         const job = await this.get(workspaceId, jobId, logFrom);
         const logDelta = job.log ?? '';
         logFrom = job.logEnd ?? logFrom;
-        if (job.status !== lastStatus || logDelta) {
+        const open = openQuestions(job)
+          .map(q => q.id)
+          .join(',');
+        if (job.status !== lastStatus || logDelta || open !== lastOpen) {
           lastStatus = job.status;
+          lastOpen = open;
           yield { job, logDelta };
         }
         if (['done', 'error', 'cancelled'].includes(job.status)) {

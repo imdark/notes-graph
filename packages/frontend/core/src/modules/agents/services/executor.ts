@@ -15,7 +15,11 @@ import {
   FILE_TOOLS,
 } from './file-tools';
 import type { WorkspaceService } from '../../workspace';
-import { RemoteAgentRunnerService } from './remote-runner';
+import {
+  openQuestions,
+  RemoteAgentRunnerService,
+  type RemoteQuestion,
+} from './remote-runner';
 import { type AgentTarget, agentTargetKey } from './target';
 import {
   buildToolPrompt,
@@ -30,6 +34,11 @@ export type AgentEvent =
   | { type: 'step'; index: number }
   /** Transcript text — what a person watching the run would want to see. */
   | { type: 'log'; text: string }
+  /**
+   * What a remote run is waiting for the reader to answer, sent whenever it
+   * changes; an empty list means it is no longer waiting.
+   */
+  | { type: 'waiting'; jobId: string; questions: RemoteQuestion[] }
   | { type: 'tool'; name: string; args: unknown }
   | { type: 'text'; delta: string }
   | { type: 'done'; output: string }
@@ -229,10 +238,22 @@ export class AgentExecutorService extends Service implements AgentExecutor {
     // funnelled into one controller so the stream and the run record only ever
     // have to look at a single aborted flag.
     const controller = new AbortController();
-    const deadline = setTimeout(
+    const limit = harness === 'remote' ? REMOTE_WALL_CLOCK_MS : WALL_CLOCK_MS;
+    let deadline: ReturnType<typeof setTimeout> | null = setTimeout(
       () => controller.abort(),
-      harness === 'remote' ? REMOTE_WALL_CLOCK_MS : WALL_CLOCK_MS
+      limit
     );
+    // A run waiting on the reader is not stalled: the clock stops while a
+    // question is open and starts afresh once it is answered. The device
+    // does the same with its own limit.
+    const pauseClock = (waiting: boolean) => {
+      if (waiting && deadline) {
+        clearTimeout(deadline);
+        deadline = null;
+      } else if (!waiting && !deadline && !controller.signal.aborted) {
+        deadline = setTimeout(() => controller.abort(), limit);
+      }
+    };
     const onOuterAbort = () => controller.abort();
     signal.addEventListener('abort', onOuterAbort);
 
@@ -266,6 +287,7 @@ export class AgentExecutorService extends Service implements AgentExecutor {
           if (event.type === 'step') steps = event.index + 1;
           if (event.type === 'text') output += event.delta;
           if (event.type === 'done') output = event.output;
+          if (event.type === 'waiting') pauseClock(event.questions.length > 0);
           yield event;
         }
         this.runsStore.finish(runId, { status: 'done', output, steps });
@@ -358,7 +380,7 @@ export class AgentExecutorService extends Service implements AgentExecutor {
           // Losing a transcript must not fail the run it describes.
         });
       }
-      clearTimeout(deadline);
+      if (deadline) clearTimeout(deadline);
       signal.removeEventListener('abort', onOuterAbort);
       this.inFlight.delete(key);
     }
@@ -408,6 +430,7 @@ export class AgentExecutorService extends Service implements AgentExecutor {
       signal
     )) {
       if (logDelta) yield { type: 'log', text: logDelta };
+      yield { type: 'waiting', jobId: job.id, questions: openQuestions(update) };
       if (update.status === 'running') {
         yield { type: 'step', index: Math.max(0, update.steps - 1) };
         continue;

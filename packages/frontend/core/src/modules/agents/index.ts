@@ -2,9 +2,12 @@ export { Agents } from './entities/agents';
 export { AgentIcon, agentIconData } from './views/agent-icon';
 export { AgentsService, DEFAULT_AGENT_TOOLS } from './services/agents';
 export {
+  CLAUDE_CODE_MODEL,
   type EnqueueRemoteJob,
+  openQuestions,
   type RemoteJob,
   type RemoteJobUpdate,
+  type RemoteQuestion,
   RemoteAgentRunnerService,
 } from './services/remote-runner';
 export { AgentContextService } from './services/context';

@@ -1,11 +1,15 @@
 import { Injectable, Logger } from '@nestjs/common';
-import type { InventoryJob } from '@prisma/client';
+import type { InventoryJob, InventoryJobQuestion } from '@prisma/client';
 
 // See the note in service.ts: a plain HttpException is reported as a 500 by
 // the global filter, so bad input has to be a UserFriendlyError.
-import { BadRequest } from '../../base';
+import { ActionForbidden, BadRequest, NotFound } from '../../base';
 import { Models } from '../../models';
-import { JOB_TERMINAL } from '../../models/inventory-job';
+import {
+  JOB_TERMINAL,
+  QUESTION_KINDS,
+  type QuestionKind,
+} from '../../models/inventory-job';
 
 /** Wire shape for a job. Epoch seconds, matching the device DTO. */
 export interface JobDto {
@@ -35,14 +39,41 @@ export interface JobDto {
   log?: string;
   logFrom?: number;
   logEnd?: number;
+  /** Everything the run has asked, open ones last. Single-job reads only. */
+  questions?: QuestionDto[];
   createdAt: number;
   startedAt: number | null;
   finishedAt: number | null;
 }
 
+export interface QuestionDto {
+  id: string;
+  kind: string;
+  text: string;
+  detail: string | null;
+  answer: string | null;
+  allowed: boolean | null;
+  createdAt: number;
+  answeredAt: number | null;
+}
+
+export function toQuestionDto(question: InventoryJobQuestion): QuestionDto {
+  return {
+    id: question.id,
+    kind: question.kind,
+    text: question.text,
+    detail: question.detail,
+    answer: question.answer,
+    allowed: question.allowed,
+    createdAt: question.createdAt.getTime() / 1000,
+    answeredAt: question.answeredAt ? question.answeredAt.getTime() / 1000 : null,
+  };
+}
+
 export interface JobDtoOptions {
   /** Include the transcript, starting at this absolute offset (0 = all kept). */
   logFrom?: number;
+  questions?: InventoryJobQuestion[];
 }
 
 export function toJobDto(job: InventoryJob, options: JobDtoOptions = {}): JobDto {
@@ -66,6 +97,7 @@ export function toJobDto(job: InventoryJob, options: JobDtoOptions = {}): JobDto
     tmuxSession: job.tmuxSession,
     claimedBy: job.claimedBy,
     ...(options.logFrom === undefined ? {} : sliceLog(job, options.logFrom)),
+    ...(options.questions ? { questions: options.questions.map(toQuestionDto) } : {}),
     createdAt: job.createdAt.getTime() / 1000,
     startedAt: job.startedAt ? job.startedAt.getTime() / 1000 : null,
     finishedAt: job.finishedAt ? job.finishedAt.getTime() / 1000 : null,
@@ -90,6 +122,8 @@ function sliceLog(job: InventoryJob, from: number) {
 }
 
 const MAX_INSTRUCTIONS = 20_000;
+const MAX_QUESTION = 4_000;
+const MAX_ANSWER = 20_000;
 const MAX_CONTEXT = 200_000;
 
 /**
@@ -162,7 +196,14 @@ export class InventoryJobService {
     logFrom?: number
   ): Promise<JobDto | null> {
     const job = await this.models.inventoryJob.get(workspaceId, id);
-    return job ? toJobDto(job, { logFrom }) : null;
+    if (!job) return null;
+    // Questions travel with the transcript: both are what a viewer of one
+    // run needs, and neither belongs in a listing.
+    const questions =
+      logFrom === undefined
+        ? undefined
+        : await this.models.inventoryJob.listQuestions(id);
+    return toJobDto(job, { logFrom, questions });
   }
 
   async list(workspaceId: string, deviceKey?: string, status?: string): Promise<JobDto[]> {
@@ -203,6 +244,104 @@ export class InventoryJobService {
       leaseSeconds: body.leaseSeconds === undefined ? undefined : Number(body.leaseSeconds),
     });
     return job ? toJobDto(job) : null;
+  }
+
+  private async runningJob(workspaceId: string, jobId: string) {
+    const job = await this.models.inventoryJob.get(workspaceId, jobId);
+    if (!job) {
+      throw new NotFound(`No job '${jobId}' in this workspace`);
+    }
+    return job;
+  }
+
+  /** A runner asks the person who started the job something, and waits. */
+  async ask(
+    workspaceId: string,
+    jobId: string,
+    body: Record<string, unknown>
+  ): Promise<QuestionDto> {
+    const job = await this.runningJob(workspaceId, jobId);
+    if (job.status !== 'running') {
+      throw new BadRequest(`Job '${jobId}' is ${job.status}, not running`);
+    }
+    const kind = String(body.kind ?? 'question') as QuestionKind;
+    if (!QUESTION_KINDS.includes(kind)) {
+      throw new BadRequest(`kind must be one of ${QUESTION_KINDS.join(', ')}`);
+    }
+    const text = String(body.text ?? '').trim();
+    if (!text) {
+      throw new BadRequest('text is required');
+    }
+    const question = await this.models.inventoryJob.ask(jobId, {
+      kind,
+      text: text.slice(0, MAX_QUESTION),
+      detail: body.detail ? String(body.detail).slice(0, MAX_QUESTION) : null,
+    });
+    this.logger.log(`job ${jobId} asked a ${kind}`);
+    return toQuestionDto(question);
+  }
+
+  /**
+   * One question, plus the job's status: a runner waiting on an answer must
+   * also notice that the job was cancelled underneath it.
+   */
+  async getQuestion(workspaceId: string, jobId: string, questionId: string) {
+    const job = await this.runningJob(workspaceId, jobId);
+    const question = await this.models.inventoryJob.getQuestion(jobId, questionId);
+    if (!question) {
+      throw new NotFound(`No question '${questionId}' on job '${jobId}'`);
+    }
+    return { question: toQuestionDto(question), jobStatus: job.status };
+  }
+
+  /**
+   * Answer a question. Only the person who started the job may: a permission
+   * answered here runs a tool on someone's machine, and a question's answer
+   * is written into their notes.
+   */
+  async answer(
+    workspaceId: string,
+    jobId: string,
+    questionId: string,
+    userId: string,
+    body: Record<string, unknown>
+  ): Promise<QuestionDto> {
+    const job = await this.runningJob(workspaceId, jobId);
+    if (job.createdBy && job.createdBy !== userId) {
+      throw new ActionForbidden('Only the person who started this run can answer it.');
+    }
+    const question = await this.models.inventoryJob.getQuestion(jobId, questionId);
+    if (!question) {
+      throw new NotFound(`No question '${questionId}' on job '${jobId}'`);
+    }
+    if (question.answeredAt) {
+      throw new BadRequest('That question has already been answered.');
+    }
+
+    let input: { answer?: string; allowed?: boolean };
+    if (question.kind === 'permission') {
+      if (typeof body.allowed !== 'boolean') {
+        throw new BadRequest('allowed (true or false) is required for a permission');
+      }
+      input = {
+        allowed: body.allowed,
+        answer: body.answer ? String(body.answer).slice(0, MAX_ANSWER) : undefined,
+      };
+    } else {
+      const answer = String(body.answer ?? '').trim();
+      if (!answer) {
+        throw new BadRequest('answer is required');
+      }
+      input = { answer: answer.slice(0, MAX_ANSWER) };
+    }
+
+    const answered = await this.models.inventoryJob.answer(
+      jobId, questionId, input, userId
+    );
+    if (!answered) {
+      throw new BadRequest('That question has already been answered.');
+    }
+    return toQuestionDto(answered);
   }
 
   async cancel(workspaceId: string, id: string): Promise<JobDto | null> {

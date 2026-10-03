@@ -220,3 +220,55 @@ export const logText = style({
   whiteSpace: 'pre-wrap',
   wordBreak: 'break-word',
 });
+
+export const questionCard = style({
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 8,
+  width: '100%',
+  padding: '10px 12px',
+  borderRadius: 8,
+  border: `1px solid ${cssVarV2('button/primary')}`,
+  background: cssVarV2('layer/background/primary'),
+});
+
+export const questionLabel = style({
+  fontSize: cssVar('fontXs'),
+  fontWeight: 600,
+  textTransform: 'uppercase',
+  letterSpacing: '0.06em',
+  color: cssVarV2('button/primary'),
+});
+
+export const questionText = style({
+  margin: 0,
+  fontSize: cssVar('fontSm'),
+  lineHeight: 1.5,
+  color: cssVarV2('text/primary'),
+  whiteSpace: 'pre-wrap',
+});
+
+export const questionDetail = style({
+  margin: 0,
+  maxHeight: 160,
+  overflow: 'auto',
+  padding: '6px 8px',
+  borderRadius: 6,
+  background: cssVarV2('layer/background/secondary'),
+  fontFamily: cssVar('fontMonoFamily'),
+  fontSize: cssVar('fontXs'),
+  whiteSpace: 'pre-wrap',
+  wordBreak: 'break-word',
+});
+
+export const questionInput = style({
+  width: '100%',
+  resize: 'vertical',
+  padding: '6px 8px',
+  borderRadius: 6,
+  border: `1px solid ${cssVarV2('layer/insideBorder/border')}`,
+  background: cssVarV2('layer/background/secondary'),
+  color: cssVarV2('text/primary'),
+  fontSize: cssVar('fontSm'),
+  fontFamily: 'inherit',
+});
