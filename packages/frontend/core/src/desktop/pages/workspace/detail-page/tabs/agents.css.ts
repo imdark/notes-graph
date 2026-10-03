@@ -1,6 +1,6 @@
 import { cssVar } from '@toeverything/theme';
 import { cssVarV2 } from '@toeverything/theme/v2';
-import { style } from '@vanilla-extract/css';
+import { keyframes, style } from '@vanilla-extract/css';
 
 export const root = style({
   height: '100%',
@@ -119,19 +119,6 @@ export const runRow = style({
   selectors: { '&:last-child': { borderBottom: 'none' } },
 });
 
-export const runDot = style({
-  width: 6,
-  height: 6,
-  borderRadius: '50%',
-  flexShrink: 0,
-  background: cssVarV2('text/tertiary'),
-  selectors: {
-    '&[data-status="done"]': { background: cssVarV2('status/success') },
-    '&[data-status="error"]': { background: cssVarV2('status/error') },
-    '&[data-status="running"]': { background: cssVarV2('icon/activated') },
-  },
-});
-
 export const runText = style({
   display: 'flex',
   flexDirection: 'column',
@@ -139,10 +126,18 @@ export const runText = style({
   flex: 1,
 });
 
+export const runHead = style({
+  display: 'flex',
+  alignItems: 'baseline',
+  gap: 4,
+  minWidth: 0,
+});
+
 export const runName = style({
   fontSize: cssVar('fontXs'),
   fontWeight: 500,
   color: cssVarV2('text/primary'),
+  whiteSpace: 'nowrap',
 });
 
 export const runMeta = style({
@@ -151,6 +146,17 @@ export const runMeta = style({
   overflow: 'hidden',
   textOverflow: 'ellipsis',
   whiteSpace: 'nowrap',
+  selectors: {
+    '&[data-status="error"]': { color: cssVarV2('status/error') },
+  },
+});
+
+export const runSide = style({
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'flex-end',
+  gap: 2,
+  flexShrink: 0,
 });
 
 export const runWhen = style({
@@ -202,23 +208,161 @@ export const attachCommand = style({
   userSelect: 'all',
 });
 
+export const logView = style({
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 6,
+  minHeight: 0,
+  minWidth: 0,
+});
+
+export const logToolbar = style({
+  display: 'flex',
+  alignItems: 'center',
+  gap: 8,
+});
+
 export const logScroll = style({
   height: '55vh',
+  // Both axes: lines never wrap, so a long one scrolls sideways.
   overflow: 'auto',
   borderRadius: 8,
   border: `1px solid ${cssVarV2('layer/insideBorder/border')}`,
   background: cssVarV2('layer/background/secondary'),
-});
-
-export const logText = style({
-  margin: 0,
-  padding: '10px 12px',
   fontFamily: cssVar('fontMonoFamily'),
   fontSize: cssVar('fontXs'),
   lineHeight: 1.55,
   color: cssVarV2('text/primary'),
-  whiteSpace: 'pre-wrap',
-  wordBreak: 'break-word',
+});
+
+export const logPlaceholder = style({
+  padding: '10px 12px',
+  color: cssVarV2('text/secondary'),
+});
+
+export const logLines = style({
+  // Grows to the longest line so every row's highlight spans the full width.
+  display: 'inline-block',
+  minWidth: '100%',
+  padding: '6px 0',
+});
+
+export const logLine = style({
+  display: 'flex',
+  alignItems: 'baseline',
+  selectors: {
+    '&:hover': { background: cssVarV2('layer/background/hoverOverlay') },
+    '&[data-selected]': {
+      background: cssVarV2('layer/background/hoverOverlay'),
+      boxShadow: `inset 2px 0 0 ${cssVarV2('button/primary')}`,
+    },
+  },
+});
+
+export const logGutter = style({
+  // Stays in view while the text scrolls sideways.
+  position: 'sticky',
+  left: 0,
+  display: 'flex',
+  flexShrink: 0,
+  gap: 8,
+  padding: '0 8px 0 4px',
+  marginRight: 8,
+  background: cssVarV2('layer/background/secondary'),
+  borderRight: `1px solid ${cssVarV2('layer/insideBorder/border')}`,
+  userSelect: 'none',
+});
+
+const gutterButton = style({
+  padding: 0,
+  border: 'none',
+  background: 'transparent',
+  font: 'inherit',
+  color: cssVarV2('text/tertiary'),
+  cursor: 'pointer',
+  selectors: {
+    '&:hover': {
+      color: cssVarV2('text/link'),
+      textDecoration: 'underline',
+    },
+  },
+});
+
+export const logLineNumber = style([gutterButton, { textAlign: 'right' }]);
+
+export const logTime = style([gutterButton, { minWidth: '9ch', textAlign: 'left' }]);
+
+export const logLineText = style({
+  whiteSpace: 'pre',
+  paddingRight: 12,
+});
+
+export const statusBadge = style({
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 5,
+  flexShrink: 0,
+  padding: '1px 8px',
+  borderRadius: 999,
+  fontSize: cssVar('fontXs'),
+  fontWeight: 500,
+  lineHeight: '18px',
+  whiteSpace: 'nowrap',
+  color: cssVarV2('text/secondary'),
+  background: cssVarV2('layer/background/secondary'),
+  selectors: {
+    '&[data-status="done"]': { color: cssVarV2('status/success') },
+    '&[data-status="error"]': { color: cssVarV2('status/error') },
+    '&[data-status="running"]': { color: cssVarV2('button/primary') },
+    '&[data-status="waiting"]': {
+      color: cssVarV2('button/pureWhiteText'),
+      background: cssVarV2('button/primary'),
+    },
+  },
+});
+
+const pulse = keyframes({
+  '0%, 100%': { opacity: 1 },
+  '50%': { opacity: 0.3 },
+});
+
+export const statusPulse = style({
+  width: 6,
+  height: 6,
+  borderRadius: '50%',
+  background: 'currentColor',
+  animation: `${pulse} 1.4s ease-in-out infinite`,
+});
+
+export const runDoc = style({
+  maxWidth: 220,
+  padding: 0,
+  border: 'none',
+  background: 'transparent',
+  fontSize: cssVar('fontXs'),
+  color: cssVarV2('text/link'),
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap',
+  cursor: 'pointer',
+  selectors: { '&:hover': { textDecoration: 'underline' } },
+});
+
+export const panelFooter = style({
+  display: 'flex',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+  width: '100%',
+});
+
+export const linkButton = style({
+  padding: 0,
+  border: 'none',
+  background: 'transparent',
+  fontSize: cssVar('fontXs'),
+  color: cssVarV2('text/link'),
+  cursor: 'pointer',
+  selectors: { '&:hover': { textDecoration: 'underline' } },
 });
 
 export const questionCard = style({

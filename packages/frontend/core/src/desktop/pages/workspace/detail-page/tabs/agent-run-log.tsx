@@ -10,16 +10,11 @@ import {
 } from '@notesgraph/core/modules/agents';
 import { WorkspaceService } from '@notesgraph/core/modules/workspace';
 import { useLiveData, useService } from '@notesgraph/infra';
-import {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-} from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
+import { AgentLogView } from './agent-log-view';
 import { AgentQuestionCard } from './agent-question';
+import { formatDuration } from './agent-run-row';
 import * as styles from './agents.css';
 
 interface RunLogState {
@@ -163,11 +158,6 @@ const statusLabel: Record<AgentRun['status'], string> = {
   error: 'Failed',
 };
 
-const formatDuration = (ms: number) => {
-  const secs = Math.round(ms / 1000);
-  return secs < 60 ? `${secs}s` : `${Math.floor(secs / 60)}m ${secs % 60}s`;
-};
-
 export const AgentRunLogDialog = ({
   runId,
   onClose,
@@ -176,6 +166,10 @@ export const AgentRunLogDialog = ({
   onClose: () => void;
 }) => {
   const runsStore = useService(AgentRunsStore);
+  const sessionService = useService(AgentRunSessionService);
+  const remoteRunner = useService(RemoteAgentRunnerService);
+  const workspaceService = useService(WorkspaceService);
+  const session = useLiveData(sessionService.session$);
   const run = useLiveData(
     useMemo(
       () => (runId ? runsStore.watchRun(runId) : null),
@@ -186,22 +180,32 @@ export const AgentRunLogDialog = ({
     run ?? undefined
   );
 
-  // Follow the end of the log while the reader is at the end; once they
-  // scroll up to read something, stop yanking them back down.
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const stickToEnd = useRef(true);
-  const onScroll = useCallback(() => {
-    const el = scrollRef.current;
-    if (!el) return;
-    stickToEnd.current = el.scrollHeight - el.scrollTop - el.clientHeight < 24;
-  }, []);
-  useLayoutEffect(() => {
-    const el = scrollRef.current;
-    if (el && stickToEnd.current) el.scrollTop = el.scrollHeight;
-  }, [log]);
-  useEffect(() => {
-    stickToEnd.current = true;
-  }, [runId]);
+  // A run can be stopped from here when this tab is driving it, or when it
+  // is a device job (the server cancels it for whoever asks). An on-device
+  // run in another tab has nothing here to stop.
+  const ownsRun = !!run && session?.runId === run.id && session.running;
+  const canStop =
+    run?.status === 'running' && (ownsRun || !!run.remoteJobId);
+  const [stopping, setStopping] = useState(false);
+  const stop = useCallback(() => {
+    if (!run) return;
+    if (ownsRun) {
+      sessionService.cancel();
+      return;
+    }
+    if (!run.remoteJobId) return;
+    setStopping(true);
+    remoteRunner
+      .cancel(workspaceService.workspace.id, run.remoteJobId)
+      .then(() => notify.success({ title: 'Stopping the run' }))
+      .catch(err =>
+        notify.error({
+          title: "Couldn't stop the run",
+          message: err instanceof Error ? err.message : String(err),
+        })
+      )
+      .finally(() => setStopping(false));
+  }, [ownsRun, remoteRunner, run, sessionService, workspaceService]);
 
   const attachCommand = tmuxSession ? `tmux attach -t ${tmuxSession}` : null;
   const copyAttach = useCallback(() => {
@@ -258,18 +262,32 @@ export const AgentRunLogDialog = ({
 
         {note ? <p className={styles.empty}>{note}</p> : null}
 
-        <div ref={scrollRef} onScroll={onScroll} className={styles.logScroll}>
-          <pre className={styles.logText} data-testid="agent-run-log-text">
-            {log ||
-              (loading
-                ? 'Loading…'
-                : run?.status === 'running'
-                  ? 'Waiting for output…'
-                  : note
-                    ? ''
-                    : 'This run left no log.')}
-          </pre>
-        </div>
+        <AgentLogView
+          log={log}
+          resetKey={runId}
+          placeholder={
+            loading
+              ? 'Loading…'
+              : run?.status === 'running'
+                ? 'Waiting for output…'
+                : note
+                  ? ''
+                  : 'This run left no log.'
+          }
+        />
+
+        {canStop ? (
+          <div className={styles.sessionActions}>
+            <Button
+              variant="error"
+              disabled={stopping}
+              onClick={stop}
+              data-testid="agent-run-log-stop"
+            >
+              Stop run
+            </Button>
+          </div>
+        ) : null}
       </div>
     </Modal>
   );

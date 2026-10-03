@@ -1,68 +1,37 @@
 import { PlusIcon } from '@blocksuite/icons/rc';
-import { Button, Scrollable } from '@notesgraph/component';
+import { Button, notify, Scrollable } from '@notesgraph/component';
 import {
   type Agent,
   AgentIcon,
-  type AgentRun,
   AgentRunSessionService,
   AgentRunsStore,
   AgentsService,
 } from '@notesgraph/core/modules/agents';
 import { WorkspaceDialogService } from '@notesgraph/core/modules/dialogs';
 import { DocService } from '@notesgraph/core/modules/doc';
+import { WorkbenchService } from '@notesgraph/core/modules/workbench';
 import { useLiveData, useService } from '@notesgraph/infra';
 import { useCallback, useMemo, useState } from 'react';
 
 import { AgentQuestionCard } from './agent-question';
 import { AgentRunLogDialog } from './agent-run-log';
+import { RunRow, RunStatusBadge, useMinuteTick } from './agent-run-row';
 import * as styles from './agents.css';
 
-const relativeTime = (at: number) => {
-  const secs = Math.round((Date.now() - at) / 1000);
-  if (secs < 60) return 'just now';
-  if (secs < 3600) return `${Math.floor(secs / 60)}m ago`;
-  if (secs < 86400) return `${Math.floor(secs / 3600)}h ago`;
-  return `${Math.floor(secs / 86400)}d ago`;
-};
-
-const RunRow = ({
-  run,
-  onOpen,
-}: {
-  run: AgentRun;
-  onOpen: (runId: string) => void;
-}) => (
-  <button
-    className={styles.runRowButton}
-    onClick={() => onOpen(run.id)}
-    title="View log"
-    data-testid="agent-run-row"
-  >
-    <span className={styles.runDot} data-status={run.status} />
-    <div className={styles.runText}>
-      <span className={styles.runName}>{run.agentName}</span>
-      <span className={styles.runMeta}>
-        {run.status === 'error'
-          ? (run.error ?? 'failed')
-          : run.status === 'cancelled'
-            ? 'cancelled'
-            : run.status === 'running'
-              ? 'running…'
-              : run.summary || 'done'}
-      </span>
-    </div>
-    <span className={styles.runWhen}>{relativeTime(run.startedAt)}</span>
-  </button>
-);
+/** Recent runs shown here; the Agents page has the rest. */
+const PANEL_RUNS = 8;
 
 export const EditorAgentsPanel = () => {
   const agentsService = useService(AgentsService);
   const sessionService = useService(AgentRunSessionService);
   const runsStore = useService(AgentRunsStore);
   const dialogService = useService(WorkspaceDialogService);
+  const workbench = useService(WorkbenchService).workbench;
   const doc = useService(DocService).doc;
+  const now = useMinuteTick();
 
   const docAgents = useLiveData(agentsService.agentsFor$('doc'));
+  const allAgents = useLiveData(agentsService.agents$);
   const session = useLiveData(sessionService.session$);
   const runs = useLiveData(
     useMemo(() => runsStore.watchRunsForDoc(doc.id), [runsStore, doc.id])
@@ -84,6 +53,27 @@ export const EditorAgentsPanel = () => {
   const openAgentSettings = useCallback(() => {
     dialogService.open('setting', { activeTab: 'workspace:agents' });
   }, [dialogService]);
+  const openAgentsPage = useCallback(() => {
+    workbench.open('/agents');
+  }, [workbench]);
+
+  const copyOutput = useCallback(() => {
+    if (!session?.output) return;
+    navigator.clipboard
+      .writeText(session.output)
+      .then(() => notify.success({ title: 'Copied' }))
+      .catch(() => notify.error({ title: "Couldn't copy" }));
+  }, [session?.output]);
+
+  const sessionStatus = !session
+    ? null
+    : running
+      ? session.questions.length > 0
+        ? 'waiting'
+        : 'running'
+      : session.error
+        ? 'error'
+        : 'done';
 
   return (
     <Scrollable.Root className={styles.root}>
@@ -93,7 +83,9 @@ export const EditorAgentsPanel = () => {
             <span className={styles.sectionLabel}>Run on this note</span>
             {docAgents.length === 0 ? (
               <p className={styles.empty}>
-                No agents can run on a whole note yet.
+                {allAgents.length === 0
+                  ? 'You have no agents yet. An agent is a saved instruction — "summarise this", "find open questions" — that you can run on a note.'
+                  : 'None of your agents run on a whole note. Turn on "note" for one in its settings, or run one on a block from the editor.'}
               </p>
             ) : (
               <div className={styles.agentList}>
@@ -104,16 +96,21 @@ export const EditorAgentsPanel = () => {
                     disabled={running}
                     onClick={() => runOnDoc(agent)}
                     data-testid="run-agent"
+                    title={running ? 'Another run is going' : `Run ${agent.name}`}
                   >
                     <span className={styles.agentEmoji}>
                       <AgentIcon agent={agent} />
                     </span>
                     <span className={styles.agentName}>{agent.name}</span>
+                    {running && session?.agentId === agent.id ? (
+                      <RunStatusBadge status="running" />
+                    ) : null}
                   </button>
                 ))}
               </div>
             )}
             <Button
+              variant={allAgents.length === 0 ? 'primary' : 'secondary'}
               onClick={openAgentSettings}
               data-testid="panel-new-agent"
               prefix={<PlusIcon />}
@@ -126,11 +123,14 @@ export const EditorAgentsPanel = () => {
             </span>
           </div>
 
-          {session ? (
+          {session && sessionStatus ? (
             <div className={styles.section} data-testid="agent-session">
-              <span className={styles.sectionLabel}>
-                {session.agentName} · {session.targetLabel}
-              </span>
+              <div className={styles.panelFooter}>
+                <span className={styles.sectionLabel}>
+                  {session.agentName} · {session.targetLabel}
+                </span>
+                <RunStatusBadge status={sessionStatus} />
+              </div>
 
               {session.remoteJobId
                 ? session.questions.map(question => (
@@ -153,7 +153,7 @@ export const EditorAgentsPanel = () => {
               ) : (
                 <p className={styles.empty}>
                   {!running
-                    ? 'No answer.'
+                    ? 'It finished without an answer. The log shows what it did.'
                     : session.questions.length > 0
                       ? 'Waiting for you…'
                       : 'Working…'}
@@ -166,13 +166,27 @@ export const EditorAgentsPanel = () => {
                     onClick={() => sessionService.cancel()}
                     data-testid="cancel-agent"
                   >
-                    Cancel
+                    Stop
                   </Button>
                 ) : (
-                  <Button onClick={() => sessionService.clear()}>Clear</Button>
+                  <>
+                    {session.output ? (
+                      <Button
+                        variant="primary"
+                        onClick={copyOutput}
+                        data-testid="copy-agent-output"
+                      >
+                        Copy answer
+                      </Button>
+                    ) : null}
+                    <Button onClick={() => sessionService.clear()}>
+                      Dismiss
+                    </Button>
+                  </>
                 )}
                 {session.runId ? (
                   <Button
+                    variant="plain"
                     onClick={() => setLogRunId(session.runId)}
                     data-testid="view-agent-log"
                   >
@@ -189,16 +203,27 @@ export const EditorAgentsPanel = () => {
             </div>
           ) : null}
 
-          {runs.length > 0 ? (
-            <div className={styles.section}>
+          <div className={styles.section}>
+            <div className={styles.panelFooter}>
               <span className={styles.sectionLabel}>Recent runs here</span>
+              <button
+                className={styles.linkButton}
+                onClick={openAgentsPage}
+                data-testid="open-agents-page"
+              >
+                All runs →
+              </button>
+            </div>
+            {runs.length === 0 ? (
+              <p className={styles.empty}>No agent has run on this note yet.</p>
+            ) : (
               <div className={styles.runList}>
-                {runs.slice(0, 8).map(run => (
-                  <RunRow key={run.id} run={run} onOpen={setLogRunId} />
+                {runs.slice(0, PANEL_RUNS).map(run => (
+                  <RunRow key={run.id} run={run} now={now} onOpen={setLogRunId} />
                 ))}
               </div>
-            </div>
-          ) : null}
+            )}
+          </div>
         </div>
       </Scrollable.Viewport>
       <Scrollable.Scrollbar />

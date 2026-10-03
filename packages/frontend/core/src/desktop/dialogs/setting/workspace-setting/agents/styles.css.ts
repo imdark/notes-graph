@@ -46,6 +46,24 @@ export const row = style({
   borderBottom: `1px solid ${cssVarV2('layer/insideBorder/border')}`,
   selectors: {
     '&:last-child': { borderBottom: 'none' },
+    '&:hover': { background: cssVarV2('layer/background/hoverOverlay') },
+  },
+});
+
+/** The clickable part of a row: everything but the switch and the menu. */
+export const rowMain = style({
+  display: 'flex',
+  alignItems: 'center',
+  gap: 12,
+  flex: 1,
+  minWidth: 0,
+  padding: 0,
+  border: 'none',
+  background: 'transparent',
+  textAlign: 'left',
+  cursor: 'pointer',
+  selectors: {
+    [`${row}[data-disabled] &`]: { opacity: 0.55 },
   },
 });
 
