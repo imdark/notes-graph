@@ -5,9 +5,11 @@ import {
 } from '@notesgraph/core/modules/agents';
 import { WorkspaceService } from '@notesgraph/core/modules/workspace';
 import { useService } from '@notesgraph/infra';
-import { type KeyboardEvent, useCallback, useState } from 'react';
+import { type KeyboardEvent, useCallback, useMemo, useState } from 'react';
 
 import * as styles from './agents.css';
+import { parseEditPreview } from './edit-diff';
+import { EditDiffView } from './edit-diff-view';
 
 /**
  * One thing a running agent is waiting on the reader for: a question to
@@ -45,6 +47,12 @@ export const AgentQuestionCard = ({
   );
 
   const isPermission = question.kind === 'permission';
+  // File edits get a before/after diff instead of the raw tool input.
+  const editPreview = useMemo(
+    () =>
+      isPermission ? parseEditPreview(question.text, question.detail) : null,
+    [isPermission, question.text, question.detail]
+  );
   const canSendAnswer = text.trim().length > 0 && state === 'idle';
 
   const onKeyDown = useCallback(
@@ -64,7 +72,9 @@ export const AgentQuestionCard = ({
         {isPermission ? 'Wants permission' : 'Asks you'}
       </span>
       <p className={styles.questionText}>{question.text}</p>
-      {question.detail ? (
+      {editPreview ? (
+        <EditDiffView preview={editPreview} />
+      ) : question.detail ? (
         <pre className={styles.questionDetail}>{question.detail}</pre>
       ) : null}
 
@@ -77,9 +87,7 @@ export const AgentQuestionCard = ({
             value={text}
             onChange={e => setText(e.target.value)}
             onKeyDown={onKeyDown}
-            placeholder={
-              isPermission ? 'Add a note (optional)' : 'Your answer'
-            }
+            placeholder={isPermission ? 'Add a note (optional)' : 'Your answer'}
             rows={isPermission ? 1 : 2}
             disabled={state === 'sending'}
             data-testid="agent-question-input"

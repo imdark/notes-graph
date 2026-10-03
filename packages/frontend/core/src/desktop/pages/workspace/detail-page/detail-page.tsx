@@ -25,6 +25,7 @@ import { CommentSidebar } from '@notesgraph/core/components/comment/sidebar';
 import { useGuard } from '@notesgraph/core/components/guard';
 import { useAppSettingHelper } from '@notesgraph/core/components/hooks/notesgraph/use-app-setting-helper';
 import { useRegisterBlocksuiteEditorCommands } from '@notesgraph/core/components/hooks/notesgraph/use-register-blocksuite-editor-commands';
+import { useRegisterAgentCommands } from '@notesgraph/core/components/hooks/notesgraph/use-register-agent-commands';
 import { useRegisterSelectionEditCommands } from '@notesgraph/core/components/hooks/notesgraph/use-register-selection-edit-commands';
 import { useActiveBlocksuiteEditor } from '@notesgraph/core/components/hooks/use-block-suite-editor';
 import { NotesGraphErrorBoundary } from '@notesgraph/core/components/notesgraph/notesgraph-error-boundary';
@@ -251,6 +252,7 @@ const DetailPageImpl = memo(function DetailPageImpl() {
 
   useRegisterBlocksuiteEditorCommands(editor, isActiveView);
   useRegisterSelectionEditCommands(editor, isActiveView);
+  useRegisterAgentCommands(editor, isActiveView);
 
   const journalService = useService(JournalService);
   const journalDate = useLiveData(journalService.journalDate$(doc.id));

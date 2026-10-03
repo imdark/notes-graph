@@ -18,6 +18,17 @@ import { FetchService, type WorkspaceServerService } from '../../cloud';
  */
 export const CLAUDE_CODE_MODEL = 'claude-code';
 
+/**
+ * The same Claude Code, started on the device the way `wf start` + `wf ai`
+ * start a task: a ticket in the device's task backend, wf's branch and
+ * worktree, the project's Claude account, skills and task memory.
+ */
+export const WORKFLOW_MODEL = 'workflow';
+
+/** Models that run Claude Code on the device; they exist only remotely. */
+export const isDeviceClaudeModel = (model: string | undefined) =>
+  model === CLAUDE_CODE_MODEL || model === WORKFLOW_MODEL;
+
 /** Something a running job asked the person who started it. */
 export interface RemoteQuestion {
   id: string;
@@ -79,9 +90,7 @@ export interface EnqueueRemoteJob {
 const POLL_MS = 1500;
 
 export class RemoteAgentRunnerService extends Service {
-  constructor(
-    private readonly workspaceServerService: WorkspaceServerService
-  ) {
+  constructor(private readonly workspaceServerService: WorkspaceServerService) {
     super();
   }
 
@@ -150,7 +159,10 @@ export class RemoteAgentRunnerService extends Service {
     return data.devices;
   }
 
-  async enqueue(workspaceId: string, input: EnqueueRemoteJob): Promise<RemoteJob> {
+  async enqueue(
+    workspaceId: string,
+    input: EnqueueRemoteJob
+  ): Promise<RemoteJob> {
     const { deviceKey, ...body } = input;
     const data = await this.json<{ job: RemoteJob }>(
       `${this.base(workspaceId)}/devices/${encodeURIComponent(deviceKey)}/jobs`,
@@ -185,9 +197,12 @@ export class RemoteAgentRunnerService extends Service {
   }
 
   async cancel(workspaceId: string, jobId: string): Promise<void> {
-    await this.json(`${this.base(workspaceId)}/jobs/${encodeURIComponent(jobId)}/cancel`, {
-      method: 'POST',
-    });
+    await this.json(
+      `${this.base(workspaceId)}/jobs/${encodeURIComponent(jobId)}/cancel`,
+      {
+        method: 'POST',
+      }
+    );
   }
 
   /**

@@ -4,11 +4,13 @@ export { AgentsService, DEFAULT_AGENT_TOOLS } from './services/agents';
 export {
   CLAUDE_CODE_MODEL,
   type EnqueueRemoteJob,
+  isDeviceClaudeModel,
   openQuestions,
   type RemoteJob,
   type RemoteJobUpdate,
   type RemoteQuestion,
   RemoteAgentRunnerService,
+  WORKFLOW_MODEL,
 } from './services/remote-runner';
 export { AgentContextService } from './services/context';
 export {
@@ -23,7 +25,11 @@ export {
   type AgentExecutor,
   AgentExecutorService,
 } from './services/executor';
-export { type AgentRun, type AgentRunStatus, AgentRunsStore } from './stores/agent-runs';
+export {
+  type AgentRun,
+  type AgentRunStatus,
+  AgentRunsStore,
+} from './stores/agent-runs';
 export { AgentRunLogsStore } from './stores/agent-run-logs';
 export {
   type AgentRunSession,
@@ -42,7 +48,7 @@ export {
 
 import { type Framework } from '@notesgraph/infra';
 
-import { AiBackendService, LocalLLMService } from '../ai-local';
+import { LocalLLMService } from '../ai-local';
 import { WorkspaceServerService } from '../cloud';
 import { WorkspaceDBService } from '../db';
 import { DocsService } from '../doc';
@@ -71,7 +77,6 @@ export function configureAgentsModule(framework: Framework) {
       AgentRunsStore,
       AgentRunLogsStore,
       LocalLLMService,
-      AiBackendService,
       AgentFileToolsService,
       RemoteAgentRunnerService,
       WorkspaceService,
