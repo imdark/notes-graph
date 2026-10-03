@@ -23,11 +23,21 @@ export interface CreateInventoryJobInput {
   createdBy?: string | null;
 }
 
+/**
+ * Most transcript text kept per job. Past this the head is dropped: while a
+ * run is going, the end is what someone watching needs, and the result field
+ * already holds the answer.
+ */
+export const JOB_LOG_CAP = 200_000;
+
 export interface ReportInventoryJobInput {
   status?: string;
   result?: string | null;
   error?: string | null;
   steps?: number;
+  /** Transcript text produced since the last report, appended to `log`. */
+  logAppend?: string;
+  tmuxSession?: string | null;
   /** Extends the lease while a long run is still making progress. */
   leaseSeconds?: number;
 }
@@ -146,6 +156,10 @@ export class InventoryJobModel extends BaseModel {
       return job;
     }
 
+    if (input.logAppend) {
+      await this.appendLog(id, input.logAppend);
+    }
+
     const status = input.status ?? job.status;
     const terminal = (JOB_TERMINAL as readonly string[]).includes(status);
     return this.db.inventoryJob.update({
@@ -155,12 +169,28 @@ export class InventoryJobModel extends BaseModel {
         result: input.result ?? job.result,
         error: input.error ?? job.error,
         steps: input.steps ?? job.steps,
+        tmuxSession: input.tmuxSession ?? job.tmuxSession,
         finishedAt: terminal ? new Date() : null,
         leaseExpiresAt: terminal
           ? null
           : new Date(Date.now() + (input.leaseSeconds ?? 300) * 1000),
       },
     });
+  }
+
+  /**
+   * Append to a job's transcript in one statement, keeping only the last
+   * JOB_LOG_CAP characters. Done in SQL rather than read-modify-write so a
+   * heartbeat landing alongside a log report cannot lose text; every SET
+   * expression sees the pre-update row, so `log_dropped` and `log` agree.
+   */
+  private async appendLog(id: string, text: string): Promise<void> {
+    await this.db.$executeRaw`
+      UPDATE "inventory_jobs"
+      SET "log" = RIGHT("log" || ${text}::text, ${JOB_LOG_CAP}::int),
+          "log_dropped" = "log_dropped"
+            + GREATEST(0, LENGTH("log") + LENGTH(${text}::text) - ${JOB_LOG_CAP}::int)
+      WHERE "id" = ${id}`;
   }
 
   async cancel(workspaceId: string, id: string): Promise<InventoryJob | null> {

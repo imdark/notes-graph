@@ -2,6 +2,7 @@ import { LiveData, Store } from '@notesgraph/infra';
 
 import type { WorkspaceDBService } from '../../db';
 import type { AgentTarget } from '../services/target';
+import type { AgentRunLogsStore } from './agent-run-logs';
 
 export type AgentRunStatus = 'running' | 'done' | 'cancelled' | 'error';
 
@@ -18,6 +19,9 @@ export interface AgentRun {
   steps?: number;
   summary?: string;
   error?: string;
+  /** The device job this run became, when it ran remotely. */
+  remoteJobId?: string;
+  deviceKey?: string;
 }
 
 /**
@@ -36,7 +40,10 @@ const SUMMARY_CHARS = 200;
  * document would be synced by every collaborator forever.
  */
 export class AgentRunsStore extends Store {
-  constructor(private readonly workspaceDBService: WorkspaceDBService) {
+  constructor(
+    private readonly workspaceDBService: WorkspaceDBService,
+    private readonly logsStore: AgentRunLogsStore
+  ) {
     super();
   }
 
@@ -73,6 +80,16 @@ export class AgentRunsStore extends Store {
     return row.id;
   }
 
+  watchRun(runId: string): LiveData<AgentRun | undefined> {
+    return this.watchRuns().map(runs => runs.find(run => run.id === runId));
+  }
+
+  /** Record which device job a remote run became, so its log can be found. */
+  attachRemote(runId: string, remoteJobId: string, deviceKey: string): void {
+    if (!this.table.get(runId)) return;
+    this.table.update(runId, { remoteJobId, deviceKey });
+  }
+
   finish(
     runId: string,
     outcome:
@@ -94,14 +111,17 @@ export class AgentRunsStore extends Store {
     });
   }
 
-  /** Drop the oldest rows beyond MAX_RUNS. */
+  /** Drop the oldest rows beyond MAX_RUNS, and their transcripts. */
   private prune(): void {
     const rows = this.table.find();
     if (rows.length <= MAX_RUNS) return;
-    rows
+    const dropped = rows
       .slice()
       .sort((a, b) => (b.startedAt ?? 0) - (a.startedAt ?? 0))
-      .slice(MAX_RUNS)
-      .forEach(row => this.table.delete(row.id));
+      .slice(MAX_RUNS);
+    dropped.forEach(row => this.table.delete(row.id));
+    this.logsStore.delete(dropped.map(row => row.id)).catch(() => {
+      // A transcript left behind is harmless; it just isn't reachable.
+    });
   }
 }

@@ -25,12 +25,27 @@ export interface JobDto {
   result: string | null;
   error: string | null;
   steps: number;
+  /** Device-side tmux session the run is in, for `tmux attach -t`. */
+  tmuxSession: string | null;
+  claimedBy: string | null;
+  /**
+   * Transcript text from absolute offset `logFrom` to `logEnd`. Omitted from
+   * listings, which would otherwise ship every job's transcript at once.
+   */
+  log?: string;
+  logFrom?: number;
+  logEnd?: number;
   createdAt: number;
   startedAt: number | null;
   finishedAt: number | null;
 }
 
-export function toJobDto(job: InventoryJob): JobDto {
+export interface JobDtoOptions {
+  /** Include the transcript, starting at this absolute offset (0 = all kept). */
+  logFrom?: number;
+}
+
+export function toJobDto(job: InventoryJob, options: JobDtoOptions = {}): JobDto {
   return {
     id: job.id,
     deviceKey: job.deviceKey,
@@ -48,9 +63,29 @@ export function toJobDto(job: InventoryJob): JobDto {
     result: job.result,
     error: job.error,
     steps: job.steps,
+    tmuxSession: job.tmuxSession,
+    claimedBy: job.claimedBy,
+    ...(options.logFrom === undefined ? {} : sliceLog(job, options.logFrom)),
     createdAt: job.createdAt.getTime() / 1000,
     startedAt: job.startedAt ? job.startedAt.getTime() / 1000 : null,
     finishedAt: job.finishedAt ? job.finishedAt.getTime() / 1000 : null,
+  };
+}
+
+/**
+ * The part of a job's transcript at or after `from`.
+ *
+ * Offsets count code points, not UTF-16 units, because that is what
+ * Postgres LENGTH() counts when the append trims the head; counting JS
+ * string length instead would drift by one per emoji.
+ */
+function sliceLog(job: InventoryJob, from: number) {
+  const chars = Array.from(job.log);
+  const start = Math.max(0, Math.floor(from) - job.logDropped);
+  return {
+    log: chars.slice(start).join(''),
+    logFrom: job.logDropped + start,
+    logEnd: job.logDropped + chars.length,
   };
 }
 
@@ -121,14 +156,18 @@ export class InventoryJobService {
     return toJobDto(job);
   }
 
-  async get(workspaceId: string, id: string): Promise<JobDto | null> {
+  async get(
+    workspaceId: string,
+    id: string,
+    logFrom?: number
+  ): Promise<JobDto | null> {
     const job = await this.models.inventoryJob.get(workspaceId, id);
-    return job ? toJobDto(job) : null;
+    return job ? toJobDto(job, { logFrom }) : null;
   }
 
   async list(workspaceId: string, deviceKey?: string, status?: string): Promise<JobDto[]> {
     const jobs = await this.models.inventoryJob.list(workspaceId, { deviceKey, status });
-    return jobs.map(toJobDto);
+    return jobs.map(job => toJobDto(job));
   }
 
   async claim(
@@ -159,6 +198,8 @@ export class InventoryJobService {
       result: body.result === undefined ? undefined : String(body.result ?? ''),
       error: body.error === undefined ? undefined : String(body.error ?? ''),
       steps: body.steps === undefined ? undefined : Number(body.steps),
+      logAppend: body.logAppend ? String(body.logAppend) : undefined,
+      tmuxSession: body.tmuxSession ? String(body.tmuxSession).slice(0, 200) : undefined,
       leaseSeconds: body.leaseSeconds === undefined ? undefined : Number(body.leaseSeconds),
     });
     return job ? toJobDto(job) : null;

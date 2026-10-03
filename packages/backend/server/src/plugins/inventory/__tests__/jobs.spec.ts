@@ -1,6 +1,6 @@
 import test from 'ava';
 
-import { InventoryJobService } from '../jobs';
+import { InventoryJobService, toJobDto } from '../jobs';
 
 /**
  * Dispatch rules, against a stub Models.
@@ -98,4 +98,92 @@ test('rejects an unknown report status', async t => {
     service.report(workspaceId, 'job-1', { status: 'exploded' }),
     { message: /status must be one of/ }
   );
+});
+
+function storedJob(overrides: Record<string, unknown> = {}): any {
+  return {
+    id: 'job-1',
+    workspaceId,
+    deviceKey: 'laptop',
+    agentId: 'a1',
+    agentName: 'summarize',
+    instructions: 'go',
+    context: '',
+    model: null,
+    tools: [],
+    maxSteps: 8,
+    targetKind: null,
+    docId: null,
+    blockId: null,
+    status: 'running',
+    result: null,
+    error: null,
+    steps: 0,
+    log: '',
+    logDropped: 0,
+    tmuxSession: null,
+    claimedBy: 'runner',
+    startedAt: null,
+    finishedAt: null,
+    createdAt: new Date(0),
+    ...overrides,
+  };
+}
+
+test('a single job carries its transcript from the requested offset', t => {
+  const job = storedJob({ log: 'step 1\nstep 2\n' });
+  const dto = toJobDto(job, { logFrom: 7 });
+  t.is(dto.log, 'step 2\n');
+  t.is(dto.logFrom, 7);
+  t.is(dto.logEnd, 14);
+});
+
+test('offsets stay absolute after the head of the transcript is dropped', t => {
+  // 100 characters were trimmed; what remains starts at offset 100.
+  const job = storedJob({ log: 'tail text', logDropped: 100 });
+
+  const caughtUp = toJobDto(job, { logFrom: 105 });
+  t.is(caughtUp.log, 'text');
+  t.is(caughtUp.logEnd, 109);
+
+  // A viewer that fell behind the trim gets everything still kept, and is
+  // told where it actually starts.
+  const behind = toJobDto(job, { logFrom: 20 });
+  t.is(behind.log, 'tail text');
+  t.is(behind.logFrom, 100);
+});
+
+test('offsets count code points, matching what Postgres trims by', t => {
+  const job = storedJob({ log: '✅ done 🎉 ok' });
+  // 11 code points, but 13 UTF-16 units.
+  const dto = toJobDto(job, { logFrom: 8 });
+  t.is(dto.log, ' ok');
+  t.is(dto.logEnd, 11);
+});
+
+test('listings leave the transcript out', t => {
+  const dto = toJobDto(storedJob({ log: 'big transcript' }));
+  t.is(dto.log, undefined);
+});
+
+test('a report passes log text and the tmux session to the model', async t => {
+  let received: any;
+  const models: any = {
+    inventoryJob: {
+      report: async (_ws: string, _id: string, input: any) => {
+        received = input;
+        return storedJob({ tmuxSession: input.tmuxSession });
+      },
+    },
+  };
+  const service = new InventoryJobService(models);
+  const job = await service.report(workspaceId, 'job-1', {
+    status: 'running',
+    logAppend: '→ read_file\n',
+    tmuxSession: 'wf-job-1234abcd',
+  });
+
+  t.is(received.logAppend, '→ read_file\n');
+  t.is(received.tmuxSession, 'wf-job-1234abcd');
+  t.is(job?.tmuxSession, 'wf-job-1234abcd');
 });

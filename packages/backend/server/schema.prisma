@@ -1752,6 +1752,12 @@ model InventoryJob {
   result         String?   @db.Text
   error          String?   @db.Text
   steps          Int       @default(0)
+  /// Tail of the runner's transcript; older text is dropped past a cap.
+  log            String    @default("") @db.Text
+  /// Characters dropped from the head of `log`, so offsets stay absolute.
+  logDropped     Int       @default(0) @map("log_dropped")
+  /// tmux session on the device the run is attached to, if any.
+  tmuxSession    String?   @map("tmux_session") @db.VarChar
   claimedBy      String?   @map("claimed_by") @db.VarChar
   leaseExpiresAt DateTime? @map("lease_expires_at") @db.Timestamptz(3)
   createdBy      String?   @map("created_by") @db.VarChar

@@ -5,6 +5,8 @@ import { AgentAlreadyRunningError, type AgentExecutorService } from './executor'
 import type { AgentTarget } from './target';
 
 export interface AgentRunSession {
+  /** The run record, once the executor has made one. */
+  runId: string | null;
   agentId: string;
   agentName: string;
   agentEmoji?: string;
@@ -12,6 +14,8 @@ export interface AgentRunSession {
   /** What was targeted, in words, for the panel header. */
   targetLabel: string;
   output: string;
+  /** Transcript so far — tool calls, results, the answer. */
+  log: string;
   error: string | null;
   running: boolean;
 }
@@ -54,12 +58,14 @@ export class AgentRunSessionService extends Service {
     this.controller = controller;
 
     this.session$.setValue({
+      runId: null,
       agentId: agent.id,
       agentName: agent.name,
       agentEmoji: agent.emoji,
       target,
       targetLabel: targetLabel(target),
       output: '',
+      log: '',
       error: null,
       running: true,
     });
@@ -77,7 +83,11 @@ export class AgentRunSessionService extends Service {
         target,
         controller.signal
       )) {
-        if (event.type === 'text') {
+        if (event.type === 'started') {
+          patch(prev => ({ ...prev, runId: event.runId }));
+        } else if (event.type === 'log') {
+          patch(prev => ({ ...prev, log: prev.log + event.text }));
+        } else if (event.type === 'text') {
           patch(prev => ({ ...prev, output: prev.output + event.delta }));
         } else if (event.type === 'error') {
           patch(prev => ({ ...prev, error: event.message }));

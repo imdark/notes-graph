@@ -176,11 +176,19 @@ export class InventoryController {
   async getJob(
     @CurrentUser() user: CurrentUserType,
     @Param('workspaceId') workspaceId: string,
-    @Param('jobId') jobId: string
+    @Param('jobId') jobId: string,
+    @Query('logFrom') logFrom?: string
   ) {
     this.assertEnabled();
     await this.ac.user(user.id).workspace(workspaceId).assert('Workspace.Read');
-    const job = await this.jobs.get(workspaceId, jobId);
+    // The transcript always comes with a single job; `logFrom` lets a viewer
+    // that already has the first N characters ask only for what's new.
+    const from = Number(logFrom);
+    const job = await this.jobs.get(
+      workspaceId,
+      jobId,
+      Number.isFinite(from) && from > 0 ? from : 0
+    );
     if (!job) {
       throw new NotFoundException(`No job '${jobId}' in this workspace`);
     }

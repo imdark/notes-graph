@@ -11,8 +11,9 @@ import {
 import { WorkspaceDialogService } from '@notesgraph/core/modules/dialogs';
 import { DocService } from '@notesgraph/core/modules/doc';
 import { useLiveData, useService } from '@notesgraph/infra';
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 
+import { AgentRunLogDialog } from './agent-run-log';
 import * as styles from './agents.css';
 
 const relativeTime = (at: number) => {
@@ -23,8 +24,19 @@ const relativeTime = (at: number) => {
   return `${Math.floor(secs / 86400)}d ago`;
 };
 
-const RunRow = ({ run }: { run: AgentRun }) => (
-  <div className={styles.runRow}>
+const RunRow = ({
+  run,
+  onOpen,
+}: {
+  run: AgentRun;
+  onOpen: (runId: string) => void;
+}) => (
+  <button
+    className={styles.runRowButton}
+    onClick={() => onOpen(run.id)}
+    title="View log"
+    data-testid="agent-run-row"
+  >
     <span className={styles.runDot} data-status={run.status} />
     <div className={styles.runText}>
       <span className={styles.runName}>{run.agentName}</span>
@@ -39,7 +51,7 @@ const RunRow = ({ run }: { run: AgentRun }) => (
       </span>
     </div>
     <span className={styles.runWhen}>{relativeTime(run.startedAt)}</span>
-  </div>
+  </button>
 );
 
 export const EditorAgentsPanel = () => {
@@ -63,6 +75,8 @@ export const EditorAgentsPanel = () => {
   );
 
   const running = session?.running ?? false;
+  const [logRunId, setLogRunId] = useState<string | null>(null);
+  const closeLog = useCallback(() => setLogRunId(null), []);
 
   // The panel is where someone realises they want an agent, so it has to be
   // able to get them there rather than naming a screen they have to go find.
@@ -142,6 +156,14 @@ export const EditorAgentsPanel = () => {
                 ) : (
                   <Button onClick={() => sessionService.clear()}>Clear</Button>
                 )}
+                {session.runId ? (
+                  <Button
+                    onClick={() => setLogRunId(session.runId)}
+                    data-testid="view-agent-log"
+                  >
+                    View log
+                  </Button>
+                ) : null}
               </div>
 
               {!running && session.output ? (
@@ -157,7 +179,7 @@ export const EditorAgentsPanel = () => {
               <span className={styles.sectionLabel}>Recent runs here</span>
               <div className={styles.runList}>
                 {runs.slice(0, 8).map(run => (
-                  <RunRow key={run.id} run={run} />
+                  <RunRow key={run.id} run={run} onOpen={setLogRunId} />
                 ))}
               </div>
             </div>
@@ -165,6 +187,7 @@ export const EditorAgentsPanel = () => {
         </div>
       </Scrollable.Viewport>
       <Scrollable.Scrollbar />
+      <AgentRunLogDialog runId={logRunId} onClose={closeLog} />
     </Scrollable.Root>
   );
 };

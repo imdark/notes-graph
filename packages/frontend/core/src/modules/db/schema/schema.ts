@@ -304,6 +304,13 @@ export const NotesGraph_WORKSPACE_USERDATA_DB_SCHEMA = {
     /** Short excerpt of the result, for the run list. */
     summary: f.string().optional(),
     error: f.string().optional(),
+    /**
+     * Set when the run went to a device. Its transcript then lives on the
+     * server under this job id; an on-device run's transcript is kept in
+     * this browser only (see AgentRunLogsStore).
+     */
+    remoteJobId: f.string().optional(),
+    deviceKey: f.string().optional(),
   },
 } as const satisfies DBSchemaBuilder;
 export type NotesGraphWorkspaceUserdataDbSchema =

@@ -4,6 +4,7 @@ export { AgentsService, DEFAULT_AGENT_TOOLS } from './services/agents';
 export {
   type EnqueueRemoteJob,
   type RemoteJob,
+  type RemoteJobUpdate,
   RemoteAgentRunnerService,
 } from './services/remote-runner';
 export { AgentContextService } from './services/context';
@@ -20,6 +21,7 @@ export {
   AgentExecutorService,
 } from './services/executor';
 export { type AgentRun, type AgentRunStatus, AgentRunsStore } from './stores/agent-runs';
+export { AgentRunLogsStore } from './stores/agent-run-logs';
 export {
   type AgentRunSession,
   AgentRunSessionService,
@@ -50,6 +52,7 @@ import { AgentFileToolsService } from './services/file-tools';
 import { AgentExecutorService } from './services/executor';
 import { RemoteAgentRunnerService } from './services/remote-runner';
 import { AgentRunSessionService } from './services/run-session';
+import { AgentRunLogsStore } from './stores/agent-run-logs';
 import { AgentRunsStore } from './stores/agent-runs';
 import { AgentsStore } from './stores/agents';
 
@@ -63,6 +66,7 @@ export function configureAgentsModule(framework: Framework) {
     .service(AgentExecutorService, [
       AgentContextService,
       AgentRunsStore,
+      AgentRunLogsStore,
       LocalLLMService,
       AiBackendService,
       AgentFileToolsService,
@@ -71,6 +75,7 @@ export function configureAgentsModule(framework: Framework) {
     ])
     .service(AgentRunSessionService, [AgentExecutorService])
     .store(AgentsStore, [WorkspaceDBService])
-    .store(AgentRunsStore, [WorkspaceDBService])
+    .store(AgentRunLogsStore)
+    .store(AgentRunsStore, [WorkspaceDBService, AgentRunLogsStore])
     .entity(Agents, [AgentsStore]);
 }

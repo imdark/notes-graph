@@ -18,6 +18,21 @@ export interface RemoteJob {
   result: string | null;
   error: string | null;
   steps: number;
+  /** tmux session on the device; `tmux attach -t` it there to watch. */
+  tmuxSession: string | null;
+  /** Transcript from absolute offset `logFrom` to `logEnd`. */
+  log?: string;
+  logFrom?: number;
+  logEnd?: number;
+  startedAt: number | null;
+  finishedAt: number | null;
+}
+
+/** One step of {@link RemoteAgentRunnerService.watch}. */
+export interface RemoteJobUpdate {
+  job: RemoteJob;
+  /** Transcript text that is new since the previous update. */
+  logDelta: string;
 }
 
 export interface EnqueueRemoteJob {
@@ -118,9 +133,13 @@ export class RemoteAgentRunnerService extends Service {
     return data.job;
   }
 
-  async get(workspaceId: string, jobId: string): Promise<RemoteJob> {
+  async get(
+    workspaceId: string,
+    jobId: string,
+    logFrom = 0
+  ): Promise<RemoteJob> {
     const data = await this.json<{ job: RemoteJob }>(
-      `${this.base(workspaceId)}/jobs/${encodeURIComponent(jobId)}`
+      `${this.base(workspaceId)}/jobs/${encodeURIComponent(jobId)}?logFrom=${logFrom}`
     );
     return data.job;
   }
@@ -132,24 +151,32 @@ export class RemoteAgentRunnerService extends Service {
   }
 
   /**
-   * Poll a job to completion, yielding each status change.
+   * Poll a job to completion, yielding whenever its status changes or its
+   * transcript grows. Only the new part of the transcript is fetched each
+   * time.
    *
-   * On abort the job is cancelled server-side before returning: leaving a
-   * device working on a run whose tab has closed is the one failure mode
-   * that costs someone else's hardware.
+   * With `cancelOnAbort` (the default — the tab that started the run), an
+   * abort cancels the job server-side before returning: leaving a device
+   * working on a run whose tab has closed is the one failure mode that costs
+   * someone else's hardware. Someone merely viewing a run's log passes
+   * false, so closing the log does not stop the run.
    */
   async *watch(
     workspaceId: string,
     jobId: string,
-    signal: AbortSignal
-  ): AsyncIterable<RemoteJob> {
-    let last = '';
+    signal: AbortSignal,
+    { cancelOnAbort = true }: { cancelOnAbort?: boolean } = {}
+  ): AsyncIterable<RemoteJobUpdate> {
+    let lastStatus = '';
+    let logFrom = 0;
     try {
       while (!signal.aborted) {
-        const job = await this.get(workspaceId, jobId);
-        if (job.status !== last) {
-          last = job.status;
-          yield job;
+        const job = await this.get(workspaceId, jobId, logFrom);
+        const logDelta = job.log ?? '';
+        logFrom = job.logEnd ?? logFrom;
+        if (job.status !== lastStatus || logDelta) {
+          lastStatus = job.status;
+          yield { job, logDelta };
         }
         if (['done', 'error', 'cancelled'].includes(job.status)) {
           return;
@@ -157,7 +184,7 @@ export class RemoteAgentRunnerService extends Service {
         await new Promise(resolve => setTimeout(resolve, POLL_MS));
       }
     } finally {
-      if (signal.aborted) {
+      if (signal.aborted && cancelOnAbort) {
         await this.cancel(workspaceId, jobId).catch(() => {
           // Best effort: the lease expires on its own if this never lands.
         });

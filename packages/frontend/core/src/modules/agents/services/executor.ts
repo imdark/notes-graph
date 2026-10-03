@@ -6,6 +6,7 @@ import {
   type AgentHarness,
   DEFAULT_MAX_STEPS,
 } from '../stores/agents';
+import type { AgentRunLogsStore } from '../stores/agent-run-logs';
 import type { AgentRunsStore } from '../stores/agent-runs';
 import type { AgentContextService } from './context';
 import {
@@ -24,7 +25,11 @@ import {
 } from './tool-protocol';
 
 export type AgentEvent =
+  /** First event of every run: the record its log is kept under. */
+  | { type: 'started'; runId: string }
   | { type: 'step'; index: number }
+  /** Transcript text — what a person watching the run would want to see. */
+  | { type: 'log'; text: string }
   | { type: 'tool'; name: string; args: unknown }
   | { type: 'text'; delta: string }
   | { type: 'done'; output: string }
@@ -40,6 +45,28 @@ export interface AgentExecutor {
 
 /** A run that never answers must still end. */
 const WALL_CLOCK_MS = 120_000;
+/**
+ * A device gives a job 15 minutes (`run_job` in `wf agent serve`). The tab
+ * must outlast that, or a slow remote run is cancelled from here while the
+ * device is still making progress on it.
+ */
+const REMOTE_WALL_CLOCK_MS = 16 * 60_000;
+/** How much of a tool result goes into the transcript. */
+const LOG_TOOL_RESULT_CHARS = 400;
+
+/**
+ * Appended straight to the saved transcript rather than yielded: after a
+ * cancel the consumer may already have stopped listening.
+ */
+const CANCELLED_LINE = '■ cancelled\n';
+
+const logLine = (text: string): AgentEvent => ({
+  type: 'log',
+  text: text.endsWith('\n') ? text : `${text}\n`,
+});
+
+const clip = (text: string, limit: number) =>
+  text.length > limit ? `${text.slice(0, limit - 1)}…` : text;
 
 export class AgentAlreadyRunningError extends Error {
   constructor() {
@@ -64,6 +91,7 @@ export class AgentExecutorService extends Service implements AgentExecutor {
   constructor(
     private readonly contextService: AgentContextService,
     private readonly runsStore: AgentRunsStore,
+    private readonly runLogs: AgentRunLogsStore,
     private readonly localLLM: LocalLLMService,
     private readonly aiBackend: AiBackendService,
     private readonly fileTools: AgentFileToolsService,
@@ -112,6 +140,7 @@ export class AgentExecutorService extends Service implements AgentExecutor {
     for (let step = 0; step < maxSteps; step++) {
       if (signal.aborted) return;
       yield { type: 'step', index: step };
+      yield logLine(`── step ${step + 1}`);
 
       let reply = '';
       for await (const delta of this.localLLM.chatStream(messages, {
@@ -126,6 +155,7 @@ export class AgentExecutorService extends Service implements AgentExecutor {
       try {
         call = parseToolCall(reply);
       } catch (err) {
+        yield logLine(`✗ couldn't read the tool call: ${(err as Error).message}`);
         messages.push(
           { role: 'assistant', content: reply },
           { role: 'user', content: (err as Error).message }
@@ -136,12 +166,16 @@ export class AgentExecutorService extends Service implements AgentExecutor {
       // No tool block: this is the answer.
       if (!call) {
         const answer = stripToolBlocks(reply);
+        yield logLine(answer);
         yield { type: 'text', delta: answer };
         yield { type: 'done', output: answer };
         return;
       }
 
+      const thinking = stripToolBlocks(reply).trim();
+      if (thinking) yield logLine(thinking);
       yield { type: 'tool', name: call.name, args: call.args };
+      yield logLine(`→ ${call.name}  ${clip(JSON.stringify(call.args), 160)}`);
 
       let result: string;
       try {
@@ -149,6 +183,9 @@ export class AgentExecutorService extends Service implements AgentExecutor {
       } catch (err) {
         result = `Error: ${err instanceof Error ? err.message : String(err)}`;
       }
+      yield logLine(
+        `  ${result.startsWith('Error:') ? '✗' : '←'} ${clip(result.replace(/\s+/g, ' '), LOG_TOOL_RESULT_CHARS)}`
+      );
 
       messages.push(
         { role: 'assistant', content: reply },
@@ -158,6 +195,7 @@ export class AgentExecutorService extends Service implements AgentExecutor {
 
     // Out of steps with no answer — say so rather than returning silence.
     const message = `Stopped after ${maxSteps} steps without a final answer.`;
+    yield logLine(`■ ${message}`);
     yield { type: 'text', delta: message };
     yield { type: 'done', output: message };
   }
@@ -186,20 +224,31 @@ export class AgentExecutorService extends Service implements AgentExecutor {
     this.inFlight.add(key);
 
     const runId = this.runsStore.start(agent, target);
+    const harness = this.harnessFor(agent);
     // Cancellation has two sources — the caller's signal and the wall clock —
     // funnelled into one controller so the stream and the run record only ever
     // have to look at a single aborted flag.
     const controller = new AbortController();
-    const deadline = setTimeout(() => controller.abort(), WALL_CLOCK_MS);
+    const deadline = setTimeout(
+      () => controller.abort(),
+      harness === 'remote' ? REMOTE_WALL_CLOCK_MS : WALL_CLOCK_MS
+    );
     const onOuterAbort = () => controller.abort();
     signal.addEventListener('abort', onOuterAbort);
 
     let output = '';
     let steps = 0;
+    // The on-device transcript, saved when the run ends. A remote run's is
+    // kept by the server, so nothing accumulates here for it.
+    let log = '';
+    const record = (event: AgentEvent): AgentEvent => {
+      if (event.type === 'log' && harness !== 'remote') log += event.text;
+      return event;
+    };
+    yield { type: 'started', runId };
     try {
       // Fail loudly rather than silently running somewhere the agent wasn't
       // configured to run. `cloud` is still declared and unimplemented.
-      const harness = this.harnessFor(agent);
       if (harness !== 'on-device' && harness !== 'remote') {
         throw new Error(
           `This agent is set to run on ${harness}, which isn't available here yet. Switch it to on-device in Settings → Agents.`
@@ -209,6 +258,7 @@ export class AgentExecutorService extends Service implements AgentExecutor {
 
       if (harness === 'remote') {
         for await (const event of this.runRemote(
+          runId,
           agent,
           context.text,
           controller.signal
@@ -230,6 +280,7 @@ export class AgentExecutorService extends Service implements AgentExecutor {
       const useTools = fileTools.length > 0 && this.fileTools.available;
 
       if (useTools) {
+        yield record(logLine(`▶ ${agent.name} on-device, with ${fileTools.join(', ')}`));
         for await (const event of this.runWithTools(
           agent,
           context.text,
@@ -239,10 +290,11 @@ export class AgentExecutorService extends Service implements AgentExecutor {
           if (event.type === 'step') steps = event.index + 1;
           if (event.type === 'text') output += event.delta;
           if (event.type === 'done') output = event.output;
-          yield event;
+          yield record(event);
         }
 
         if (controller.signal.aborted) {
+          log += CANCELLED_LINE;
           this.runsStore.finish(runId, { status: 'cancelled', steps });
           return;
         }
@@ -251,6 +303,9 @@ export class AgentExecutorService extends Service implements AgentExecutor {
       }
 
       yield { type: 'step', index: 0 };
+      yield record(
+        logLine(`▶ ${agent.name} on-device · reading ${context.text.length} characters`)
+      );
 
       const messages = [
         {
@@ -272,10 +327,13 @@ export class AgentExecutorService extends Service implements AgentExecutor {
         model: agent.model,
       })) {
         output += delta;
+        log += delta;
         yield { type: 'text', delta };
       }
+      if (output && !output.endsWith('\n')) log += '\n';
 
       if (controller.signal.aborted) {
+        log += CANCELLED_LINE;
         this.runsStore.finish(runId, { status: 'cancelled', steps: 1 });
         return;
       }
@@ -286,13 +344,20 @@ export class AgentExecutorService extends Service implements AgentExecutor {
       // An abort surfaces as a throw from the stream; that's a cancel, not a
       // failure, and shouldn't be recorded as one.
       if (controller.signal.aborted) {
+        if (harness !== 'remote') log += CANCELLED_LINE;
         this.runsStore.finish(runId, { status: 'cancelled', steps: 1 });
         return;
       }
       const message = err instanceof Error ? err.message : String(err);
+      yield record(logLine(`✗ ${message}`));
       this.runsStore.finish(runId, { status: 'error', steps: 1, error: message });
       yield { type: 'error', message };
     } finally {
+      if (log) {
+        this.runLogs.put(runId, log).catch(() => {
+          // Losing a transcript must not fail the run it describes.
+        });
+      }
       clearTimeout(deadline);
       signal.removeEventListener('abort', onOuterAbort);
       this.inFlight.delete(key);
@@ -308,6 +373,7 @@ export class AgentExecutorService extends Service implements AgentExecutor {
    * than token deltas.
    */
   private async *runRemote(
+    runId: string,
     agent: Agent,
     context: string,
     signal: AbortSignal
@@ -332,10 +398,16 @@ export class AgentExecutorService extends Service implements AgentExecutor {
       tools: agent.tools,
       maxSteps: agent.maxSteps,
     });
+    this.runsStore.attachRemote(runId, job.id, agent.deviceKey);
 
     yield { type: 'text', delta: `Queued on ${agent.deviceKey}…\n` };
 
-    for await (const update of this.remoteRunner.watch(workspaceId, job.id, signal)) {
+    for await (const { job: update, logDelta } of this.remoteRunner.watch(
+      workspaceId,
+      job.id,
+      signal
+    )) {
+      if (logDelta) yield { type: 'log', text: logDelta };
       if (update.status === 'running') {
         yield { type: 'step', index: Math.max(0, update.steps - 1) };
         continue;

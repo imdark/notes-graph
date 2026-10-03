@@ -163,3 +163,60 @@ export const sessionActions = style({
   display: 'flex',
   gap: 8,
 });
+
+export const runRowButton = style([
+  runRow,
+  {
+    width: '100%',
+    border: 'none',
+    background: 'transparent',
+    textAlign: 'left',
+    cursor: 'pointer',
+    selectors: {
+      '&:hover': { background: cssVarV2('layer/background/hoverOverlay') },
+    },
+  },
+]);
+
+export const logDialogBody = style({
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 10,
+  minHeight: 0,
+});
+
+export const attachRow = style({
+  display: 'flex',
+  alignItems: 'center',
+  gap: 8,
+  flexWrap: 'wrap',
+});
+
+export const attachCommand = style({
+  fontFamily: cssVar('fontMonoFamily'),
+  fontSize: cssVar('fontXs'),
+  padding: '2px 6px',
+  borderRadius: 4,
+  background: cssVarV2('layer/background/secondary'),
+  color: cssVarV2('text/primary'),
+  userSelect: 'all',
+});
+
+export const logScroll = style({
+  height: '55vh',
+  overflow: 'auto',
+  borderRadius: 8,
+  border: `1px solid ${cssVarV2('layer/insideBorder/border')}`,
+  background: cssVarV2('layer/background/secondary'),
+});
+
+export const logText = style({
+  margin: 0,
+  padding: '10px 12px',
+  fontFamily: cssVar('fontMonoFamily'),
+  fontSize: cssVar('fontXs'),
+  lineHeight: 1.55,
+  color: cssVarV2('text/primary'),
+  whiteSpace: 'pre-wrap',
+  wordBreak: 'break-word',
+});
