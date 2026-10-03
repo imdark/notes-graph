@@ -123,6 +123,9 @@ function sliceLog(job: InventoryJob, from: number) {
 
 const MAX_INSTRUCTIONS = 20_000;
 const MAX_QUESTION = 4_000;
+// A permission's detail is the tool input, which the page renders as a diff:
+// clipped JSON no longer parses, so leave room for a whole file.
+const MAX_DETAIL = 200_000;
 const MAX_ANSWER = 20_000;
 const MAX_CONTEXT = 200_000;
 
@@ -275,7 +278,7 @@ export class InventoryJobService {
     const question = await this.models.inventoryJob.ask(jobId, {
       kind,
       text: text.slice(0, MAX_QUESTION),
-      detail: body.detail ? String(body.detail).slice(0, MAX_QUESTION) : null,
+      detail: body.detail ? String(body.detail).slice(0, MAX_DETAIL) : null,
     });
     this.logger.log(`job ${jobId} asked a ${kind}`);
     return toQuestionDto(question);
