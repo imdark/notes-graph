@@ -22,7 +22,9 @@ import {
   CLAUDE_CODE_MODEL,
   DEFAULT_MAX_STEPS,
   FILE_TOOLS,
+  isDeviceClaudeModel,
   RemoteAgentRunnerService,
+  WORKFLOW_MODEL,
 } from '@notesgraph/core/modules/agents';
 import {
   AIModelService,
@@ -79,18 +81,25 @@ const toolByName = (name: string): ToolChoice | undefined =>
   ALL_TOOLS.find(tool => tool.name === name);
 
 /**
- * What a remote agent can run as. Blank is whatever the device is set up to
- * use (`ai.provider` in its wf config).
+ * The harness a remote agent runs in, shown as "Harness" and saved as the
+ * agent's `model`. Blank is whatever the device is set up to use
+ * (`ai.provider` in its wf config).
  */
-const REMOTE_MODELS = [
+const REMOTE_HARNESSES = [
   {
     id: CLAUDE_CODE_MODEL,
     name: 'Claude Code',
     category: 'asks you, remembers in your notes',
   },
+  {
+    id: WORKFLOW_MODEL,
+    name: 'Workflow',
+    category: 'Claude Code as wf start + wf ai: ticket, branch, worktree',
+  },
 ];
 
-const HARNESSES: {
+/** Where an agent runs ("Runs on"), saved as the agent's `harness`. */
+const ENVIRONMENTS: {
   value: AgentHarness | undefined;
   label: string;
   note: string;
@@ -199,11 +208,11 @@ export const AgentEditor = ({
   // Follow the agent's own harness, not the workspace's backend setting —
   // picking "on-device" should offer on-device models even when the workspace
   // is pointed at the cloud.
-  const availableModels =
+  const availableHarnesses =
     harness === 'on-device'
       ? LOCAL_MODELS
       : harness === 'remote'
-        ? REMOTE_MODELS
+        ? REMOTE_HARNESSES
         : backendModels;
 
   // Tools not yet picked, so the menu only ever offers something new.
@@ -234,9 +243,10 @@ export const AgentEditor = ({
       // Only meaningful for a remote agent; don't leave a stale key behind
       // on one that has been switched back to running locally.
       deviceKey: harness === 'remote' ? deviceKey : undefined,
-      // Claude Code only exists on a device; don't carry it to a runtime
-      // that would read it as an unknown model name.
-      model: model === CLAUDE_CODE_MODEL && harness !== 'remote' ? undefined : model,
+      // Claude Code and Workflow only exist on a device; don't carry them to
+      // a runtime that would read them as an unknown model name.
+      model:
+        isDeviceClaudeModel(model) && harness !== 'remote' ? undefined : model,
       tools,
       targets,
       output: 'panel',
@@ -280,277 +290,281 @@ export const AgentEditor = ({
             actually overflows. */}
         <Scrollable.Root type="auto" className={styles.editorScrollRoot}>
           <Scrollable.Viewport className={styles.editorBody}>
-          <div className={styles.field}>
-            <span className={styles.label}>Name</span>
-            <Input
-              value={name}
-              onChange={setName}
-              placeholder="Break into subtasks"
-              data-testid="agent-editor-name"
-            />
-          </div>
+            <div className={styles.field}>
+              <span className={styles.label}>Name</span>
+              <Input
+                value={name}
+                onChange={setName}
+                placeholder="Break into subtasks"
+                data-testid="agent-editor-name"
+              />
+            </div>
 
-          <div className={styles.field}>
-            <span className={styles.label}>Icon</span>
-            <div className={styles.iconRow} data-testid="agent-editor-icon">
-              {/* The icon itself stays on screen; the pen is what opens the
+            <div className={styles.field}>
+              <span className={styles.label}>Icon</span>
+              <div className={styles.iconRow} data-testid="agent-editor-icon">
+                {/* The icon itself stays on screen; the pen is what opens the
                 picker, so the current choice is always visible rather than
                 hidden behind a button you have to press to see. */}
-              <span className={styles.iconPreview}>
-                <IconRenderer data={icon} fallback={<ToolIcon />} />
-              </span>
-              <Menu
-                rootOptions={{
-                  open: pickerOpen,
-                  onOpenChange: setPickerOpen,
-                  modal: true,
-                }}
-                contentOptions={{
-                  side: 'bottom',
-                  align: 'start',
-                  sideOffset: 4,
-                }}
-                items={
-                  <div
-                    onWheel={e => e.stopPropagation()}
-                    style={{ display: 'flex', alignItems: 'stretch' }}
-                  >
-                    <IconPicker
-                      onSelect={data => {
-                        setIcon(data);
-                        setPickerOpen(false);
-                      }}
-                    />
-                    <AiIconGenerator
-                      subject={name.trim() || 'an assistant'}
-                      onSelect={setIcon}
-                      onApplied={() => setPickerOpen(false)}
-                    />
-                  </div>
-                }
-              >
-                <Button
-                  variant="plain"
-                  prefix={<EditIcon />}
-                  aria-label={icon ? 'Change icon' : 'Choose icon'}
-                  title={icon ? 'Change icon' : 'Choose icon'}
-                  data-testid="agent-editor-icon-edit"
-                />
-              </Menu>
-              {icon ? (
-                <Button variant="plain" onClick={() => setIcon(undefined)}>
-                  Reset
-                </Button>
-              ) : null}
-            </div>
-            <span className={styles.hint}>
-              Same picker as a note's icon — emoji, a built-in icon, or one
-              generated with AI.
-            </span>
-          </div>
-
-          <div className={styles.field}>
-            <span className={styles.label}>Instructions</span>
-            <textarea
-              className={styles.textarea}
-              value={instructions}
-              onChange={e => setInstructions(e.target.value)}
-              placeholder="Split this task into concrete subtasks. Keep each one to a single action."
-              data-testid="agent-editor-instructions"
-            />
-            <span className={styles.hint}>
-              The block or note being run against is supplied automatically.
-            </span>
-          </div>
-
-          <div className={styles.field}>
-            <span className={styles.label}>Can be run on</span>
-            <div className={styles.checkGrid}>
-              {TARGETS.map(({ kind, label }) => (
-                <label key={kind} className={styles.check}>
-                  <Switch
-                    checked={targets.includes(kind)}
-                    onChange={() => setTargets(prev => toggle(prev, kind))}
-                  />
-                  {label}
-                </label>
-              ))}
-            </div>
-          </div>
-
-          <div className={styles.field}>
-            <span className={styles.label}>Tools</span>
-            <div className={styles.tagInput} data-testid="agent-editor-tools">
-              {tools.map(toolName => {
-                const tool = toolByName(toolName);
-                return (
-                  <span
-                    key={toolName}
-                    className={styles.tag}
-                    data-mutates={tool?.mutates ? 'true' : 'false'}
-                    title={tool?.desc ?? toolName}
-                  >
-                    {toolName}
-                    <button
-                      type="button"
-                      className={styles.tagRemove}
-                      aria-label={`Remove ${toolName}`}
-                      onClick={() =>
-                        setTools(prev => prev.filter(t => t !== toolName))
-                      }
-                    >
-                      ×
-                    </button>
-                  </span>
-                );
-              })}
-              {unusedTools.length > 0 && (
+                <span className={styles.iconPreview}>
+                  <IconRenderer data={icon} fallback={<ToolIcon />} />
+                </span>
                 <Menu
+                  rootOptions={{
+                    open: pickerOpen,
+                    onOpenChange: setPickerOpen,
+                    modal: true,
+                  }}
                   contentOptions={{
                     side: 'bottom',
                     align: 'start',
                     sideOffset: 4,
                   }}
-                  items={unusedTools.map(tool => (
-                    <MenuItem
-                      key={tool.name}
-                      onSelect={() => setTools(prev => [...prev, tool.name])}
+                  items={
+                    <div
+                      onWheel={e => e.stopPropagation()}
+                      style={{ display: 'flex', alignItems: 'stretch' }}
                     >
-                      <span className={styles.tagMenuItem}>
-                        <span>
-                          {tool.name}
-                          {tool.mutates ? ' · changes files' : ''}
-                        </span>
-                        <span className={styles.tagMenuDesc}>
-                          {tool.group} — {tool.desc}
-                        </span>
-                      </span>
-                    </MenuItem>
-                  ))}
+                      <IconPicker
+                        onSelect={data => {
+                          setIcon(data);
+                          setPickerOpen(false);
+                        }}
+                      />
+                      <AiIconGenerator
+                        subject={name.trim() || 'an assistant'}
+                        onSelect={setIcon}
+                        onApplied={() => setPickerOpen(false)}
+                      />
+                    </div>
+                  }
                 >
-                  <button type="button" className={styles.tagAdd}>
-                    + Add tool
-                  </button>
-                </Menu>
-              )}
-            </div>
-            <span className={styles.hint}>
-              Note tools are read-only. Folder-file tools need a bound folder,
-              never reach outside it, and keep a backup before any overwrite or
-              delete.
-            </span>
-          </div>
-
-          <div className={styles.field}>
-            <span className={styles.label}>Runs on</span>
-            <div className={styles.checkGrid}>
-              {HARNESSES.map(({ value, label, note }) => (
-                <label key={label} className={styles.check} title={note}>
-                  <input
-                    type="radio"
-                    name="agent-harness"
-                    checked={harness === value}
-                    onChange={() => setHarness(value)}
-                    data-testid={`agent-editor-harness-${value ?? 'default'}`}
+                  <Button
+                    variant="plain"
+                    prefix={<EditIcon />}
+                    aria-label={icon ? 'Change icon' : 'Choose icon'}
+                    title={icon ? 'Change icon' : 'Choose icon'}
+                    data-testid="agent-editor-icon-edit"
                   />
-                  {label}
-                </label>
-              ))}
+                </Menu>
+                {icon ? (
+                  <Button variant="plain" onClick={() => setIcon(undefined)}>
+                    Reset
+                  </Button>
+                ) : null}
+              </div>
+              <span className={styles.hint}>
+                Same picker as a note's icon — emoji, a built-in icon, or one
+                generated with AI.
+              </span>
             </div>
-            <span className={styles.hint}>
-              On-device runs in this browser. Remote runs on a machine you have
-              registered in the device inventory. Cloud needs the server to
-              offer Copilot, which this one doesn't yet.
-            </span>
-          </div>
 
-          {harness === 'remote' ? (
             <div className={styles.field}>
-              <span className={styles.label}>Device</span>
-              <select
-                className={styles.select}
-                value={deviceKey ?? ''}
-                onChange={e => setDeviceKey(e.target.value || undefined)}
-                data-testid="agent-editor-device"
-              >
-                <option value="">Pick a device…</option>
-                {/* A device already chosen but no longer listed — offline, or
+              <span className={styles.label}>Instructions</span>
+              <textarea
+                className={styles.textarea}
+                value={instructions}
+                onChange={e => setInstructions(e.target.value)}
+                placeholder="Split this task into concrete subtasks. Keep each one to a single action."
+                data-testid="agent-editor-instructions"
+              />
+              <span className={styles.hint}>
+                The block or note being run against is supplied automatically.
+              </span>
+            </div>
+
+            <div className={styles.field}>
+              <span className={styles.label}>Can be run on</span>
+              <div className={styles.checkGrid}>
+                {TARGETS.map(({ kind, label }) => (
+                  <label key={kind} className={styles.check}>
+                    <Switch
+                      checked={targets.includes(kind)}
+                      onChange={() => setTargets(prev => toggle(prev, kind))}
+                    />
+                    {label}
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <div className={styles.field}>
+              <span className={styles.label}>Tools</span>
+              <div className={styles.tagInput} data-testid="agent-editor-tools">
+                {tools.map(toolName => {
+                  const tool = toolByName(toolName);
+                  return (
+                    <span
+                      key={toolName}
+                      className={styles.tag}
+                      data-mutates={tool?.mutates ? 'true' : 'false'}
+                      title={tool?.desc ?? toolName}
+                    >
+                      {toolName}
+                      <button
+                        type="button"
+                        className={styles.tagRemove}
+                        aria-label={`Remove ${toolName}`}
+                        onClick={() =>
+                          setTools(prev => prev.filter(t => t !== toolName))
+                        }
+                      >
+                        ×
+                      </button>
+                    </span>
+                  );
+                })}
+                {unusedTools.length > 0 && (
+                  <Menu
+                    contentOptions={{
+                      side: 'bottom',
+                      align: 'start',
+                      sideOffset: 4,
+                    }}
+                    items={unusedTools.map(tool => (
+                      <MenuItem
+                        key={tool.name}
+                        onSelect={() => setTools(prev => [...prev, tool.name])}
+                      >
+                        <span className={styles.tagMenuItem}>
+                          <span>
+                            {tool.name}
+                            {tool.mutates ? ' · changes files' : ''}
+                          </span>
+                          <span className={styles.tagMenuDesc}>
+                            {tool.group} — {tool.desc}
+                          </span>
+                        </span>
+                      </MenuItem>
+                    ))}
+                  >
+                    <button type="button" className={styles.tagAdd}>
+                      + Add tool
+                    </button>
+                  </Menu>
+                )}
+              </div>
+              <span className={styles.hint}>
+                Note tools are read-only. Folder-file tools need a bound folder,
+                never reach outside it, and keep a backup before any overwrite
+                or delete.
+              </span>
+            </div>
+
+            <div className={styles.field}>
+              <span className={styles.label}>Runs on</span>
+              <div className={styles.checkGrid}>
+                {ENVIRONMENTS.map(({ value, label, note }) => (
+                  <label key={label} className={styles.check} title={note}>
+                    <input
+                      type="radio"
+                      name="agent-harness"
+                      checked={harness === value}
+                      onChange={() => setHarness(value)}
+                      data-testid={`agent-editor-harness-${value ?? 'default'}`}
+                    />
+                    {label}
+                  </label>
+                ))}
+              </div>
+              <span className={styles.hint}>
+                On-device runs in this browser. Remote runs on a machine you
+                have registered in the device inventory. Cloud needs the server
+                to offer Copilot, which this one doesn't yet.
+              </span>
+            </div>
+
+            {harness === 'remote' ? (
+              <div className={styles.field}>
+                <span className={styles.label}>Device</span>
+                <select
+                  className={styles.select}
+                  value={deviceKey ?? ''}
+                  onChange={e => setDeviceKey(e.target.value || undefined)}
+                  data-testid="agent-editor-device"
+                >
+                  <option value="">Pick a device…</option>
+                  {/* A device already chosen but no longer listed — offline, or
                     its agent opt-in was revoked — stays selectable so opening
                     the editor can't silently clear it. */}
-                {deviceKey && !devices.some(d => d.key === deviceKey) ? (
-                  <option value={deviceKey}>{deviceKey} (unavailable)</option>
-                ) : null}
-                {devices.map(device => (
-                  <option key={device.key} value={device.key}>
-                    {device.name || device.key}
-                    {device.state && device.state !== 'online'
-                      ? ` · ${device.state}`
-                      : ''}
+                  {deviceKey && !devices.some(d => d.key === deviceKey) ? (
+                    <option value={deviceKey}>{deviceKey} (unavailable)</option>
+                  ) : null}
+                  {devices.map(device => (
+                    <option key={device.key} value={device.key}>
+                      {device.name || device.key}
+                      {device.state && device.state !== 'online'
+                        ? ` · ${device.state}`
+                        : ''}
+                    </option>
+                  ))}
+                </select>
+                <span className={styles.hint}>
+                  {devicesError
+                    ? `Couldn't load devices: ${devicesError}`
+                    : devices.length === 0
+                      ? 'No devices accept agent work yet. Register one with ' +
+                        '`wf deploy add <user>@<host> --agent`.'
+                      : 'The device claims the run and reports back; nothing ' +
+                        'connects to it from here.'}
+                </span>
+              </div>
+            ) : null}
+
+            <div className={styles.field}>
+              <span className={styles.label}>Harness</span>
+              <select
+                className={styles.select}
+                value={model ?? ''}
+                onChange={e => setModel(e.target.value || undefined)}
+                data-testid="agent-editor-model"
+              >
+                <option value="">Default for this runtime</option>
+                {availableHarnesses.map(m => (
+                  <option key={m.id} value={m.id}>
+                    {m.name}
+                    {m.category ? ` · ${m.category}` : ''}
                   </option>
                 ))}
               </select>
               <span className={styles.hint}>
-                {devicesError
-                  ? `Couldn't load devices: ${devicesError}`
-                  : devices.length === 0
-                    ? 'No devices accept agent work yet. Register one with ' +
-                      '`wf deploy add <user>@<host> --agent`.'
-                    : 'The device claims the run and reports back; nothing ' +
-                      'connects to it from here.'}
+                {harness === 'remote'
+                  ? model === CLAUDE_CODE_MODEL
+                    ? 'Runs the claude CLI on the device with your notes as tools. ' +
+                      'When it needs a fact or a permission it asks you here, then ' +
+                      'saves the answer to your notes so it does not ask again.'
+                    : model === WORKFLOW_MODEL
+                      ? 'The same Claude Code, started like `wf start` + `wf ai`: ' +
+                        'a ticket in the device’s task backend, its own branch and ' +
+                        'worktree, and the project’s Claude account and skills.'
+                      : "Default runs the device's configured AI provider."
+                  : 'A different on-device model is downloaded the first time it runs.'}
               </span>
             </div>
-          ) : null}
 
-          <div className={styles.field}>
-            <span className={styles.label}>Model</span>
-            <select
-              className={styles.select}
-              value={model ?? ''}
-              onChange={e => setModel(e.target.value || undefined)}
-              data-testid="agent-editor-model"
-            >
-              <option value="">Default for this runtime</option>
-              {availableModels.map(m => (
-                <option key={m.id} value={m.id}>
-                  {m.name}
-                  {m.category ? ` · ${m.category}` : ''}
-                </option>
-              ))}
-            </select>
-            <span className={styles.hint}>
-              {harness === 'remote'
-                ? model === CLAUDE_CODE_MODEL
-                  ? 'Runs the claude CLI on the device with your notes as tools. ' +
-                    'When it needs a fact or a permission it asks you here, then ' +
-                    'saves the answer to your notes so it does not ask again.'
-                  : "Default runs the device's configured AI provider."
-                : 'A different on-device model is downloaded the first time it runs.'}
-            </span>
-          </div>
-
-          {/* Claude Code has no step limit: it counts every tool call as a
-              turn, and the run's time limit bounds it instead. */}
-          {harness === 'remote' && model === CLAUDE_CODE_MODEL ? null : (
-            <div className={styles.field}>
-              <span className={styles.label}>Step limit</span>
-              <Input
-                value={String(maxSteps)}
-                onChange={value => {
-                  const parsed = Number.parseInt(value, 10);
-                  setMaxSteps(
-                    Number.isFinite(parsed) && parsed > 0
-                      ? parsed
-                      : DEFAULT_MAX_STEPS
-                  );
-                }}
-                data-testid="agent-editor-max-steps"
-              />
-              <span className={styles.hint}>
-                How many times the agent may call a tool before it has to
-                answer.
-              </span>
-            </div>
-          )}
+            {/* Claude Code (and Workflow) have no step limit: they count every
+              tool call as a turn, and the run's time limit bounds them. */}
+            {harness === 'remote' && isDeviceClaudeModel(model) ? null : (
+              <div className={styles.field}>
+                <span className={styles.label}>Step limit</span>
+                <Input
+                  value={String(maxSteps)}
+                  onChange={value => {
+                    const parsed = Number.parseInt(value, 10);
+                    setMaxSteps(
+                      Number.isFinite(parsed) && parsed > 0
+                        ? parsed
+                        : DEFAULT_MAX_STEPS
+                    );
+                  }}
+                  data-testid="agent-editor-max-steps"
+                />
+                <span className={styles.hint}>
+                  How many times the agent may call a tool before it has to
+                  answer.
+                </span>
+              </div>
+            )}
           </Scrollable.Viewport>
           <Scrollable.Scrollbar />
         </Scrollable.Root>
