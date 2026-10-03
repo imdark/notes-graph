@@ -86,6 +86,7 @@ dependencies {
     implementation project(':service')
 
     implementation libs.androidx.appcompat
+    implementation libs.androidx.biometric
     implementation libs.androidx.browser
     implementation libs.timber
 
@@ -104,6 +105,7 @@ dependencies {
     implementation libs.androidx.compose.ui.viewbinding
     implementation libs.androidx.compose.ui.googlefonts
     implementation libs.androidx.lifecycle.viewModelCompose
+    implementation libs.androidx.lifecycle.process
     implementation libs.androidx.lifecycle.runtime.compose
     implementation libs.androidx.navigation.compose
     debugImplementation composeBom

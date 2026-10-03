@@ -27,6 +27,7 @@ class NotesGraphApp : Application() {
         Timber.i("Application started.")
         // init capacitor config
         CapacitorConfig.init(baseContext)
+        AppLock.install()
         // init crashlytics
         Firebase.crashlytics.setCustomKeys {
             key("notesgraph_version", CapacitorConfig.getNotesGraphVersion())

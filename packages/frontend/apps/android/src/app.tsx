@@ -19,6 +19,7 @@ import { VirtualKeyboardProvider } from '@notesgraph/core/mobile/modules/virtual
 import { router } from '@notesgraph/core/mobile/router';
 import { configureCommonModules } from '@notesgraph/core/modules';
 import { AIButtonProvider } from '@notesgraph/core/modules/ai-button';
+import { AppLockProvider } from '@notesgraph/core/modules/app-lock';
 import {
   AuthProvider,
   AuthService,
@@ -57,6 +58,7 @@ import { Suspense, useEffect } from 'react';
 import { RouterProvider } from 'react-router-dom';
 
 import { AIButton } from './plugins/ai-button';
+import { AppLock } from './plugins/app-lock';
 import { Auth } from './plugins/auth';
 import { HashCash } from './plugins/hashcash';
 import { NbStoreNativeDBApis } from './plugins/nbstore';
@@ -239,6 +241,11 @@ framework.impl(AIButtonProvider, {
   dismissAIButton: () => {
     return AIButton.dismiss();
   },
+});
+
+framework.impl(AppLockProvider, {
+  getState: () => AppLock.getState(),
+  setEnabled: enabled => AppLock.setEnabled({ enabled }),
 });
 
 // ------ some apis for native ------

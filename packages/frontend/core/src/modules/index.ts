@@ -10,6 +10,7 @@ import {
   configureAIToolsConfigModule,
 } from './ai-button';
 import { configureAgentsModule } from './agents';
+import { configureAppLockModule } from './app-lock';
 import { configureFolderSyncModule } from './folder-sync';
 import { configureAiLocalModule } from './ai-local';
 import { configureAppSidebarModule } from './app-sidebar';
@@ -146,6 +147,7 @@ export function configureCommonModules(framework: Framework) {
   configureAIReasoningModule(framework);
   configureAIPlaygroundModule(framework);
   configureAIButtonModule(framework);
+  configureAppLockModule(framework);
   configureAIDraftModule(framework);
   configureAIToolsConfigModule(framework);
   configureAIModelModule(framework);

@@ -2,11 +2,19 @@ package app.notesgraph.pro
 
 import android.content.Intent
 import android.content.res.ColorStateList
+import android.content.res.Configuration
+import android.graphics.Color
+import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import android.view.Gravity
 import android.view.View
+import android.view.ViewGroup
 import android.webkit.WebSettings
+import android.widget.Button
+import android.widget.LinearLayout
+import android.widget.TextView
+import androidx.activity.OnBackPressedCallback
 import androidx.coordinatorlayout.widget.CoordinatorLayout
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.drawable.DrawableCompat
@@ -17,6 +25,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.vectordrawable.graphics.drawable.VectorDrawableCompat
 import app.notesgraph.pro.ai.AIActivity
 import app.notesgraph.pro.plugin.AIButtonPlugin
+import app.notesgraph.pro.plugin.AppLockPlugin
 import app.notesgraph.pro.plugin.NotesGraphThemePlugin
 import app.notesgraph.pro.plugin.AuthPlugin
 import app.notesgraph.pro.plugin.HashCashPlugin
@@ -53,6 +62,7 @@ class MainActivity : BridgeActivity(), AIButtonPlugin.Callback, NotesGraphThemeP
             listOf(
                 NotesGraphThemePlugin::class.java,
                 AIButtonPlugin::class.java,
+                AppLockPlugin::class.java,
                 AuthPlugin::class.java,
                 HashCashPlugin::class.java,
                 NbStorePlugin::class.java,
@@ -90,6 +100,122 @@ class MainActivity : BridgeActivity(), AIButtonPlugin.Callback, NotesGraphThemeP
         ViewCompat.setOnApplyWindowInsetsListener(window.decorView) { v, insets ->
             navHeight = px2dp(insets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom)
             ViewCompat.onApplyWindowInsets(v, insets)
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            setRecentsScreenshotEnabled(!AppLock.isEnabled(this))
+        }
+        // While locked, back leaves the app rather than navigating the
+        // WebView history behind the cover.
+        onBackPressedDispatcher.addCallback(this, lockBackCallback)
+    }
+
+    // ------ app lock (see AppLock) ------
+
+    private val lockBackCallback = object : OnBackPressedCallback(false) {
+        override fun handleOnBackPressed() {
+            moveTaskToBack(true)
+        }
+    }
+
+    /**
+     * Prompt automatically once per lock, not on every resume: dismissing the
+     * PIN screen resumes this activity, and re-prompting then would trap the
+     * user in a loop. After that, the Unlock button asks again.
+     */
+    private var promptedThisLock = false
+
+    private val lockLabel: TextView by lazy {
+        TextView(this).apply {
+            setText(R.string.app_lock_locked)
+            textSize = 18f
+            gravity = Gravity.CENTER
+        }
+    }
+
+    private val lockCover: View by lazy {
+        LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            // swallow touches so nothing reaches the notes underneath
+            isClickable = true
+            isFocusable = true
+            addView(lockLabel)
+            addView(Button(this@MainActivity).apply {
+                setText(R.string.app_lock_unlock)
+                setOnClickListener { promptUnlock() }
+            }, LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { topMargin = dp2px(16) })
+        }
+    }
+
+    /**
+     * The app's colour mode, not the system's - they can differ. On a first
+     * cold start nothing is saved yet, so this is re-applied when the web layer
+     * reports its theme, which can arrive while the cover is already up.
+     */
+    private fun applyLockCoverColors() {
+        val systemDark = (resources.configuration.uiMode and
+            Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
+        val dark = AppLock.isDark(this, systemDark)
+        lockCover.setBackgroundColor(
+            ContextCompat.getColor(
+                this,
+                if (dark) R.color.layer_background_primary_dark
+                else R.color.layer_background_primary
+            )
+        )
+        lockLabel.setTextColor(if (dark) Color.WHITE else Color.BLACK)
+    }
+
+    private fun showLockCover() {
+        applyLockCoverColors()
+        if (lockCover.parent == null) {
+            (window.decorView as ViewGroup).addView(
+                lockCover,
+                ViewGroup.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT
+                )
+            )
+        }
+        lockCover.bringToFront()
+        lockBackCallback.isEnabled = true
+    }
+
+    private fun hideLockCover() {
+        (lockCover.parent as? ViewGroup)?.removeView(lockCover)
+        lockBackCallback.isEnabled = false
+    }
+
+    private fun promptUnlock() {
+        AppLock.authenticate(this) { ok ->
+            if (ok) hideLockCover()
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (!AppLock.needsUnlock(this)) {
+            hideLockCover()
+            return
+        }
+        showLockCover()
+        if (!promptedThisLock && !AppLock.prompting) {
+            promptedThisLock = true
+            promptUnlock()
+        }
+    }
+
+    override fun onStop() {
+        super.onStop()
+        // Cover on the way out, so the notes are not the first frame shown on
+        // return before onResume decides whether to lock; a return within the
+        // grace period lifts it again at once.
+        if (AppLock.isEnabled(this) && !AppLock.prompting) {
+            showLockCover()
+            promptedThisLock = false
         }
     }
 
@@ -187,7 +313,9 @@ class MainActivity : BridgeActivity(), AIButtonPlugin.Callback, NotesGraphThemeP
     }
 
     override fun onThemeChanged(darkMode: Boolean) {
+        AppLock.setDark(this, darkMode)
         lifecycleScope.launch {
+            if (lockCover.parent != null) applyLockCoverColors()
             fab.backgroundTintList = ColorStateList.valueOf(
                 ContextCompat.getColor(
                     this@MainActivity,

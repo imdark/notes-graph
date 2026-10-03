@@ -2592,5 +2592,8 @@
   "com.notesgraph.import.orgzly.tooltip": "Pick your Orgzly sync folder — each .org notebook is imported, its outline becoming headings and TODO/DONE items becoming checkboxes.",
   "com.notesgraph.schedule.todo.inbox": "Inbox",
   "com.notesgraph.integration.calendar.add-note": "Add note",
-  "com.notesgraph.integration.calendar.open-note": "Open note"
+  "com.notesgraph.integration.calendar.open-note": "Open note",
+  "com.notesgraph.mobile.setting.security.title": "Security",
+  "com.notesgraph.mobile.setting.security.app-lock": "Lock app with device PIN or biometrics",
+  "com.notesgraph.mobile.setting.security.app-lock.unavailable": "Set a screen lock on your phone to use this."
 }
