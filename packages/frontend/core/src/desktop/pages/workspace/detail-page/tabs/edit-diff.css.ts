@@ -1,6 +1,6 @@
 import { cssVar } from '@toeverything/theme';
 import { cssVarV2 } from '@toeverything/theme/v2';
-import { style } from '@vanilla-extract/css';
+import { globalStyle, style } from '@vanilla-extract/css';
 
 // Tints that read on both the light and dark themes.
 const removedBg = 'rgba(235, 87, 87, 0.12)';
@@ -63,12 +63,12 @@ export const columnsHeader = style({
   letterSpacing: '0.06em',
   color: cssVarV2('text/tertiary'),
   borderBottom: `1px solid ${cssVarV2('layer/insideBorder/border')}`,
-  selectors: {
-    '& > span': { padding: '2px 8px' },
-    '& > span + span': {
-      borderLeft: `1px solid ${cssVarV2('layer/insideBorder/border')}`,
-    },
-  },
+});
+
+// Child selectors aren't allowed in `selectors` (it must target `&` itself).
+globalStyle(`${columnsHeader} > span`, { padding: '2px 8px' });
+globalStyle(`${columnsHeader} > span + span`, {
+  borderLeft: `1px solid ${cssVarV2('layer/insideBorder/border')}`,
 });
 
 export const row = style({
