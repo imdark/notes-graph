@@ -48,7 +48,7 @@ const RunRow = ({
             ? 'cancelled'
             : run.status === 'running'
               ? 'running…'
-              : (run.summary || 'done')}
+              : run.summary || 'done'}
       </span>
     </div>
     <span className={styles.runWhen}>{relativeTime(run.startedAt)}</span>
