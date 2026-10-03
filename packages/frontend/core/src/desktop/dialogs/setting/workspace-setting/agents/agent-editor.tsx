@@ -528,24 +528,29 @@ export const AgentEditor = ({
             </span>
           </div>
 
-          <div className={styles.field}>
-            <span className={styles.label}>Step limit</span>
-            <Input
-              value={String(maxSteps)}
-              onChange={value => {
-                const parsed = Number.parseInt(value, 10);
-                setMaxSteps(
-                  Number.isFinite(parsed) && parsed > 0
-                    ? parsed
-                    : DEFAULT_MAX_STEPS
-                );
-              }}
-              data-testid="agent-editor-max-steps"
-            />
-            <span className={styles.hint}>
-              How many times the agent may call a tool before it has to answer.
-            </span>
-          </div>
+          {/* Claude Code has no step limit: it counts every tool call as a
+              turn, and the run's time limit bounds it instead. */}
+          {harness === 'remote' && model === CLAUDE_CODE_MODEL ? null : (
+            <div className={styles.field}>
+              <span className={styles.label}>Step limit</span>
+              <Input
+                value={String(maxSteps)}
+                onChange={value => {
+                  const parsed = Number.parseInt(value, 10);
+                  setMaxSteps(
+                    Number.isFinite(parsed) && parsed > 0
+                      ? parsed
+                      : DEFAULT_MAX_STEPS
+                  );
+                }}
+                data-testid="agent-editor-max-steps"
+              />
+              <span className={styles.hint}>
+                How many times the agent may call a tool before it has to
+                answer.
+              </span>
+            </div>
+          )}
           </Scrollable.Viewport>
           <Scrollable.Scrollbar />
         </Scrollable.Root>
