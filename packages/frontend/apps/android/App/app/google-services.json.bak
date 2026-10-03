@@ -1,15 +1,15 @@
 {
   "project_info": {
     "project_number": "000000000000",
-    "project_id": "affine-local",
-    "storage_bucket": "affine-local.appspot.com"
+    "project_id": "notesgraph-local",
+    "storage_bucket": "notesgraph-local.appspot.com"
   },
   "client": [
     {
       "client_info": {
         "mobilesdk_app_id": "1:000000000000:android:0000000000000000000000",
         "android_client_info": {
-          "package_name": "app.affine.pro"
+          "package_name": "app.notesgraph.pro"
         }
       },
       "oauth_client": [],
