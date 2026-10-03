@@ -42,7 +42,7 @@ export {
 
 import { type Framework } from '@notesgraph/infra';
 
-import { AiBackendService, LocalLLMService } from '../ai-local';
+import { LocalLLMService } from '../ai-local';
 import { WorkspaceServerService } from '../cloud';
 import { WorkspaceDBService } from '../db';
 import { DocsService } from '../doc';
@@ -71,7 +71,6 @@ export function configureAgentsModule(framework: Framework) {
       AgentRunsStore,
       AgentRunLogsStore,
       LocalLLMService,
-      AiBackendService,
       AgentFileToolsService,
       RemoteAgentRunnerService,
       WorkspaceService,
