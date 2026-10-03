@@ -199,6 +199,7 @@ export class AgentsStore extends Store {
       emoji: agent.emoji,
       instructions: agent.instructions,
       harness: agent.harness,
+      deviceKey: agent.deviceKey,
       model: agent.model,
       tools: agent.tools,
       targets: agent.targets,

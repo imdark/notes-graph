@@ -1,6 +1,7 @@
 import { EditIcon, ToolIcon } from '@blocksuite/icons/rc';
 import {
   Button,
+  Checkbox,
   type IconData,
   IconPicker,
   IconRenderer,
@@ -455,12 +456,15 @@ export const AgentEditor = ({
 
             <div className={styles.field}>
               <span className={styles.label}>Runs on</span>
-              <div className={styles.checkGrid}>
+              {/* Checkboxes that act as one choice: ticking one unticks the
+                  rest, and the ticked one stays ticked (an agent always runs
+                  somewhere). */}
+              <div className={styles.checkGrid} role="radiogroup">
                 {ENVIRONMENTS.map(({ value, label, note }) => (
                   <label key={label} className={styles.check} title={note}>
-                    <input
-                      type="radio"
-                      name="agent-harness"
+                    <Checkbox
+                      role="radio"
+                      aria-checked={harness === value}
                       checked={harness === value}
                       onChange={() => setHarness(value)}
                       data-testid={`agent-editor-harness-${value ?? 'default'}`}

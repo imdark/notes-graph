@@ -13,6 +13,7 @@ import {
   type AgentDraft,
   type AgentScope,
   AgentsService,
+  isDeviceClaudeModel,
 } from '@notesgraph/core/modules/agents';
 import { WorkspaceService } from '@notesgraph/core/modules/workspace';
 import { FrameworkScope, useLiveData, useService } from '@notesgraph/infra';
@@ -29,7 +30,17 @@ const targetSummary = (agent: Agent) => {
     doc: 'note',
   };
   const names = agent.targets.map(t => labels[t] ?? t);
-  return names.length ? names.join(' · ') : 'nowhere';
+  return names.length ? names.join(', ') : 'nothing';
+};
+
+const harnessSummary = (agent: Agent) => {
+  const where =
+    agent.harness === 'remote'
+      ? `on ${agent.deviceKey ?? 'a device'}`
+      : agent.harness === 'cloud'
+        ? 'in the cloud'
+        : 'on this device';
+  return isDeviceClaudeModel(agent.model) ? `Claude Code ${where}` : where;
 };
 
 const AgentList = ({
@@ -63,18 +74,32 @@ const AgentList = ({
         <div className={styles.empty}>{emptyText}</div>
       ) : (
         agents.map(agent => (
-          <div key={agent.id} className={styles.row} data-testid="agent-row">
-            <span className={styles.rowEmoji}>
-              <AgentIcon agent={agent} />
-            </span>
-            <div className={styles.rowText}>
-              <span className={styles.rowName}>{agent.name}</span>
-              <span className={styles.rowMeta}>
-                Runs on {targetSummary(agent)} · {agent.tools.length}{' '}
-                {agent.tools.length === 1 ? 'tool' : 'tools'} · max{' '}
-                {agent.maxSteps} steps
+          <div
+            key={agent.id}
+            className={styles.row}
+            data-disabled={!agent.enabled || undefined}
+            data-testid="agent-row"
+          >
+            <button
+              className={styles.rowMain}
+              onClick={() => onEdit(agent)}
+              title={`Edit ${agent.name}`}
+            >
+              <span className={styles.rowEmoji}>
+                <AgentIcon agent={agent} />
               </span>
-            </div>
+              <div className={styles.rowText}>
+                <span className={styles.rowName}>{agent.name}</span>
+                <span className={styles.rowMeta}>
+                  On {targetSummary(agent)} · {harnessSummary(agent)} ·{' '}
+                  {agent.tools.length}{' '}
+                  {agent.tools.length === 1 ? 'tool' : 'tools'}
+                  {isDeviceClaudeModel(agent.model)
+                    ? ''
+                    : ` · max ${agent.maxSteps} steps`}
+                </span>
+              </div>
+            </button>
             <div className={styles.rowActions}>
               <Switch
                 checked={agent.enabled}

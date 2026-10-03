@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
-import type {
-  InventoryJob,
-  InventoryJobQuestion,
+import {
+  type InventoryJob,
+  type InventoryJobQuestion,
   Prisma,
 } from '@prisma/client';
 
@@ -35,6 +35,22 @@ export interface CreateInventoryJobInput {
  * already holds the answer.
  */
 export const JOB_LOG_CAP = 200_000;
+
+/**
+ * Every transcript line starts with the time the server received it, as
+ * `[<ISO time>] `. The device sends plain text; stamping here gives every
+ * run's log the same timeline whichever device wrote it. The log viewer in
+ * the app parses this exact prefix (modules/agents/services/log-lines.ts).
+ */
+export const logStamp = (at: Date) => `[${at.toISOString()}] `;
+
+/**
+ * Stamp the line starts *inside* an appended chunk. Whether the chunk's first
+ * character starts a line depends on the stored log, so that one is decided
+ * in SQL where the row is read.
+ */
+export const stampInnerLines = (text: string, stamp: string) =>
+  text.replace(/\n(?=[^\n])/g, `\n${stamp}`);
 
 export interface ReportInventoryJobInput {
   status?: string;
@@ -190,12 +206,22 @@ export class InventoryJobModel extends BaseModel {
    * heartbeat landing alongside a log report cannot lose text; every SET
    * expression sees the pre-update row, so `log_dropped` and `log` agree.
    */
-  private async appendLog(id: string, text: string): Promise<void> {
+  private async appendLog(id: string, raw: string): Promise<void> {
+    const stamp = logStamp(new Date());
+    const text = stampInnerLines(raw, stamp);
+    // The chunk's first character starts a line when the log is empty or
+    // ended on a newline; only then does it get a stamp of its own.
+    // Decided inside SET, which sees the row as locked for this update, so a
+    // concurrent append cannot make the decision stale.
+    const lead = Prisma.sql`CASE
+      WHEN "log" = '' OR RIGHT("log", 1) = E'\n' THEN ${stamp}::text
+      ELSE ''
+    END`;
     await this.db.$executeRaw`
       UPDATE "inventory_jobs"
-      SET "log" = RIGHT("log" || ${text}::text, ${JOB_LOG_CAP}::int),
+      SET "log" = RIGHT("log" || ${lead} || ${text}::text, ${JOB_LOG_CAP}::int),
           "log_dropped" = "log_dropped"
-            + GREATEST(0, LENGTH("log") + LENGTH(${text}::text) - ${JOB_LOG_CAP}::int)
+            + GREATEST(0, LENGTH("log") + LENGTH(${lead} || ${text}::text) - ${JOB_LOG_CAP}::int)
       WHERE "id" = ${id}`;
   }
 

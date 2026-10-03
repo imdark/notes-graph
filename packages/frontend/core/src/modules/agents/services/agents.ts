@@ -78,6 +78,7 @@ export class AgentsService extends Service {
       emoji: agent.emoji,
       instructions: agent.instructions,
       harness: agent.harness,
+      deviceKey: agent.deviceKey,
       model: agent.model,
       tools: agent.tools,
       targets: agent.targets,

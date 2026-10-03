@@ -20,6 +20,7 @@ import {
   RemoteAgentRunnerService,
   type RemoteQuestion,
 } from './remote-runner';
+import { stampLines } from './log-lines';
 import { type AgentTarget, agentTargetKey } from './target';
 import {
   buildToolPrompt,
@@ -67,11 +68,11 @@ const LOG_TOOL_RESULT_CHARS = 400;
  * Appended straight to the saved transcript rather than yielded: after a
  * cancel the consumer may already have stopped listening.
  */
-const CANCELLED_LINE = '■ cancelled\n';
+const cancelledLine = () => stampLines('■ cancelled\n', Date.now());
 
 const logLine = (text: string): AgentEvent => ({
   type: 'log',
-  text: text.endsWith('\n') ? text : `${text}\n`,
+  text: stampLines(text.endsWith('\n') ? text : `${text}\n`, Date.now()),
 });
 
 /**
@@ -327,7 +328,7 @@ export class AgentExecutorService extends Service implements AgentExecutor {
         }
 
         if (controller.signal.aborted) {
-          log += CANCELLED_LINE;
+          log += cancelledLine();
           this.runsStore.finish(runId, { status: 'cancelled', steps });
           return;
         }
@@ -366,7 +367,7 @@ export class AgentExecutorService extends Service implements AgentExecutor {
       if (output && !output.endsWith('\n')) log += '\n';
 
       if (controller.signal.aborted) {
-        log += CANCELLED_LINE;
+        log += cancelledLine();
         this.runsStore.finish(runId, { status: 'cancelled', steps: 1 });
         return;
       }
@@ -377,7 +378,7 @@ export class AgentExecutorService extends Service implements AgentExecutor {
       // An abort surfaces as a throw from the stream; that's a cancel, not a
       // failure, and shouldn't be recorded as one.
       if (controller.signal.aborted) {
-        if (harness !== 'remote') log += CANCELLED_LINE;
+        if (harness !== 'remote') log += cancelledLine();
         this.runsStore.finish(runId, { status: 'cancelled', steps: 1 });
         return;
       }

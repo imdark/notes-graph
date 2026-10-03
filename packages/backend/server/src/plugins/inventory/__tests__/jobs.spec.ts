@@ -1,5 +1,6 @@
 import test from 'ava';
 
+import { logStamp, stampInnerLines } from '../../../models';
 import { InventoryJobService, toJobDto } from '../jobs';
 
 /**
@@ -299,4 +300,15 @@ test('a single job carries its questions; a listing does not', t => {
   t.is(toJobDto(storedJob(), { logFrom: 0, questions }).questions?.[0].text,
     'Who is Cosmo, and how old?');
   t.is(toJobDto(storedJob()).questions, undefined);
+});
+
+test('appended log text gets a stamp at each inner line start', t => {
+  const stamp = logStamp(new Date('2026-10-03T12:00:00.000Z'));
+  t.is(stamp, '[2026-10-03T12:00:00.000Z] ');
+  // The first line's stamp depends on the stored log, so it is left to SQL;
+  // a trailing newline starts no line yet and gets nothing.
+  t.is(
+    stampInnerLines('tail\n→ read_file\n\nok\n', stamp),
+    'tail\n' + stamp + '→ read_file\n\n' + stamp + 'ok\n'
+  );
 });

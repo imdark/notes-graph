@@ -8,12 +8,14 @@ import {
   JournalIcon,
   PlanetPanelIcon,
   SettingsIcon,
+  ToolIcon,
 } from '@blocksuite/icons/rc';
 import type { Store } from '@blocksuite/notesgraph/store';
 import { ZipTransformer } from '@blocksuite/notesgraph/widgets/linked-doc';
 import { notify } from '@notesgraph/component';
 import { NotesGraphLogoIcon } from '@notesgraph/component/brand';
 import { useAsyncCallback } from '@notesgraph/core/components/hooks/notesgraph-async-hooks';
+import { AgentRunsStore } from '@notesgraph/core/modules/agents';
 import { AppSidebarService } from '@notesgraph/core/modules/app-sidebar';
 import {
   AddPageButton,
@@ -38,7 +40,7 @@ import { useLiveData, useService, useServices } from '@notesgraph/infra';
 import { track } from '@notesgraph/track';
 import { cssVarV2 } from '@toeverything/theme/v2';
 import type { ReactElement } from 'react';
-import { memo, useCallback } from 'react';
+import { memo, useCallback, useMemo } from 'react';
 
 import {
   CollapsibleSection,
@@ -197,6 +199,61 @@ const DuplicatesButton = () => {
   );
 };
 
+const AgentsButton = () => {
+  const { workbenchService } = useServices({
+    WorkbenchService,
+  });
+  const workbench = workbenchService.workbench;
+  const agentsActive = useLiveData(
+    workbench.location$.selector(location => location.pathname === '/agents')
+  );
+  const runsStore = useService(AgentRunsStore);
+  const running = useLiveData(
+    useMemo(
+      () =>
+        runsStore
+          .watchRuns()
+          .map(runs => runs.filter(run => run.status === 'running').length),
+      [runsStore]
+    )
+  );
+
+  return (
+    <MenuLinkItem icon={<ToolIcon />} active={agentsActive} to={'/agents'}>
+      <span
+        data-testid="agents"
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 8,
+          width: '100%',
+        }}
+      >
+        Agents
+        {running > 0 ? (
+          <span
+            title={`${running} running`}
+            style={{
+              marginLeft: 'auto',
+              minWidth: 18,
+              height: 18,
+              padding: '0 6px',
+              borderRadius: 999,
+              fontSize: 11,
+              lineHeight: '18px',
+              textAlign: 'center',
+              background: cssVarV2('button/primary'),
+              color: cssVarV2('button/pureWhiteText'),
+            }}
+          >
+            {running}
+          </span>
+        ) : null}
+      </span>
+    </MenuLinkItem>
+  );
+};
+
 const AIChatButton = () => {
   const t = useI18n();
   const featureFlagService = useService(FeatureFlagService);
@@ -343,6 +400,7 @@ export const RootAppSidebar = memo((): ReactElement => {
         <GraphButton />
         <DiscoverButton />
         <AppSidebarJournalButton />
+        <AgentsButton />
         <DuplicatesButton />
         <MenuItem
           data-testid="slider-bar-workspace-setting-button"

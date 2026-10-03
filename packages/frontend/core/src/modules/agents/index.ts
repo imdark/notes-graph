@@ -35,6 +35,7 @@ export {
   type AgentRunSession,
   AgentRunSessionService,
 } from './services/run-session';
+export { type LogLine, parseLogLines } from './services/log-lines';
 export { type AgentTarget, agentTargetKey } from './services/target';
 export {
   type Agent,
