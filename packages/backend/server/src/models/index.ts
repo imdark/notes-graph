@@ -179,6 +179,7 @@ export * from './doc';
 export * from './doc-user';
 export * from './feature';
 export * from './history';
+export * from './inventory-job';
 export * from './magic-link-otp';
 export * from './notification';
 export * from './permission-projection';
