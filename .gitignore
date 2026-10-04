@@ -78,6 +78,8 @@ test-results
 playwright-report
 playwright/.cache
 download
+# …except the notesgraph.com/download page, which deploy-prod.sh --download ships
+!landing/download/
 
 # Cache
 .eslintcache
