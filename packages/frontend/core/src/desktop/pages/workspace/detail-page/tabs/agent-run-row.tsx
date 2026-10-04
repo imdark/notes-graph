@@ -3,7 +3,7 @@ import { IconButton } from '@notesgraph/component';
 import type { AgentRun } from '@notesgraph/core/modules/agents';
 import { DocDisplayMetaService } from '@notesgraph/core/modules/doc-display-meta';
 import { useLiveData, useService } from '@notesgraph/infra';
-import { useEffect, useMemo, useState } from 'react';
+import { type ReactNode, useEffect, useMemo, useState } from 'react';
 
 import * as styles from './agents.css';
 
@@ -61,6 +61,39 @@ export const runOutcomeText = (run: AgentRun) =>
         ? 'Working…'
         : run.summary || 'Finished with no answer.';
 
+/** A link inside the row's button, so clicking it doesn't open the log too. */
+const InlineLink = ({
+  title,
+  onActivate,
+  children,
+  testId,
+}: {
+  title: string;
+  onActivate: () => void;
+  children: ReactNode;
+  testId?: string;
+}) => (
+  <span
+    role="link"
+    tabIndex={0}
+    className={styles.runDoc}
+    title={title}
+    data-testid={testId}
+    onClick={e => {
+      e.stopPropagation();
+      onActivate();
+    }}
+    onKeyDown={e => {
+      if (e.key === 'Enter') {
+        e.stopPropagation();
+        onActivate();
+      }
+    }}
+  >
+    {children}
+  </span>
+);
+
 const DocLink = ({
   docId,
   onOpenDoc,
@@ -73,30 +106,16 @@ const DocLink = ({
     useMemo(() => displayMeta.title$(docId), [displayMeta, docId])
   );
   return (
-    <span
-      role="link"
-      tabIndex={0}
-      className={styles.runDoc}
-      title={`Open ${title}`}
-      onClick={e => {
-        e.stopPropagation();
-        onOpenDoc(docId);
-      }}
-      onKeyDown={e => {
-        if (e.key === 'Enter') {
-          e.stopPropagation();
-          onOpenDoc(docId);
-        }
-      }}
-    >
+    <InlineLink title={`Open ${title}`} onActivate={() => onOpenDoc(docId)}>
       {title}
-    </span>
+    </InlineLink>
   );
 };
 
 /**
  * One run in a list. Clicking it opens the log; with `onOpenDoc`, the note it
- * ran on is shown too and opens on its own click. `onRetry` and `onDelete`
+ * ran on is shown too and opens on its own click; with `onShowTarget`, a run
+ * on blocks gets a link that scrolls to them. `onRetry` and `onDelete`
  * add those actions to a run that has ended — a live one has to be stopped
  * first, or its row would come back the moment it finished.
  */
@@ -106,6 +125,7 @@ export const RunRow = ({
   now,
   onOpen,
   onOpenDoc,
+  onShowTarget,
   onRetry,
   onDelete,
 }: {
@@ -114,6 +134,7 @@ export const RunRow = ({
   now: number;
   onOpen: (runId: string) => void;
   onOpenDoc?: (docId: string) => void;
+  onShowTarget?: (run: AgentRun) => void;
   onRetry?: (run: AgentRun) => void;
   onDelete?: (run: AgentRun) => void;
 }) => {
@@ -130,6 +151,7 @@ export const RunRow = ({
           status={status}
           now={now}
           onOpenDoc={onOpenDoc}
+          onShowTarget={onShowTarget}
         />
       </button>
       {ended && (onRetry || onDelete) ? (
@@ -164,35 +186,49 @@ const RunRowContent = ({
   status,
   now,
   onOpenDoc,
+  onShowTarget,
 }: {
   run: AgentRun;
   status: RunDisplayStatus;
   now: number;
   onOpenDoc?: (docId: string) => void;
-}) => (
-  <>
-    <div className={styles.runText}>
-      <span className={styles.runHead}>
-        <span className={styles.runName}>{run.agentName}</span>
-        {onOpenDoc && run.docId ? (
-          <>
-            <span className={styles.runWhen}>on</span>
-            <DocLink docId={run.docId} onOpenDoc={onOpenDoc} />
-          </>
-        ) : null}
-      </span>
-      <span className={styles.runMeta} data-status={run.status}>
-        {runOutcomeText(run)}
-      </span>
-    </div>
-    <div className={styles.runSide}>
-      <RunStatusBadge status={status} />
-      <span className={styles.runWhen}>
-        {relativeTime(run.startedAt, now)}
-        {run.durationMs !== undefined
-          ? ` · ${formatDuration(run.durationMs)}`
-          : ''}
-      </span>
-    </div>
-  </>
-);
+  onShowTarget?: (run: AgentRun) => void;
+}) => {
+  const blockCount = run.blockId ? 1 : (run.blockIds?.length ?? 0);
+  return (
+    <>
+      <div className={styles.runText}>
+        <span className={styles.runHead}>
+          <span className={styles.runName}>{run.agentName}</span>
+          {onOpenDoc && run.docId ? (
+            <>
+              <span className={styles.runWhen}>on</span>
+              <DocLink docId={run.docId} onOpenDoc={onOpenDoc} />
+            </>
+          ) : null}
+          {onShowTarget && blockCount > 0 ? (
+            <InlineLink
+              title="Scroll to the blocks it ran on"
+              onActivate={() => onShowTarget(run)}
+              testId="agent-run-show-target"
+            >
+              {blockCount === 1 ? 'Show block' : `Show ${blockCount} blocks`}
+            </InlineLink>
+          ) : null}
+        </span>
+        <span className={styles.runMeta} data-status={run.status}>
+          {runOutcomeText(run)}
+        </span>
+      </div>
+      <div className={styles.runSide}>
+        <RunStatusBadge status={status} />
+        <span className={styles.runWhen}>
+          {relativeTime(run.startedAt, now)}
+          {run.durationMs !== undefined
+            ? ` · ${formatDuration(run.durationMs)}`
+            : ''}
+        </span>
+      </div>
+    </>
+  );
+};

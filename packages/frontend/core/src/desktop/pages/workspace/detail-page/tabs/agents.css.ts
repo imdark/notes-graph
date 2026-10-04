@@ -306,7 +306,10 @@ const gutterButton = style({
 
 export const logLineNumber = style([gutterButton, { textAlign: 'right' }]);
 
-export const logTime = style([gutterButton, { minWidth: '9ch', textAlign: 'left' }]);
+export const logTime = style([
+  gutterButton,
+  { minWidth: '9ch', textAlign: 'left' },
+]);
 
 export const logLineText = style({
   whiteSpace: 'pre',
@@ -329,7 +332,9 @@ export const statusBadge = style({
   selectors: {
     '&[data-status="done"]': { color: cssVarV2('status/success') },
     '&[data-status="error"]': { color: cssVarV2('status/error') },
-    '&[data-status="running"]': { color: cssVarV2('button/primary') },
+    // Not button/primary: the brand theme makes that pink, which reads as
+    // an error next to the red error badge.
+    '&[data-status="running"]': { color: cssVarV2('edgeless/line/blue') },
     '&[data-status="waiting"]': {
       color: cssVarV2('button/pureWhiteText'),
       background: cssVarV2('button/primary'),
@@ -369,6 +374,13 @@ export const panelFooter = style({
   justifyContent: 'space-between',
   alignItems: 'center',
   width: '100%',
+});
+
+export const sessionHeadSide = style({
+  display: 'flex',
+  alignItems: 'center',
+  gap: 8,
+  flexShrink: 0,
 });
 
 export const linkButton = style({

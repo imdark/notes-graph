@@ -4,6 +4,8 @@ import {
   AgentRunSessionService,
   AgentRunsStore,
   AgentsService,
+  type AgentTarget,
+  agentTargetBlockIds,
 } from '@notesgraph/core/modules/agents';
 import { WorkbenchService } from '@notesgraph/core/modules/workbench';
 import { useService } from '@notesgraph/infra';
@@ -43,14 +45,6 @@ export const useRunActions = ({ openDoc }: { openDoc: boolean }) => {
         });
         return;
       }
-      // Starting a run replaces the current one, which would stop it unasked.
-      if (sessionService.session$.value?.running) {
-        notify.error({
-          title: 'Another run is going',
-          message: 'Stop it or wait for it to finish first.',
-        });
-        return;
-      }
       if (openDoc) workbench.openDoc(run.docId, { at: 'active' });
       workbench.openSidebar();
       workbench.activeView$.value.activeSidebarTab('agents');
@@ -64,5 +58,35 @@ export const useRunActions = ({ openDoc }: { openDoc: boolean }) => {
     [runsStore]
   );
 
-  return { retry, remove };
+  /**
+   * Scroll the editor to the blocks a run is on and select them — so while
+   * an agent works down a list, you can see which line it's on.
+   */
+  const showTarget = useCallback(
+    (target: AgentTarget) => {
+      const blockIds = agentTargetBlockIds(target);
+      if (blockIds.length === 0) return;
+      workbench.openDoc(
+        {
+          docId: target.docId,
+          mode: 'page',
+          blockIds,
+          // Without it a second click is the same URL, and nothing scrolls.
+          refreshKey: 'agent-' + Date.now(),
+        },
+        { at: 'active' }
+      );
+    },
+    [workbench]
+  );
+
+  const showRunTarget = useCallback(
+    (run: AgentRun) => {
+      const target = runsStore.targetOf(run);
+      if (target) showTarget(target);
+    },
+    [runsStore, showTarget]
+  );
+
+  return { retry, remove, showTarget, showRunTarget };
 };

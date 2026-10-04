@@ -10,6 +10,8 @@ import { type KeyboardEvent, useCallback, useMemo, useState } from 'react';
 import * as styles from './agents.css';
 import { parseEditPreview } from './edit-diff';
 import { EditDiffView } from './edit-diff-view';
+import { parseToolInput } from './tool-input';
+import { ToolInputView } from './tool-input-view';
 
 /**
  * One thing a running agent is waiting on the reader for: a question to
@@ -53,6 +55,14 @@ export const AgentQuestionCard = ({
       isPermission ? parseEditPreview(question.text, question.detail) : null,
     [isPermission, question.text, question.detail]
   );
+  // Any other tool (Bash, …) gets its input laid out as fields.
+  const toolInput = useMemo(
+    () =>
+      isPermission && !editPreview
+        ? parseToolInput(question.text, question.detail)
+        : null,
+    [isPermission, editPreview, question.text, question.detail]
+  );
   const options = isPermission ? [] : (question.options ?? []);
   const canSendAnswer = text.trim().length > 0 && state === 'idle';
 
@@ -75,6 +85,8 @@ export const AgentQuestionCard = ({
       <p className={styles.questionText}>{question.text}</p>
       {editPreview ? (
         <EditDiffView preview={editPreview} />
+      ) : toolInput ? (
+        <ToolInputView preview={toolInput} />
       ) : question.detail ? (
         <pre className={styles.questionDetail}>{question.detail}</pre>
       ) : null}

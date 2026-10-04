@@ -3,6 +3,7 @@ import { LiveData, Service } from '@notesgraph/infra';
 import type { Agent } from '../stores/agents';
 import type { RemoteQuestion } from './remote-runner';
 import { AgentAlreadyRunningError, type AgentExecutorService } from './executor';
+import { type AgentBlockRef, lastBlockTouched } from './focus-block';
 import { type AgentTarget, agentTargetKey } from './target';
 
 /** A run asked for while another was going, waiting its turn. */
@@ -14,6 +15,8 @@ export interface QueuedAgentRun {
 }
 
 export interface AgentRunSession {
+  /** This session, for stopping or dismissing it; not the run record. */
+  id: string;
   /** The run record, once the executor has made one. */
   runId: string | null;
   agentId: string;
@@ -31,7 +34,27 @@ export interface AgentRunSession {
   questions: RemoteQuestion[];
   error: string | null;
   running: boolean;
+  /** On the tab's own model, so other on-device runs queue behind it. */
+  onDevice: boolean;
+  /**
+   * The block the run is on: the last one a tool call named, else the block
+   * it was started on. What the run card's Show link jumps to.
+   */
+  focus: AgentBlockRef | null;
 }
+
+const targetFocus = (target: AgentTarget): AgentBlockRef | null => {
+  switch (target.kind) {
+    case 'block':
+      return { docId: target.docId, blockId: target.blockId };
+    case 'selection':
+      return target.blockIds[0]
+        ? { docId: target.docId, blockId: target.blockIds[0] }
+        : null;
+    case 'doc':
+      return null;
+  }
+};
 
 const targetLabel = (target: AgentTarget): string => {
   switch (target.kind) {
@@ -44,62 +67,73 @@ const targetLabel = (target: AgentTarget): string => {
   }
 };
 
+const runKey = (agentId: string, target: AgentTarget) =>
+  `${agentId}:${agentTargetKey(target)}`;
+
 /**
- * The one agent run the reader is currently looking at.
+ * The agent runs the reader is looking at.
  *
  * Runs can be started from places that have nowhere to show a result — the
- * slash menu closes the moment it's used — so the run lives here and the
- * Agents side panel renders it. Starting a run from the editor therefore means
- * "start it and open the panel", not "build a second piece of run UI".
+ * slash menu closes the moment it's used — so the runs live here and the
+ * Agents side panel renders them. Starting a run from the editor therefore
+ * means "start it and open the panel", not "build a second piece of run UI".
  *
- * Asking for a run while one is going queues it rather than replacing it:
- * working down a task list means picking the next block while the agent is
- * still on the last one, and that must not throw the last one away.
+ * Runs go side by side: working down a task list means picking the next
+ * block while the agent is still on the last one. A device run gets its own
+ * worktree and a cloud run is a server request, so those start at once. The
+ * exception is the on-device model — one engine in the tab, which can only
+ * answer one run at a time — so an on-device run asked for while another is
+ * going queues behind it.
  */
 export class AgentRunSessionService extends Service {
   constructor(private readonly executor: AgentExecutorService) {
     super();
   }
 
-  readonly session$ = new LiveData<AgentRunSession | null>(null);
+  /** Runs going or finished and not yet dismissed, oldest first. */
+  readonly sessions$ = new LiveData<AgentRunSession[]>([]);
 
-  /** Runs waiting for the current one to end, oldest first. */
+  /** On-device runs waiting for the one going to end, oldest first. */
   readonly queue$ = new LiveData<QueuedAgentRun[]>([]);
 
-  /** Aborts the current run; cleared once it is stopped or ends. */
-  private controller: AbortController | null = null;
-  /** The run {@link session$} shows, kept after a stop so its end still lands. */
-  private active: AbortController | null = null;
-  private nextQueueId = 0;
+  /** Aborts each running session; cleared once it is stopped or ends. */
+  private readonly controllers = new Map<string, AbortController>();
+  private nextId = 0;
 
-  private get busy(): boolean {
-    return this.session$.value?.running ?? false;
+  /** Whether this agent's runs wait their turn rather than going at once. */
+  queues(agent: Agent): boolean {
+    return this.executor.harnessFor(agent) === 'on-device';
+  }
+
+  /** Whether an on-device run is going, so another would queue. */
+  get onDeviceBusy(): boolean {
+    return this.sessions$.value.some(
+      session => session.running && session.onDevice
+    );
   }
 
   private isPending(agent: Agent, target: AgentTarget): boolean {
-    const key = agentTargetKey(target);
-    const same = (agentId: string, t: AgentTarget) =>
-      agentId === agent.id && agentTargetKey(t) === key;
-    const session = this.session$.value;
+    const key = runKey(agent.id, target);
     return (
-      (!!session?.running && same(session.agentId, session.target)) ||
-      this.queue$.value.some(run => same(run.agent.id, run.target))
+      this.sessions$.value.some(
+        session =>
+          session.running && runKey(session.agentId, session.target) === key
+      ) || this.queue$.value.some(run => runKey(run.agent.id, run.target) === key)
     );
   }
 
   /**
-   * Run now if nothing is going, otherwise queue behind what is. Resolves
-   * when this run ends; callers that just want the panel to light up can
-   * ignore the promise. Asking again for a run already going or queued does
-   * nothing.
+   * Run now, or queue behind the on-device run that's going. Resolves when
+   * this run ends; callers that just want the panel to light up can ignore
+   * the promise. Asking again for a run already going or queued does nothing.
    */
   async start(agent: Agent, target: AgentTarget): Promise<void> {
     if (this.isPending(agent, target)) return;
-    if (this.busy) {
+    if (this.queues(agent) && this.onDeviceBusy) {
       this.queue$.setValue([
         ...this.queue$.value,
         {
-          id: `q${++this.nextQueueId}`,
+          id: `q${++this.nextId}`,
           agent,
           target,
           targetLabel: targetLabel(target),
@@ -123,31 +157,45 @@ export class AgentRunSessionService extends Service {
   }
 
   private async runNow(agent: Agent, target: AgentTarget): Promise<void> {
+    const id = `s${++this.nextId}`;
     const controller = new AbortController();
-    this.controller = controller;
-    this.active = controller;
+    this.controllers.set(id, controller);
+    const onDevice = this.queues(agent);
 
-    this.session$.setValue({
-      runId: null,
-      agentId: agent.id,
-      agentName: agent.name,
-      agentEmoji: agent.emoji,
-      target,
-      targetLabel: targetLabel(target),
-      output: '',
-      log: '',
-      remoteJobId: null,
-      questions: [],
-      error: null,
-      running: true,
-    });
+    // The last run of this agent on this target has ended; this one takes
+    // its place rather than stacking up beside it.
+    const key = runKey(agent.id, target);
+    this.sessions$.setValue([
+      ...this.sessions$.value.filter(
+        session => runKey(session.agentId, session.target) !== key
+      ),
+      {
+        id,
+        runId: null,
+        agentId: agent.id,
+        agentName: agent.name,
+        agentEmoji: agent.emoji,
+        target,
+        targetLabel: targetLabel(target),
+        output: '',
+        log: '',
+        remoteJobId: null,
+        questions: [],
+        error: null,
+        running: true,
+        onDevice,
+        focus: targetFocus(target),
+      },
+    ]);
 
     const patch = (fn: (prev: AgentRunSession) => AgentRunSession) => {
-      const prev = this.session$.value;
-      // The session was dismissed or a newer run has taken over; this one's
-      // events are stale.
-      if (!prev || this.active !== controller) return;
-      this.session$.setValue(fn(prev));
+      // A dismissed session's events are stale.
+      const sessions = this.sessions$.value;
+      const index = sessions.findIndex(session => session.id === id);
+      if (index < 0) return;
+      const next = sessions.slice();
+      next[index] = fn(sessions[index]);
+      this.sessions$.setValue(next);
     };
 
     try {
@@ -165,7 +213,16 @@ export class AgentRunSessionService extends Service {
             questions: event.questions,
           }));
         } else if (event.type === 'log') {
-          patch(prev => ({ ...prev, log: prev.log + event.text }));
+          patch(prev => {
+            const log = prev.log + event.text;
+            // A remote log arrives in chunks that can split a line, so look
+            // from the start of the line the new text continues.
+            const touched = lastBlockTouched(
+              log.slice(prev.log.lastIndexOf('\n') + 1),
+              target.docId
+            );
+            return { ...prev, log, focus: touched ?? prev.focus };
+          });
         } else if (event.type === 'text') {
           patch(prev => ({ ...prev, output: prev.output + event.delta }));
         } else if (event.type === 'error') {
@@ -181,27 +238,34 @@ export class AgentRunSessionService extends Service {
             : String(err);
       patch(prev => ({ ...prev, error: message }));
     } finally {
-      if (this.controller === controller) this.controller = null;
+      this.controllers.delete(id);
       patch(prev => ({ ...prev, running: false, questions: [] }));
-      if (this.active === controller) this.runNext();
+      if (onDevice) this.runNext();
     }
   }
 
-  /** Stop the current run; the next queued one, if any, starts. */
-  cancel(): void {
-    this.controller?.abort();
-    this.controller = null;
+  /** Stop one run; if it was on-device, the next queued one starts. */
+  cancel(id: string): void {
+    this.controllers.get(id)?.abort();
+    this.controllers.delete(id);
   }
 
-  /** Stop everything: the current run and all that are queued. */
+  /** Stop everything: every run going and all that are queued. */
   cancelAll(): void {
     this.queue$.setValue([]);
-    this.cancel();
+    for (const id of [...this.controllers.keys()]) this.cancel(id);
+  }
+
+  /** Take a session off the panel, stopping it if it is still going. */
+  dismiss(id: string): void {
+    this.cancel(id);
+    this.sessions$.setValue(
+      this.sessions$.value.filter(session => session.id !== id)
+    );
   }
 
   clear(): void {
     this.cancelAll();
-    this.active = null;
-    this.session$.setValue(null);
+    this.sessions$.setValue([]);
   }
 }

@@ -36,8 +36,13 @@ export {
   AgentRunSessionService,
   type QueuedAgentRun,
 } from './services/run-session';
+export { type AgentBlockRef, lastBlockTouched } from './services/focus-block';
 export { type LogLine, parseLogLines } from './services/log-lines';
-export { type AgentTarget, agentTargetKey } from './services/target';
+export {
+  type AgentTarget,
+  agentTargetBlockIds,
+  agentTargetKey,
+} from './services/target';
 export {
   type Agent,
   type AgentDraft,
