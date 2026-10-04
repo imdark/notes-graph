@@ -329,7 +329,9 @@ export const statusBadge = style({
   selectors: {
     '&[data-status="done"]': { color: cssVarV2('status/success') },
     '&[data-status="error"]': { color: cssVarV2('status/error') },
-    '&[data-status="running"]': { color: cssVarV2('button/primary') },
+    // Not button/primary: the brand theme makes that pink, which reads as
+    // an error next to the red error badge.
+    '&[data-status="running"]': { color: cssVarV2('edgeless/line/blue') },
     '&[data-status="waiting"]': {
       color: cssVarV2('button/pureWhiteText'),
       background: cssVarV2('button/primary'),
