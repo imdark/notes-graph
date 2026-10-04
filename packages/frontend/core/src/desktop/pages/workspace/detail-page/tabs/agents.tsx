@@ -33,6 +33,7 @@ export const EditorAgentsPanel = () => {
   const docAgents = useLiveData(agentsService.agentsFor$('doc'));
   const allAgents = useLiveData(agentsService.agents$);
   const session = useLiveData(sessionService.session$);
+  const queue = useLiveData(sessionService.queue$);
   const runs = useLiveData(
     useMemo(() => runsStore.watchRunsForDoc(doc.id), [runsStore, doc.id])
   );
@@ -93,10 +94,13 @@ export const EditorAgentsPanel = () => {
                   <button
                     key={agent.id}
                     className={styles.agentButton}
-                    disabled={running}
                     onClick={() => runOnDoc(agent)}
                     data-testid="run-agent"
-                    title={running ? 'Another run is going' : `Run ${agent.name}`}
+                    title={
+                      running
+                        ? `Queue ${agent.name} after the current run`
+                        : `Run ${agent.name}`
+                    }
                   >
                     <span className={styles.agentEmoji}>
                       <AgentIcon agent={agent} />
@@ -162,12 +166,27 @@ export const EditorAgentsPanel = () => {
 
               <div className={styles.sessionActions}>
                 {running ? (
-                  <Button
-                    onClick={() => sessionService.cancel()}
-                    data-testid="cancel-agent"
-                  >
-                    Stop
-                  </Button>
+                  <>
+                    <Button
+                      onClick={() => sessionService.cancel()}
+                      data-testid="cancel-agent"
+                      title={
+                        queue.length > 0
+                          ? 'Stop this run; the next queued one starts'
+                          : undefined
+                      }
+                    >
+                      Stop
+                    </Button>
+                    {queue.length > 0 ? (
+                      <Button
+                        onClick={() => sessionService.cancelAll()}
+                        data-testid="cancel-all-agents"
+                      >
+                        Stop all
+                      </Button>
+                    ) : null}
+                  </>
                 ) : (
                   <>
                     {session.output ? (
@@ -200,6 +219,35 @@ export const EditorAgentsPanel = () => {
                   Nothing is written to the note — copy what you want to keep.
                 </span>
               ) : null}
+            </div>
+          ) : null}
+
+          {queue.length > 0 ? (
+            <div className={styles.section} data-testid="agent-queue">
+              <span className={styles.sectionLabel}>
+                Up next ({queue.length})
+              </span>
+              <div className={styles.runList}>
+                {queue.map(run => (
+                  <div
+                    key={run.id}
+                    className={styles.panelFooter}
+                    data-testid="agent-queue-item"
+                  >
+                    <span>
+                      {run.agent.emoji ? `${run.agent.emoji} ` : ''}
+                      {run.agent.name} · {run.targetLabel}
+                    </span>
+                    <button
+                      className={styles.linkButton}
+                      onClick={() => sessionService.dequeue(run.id)}
+                      data-testid="agent-queue-remove"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ))}
+              </div>
             </div>
           ) : null}
 

@@ -302,6 +302,12 @@ export class AgentExecutorService extends Service implements AgentExecutor {
           if (event.type === 'waiting') pauseClock(event.questions.length > 0);
           yield event;
         }
+        // An abort ends the watch quietly (the job is cancelled on the way
+        // out), so the loop finishing doesn't by itself mean the job did.
+        if (controller.signal.aborted) {
+          this.runsStore.finish(runId, { status: 'cancelled', steps });
+          return;
+        }
         this.runsStore.finish(runId, { status: 'done', output, steps });
         return;
       }
