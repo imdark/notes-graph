@@ -63,11 +63,27 @@ const SessionCard = ({
           {session.agentName} · {session.targetLabel}
         </span>
         <span className={styles.sessionHeadSide}>
-          {agentTargetBlockIds(session.target).length > 0 ? (
+          {session.focus || agentTargetBlockIds(session.target).length > 0 ? (
             <button
               className={styles.linkButton}
-              onClick={() => onShowTarget(session.target)}
-              title="Scroll to the blocks this run is on"
+              // Working down a list, the agent moves from block to block, so
+              // go to the one it is on (or last touched), else the run's own.
+              onClick={() =>
+                onShowTarget(
+                  session.focus
+                    ? {
+                        kind: 'block',
+                        docId: session.focus.docId,
+                        blockId: session.focus.blockId,
+                      }
+                    : session.target
+                )
+              }
+              title={
+                running
+                  ? 'Go to the block the agent is working on'
+                  : 'Go to the last block the agent worked on'
+              }
               data-testid="agent-show-target"
             >
               Show

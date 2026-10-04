@@ -180,4 +180,50 @@ describe('AgentRunSessionService', () => {
     expect(sessions.sessions$.value).toHaveLength(1);
     expect(sessions.sessions$.value[0].running).toBe(true);
   });
+
+  test('the focus follows the block the log says the agent is on', async () => {
+    const log: string[] = [];
+    let next!: () => void;
+    const executor = {
+      harnessFor: (a: Agent) => a.harness ?? 'on-device',
+      async *run(): AsyncIterable<AgentEvent> {
+        yield { type: 'started', runId: 'run-1' };
+        while (log.length) {
+          await new Promise<void>(resolve => (next = resolve));
+          yield { type: 'log', text: log.shift() as string };
+        }
+      },
+    };
+    const framework = new Framework();
+    framework.service(AgentExecutorService, executor as any);
+    framework.service(AgentRunSessionService, [AgentExecutorService]);
+    const sessions = framework.provider().get(AgentRunSessionService);
+    // A remote log can arrive cut mid-line.
+    log.push('→ update_task  {"docId": "doc", "blo', 'ckId": "t2"}\n');
+
+    void sessions.start(agent, { kind: 'doc', docId: 'doc' });
+    await tick();
+    expect(sessions.sessions$.value[0]?.focus).toBeNull();
+
+    next();
+    await tick();
+    expect(sessions.sessions$.value[0]?.focus).toBeNull();
+
+    next();
+    await tick();
+    expect(sessions.sessions$.value[0]?.focus).toEqual({
+      docId: 'doc',
+      blockId: 't2',
+    });
+  });
+
+  test('a block run starts focused on its block', async () => {
+    const { sessions } = fakeExecutor();
+    void sessions.start(agent, block('b1'));
+    await tick();
+    expect(sessions.sessions$.value[0]?.focus).toEqual({
+      docId: 'doc',
+      blockId: 'b1',
+    });
+  });
 });
