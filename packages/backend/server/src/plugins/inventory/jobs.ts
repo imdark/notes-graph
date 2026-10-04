@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import type { InventoryJob, InventoryJobQuestion } from '@prisma/client';
 
 // See the note in service.ts: a plain HttpException is reported as a 500 by
@@ -10,6 +10,7 @@ import {
   QUESTION_KINDS,
   type QuestionKind,
 } from '../../models/inventory-job';
+import { AgentPushService } from './push';
 
 /** Wire shape for a job. Epoch seconds, matching the device DTO. */
 export interface JobDto {
@@ -156,7 +157,18 @@ const MAX_CONTEXT = 200_000;
 export class InventoryJobService {
   private readonly logger = new Logger(InventoryJobService.name);
 
-  constructor(private readonly models: Models) {}
+  constructor(
+    private readonly models: Models,
+    @Optional() private readonly push?: AgentPushService
+  ) {}
+
+  /** Push without holding up the request it rides on, or failing it. */
+  private notify(send: (push: AgentPushService) => Promise<void>) {
+    if (!this.push) return;
+    send(this.push).catch(err => {
+      this.logger.warn(`agent push failed: ${err}`);
+    });
+  }
 
   async enqueue(
     workspaceId: string,
@@ -304,6 +316,9 @@ export class InventoryJobService {
     this.logger.log(
       `job ${jobId} asked a ${kind}${allowAll ? ' (allowed: allow all)' : ''}`
     );
+    if (!allowAll) {
+      this.notify(push => push.questionAsked(job, question));
+    }
     return toQuestionDto(question);
   }
 
@@ -371,10 +386,22 @@ export class InventoryJobService {
     if (!answered) {
       throw new BadRequest('That question has already been answered.');
     }
+    const closed = [questionId];
     if (allowAll && question.kind === 'permission') {
+      // The permissions still open beside this one are allowed with it, so
+      // their notifications go too.
+      if (this.push) {
+        const open = await this.models.inventoryJob.listQuestions(jobId);
+        closed.push(
+          ...open
+            .filter(q => q.kind === 'permission' && !q.answeredAt && q.id !== questionId)
+            .map(q => q.id)
+        );
+      }
       await this.models.inventoryJob.allowAllTools(jobId, userId);
       this.logger.log(`job ${jobId}: allow all tools`);
     }
+    this.notify(push => push.questionsClosed(job, closed));
     return toQuestionDto(answered);
   }
 

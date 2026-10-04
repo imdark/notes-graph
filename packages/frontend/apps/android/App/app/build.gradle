@@ -134,6 +134,8 @@ dependencies {
     implementation platform(libs.firebase.bom)
     implementation libs.firebase.analytics
     implementation libs.firebase.crashlytics
+    // Push for "an agent run is waiting on you" (push/AgentPushService).
+    implementation libs.firebase.messaging
     implementation libs.firebase.storage
 
     implementation platform(libs.okhttp.bom)

@@ -2,6 +2,7 @@ import test from 'ava';
 
 import { logStamp, stampInnerLines } from '../../../models';
 import { InventoryJobService, toJobDto } from '../jobs';
+import { questionPushData } from '../push';
 
 /**
  * Dispatch rules, against a stub Models.
@@ -366,6 +367,83 @@ test('a single job carries its questions; a listing does not', t => {
   t.is(toJobDto(storedJob(), { logFrom: 0, questions }).questions?.[0].text,
     'Who is Cosmo, and how old?');
   t.is(toJobDto(storedJob()).questions, undefined);
+});
+
+function pushStub() {
+  const asked: string[] = [];
+  const closed: string[][] = [];
+  const push: any = {
+    questionAsked: async (_job: any, question: any) => {
+      asked.push(question.id);
+    },
+    questionsClosed: async (_job: any, ids: string[]) => {
+      closed.push(ids);
+    },
+  };
+  return { push, asked, closed };
+}
+
+test("a question pushes to the starter's phone", async t => {
+  const { push, asked } = pushStub();
+  const { service } = questionService(storedJob({ createdBy: userId }));
+  const withPush = new InventoryJobService((service as any).models, push);
+  await withPush.ask(workspaceId, 'job-1', { text: 'Who is Cosmo?' });
+  t.deepEqual(asked, ['q1']);
+});
+
+test('a permission already allowed by "Allow all" pushes nothing', async t => {
+  const { push, asked } = pushStub();
+  const { service } = questionService(
+    storedJob({ createdBy: userId, allowAllTools: true })
+  );
+  const withPush = new InventoryJobService((service as any).models, push);
+  await withPush.ask(workspaceId, 'job-1', { kind: 'permission', text: 'Allow Edit?' });
+  t.deepEqual(asked, []);
+});
+
+test('answering takes the question off the other phones', async t => {
+  const { push, closed } = pushStub();
+  const { service } = questionService(
+    storedJob({ createdBy: userId }),
+    openQuestion({ kind: 'permission', text: 'Allow Bash?' })
+  );
+  const withPush = new InventoryJobService((service as any).models, push);
+  await withPush.answer(workspaceId, 'job-1', 'q1', userId, {
+    allowed: false,
+    answer: 'use rg, not grep',
+  });
+  t.deepEqual(closed, [['q1']]);
+});
+
+test('a push that fails does not fail the ask', async t => {
+  const push: any = {
+    questionAsked: async () => {
+      throw new Error('FCM down');
+    },
+  };
+  const { service } = questionService(storedJob({ createdBy: userId }));
+  const withPush = new InventoryJobService((service as any).models, push);
+  const question = await withPush.ask(workspaceId, 'job-1', { text: 'still?' });
+  t.is(question.id, 'q1');
+});
+
+test('push data fits FCM by giving up the tool input first', t => {
+  const data = questionPushData(
+    'https://app.notesgraph.com',
+    { id: 'job-1', workspaceId, agentName: 'coder', docId: null },
+    {
+      id: 'q1',
+      kind: 'permission',
+      text: 'Allow Write?',
+      detail: 'x'.repeat(100_000),
+      options: [],
+    }
+  );
+  t.is(data.type, 'agent-question');
+  t.is(data.server, 'https://app.notesgraph.com');
+  t.is(data.kind, 'permission');
+  t.true(Buffer.byteLength(JSON.stringify(data)) <= 3_500);
+  t.true(data.detail.length <= 1_200);
 });
 
 test('appended log text gets a stamp at each inner line start', t => {

@@ -25,6 +25,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.vectordrawable.graphics.drawable.VectorDrawableCompat
 import app.notesgraph.pro.ai.AIActivity
 import app.notesgraph.pro.plugin.AIButtonPlugin
+import app.notesgraph.pro.plugin.AgentPushPlugin
 import app.notesgraph.pro.plugin.AppLockPlugin
 import app.notesgraph.pro.plugin.NotesGraphThemePlugin
 import app.notesgraph.pro.plugin.AuthPlugin
@@ -62,6 +63,7 @@ class MainActivity : BridgeActivity(), AIButtonPlugin.Callback, NotesGraphThemeP
             listOf(
                 NotesGraphThemePlugin::class.java,
                 AIButtonPlugin::class.java,
+                AgentPushPlugin::class.java,
                 AppLockPlugin::class.java,
                 AuthPlugin::class.java,
                 HashCashPlugin::class.java,

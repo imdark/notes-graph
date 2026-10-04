@@ -9,7 +9,7 @@ import {
   Query,
 } from '@nestjs/common';
 
-import { Config } from '../../base';
+import { BadRequest, Config } from '../../base';
 import type { CurrentUser as CurrentUserType } from '../../core/auth';
 import { CurrentUser } from '../../core/auth';
 import { PermissionAccess } from '../../core/permission';
@@ -51,6 +51,41 @@ export class InventoryController {
       user: { id: user.id, email: user.email, name: user.name },
       workspaceIds,
     };
+  }
+
+  // ── phone push ─────────────────────────────────────────────────────────
+  //
+  // Per user, not per workspace: a run's questions go to whoever started it,
+  // in whichever workspace it runs.
+
+  /** A phone asks to be told when a run it started is waiting on it. */
+  @Post('/push-tokens')
+  async registerPushToken(
+    @CurrentUser() user: CurrentUserType,
+    @Body() body: { token?: string; platform?: string }
+  ) {
+    this.assertEnabled();
+    const token = String(body?.token ?? '').trim();
+    if (!token || token.length > 4096) {
+      throw new BadRequest('token is required');
+    }
+    const platform = body?.platform === 'ios' ? 'ios' : 'android';
+    await this.models.userPushToken.register(user.id, token, platform);
+    return { ok: true, enabled: !!this.config.inventory.fcmServiceAccount };
+  }
+
+  /** On sign-out: this phone should stop hearing about this user's runs. */
+  @Post('/push-tokens/remove')
+  async removePushToken(
+    @CurrentUser() user: CurrentUserType,
+    @Body() body: { token?: string }
+  ) {
+    this.assertEnabled();
+    const removed = await this.models.userPushToken.unregister(
+      user.id,
+      String(body?.token ?? '')
+    );
+    return { ok: removed > 0 };
   }
 
   @Get('/workspaces/:workspaceId/devices')
