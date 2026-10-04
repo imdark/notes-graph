@@ -49,6 +49,7 @@ import { SessionModel } from './session';
 import { UserModel } from './user';
 import { UserDocModel } from './user-doc';
 import { UserFeatureModel } from './user-feature';
+import { UserPushTokenModel } from './user-push-token';
 import { UserSettingsModel } from './user-settings';
 import { VerificationTokenModel } from './verification-token';
 import { WorkspaceModel } from './workspace';
@@ -98,6 +99,7 @@ const MODELS = {
   calendarAccount: CalendarAccountModel,
   inventoryDevice: InventoryDeviceModel,
   inventoryJob: InventoryJobModel,
+  userPushToken: UserPushTokenModel,
   calendarSubscription: CalendarSubscriptionModel,
   calendarEvent: CalendarEventModel,
   calendarEventInstance: CalendarEventInstanceModel,
@@ -189,6 +191,7 @@ export * from './session';
 export * from './user';
 export * from './user-doc';
 export * from './user-feature';
+export * from './user-push-token';
 export * from './user-settings';
 export * from './verification-token';
 export * from './workspace';

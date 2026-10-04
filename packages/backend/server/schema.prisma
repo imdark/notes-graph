@@ -38,6 +38,7 @@ model User {
   projectMemberships          ProjectMember[]
   connectedAccounts           ConnectedAccount[]
   calendarAccounts            CalendarAccount[]
+  pushTokens                  UserPushToken[]
   connectedDirectoryAccounts  DirectoryAccount[]
   sessions                    UserSession[]
   aiSessions                  AiSession[]
@@ -1800,4 +1801,22 @@ model InventoryJobQuestion {
 
   @@index([jobId, createdAt])
   @@map("inventory_job_questions")
+}
+
+/// A phone that wants a push when an agent run is waiting on its owner. The
+/// token is the device's Firebase Cloud Messaging registration; it belongs to
+/// whoever registered it last, so a phone handed to someone else follows them.
+model UserPushToken {
+  id        String   @id @default(uuid()) @db.VarChar
+  userId    String   @map("user_id") @db.VarChar
+  token     String   @unique @db.Text
+  /// 'android' today; kept so an iOS (APNs-via-FCM) build can share the table.
+  platform  String   @default("android") @db.VarChar
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("user_push_tokens")
 }

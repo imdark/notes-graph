@@ -14,6 +14,7 @@ import { NotesGraphContext } from '@notesgraph/core/components/context';
 import { AppFallback } from '@notesgraph/core/mobile/components/app-fallback';
 import { DebugConsole } from '@notesgraph/core/mobile/components/debug-console';
 import { configureMobileModules } from '@notesgraph/core/mobile/modules';
+import { setupAgentPush } from './agent-push-glue';
 import { setupBackgroundSyncManifest } from './background-sync-glue';
 import { VirtualKeyboardProvider } from '@notesgraph/core/mobile/modules/virtual-keyboard';
 import { router } from '@notesgraph/core/mobile/router';
@@ -57,6 +58,7 @@ import { useTheme } from 'next-themes';
 import { Suspense, useEffect } from 'react';
 import { RouterProvider } from 'react-router-dom';
 
+import { AgentPush } from './plugins/agent-push';
 import { AIButton } from './plugins/ai-button';
 import { AppLock } from './plugins/app-lock';
 import { Auth } from './plugins/auth';
@@ -141,6 +143,9 @@ framework.scope(ServerScope).override(AuthProvider, resolver => {
       await writeEndpointToken(endpoint, token);
     },
     async signOut() {
+      // While the session can still say whose phone this is: stop agent
+      // pushes for this account. Best effort; never blocks signing out.
+      await AgentPush.unregister({ server: endpoint }).catch(() => {});
       const token = await readEndpointToken(endpoint);
       try {
         await Auth.signOut({ endpoint, token });
@@ -155,6 +160,8 @@ const frameworkProvider = framework.provider();
 
 // Keep the native background push-sync manifest in step with the app state.
 setupBackgroundSyncManifest(frameworkProvider);
+// Phone notifications when an agent run is waiting on the user.
+setupAgentPush(frameworkProvider);
 
 registerNativePreviewHandlers({
   renderMermaidSvg: request => Preview.renderMermaidSvg(request),
