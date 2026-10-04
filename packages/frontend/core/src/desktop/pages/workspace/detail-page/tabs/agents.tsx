@@ -3,6 +3,7 @@ import { Button, notify, Scrollable } from '@notesgraph/component';
 import {
   type Agent,
   AgentIcon,
+  type AgentRunSession,
   AgentRunSessionService,
   AgentRunsStore,
   AgentsService,
@@ -22,6 +23,120 @@ import { useRunActions } from './use-run-actions';
 /** Recent runs shown here; the Agents page has the rest. */
 const PANEL_RUNS = 8;
 
+/** One run going, or finished and not yet dismissed. */
+const SessionCard = ({
+  session,
+  queued,
+  onViewLog,
+}: {
+  session: AgentRunSession;
+  /** How many on-device runs wait for this one, when it is on-device. */
+  queued: number;
+  onViewLog: (runId: string) => void;
+}) => {
+  const sessionService = useService(AgentRunSessionService);
+  const { running } = session;
+
+  const copyOutput = useCallback(() => {
+    if (!session.output) return;
+    navigator.clipboard
+      .writeText(session.output)
+      .then(() => notify.success({ title: 'Copied' }))
+      .catch(() => notify.error({ title: "Couldn't copy" }));
+  }, [session.output]);
+
+  const status = running
+    ? session.questions.length > 0
+      ? 'waiting'
+      : 'running'
+    : session.error
+      ? 'error'
+      : 'done';
+
+  return (
+    <div className={styles.section} data-testid="agent-session">
+      <div className={styles.panelFooter}>
+        <span className={styles.sectionLabel}>
+          {session.agentName} · {session.targetLabel}
+        </span>
+        <RunStatusBadge status={status} />
+      </div>
+
+      {session.remoteJobId
+        ? session.questions.map(question => (
+            <AgentQuestionCard
+              key={question.id}
+              jobId={session.remoteJobId as string}
+              question={question}
+            />
+          ))
+        : null}
+
+      {session.error ? (
+        <p className={styles.error} data-testid="agent-error">
+          {session.error}
+        </p>
+      ) : session.output ? (
+        <p className={styles.output} data-testid="agent-output">
+          {session.output}
+        </p>
+      ) : (
+        <p className={styles.empty}>
+          {!running
+            ? 'It finished without an answer. The log shows what it did.'
+            : session.questions.length > 0
+              ? 'Waiting for you…'
+              : 'Working…'}
+        </p>
+      )}
+
+      <div className={styles.sessionActions}>
+        {running ? (
+          <Button
+            onClick={() => sessionService.cancel(session.id)}
+            data-testid="cancel-agent"
+            title={
+              queued > 0 ? 'Stop this run; the next queued one starts' : undefined
+            }
+          >
+            Stop
+          </Button>
+        ) : (
+          <>
+            {session.output ? (
+              <Button
+                variant="primary"
+                onClick={copyOutput}
+                data-testid="copy-agent-output"
+              >
+                Copy answer
+              </Button>
+            ) : null}
+            <Button onClick={() => sessionService.dismiss(session.id)}>
+              Dismiss
+            </Button>
+          </>
+        )}
+        {session.runId ? (
+          <Button
+            variant="plain"
+            onClick={() => onViewLog(session.runId as string)}
+            data-testid="view-agent-log"
+          >
+            View log
+          </Button>
+        ) : null}
+      </div>
+
+      {!running && session.output ? (
+        <span className={styles.hint}>
+          Nothing is written to the note — copy what you want to keep.
+        </span>
+      ) : null}
+    </div>
+  );
+};
+
 export const EditorAgentsPanel = () => {
   const agentsService = useService(AgentsService);
   const sessionService = useService(AgentRunSessionService);
@@ -33,7 +148,7 @@ export const EditorAgentsPanel = () => {
 
   const docAgents = useLiveData(agentsService.agentsFor$('doc'));
   const allAgents = useLiveData(agentsService.agents$);
-  const session = useLiveData(sessionService.session$);
+  const sessions = useLiveData(sessionService.sessions$);
   const queue = useLiveData(sessionService.queue$);
   const runs = useLiveData(
     useMemo(() => runsStore.watchRunsForDoc(doc.id), [runsStore, doc.id])
@@ -46,7 +161,10 @@ export const EditorAgentsPanel = () => {
     [doc.id, sessionService]
   );
 
-  const running = session?.running ?? false;
+  const runningCount = sessions.filter(session => session.running).length;
+  const onDeviceBusy = sessions.some(
+    session => session.running && session.onDevice
+  );
   const runActions = useRunActions({ openDoc: false });
   const [logRunId, setLogRunId] = useState<string | null>(null);
   const closeLog = useCallback(() => setLogRunId(null), []);
@@ -59,24 +177,6 @@ export const EditorAgentsPanel = () => {
   const openAgentsPage = useCallback(() => {
     workbench.open('/agents');
   }, [workbench]);
-
-  const copyOutput = useCallback(() => {
-    if (!session?.output) return;
-    navigator.clipboard
-      .writeText(session.output)
-      .then(() => notify.success({ title: 'Copied' }))
-      .catch(() => notify.error({ title: "Couldn't copy" }));
-  }, [session?.output]);
-
-  const sessionStatus = !session
-    ? null
-    : running
-      ? session.questions.length > 0
-        ? 'waiting'
-        : 'running'
-      : session.error
-        ? 'error'
-        : 'done';
 
   return (
     <Scrollable.Root className={styles.root}>
@@ -99,8 +199,8 @@ export const EditorAgentsPanel = () => {
                     onClick={() => runOnDoc(agent)}
                     data-testid="run-agent"
                     title={
-                      running
-                        ? `Queue ${agent.name} after the current run`
+                      onDeviceBusy && sessionService.queues(agent)
+                        ? `Queue ${agent.name} after the on-device run going`
                         : `Run ${agent.name}`
                     }
                   >
@@ -108,7 +208,9 @@ export const EditorAgentsPanel = () => {
                       <AgentIcon agent={agent} />
                     </span>
                     <span className={styles.agentName}>{agent.name}</span>
-                    {running && session?.agentId === agent.id ? (
+                    {sessions.some(
+                      session => session.running && session.agentId === agent.id
+                    ) ? (
                       <RunStatusBadge status="running" />
                     ) : null}
                   </button>
@@ -129,105 +231,31 @@ export const EditorAgentsPanel = () => {
             </span>
           </div>
 
-          {session && sessionStatus ? (
-            <div className={styles.section} data-testid="agent-session">
-              <div className={styles.panelFooter}>
-                <span className={styles.sectionLabel}>
-                  {session.agentName} · {session.targetLabel}
-                </span>
-                <RunStatusBadge status={sessionStatus} />
-              </div>
-
-              {session.remoteJobId
-                ? session.questions.map(question => (
-                    <AgentQuestionCard
-                      key={question.id}
-                      jobId={session.remoteJobId as string}
-                      question={question}
-                    />
-                  ))
-                : null}
-
-              {session.error ? (
-                <p className={styles.error} data-testid="agent-error">
-                  {session.error}
-                </p>
-              ) : session.output ? (
-                <p className={styles.output} data-testid="agent-output">
-                  {session.output}
-                </p>
-              ) : (
-                <p className={styles.empty}>
-                  {!running
-                    ? 'It finished without an answer. The log shows what it did.'
-                    : session.questions.length > 0
-                      ? 'Waiting for you…'
-                      : 'Working…'}
-                </p>
-              )}
-
-              <div className={styles.sessionActions}>
-                {running ? (
-                  <>
-                    <Button
-                      onClick={() => sessionService.cancel()}
-                      data-testid="cancel-agent"
-                      title={
-                        queue.length > 0
-                          ? 'Stop this run; the next queued one starts'
-                          : undefined
-                      }
-                    >
-                      Stop
-                    </Button>
-                    {queue.length > 0 ? (
-                      <Button
-                        onClick={() => sessionService.cancelAll()}
-                        data-testid="cancel-all-agents"
-                      >
-                        Stop all
-                      </Button>
-                    ) : null}
-                  </>
-                ) : (
-                  <>
-                    {session.output ? (
-                      <Button
-                        variant="primary"
-                        onClick={copyOutput}
-                        data-testid="copy-agent-output"
-                      >
-                        Copy answer
-                      </Button>
-                    ) : null}
-                    <Button onClick={() => sessionService.clear()}>
-                      Dismiss
-                    </Button>
-                  </>
-                )}
-                {session.runId ? (
-                  <Button
-                    variant="plain"
-                    onClick={() => setLogRunId(session.runId)}
-                    data-testid="view-agent-log"
-                  >
-                    View log
-                  </Button>
-                ) : null}
-              </div>
-
-              {!running && session.output ? (
-                <span className={styles.hint}>
-                  Nothing is written to the note — copy what you want to keep.
-                </span>
-              ) : null}
+          {runningCount > 1 || (runningCount > 0 && queue.length > 0) ? (
+            <div className={styles.sessionActions}>
+              <span className={styles.hint}>{runningCount} running</span>
+              <Button
+                onClick={() => sessionService.cancelAll()}
+                data-testid="cancel-all-agents"
+              >
+                Stop all
+              </Button>
             </div>
           ) : null}
+
+          {sessions.map(session => (
+            <SessionCard
+              key={session.id}
+              session={session}
+              queued={session.onDevice ? queue.length : 0}
+              onViewLog={setLogRunId}
+            />
+          ))}
 
           {queue.length > 0 ? (
             <div className={styles.section} data-testid="agent-queue">
               <span className={styles.sectionLabel}>
-                Up next ({queue.length})
+                Up next on this device ({queue.length})
               </span>
               <div className={styles.runList}>
                 {queue.map(run => (
@@ -274,7 +302,7 @@ export const EditorAgentsPanel = () => {
                     run={run}
                     now={now}
                     onOpen={setLogRunId}
-                    onRetry={running ? undefined : runActions.retry}
+                    onRetry={runActions.retry}
                     onDelete={runActions.remove}
                   />
                 ))}

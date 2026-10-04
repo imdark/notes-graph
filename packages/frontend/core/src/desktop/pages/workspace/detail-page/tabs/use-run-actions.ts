@@ -43,14 +43,6 @@ export const useRunActions = ({ openDoc }: { openDoc: boolean }) => {
         });
         return;
       }
-      // Starting a run replaces the current one, which would stop it unasked.
-      if (sessionService.session$.value?.running) {
-        notify.error({
-          title: 'Another run is going',
-          message: 'Stop it or wait for it to finish first.',
-        });
-        return;
-      }
       if (openDoc) workbench.openDoc(run.docId, { at: 'active' });
       workbench.openSidebar();
       workbench.activeView$.value.activeSidebarTab('agents');
