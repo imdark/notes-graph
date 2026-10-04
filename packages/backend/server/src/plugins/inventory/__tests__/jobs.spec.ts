@@ -124,6 +124,7 @@ function storedJob(overrides: Record<string, unknown> = {}): any {
     logDropped: 0,
     tmuxSession: null,
     claimedBy: 'runner',
+    allowAllTools: false,
     startedAt: null,
     finishedAt: null,
     createdAt: new Date(0),
@@ -191,10 +192,15 @@ test('a report passes log text and the tmux session to the model', async t => {
 
 function questionService(job: any, question?: any) {
   const answered: any[] = [];
+  const asked: any[] = [];
+  const allowedAll: string[] = [];
   const models: any = {
     inventoryJob: {
       get: async () => job,
-      ask: async (jobId: string, input: any) => ({
+      allowAllTools: async (_jobId: string, by: string) => {
+        allowedAll.push(by);
+      },
+      ask: async (jobId: string, input: any) => (asked.push(input), {
         id: 'q1',
         jobId,
         ...input,
@@ -212,7 +218,7 @@ function questionService(job: any, question?: any) {
       },
     },
   };
-  return { service: new InventoryJobService(models), answered };
+  return { service: new InventoryJobService(models), answered, asked, allowedAll };
 }
 
 const openQuestion = (overrides: Record<string, unknown> = {}) => ({
@@ -282,6 +288,46 @@ test('a permission needs an explicit allow or deny', async t => {
   );
   await service.answer(workspaceId, 'job-1', 'q1', userId, { allowed: false });
   t.deepEqual(answered, [{ allowed: false, answer: undefined }]);
+});
+
+test('"Allow all" allows the permission and every later one in the run', async t => {
+  const { service, answered, allowedAll } = questionService(
+    storedJob({ createdBy: userId }),
+    openQuestion({ kind: 'permission', text: 'Allow Bash?' })
+  );
+  await service.answer(workspaceId, 'job-1', 'q1', userId, {
+    allowed: true,
+    allowAll: true,
+  });
+  t.deepEqual(answered, [{ allowed: true, answer: undefined }]);
+  t.deepEqual(allowedAll, [userId]);
+});
+
+test('"Allow all" cannot go with a deny', async t => {
+  const { service, answered, allowedAll } = questionService(
+    storedJob({ createdBy: userId }),
+    openQuestion({ kind: 'permission', text: 'Allow Bash?' })
+  );
+  await t.throwsAsync(
+    service.answer(workspaceId, 'job-1', 'q1', userId, {
+      allowed: false,
+      allowAll: true,
+    }),
+    { message: /allowAll only goes with allowed: true/ }
+  );
+  t.deepEqual(answered, []);
+  t.deepEqual(allowedAll, []);
+});
+
+test('after "Allow all" a permission is recorded as allowed, not asked', async t => {
+  const { service, asked } = questionService(
+    storedJob({ createdBy: userId, allowAllTools: true })
+  );
+  await service.ask(workspaceId, 'job-1', { kind: 'permission', text: 'Allow Edit?' });
+  // A plain question still waits for the person: "Allow all" covers tools only.
+  await service.ask(workspaceId, 'job-1', { text: 'Who is Cosmo?' });
+  t.is(asked[0].allowedBy, userId);
+  t.false('allowedBy' in asked[1]);
 });
 
 test('a question is answered once', async t => {

@@ -32,7 +32,7 @@ export const AgentQuestionCard = ({
   const [error, setError] = useState<string | null>(null);
 
   const send = useCallback(
-    (answer: { answer?: string; allowed?: boolean }) => {
+    (answer: { answer?: string; allowed?: boolean; allowAll?: boolean }) => {
       setState('sending');
       setError(null);
       remoteRunner
@@ -104,6 +104,20 @@ export const AgentQuestionCard = ({
                   data-testid="agent-question-allow"
                 >
                   Allow
+                </Button>
+                <Button
+                  disabled={state !== 'idle'}
+                  onClick={() =>
+                    send({
+                      allowed: true,
+                      allowAll: true,
+                      answer: text.trim() || undefined,
+                    })
+                  }
+                  tooltip="Allow this and every other tool for the rest of this run, without asking again"
+                  data-testid="agent-question-allow-all"
+                >
+                  Allow all
                 </Button>
                 <Button
                   disabled={state !== 'idle'}
