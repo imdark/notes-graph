@@ -19,6 +19,7 @@ import type { WorkspaceService } from '../../workspace';
 import {
   openQuestions,
   RemoteAgentRunnerService,
+  type RemoteJob,
   type RemoteQuestion,
 } from './remote-runner';
 import { stampLines } from './log-lines';
@@ -57,16 +58,19 @@ export interface AgentExecutor {
 /** A run that never answers must still end. */
 const WALL_CLOCK_MS = 120_000;
 /**
- * A device gives a job 15 minutes (`run_job` in `wf agent serve`). The tab
- * must outlast that, or a slow remote run is cancelled from here while the
- * device is still making progress on it.
- */
-const REMOTE_WALL_CLOCK_MS = 16 * 60_000;
-/**
  * Each cloud step is a server round trip, and a tool loop takes several, so
  * the on-device limit would cut off a run that is working.
  */
 const CLOUD_WALL_CLOCK_MS = 10 * 60_000;
+/**
+ * A run with no device job that still says running after this long was
+ * orphaned: every in-tab run is cut off by its wall clock well before, so the
+ * tab driving it must have closed before it could record the end.
+ */
+const ORPHANED_AFTER_MS = CLOUD_WALL_CLOCK_MS + 60_000;
+/** What an orphaned in-tab run is recorded as having ended with. */
+const ORPHANED_ERROR =
+  'Interrupted: the tab running it closed before it finished.';
 /** How much of a tool result goes into the transcript. */
 const LOG_TOOL_RESULT_CHARS = 400;
 
@@ -249,6 +253,92 @@ export class AgentExecutorService extends Service implements AgentExecutor {
    */
   private readonly inFlight = new Set<string>();
 
+  /** Run records this tab is driving, which only this tab may settle. */
+  private readonly liveRuns = new Set<string>();
+  private reconciling = false;
+
+  /**
+   * Record how a device job ended on its run row, if it has ended. The tab
+   * that started a run writes its end, so a run whose tab closed mid-way is
+   * left saying running after its job is long finished; any viewer that sees
+   * the job end can put that right.
+   */
+  settleFromJob(runId: string, job: RemoteJob): void {
+    if (this.liveRuns.has(runId)) return;
+    const endedAt = job.finishedAt ? job.finishedAt * 1000 : Date.now();
+    const steps = job.steps ?? 0;
+    switch (job.status) {
+      case 'done':
+        this.runsStore.finish(
+          runId,
+          { status: 'done', steps, output: job.result ?? '' },
+          endedAt
+        );
+        return;
+      case 'error':
+        this.runsStore.finish(
+          runId,
+          {
+            status: 'error',
+            steps,
+            error: job.error || 'The run failed on its device.',
+          },
+          endedAt
+        );
+        return;
+      case 'cancelled':
+        this.runsStore.finish(runId, { status: 'cancelled', steps }, endedAt);
+        return;
+    }
+  }
+
+  /**
+   * Settle run rows left saying running by a tab that closed mid-run: a
+   * device run takes its device job's end; an in-tab run past any wall clock
+   * is recorded as interrupted. Rows this tab is driving are left alone, and
+   * so are ones that may still be going in another tab.
+   */
+  async reconcileRuns(): Promise<void> {
+    if (this.reconciling) return;
+    this.reconciling = true;
+    try {
+      const now = Date.now();
+      const workspaceId = this.workspaceId;
+      const orphans = this.runsStore
+        .runningRuns()
+        .filter(run => !this.liveRuns.has(run.id));
+      await Promise.all(
+        orphans.map(async run => {
+          if (run.remoteJobId) {
+            if (!workspaceId) return;
+            try {
+              // Past the end of any transcript: only the status is wanted.
+              const job = await this.remoteRunner.get(
+                workspaceId,
+                run.remoteJobId,
+                Number.MAX_SAFE_INTEGER
+              );
+              this.settleFromJob(run.id, job);
+            } catch {
+              // Unreachable for now; the next pass tries again.
+            }
+            return;
+          }
+          if (now - run.startedAt > ORPHANED_AFTER_MS) {
+            this.runsStore.finish(
+              run.id,
+              { status: 'error', steps: run.steps ?? 0, error: ORPHANED_ERROR },
+              // When it must have stopped by, not when it was noticed.
+              Math.min(now, run.startedAt + ORPHANED_AFTER_MS)
+            );
+          }
+        })
+      );
+    } finally {
+      this.reconciling = false;
+    }
+  }
+
   /**
    * The runtime an agent will actually use: its own choice, else on-device.
    *
@@ -273,25 +363,28 @@ export class AgentExecutorService extends Service implements AgentExecutor {
     this.inFlight.add(key);
 
     const runId = this.runsStore.start(agent, target);
+    this.liveRuns.add(runId);
     const harness = this.harnessFor(agent);
     // Cancellation has two sources — the caller's signal and the wall clock —
     // funnelled into one controller so the stream and the run record only ever
     // have to look at a single aborted flag.
     const controller = new AbortController();
+    // A device runs a job with no time limit (`run_job` in `wf agent serve`)
+    // — it may be working through a long task list — so a remote run has no
+    // wall clock here either; it ends when the device finishes or on cancel.
     const limit =
       harness === 'remote'
-        ? REMOTE_WALL_CLOCK_MS
+        ? null
         : harness === 'cloud'
           ? CLOUD_WALL_CLOCK_MS
           : WALL_CLOCK_MS;
-    let deadline: ReturnType<typeof setTimeout> | null = setTimeout(
-      () => controller.abort(),
-      limit
-    );
+    let deadline: ReturnType<typeof setTimeout> | null =
+      limit === null ? null : setTimeout(() => controller.abort(), limit);
     // A run waiting on the reader is not stalled: the clock stops while a
     // question is open and starts afresh once it is answered. The device
     // does the same with its own limit.
     const pauseClock = (waiting: boolean) => {
+      if (limit === null) return;
       if (waiting && deadline) {
         clearTimeout(deadline);
         deadline = null;
@@ -429,6 +522,7 @@ export class AgentExecutorService extends Service implements AgentExecutor {
       if (deadline) clearTimeout(deadline);
       signal.removeEventListener('abort', onOuterAbort);
       this.inFlight.delete(key);
+      this.liveRuns.delete(runId);
     }
   }
 

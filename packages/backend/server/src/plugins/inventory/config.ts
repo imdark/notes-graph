@@ -7,6 +7,12 @@ export interface InventoryConfig {
   enabled: boolean;
   /** Upper bound on devices per workspace, to keep a looping CLI honest. */
   maxDevicesPerWorkspace: number;
+  /**
+   * Firebase service-account key (the whole JSON file, as a string) used to
+   * push "an agent is waiting on you" to phones. Empty turns push off; the
+   * questions still wait in the app.
+   */
+  fcmServiceAccount: string;
 }
 
 declare global {
@@ -14,6 +20,7 @@ declare global {
     inventory: {
       enabled: ConfigItem<boolean>;
       maxDevicesPerWorkspace: ConfigItem<number>;
+      fcmServiceAccount: ConfigItem<string>;
     };
   }
 }
@@ -39,5 +46,11 @@ defineModuleConfig('inventory', {
     default: 500,
     schema: z.number().int().positive(),
     env: ['NOTESGRAPH_INVENTORY_MAX_DEVICES', 'integer'],
+  },
+  fcmServiceAccount: {
+    desc: 'Firebase service-account JSON for pushing agent questions to phones. Empty disables push.',
+    default: '',
+    schema: z.string(),
+    env: ['NOTESGRAPH_FCM_SERVICE_ACCOUNT', 'string'],
   },
 });

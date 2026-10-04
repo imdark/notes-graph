@@ -55,6 +55,15 @@ export const body = style({
   lineHeight: 1.55,
 });
 
+/**
+ * As wide as the longest line, so lines scroll sideways instead of wrapping.
+ * Every row is a `1fr 1fr` grid at this width, keeping the columns aligned.
+ */
+export const lines = style({
+  width: 'max-content',
+  minWidth: '100%',
+});
+
 export const columnsHeader = style({
   display: 'grid',
   gridTemplateColumns: '1fr 1fr',
@@ -85,8 +94,7 @@ export const cell = style({
   minWidth: 0,
   padding: '0 8px 0 20px',
   position: 'relative',
-  whiteSpace: 'pre-wrap',
-  wordBreak: 'break-word',
+  whiteSpace: 'pre',
   color: cssVarV2('text/primary'),
   selectors: {
     [`${row} > & + &`]: {
@@ -128,7 +136,7 @@ export const wordAdded = style({
 
 export const fold = style({
   padding: '1px 8px',
-  textAlign: 'center',
+  textAlign: 'left',
   color: cssVarV2('text/tertiary'),
   background: cssVarV2('layer/background/secondary'),
   cursor: 'pointer',
@@ -136,4 +144,11 @@ export const fold = style({
   width: '100%',
   fontFamily: 'inherit',
   fontSize: 'inherit',
+});
+
+/** Pinned to the left edge so it stays visible while scrolled sideways. */
+export const foldLabel = style({
+  display: 'inline-block',
+  position: 'sticky',
+  left: 8,
 });

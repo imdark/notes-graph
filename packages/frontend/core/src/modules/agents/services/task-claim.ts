@@ -1,0 +1,143 @@
+import {
+  orgStatusLabel,
+  parseOrgStatusPrefix,
+} from '@blocksuite/notesgraph/shared/utils';
+import type { BlockModel, Store } from '@blocksuite/notesgraph/store';
+import { Service } from '@notesgraph/infra';
+
+import type { DocsService } from '../../doc';
+import { type AgentTarget, agentTargetBlockIds } from './target';
+
+/** The org keyword a task carries while a run for it waits or starts. */
+export const QUEUED_STATUS = 'QUEUED';
+
+/** How long a finished run waits before handing back a task it left queued. */
+const RELEASE_SETTLE_MS = 5_000;
+
+/**
+ * A task's org status: the chip embed (one attributed character at the start
+ * whose `orgStatus` holds the org text), a raw typed annotation like `[-] `,
+ * or — for a checkbox item with neither — its native checked state.
+ */
+export const readTaskStatus = (
+  model: BlockModel
+): { text: string; length: number; embedded: boolean } | null => {
+  const text = model.text;
+  if (!text) return null;
+  const first = text.toDelta()[0] as
+    | { insert?: string; attributes?: { orgStatus?: string } }
+    | undefined;
+  const embedded = first?.attributes?.orgStatus;
+  if (typeof embedded === 'string' && first?.insert) {
+    return { text: embedded, length: first.insert.length, embedded: true };
+  }
+  const prefix = parseOrgStatusPrefix(text.toString());
+  if (prefix) {
+    return { text: prefix.statusText, length: prefix.length, embedded: false };
+  }
+  const props = model.props as { type?: string; checked?: boolean };
+  if (props.type === 'todo') {
+    return { text: props.checked ? '[X]' : '[ ]', length: 0, embedded: false };
+  }
+  return null;
+};
+
+/** Rewrite a task's status as a chip, the way the kanban board does. */
+const writeStatus = (
+  model: BlockModel,
+  status: { length: number; embedded: boolean },
+  statusText: string
+) => {
+  const text = model.text;
+  if (!text) return;
+  if (status.embedded) {
+    text.format(0, status.length, { orgStatus: statusText });
+  } else if (status.length > 0) {
+    text.replace(0, status.length, ' ', { orgStatus: statusText });
+  } else {
+    text.insert(' ', 0);
+    text.insert(' ', 0, { orgStatus: statusText });
+  }
+};
+
+/**
+ * Mark each to-do task among `blockIds` as queued. Tasks already in progress,
+ * done or in some other state are left alone, as are blocks that aren't tasks.
+ * Returns the blocks it marked.
+ */
+export function markTasksQueued(store: Store, blockIds: string[]): string[] {
+  const marked: string[] = [];
+  for (const id of blockIds) {
+    const model = store.getBlock(id)?.model;
+    if (!model) continue;
+    const status = readTaskStatus(model);
+    if (!status || orgStatusLabel(status.text) !== 'Todo') continue;
+    writeStatus(model, status, QUEUED_STATUS);
+    marked.push(id);
+  }
+  return marked;
+}
+
+/**
+ * Put tasks still marked queued back to to-do. One the agent moved on — to in
+ * progress, done, anything — keeps what the agent wrote.
+ */
+export function releaseQueuedTasks(store: Store, blockIds: string[]): void {
+  for (const id of blockIds) {
+    const model = store.getBlock(id)?.model;
+    if (!model) continue;
+    const status = readTaskStatus(model);
+    if (status?.text !== QUEUED_STATUS) continue;
+    writeStatus(model, status, '[ ]');
+  }
+}
+
+/**
+ * Claims the tasks a run is on the moment it is asked for, before any work
+ * starts, so another agent working down the same list — here, on a device or
+ * through MCP — sees them as taken rather than to-do and doesn't pick them up.
+ */
+export class AgentTaskClaimService extends Service {
+  constructor(private readonly docsService: DocsService) {
+    super();
+  }
+
+  async markQueued(target: AgentTarget): Promise<void> {
+    await this.withStore(target, store =>
+      markTasksQueued(store, agentTargetBlockIds(target))
+    );
+  }
+
+  /**
+   * Hand back tasks still marked queued, unless `claimedAgain` says another
+   * run has been asked for on them in the meantime.
+   */
+  async release(
+    target: AgentTarget,
+    claimedAgain: () => boolean = () => false
+  ): Promise<void> {
+    // A device or MCP agent writes its own status on the server; give that
+    // edit time to sync here, so a task it just finished isn't read as still
+    // queued and reopened.
+    await new Promise(resolve => setTimeout(resolve, RELEASE_SETTLE_MS));
+    if (claimedAgain()) return;
+    await this.withStore(target, store =>
+      releaseQueuedTasks(store, agentTargetBlockIds(target))
+    );
+  }
+
+  private async withStore(
+    target: AgentTarget,
+    fn: (store: Store) => void
+  ): Promise<void> {
+    // A whole note isn't one task; there is nothing to claim.
+    if (target.kind === 'doc') return;
+    const { doc, release } = this.docsService.open(target.docId);
+    try {
+      await doc.waitForSyncReady();
+      fn(doc.blockSuiteDoc);
+    } finally {
+      release();
+    }
+  }
+}

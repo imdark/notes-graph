@@ -7,6 +7,7 @@ import { PermissionModule } from '../../core/permission';
 import { WorkspaceModule } from '../../core/workspaces';
 import { InventoryController } from './controller';
 import { InventoryJobService } from './jobs';
+import { AgentPushService } from './push';
 import { InventoryService } from './service';
 
 /**
@@ -16,7 +17,7 @@ import { InventoryService } from './service';
  */
 @Module({
   imports: [AuthModule, PermissionModule, WorkspaceModule],
-  providers: [InventoryService, InventoryJobService],
+  providers: [InventoryService, InventoryJobService, AgentPushService],
   controllers: [InventoryController],
 })
 export class InventoryModule {}
