@@ -1,3 +1,5 @@
+import { DeleteIcon, ResetIcon } from '@blocksuite/icons/rc';
+import { IconButton } from '@notesgraph/component';
 import type { AgentRun } from '@notesgraph/core/modules/agents';
 import { DocDisplayMetaService } from '@notesgraph/core/modules/doc-display-meta';
 import { useLiveData, useService } from '@notesgraph/infra';
@@ -94,7 +96,9 @@ const DocLink = ({
 
 /**
  * One run in a list. Clicking it opens the log; with `onOpenDoc`, the note it
- * ran on is shown too and opens on its own click.
+ * ran on is shown too and opens on its own click. `onRetry` and `onDelete`
+ * add those actions to a run that has ended — a live one has to be stopped
+ * first, or its row would come back the moment it finished.
  */
 export const RunRow = ({
   run,
@@ -102,19 +106,71 @@ export const RunRow = ({
   now,
   onOpen,
   onOpenDoc,
+  onRetry,
+  onDelete,
 }: {
   run: AgentRun;
   status?: RunDisplayStatus;
   now: number;
   onOpen: (runId: string) => void;
   onOpenDoc?: (docId: string) => void;
+  onRetry?: (run: AgentRun) => void;
+  onDelete?: (run: AgentRun) => void;
+}) => {
+  const ended = status !== 'running' && status !== 'waiting';
+  return (
+    <div className={styles.runItem} data-testid="agent-run-row">
+      <button
+        className={styles.runRowButton}
+        onClick={() => onOpen(run.id)}
+        title="View log"
+      >
+        <RunRowContent
+          run={run}
+          status={status}
+          now={now}
+          onOpenDoc={onOpenDoc}
+        />
+      </button>
+      {ended && (onRetry || onDelete) ? (
+        <div className={styles.runActions}>
+          {onRetry ? (
+            <IconButton
+              size="16"
+              icon={<ResetIcon />}
+              tooltip="Run again"
+              onClick={() => onRetry(run)}
+              data-testid="agent-run-retry"
+            />
+          ) : null}
+          {onDelete ? (
+            <IconButton
+              size="16"
+              variant="danger"
+              icon={<DeleteIcon />}
+              tooltip="Delete run"
+              onClick={() => onDelete(run)}
+              data-testid="agent-run-delete"
+            />
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
+};
+
+const RunRowContent = ({
+  run,
+  status,
+  now,
+  onOpenDoc,
+}: {
+  run: AgentRun;
+  status: RunDisplayStatus;
+  now: number;
+  onOpenDoc?: (docId: string) => void;
 }) => (
-  <button
-    className={styles.runRowButton}
-    onClick={() => onOpen(run.id)}
-    title="View log"
-    data-testid="agent-run-row"
-  >
+  <>
     <div className={styles.runText}>
       <span className={styles.runHead}>
         <span className={styles.runName}>{run.agentName}</span>
@@ -138,5 +194,5 @@ export const RunRow = ({
           : ''}
       </span>
     </div>
-  </button>
+  </>
 );

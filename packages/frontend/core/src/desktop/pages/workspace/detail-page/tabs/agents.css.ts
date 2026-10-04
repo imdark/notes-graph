@@ -110,15 +110,6 @@ export const runList = style({
   overflow: 'hidden',
 });
 
-export const runRow = style({
-  display: 'flex',
-  alignItems: 'center',
-  gap: 8,
-  padding: '8px 10px',
-  borderBottom: `1px solid ${cssVarV2('layer/insideBorder/border')}`,
-  selectors: { '&:last-child': { borderBottom: 'none' } },
-});
-
 export const runText = style({
   display: 'flex',
   flexDirection: 'column',
@@ -170,19 +161,44 @@ export const sessionActions = style({
   gap: 8,
 });
 
-export const runRowButton = style([
-  runRow,
-  {
-    width: '100%',
-    border: 'none',
-    background: 'transparent',
-    textAlign: 'left',
-    cursor: 'pointer',
-    selectors: {
-      '&:hover': { background: cssVarV2('layer/background/hoverOverlay') },
-    },
+export const runItem = style({
+  display: 'flex',
+  alignItems: 'center',
+  width: '100%',
+  borderBottom: `1px solid ${cssVarV2('layer/insideBorder/border')}`,
+  selectors: {
+    '&:last-child': { borderBottom: 'none' },
+    '&:hover': { background: cssVarV2('layer/background/hoverOverlay') },
   },
-]);
+});
+
+export const runRowButton = style({
+  display: 'flex',
+  alignItems: 'center',
+  gap: 8,
+  flex: 1,
+  minWidth: 0,
+  padding: '8px 10px',
+  border: 'none',
+  background: 'transparent',
+  color: 'inherit',
+  font: 'inherit',
+  textAlign: 'left',
+  cursor: 'pointer',
+});
+
+export const runActions = style({
+  display: 'flex',
+  gap: 2,
+  paddingRight: 8,
+  flexShrink: 0,
+  // Out of the way until the row is pointed at; always there on touch.
+  opacity: 0,
+  selectors: {
+    [`${runItem}:hover &, ${runItem}:focus-within &`]: { opacity: 1 },
+  },
+  '@media': { '(hover: none)': { opacity: 1 } },
+});
 
 export const logDialogBody = style({
   display: 'flex',

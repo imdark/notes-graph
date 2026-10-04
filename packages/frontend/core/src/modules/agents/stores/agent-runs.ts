@@ -13,6 +13,7 @@ export interface AgentRun {
   targetKind: string;
   docId: string;
   blockId?: string;
+  blockIds?: string[];
   status: AgentRunStatus;
   startedAt: number;
   durationMs?: number;
@@ -73,6 +74,7 @@ export class AgentRunsStore extends Store {
       targetKind: target.kind,
       docId: target.docId,
       blockId: target.kind === 'block' ? target.blockId : undefined,
+      blockIds: target.kind === 'selection' ? target.blockIds : undefined,
       status: 'running',
       startedAt: Date.now(),
     });
@@ -111,6 +113,35 @@ export class AgentRunsStore extends Store {
     });
   }
 
+  /**
+   * What the run was pointed at, to run it again. Null for a selection run
+   * recorded before its blocks were kept.
+   */
+  targetOf(run: AgentRun): AgentTarget | null {
+    switch (run.targetKind) {
+      case 'block':
+        return run.blockId
+          ? { kind: 'block', docId: run.docId, blockId: run.blockId }
+          : null;
+      case 'selection':
+        return run.blockIds?.length
+          ? { kind: 'selection', docId: run.docId, blockIds: run.blockIds }
+          : null;
+      case 'doc':
+        return { kind: 'doc', docId: run.docId };
+      default:
+        return null;
+    }
+  }
+
+  /** Remove runs from the history, and their transcripts. */
+  delete(runIds: string[]): void {
+    runIds.forEach(id => this.table.delete(id));
+    this.logsStore.delete(runIds).catch(() => {
+      // A transcript left behind is harmless; it just isn't reachable.
+    });
+  }
+
   /** Drop the oldest rows beyond MAX_RUNS, and their transcripts. */
   private prune(): void {
     const rows = this.table.find();
@@ -119,9 +150,6 @@ export class AgentRunsStore extends Store {
       .slice()
       .sort((a, b) => (b.startedAt ?? 0) - (a.startedAt ?? 0))
       .slice(MAX_RUNS);
-    dropped.forEach(row => this.table.delete(row.id));
-    this.logsStore.delete(dropped.map(row => row.id)).catch(() => {
-      // A transcript left behind is harmless; it just isn't reachable.
-    });
+    this.delete(dropped.map(row => row.id));
   }
 }

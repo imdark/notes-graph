@@ -1,5 +1,5 @@
 import { PlusIcon } from '@blocksuite/icons/rc';
-import { Button } from '@notesgraph/component';
+import { Button, useConfirmModal } from '@notesgraph/component';
 import {
   type Agent,
   AgentIcon,
@@ -32,6 +32,7 @@ import {
   type RemoteRunState,
   useRemoteRunStates,
 } from '../detail-page/tabs/use-run-questions';
+import { useRunActions } from '../detail-page/tabs/use-run-actions';
 import * as styles from './agents-page.css';
 
 type RunFilter = 'all' | 'waiting' | 'running' | 'error' | 'done';
@@ -137,6 +138,8 @@ const AgentsPage = () => {
   const dialogService = useService(WorkspaceDialogService);
   const workbench = useService(WorkbenchService).workbench;
   const now = useMinuteTick();
+  const runActions = useRunActions({ openDoc: true });
+  const { openConfirmModal } = useConfirmModal();
 
   const agents = useLiveData(agentsService.agents$);
   const runs = useLiveData(useMemo(() => runsStore.watchRuns(), [runsStore]));
@@ -205,6 +208,27 @@ const AgentsPage = () => {
         : agentRuns.filter(run => statuses.get(run.id) === filter),
     [agentRuns, filter, statuses]
   );
+
+  // A live run can't be deleted: its row would be written again when it ends.
+  const deletable = useMemo(
+    () =>
+      shown.filter(run => {
+        const status = statuses.get(run.id);
+        return status !== 'running' && status !== 'waiting';
+      }),
+    [shown, statuses]
+  );
+  const confirmDeleteShown = useCallback(() => {
+    const ids = deletable.map(run => run.id);
+    openConfirmModal({
+      title: `Delete ${ids.length} ${ids.length === 1 ? 'run' : 'runs'}?`,
+      description:
+        'They and their logs are removed from your run history. What the agents wrote into your notes stays.',
+      confirmText: 'Delete',
+      confirmButtonOptions: { variant: 'error' },
+      onConfirm: () => runsStore.delete(ids),
+    });
+  }, [deletable, openConfirmModal, runsStore]);
 
   // Questions are the one thing here that blocks a run, so they lead the
   // page whatever the filters say.
@@ -307,11 +331,23 @@ const AgentsPage = () => {
             <section className={styles.section}>
               <div className={styles.sectionTitle}>
                 {selectedAgent ? `Runs of ${selectedAgent.name}` : 'Runs'}
-                {selectedAgent ? (
+                {selectedAgent || deletable.length > 0 ? (
                   <div className={styles.sectionActions}>
-                    <Button variant="plain" onClick={() => setAgentId(null)}>
-                      Show all agents
-                    </Button>
+                    {deletable.length > 0 ? (
+                      <Button
+                        variant="plain"
+                        onClick={confirmDeleteShown}
+                        data-testid="agents-page-delete-shown"
+                      >
+                        Delete {deletable.length} ended{' '}
+                        {deletable.length === 1 ? 'run' : 'runs'}
+                      </Button>
+                    ) : null}
+                    {selectedAgent ? (
+                      <Button variant="plain" onClick={() => setAgentId(null)}>
+                        Show all agents
+                      </Button>
+                    ) : null}
                   </div>
                 ) : null}
               </div>
@@ -348,6 +384,8 @@ const AgentsPage = () => {
                       now={now}
                       onOpen={setLogRunId}
                       onOpenDoc={openDoc}
+                      onRetry={runActions.retry}
+                      onDelete={runActions.remove}
                     />
                   ))}
                 </div>
