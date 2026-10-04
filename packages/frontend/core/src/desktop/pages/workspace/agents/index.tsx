@@ -164,7 +164,10 @@ const AgentsPage = () => {
   }, []);
 
   const statuses = useMemo(
-    () => new Map(runs.map(run => [run.id, displayStatus(run, remote.get(run.id))])),
+    () =>
+      new Map(
+        runs.map(run => [run.id, displayStatus(run, remote.get(run.id))])
+      ),
     [runs, remote]
   );
 
@@ -235,7 +238,8 @@ const AgentsPage = () => {
   const waiting = useMemo(
     () =>
       runs.filter(
-        run => run.remoteJobId && (remote.get(run.id)?.questions.length ?? 0) > 0
+        run =>
+          run.remoteJobId && (remote.get(run.id)?.questions.length ?? 0) > 0
       ),
     [runs, remote]
   );
@@ -265,7 +269,10 @@ const AgentsPage = () => {
         <div className={styles.body}>
           <div className={styles.content}>
             {waiting.length > 0 ? (
-              <section className={styles.section} data-testid="agents-page-waiting">
+              <section
+                className={styles.section}
+                data-testid="agents-page-waiting"
+              >
                 <div className={styles.sectionTitle}>
                   Needs you
                   <span className={styles.sectionCount}>{waiting.length}</span>
@@ -279,6 +286,7 @@ const AgentsPage = () => {
                         now={now}
                         onOpen={setLogRunId}
                         onOpenDoc={openDoc}
+                        onShowTarget={runActions.showRunTarget}
                       />
                     </div>
                     {remote.get(run.id)?.questions.map(question => (
@@ -300,8 +308,8 @@ const AgentsPage = () => {
               </div>
               {agents.length === 0 ? (
                 <div className={styles.empty}>
-                  No agents yet. An agent is a saved instruction you can run
-                  on a block, a selection or a whole note.
+                  No agents yet. An agent is a saved instruction you can run on
+                  a block, a selection or a whole note.
                   <div style={{ marginTop: 12 }}>
                     <Button variant="primary" onClick={openSettings}>
                       Create your first agent
@@ -384,6 +392,7 @@ const AgentsPage = () => {
                       now={now}
                       onOpen={setLogRunId}
                       onOpenDoc={openDoc}
+                      onShowTarget={runActions.showRunTarget}
                       onRetry={runActions.retry}
                       onDelete={runActions.remove}
                     />

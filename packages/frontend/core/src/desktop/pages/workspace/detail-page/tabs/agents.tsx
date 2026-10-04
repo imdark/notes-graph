@@ -7,6 +7,7 @@ import {
   AgentRunSessionService,
   AgentRunsStore,
   AgentsService,
+  agentTargetBlockIds,
 } from '@notesgraph/core/modules/agents';
 import { WorkspaceDialogService } from '@notesgraph/core/modules/dialogs';
 import { DocService } from '@notesgraph/core/modules/doc';
@@ -28,11 +29,13 @@ const SessionCard = ({
   session,
   queued,
   onViewLog,
+  onShowTarget,
 }: {
   session: AgentRunSession;
   /** How many on-device runs wait for this one, when it is on-device. */
   queued: number;
   onViewLog: (runId: string) => void;
+  onShowTarget: (target: AgentRunSession['target']) => void;
 }) => {
   const sessionService = useService(AgentRunSessionService);
   const { running } = session;
@@ -59,7 +62,19 @@ const SessionCard = ({
         <span className={styles.sectionLabel}>
           {session.agentName} · {session.targetLabel}
         </span>
-        <RunStatusBadge status={status} />
+        <span className={styles.sessionHeadSide}>
+          {agentTargetBlockIds(session.target).length > 0 ? (
+            <button
+              className={styles.linkButton}
+              onClick={() => onShowTarget(session.target)}
+              title="Scroll to the blocks this run is on"
+              data-testid="agent-show-target"
+            >
+              Show
+            </button>
+          ) : null}
+          <RunStatusBadge status={status} />
+        </span>
       </div>
 
       {session.remoteJobId
@@ -249,6 +264,7 @@ export const EditorAgentsPanel = () => {
               session={session}
               queued={session.onDevice ? queue.length : 0}
               onViewLog={setLogRunId}
+              onShowTarget={runActions.showTarget}
             />
           ))}
 
@@ -302,6 +318,7 @@ export const EditorAgentsPanel = () => {
                     run={run}
                     now={now}
                     onOpen={setLogRunId}
+                    onShowTarget={runActions.showRunTarget}
                     onRetry={runActions.retry}
                     onDelete={runActions.remove}
                   />
