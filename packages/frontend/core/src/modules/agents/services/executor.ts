@@ -57,12 +57,6 @@ export interface AgentExecutor {
 /** A run that never answers must still end. */
 const WALL_CLOCK_MS = 120_000;
 /**
- * A device gives a job 15 minutes (`run_job` in `wf agent serve`). The tab
- * must outlast that, or a slow remote run is cancelled from here while the
- * device is still making progress on it.
- */
-const REMOTE_WALL_CLOCK_MS = 16 * 60_000;
-/**
  * Each cloud step is a server round trip, and a tool loop takes several, so
  * the on-device limit would cut off a run that is working.
  */
@@ -278,20 +272,22 @@ export class AgentExecutorService extends Service implements AgentExecutor {
     // funnelled into one controller so the stream and the run record only ever
     // have to look at a single aborted flag.
     const controller = new AbortController();
+    // A device runs a job with no time limit (`run_job` in `wf agent serve`)
+    // — it may be working through a long task list — so a remote run has no
+    // wall clock here either; it ends when the device finishes or on cancel.
     const limit =
       harness === 'remote'
-        ? REMOTE_WALL_CLOCK_MS
+        ? null
         : harness === 'cloud'
           ? CLOUD_WALL_CLOCK_MS
           : WALL_CLOCK_MS;
-    let deadline: ReturnType<typeof setTimeout> | null = setTimeout(
-      () => controller.abort(),
-      limit
-    );
+    let deadline: ReturnType<typeof setTimeout> | null =
+      limit === null ? null : setTimeout(() => controller.abort(), limit);
     // A run waiting on the reader is not stalled: the clock stops while a
     // question is open and starts afresh once it is answered. The device
     // does the same with its own limit.
     const pauseClock = (waiting: boolean) => {
+      if (limit === null) return;
       if (waiting && deadline) {
         clearTimeout(deadline);
         deadline = null;
