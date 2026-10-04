@@ -115,7 +115,9 @@ const Fold = ({ rows, single }: { rows: DiffRow[]; single: boolean }) => {
   }
   return (
     <button type="button" className={styles.fold} onClick={() => setOpen(true)}>
-      ⋯ {rows.length} unchanged lines
+      <span className={styles.foldLabel}>
+        ⋯ {rows.length} unchanged lines
+      </span>
     </button>
   );
 };
@@ -147,21 +149,23 @@ const FileDiff = ({ edit }: { edit: FileEdit }) => {
         </span>
       </div>
       <div className={styles.body}>
-        {single ? null : (
-          <div className={styles.columnsHeader}>
-            <span>Before</span>
-            <span>After</span>
-          </div>
-        )}
-        {blocks.map((block, i) =>
-          block.kind === 'fold' ? (
-            <Fold key={i} rows={block.rows} single={single} />
-          ) : (
-            block.rows.map((row, j) => (
-              <Row key={`${i}-${j}`} row={row} single={single} />
-            ))
-          )
-        )}
+        <div className={styles.lines}>
+          {single ? null : (
+            <div className={styles.columnsHeader}>
+              <span>Before</span>
+              <span>After</span>
+            </div>
+          )}
+          {blocks.map((block, i) =>
+            block.kind === 'fold' ? (
+              <Fold key={i} rows={block.rows} single={single} />
+            ) : (
+              block.rows.map((row, j) => (
+                <Row key={`${i}-${j}`} row={row} single={single} />
+              ))
+            )
+          )}
+        </div>
       </div>
     </div>
   );
