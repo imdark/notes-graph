@@ -187,7 +187,8 @@ export class RemoteAgentRunnerService extends Service {
     workspaceId: string,
     jobId: string,
     questionId: string,
-    answer: { answer?: string; allowed?: boolean }
+    /** `allowAll` (with `allowed: true`): allow every later tool in the run. */
+    answer: { answer?: string; allowed?: boolean; allowAll?: boolean }
   ): Promise<RemoteQuestion> {
     const data = await this.json<{ question: RemoteQuestion }>(
       `${this.base(workspaceId)}/jobs/${encodeURIComponent(jobId)}/questions/${encodeURIComponent(questionId)}/answer`,

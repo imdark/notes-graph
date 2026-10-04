@@ -275,12 +275,18 @@ export class InventoryJobService {
     if (!text) {
       throw new BadRequest('text is required');
     }
+    // After "Allow all" a permission is recorded as allowed by whoever
+    // started the run, rather than waiting on them again.
+    const allowAll = kind === 'permission' && job.allowAllTools;
     const question = await this.models.inventoryJob.ask(jobId, {
       kind,
       text: text.slice(0, MAX_QUESTION),
       detail: body.detail ? String(body.detail).slice(0, MAX_DETAIL) : null,
+      ...(allowAll ? { allowedBy: job.createdBy } : {}),
     });
-    this.logger.log(`job ${jobId} asked a ${kind}`);
+    this.logger.log(
+      `job ${jobId} asked a ${kind}${allowAll ? ' (allowed: allow all)' : ''}`
+    );
     return toQuestionDto(question);
   }
 
@@ -322,9 +328,13 @@ export class InventoryJobService {
     }
 
     let input: { answer?: string; allowed?: boolean };
+    const allowAll = body.allowAll === true;
     if (question.kind === 'permission') {
       if (typeof body.allowed !== 'boolean') {
         throw new BadRequest('allowed (true or false) is required for a permission');
+      }
+      if (allowAll && !body.allowed) {
+        throw new BadRequest('allowAll only goes with allowed: true');
       }
       input = {
         allowed: body.allowed,
@@ -343,6 +353,10 @@ export class InventoryJobService {
     );
     if (!answered) {
       throw new BadRequest('That question has already been answered.');
+    }
+    if (allowAll && question.kind === 'permission') {
+      await this.models.inventoryJob.allowAllTools(jobId, userId);
+      this.logger.log(`job ${jobId}: allow all tools`);
     }
     return toQuestionDto(answered);
   }

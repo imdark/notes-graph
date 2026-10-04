@@ -1761,6 +1761,9 @@ model InventoryJob {
   claimedBy      String?   @map("claimed_by") @db.VarChar
   leaseExpiresAt DateTime? @map("lease_expires_at") @db.Timestamptz(3)
   createdBy      String?   @map("created_by") @db.VarChar
+  /// Set by "Allow all" on a permission: every later tool in this run is
+  /// allowed without asking.
+  allowAllTools  Boolean   @default(false) @map("allow_all_tools")
   startedAt      DateTime? @map("started_at") @db.Timestamptz(3)
   finishedAt     DateTime? @map("finished_at") @db.Timestamptz(3)
   createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)

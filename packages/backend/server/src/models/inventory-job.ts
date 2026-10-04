@@ -1,3 +1,4 @@
+import { Transactional } from '@nestjs-cls/transactional';
 import { Injectable } from '@nestjs/common';
 import {
   type InventoryJob,
@@ -225,18 +226,48 @@ export class InventoryJobModel extends BaseModel {
       WHERE "id" = ${id}`;
   }
 
-  /** Record a question from a running job. The runner then polls for it. */
+  /**
+   * Record a question from a running job. The runner then polls for it.
+   * `allowedBy` records a permission as already allowed on that person's
+   * behalf (the run has "Allow all"), so the runner's first poll finds it
+   * answered and the run's questions still show what it did.
+   */
   async ask(
     jobId: string,
-    input: { kind: QuestionKind; text: string; detail?: string | null }
+    input: {
+      kind: QuestionKind;
+      text: string;
+      detail?: string | null;
+      allowedBy?: string | null;
+    }
   ): Promise<InventoryJobQuestion> {
+    const allowed = input.allowedBy !== undefined;
     return this.db.inventoryJobQuestion.create({
       data: {
         jobId,
         kind: input.kind,
         text: input.text,
         detail: input.detail ?? null,
+        ...(allowed
+          ? { allowed: true, answeredBy: input.allowedBy, answeredAt: new Date() }
+          : {}),
       },
+    });
+  }
+
+  /**
+   * "Allow all": every later permission in this run is allowed without
+   * asking, and any still open alongside the one answered are allowed now.
+   */
+  @Transactional()
+  async allowAllTools(jobId: string, userId: string): Promise<void> {
+    await this.db.inventoryJob.update({
+      where: { id: jobId },
+      data: { allowAllTools: true },
+    });
+    await this.db.inventoryJobQuestion.updateMany({
+      where: { jobId, kind: 'permission', answeredAt: null },
+      data: { allowed: true, answeredBy: userId, answeredAt: new Date() },
     });
   }
 
