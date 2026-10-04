@@ -34,6 +34,7 @@ export { AgentRunLogsStore } from './stores/agent-run-logs';
 export {
   type AgentRunSession,
   AgentRunSessionService,
+  type QueuedAgentRun,
 } from './services/run-session';
 export { type LogLine, parseLogLines } from './services/log-lines';
 export { type AgentTarget, agentTargetKey } from './services/target';
