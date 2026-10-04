@@ -51,6 +51,8 @@ export interface QuestionDto {
   kind: string;
   text: string;
   detail: string | null;
+  /** For a question: choices offered; empty means free text only. */
+  options: string[];
   answer: string | null;
   allowed: boolean | null;
   createdAt: number;
@@ -63,6 +65,7 @@ export function toQuestionDto(question: InventoryJobQuestion): QuestionDto {
     kind: question.kind,
     text: question.text,
     detail: question.detail,
+    options: question.options ?? [],
     answer: question.answer,
     allowed: question.allowed,
     createdAt: question.createdAt.getTime() / 1000,
@@ -127,6 +130,19 @@ const MAX_QUESTION = 4_000;
 // clipped JSON no longer parses, so leave room for a whole file.
 const MAX_DETAIL = 200_000;
 const MAX_ANSWER = 20_000;
+const MAX_OPTIONS = 10;
+const MAX_OPTION = 500;
+
+/** A question's choices: trimmed, non-empty, de-duplicated and capped. */
+function parseOptions(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  const options = value
+    .map(option => String(option ?? '').trim().slice(0, MAX_OPTION))
+    .filter(Boolean);
+  return [...new Set(options)].slice(0, MAX_OPTIONS);
+}
 const MAX_CONTEXT = 200_000;
 
 /**
@@ -282,6 +298,7 @@ export class InventoryJobService {
       kind,
       text: text.slice(0, MAX_QUESTION),
       detail: body.detail ? String(body.detail).slice(0, MAX_DETAIL) : null,
+      options: kind === 'question' ? parseOptions(body.options) : [],
       ...(allowAll ? { allowedBy: job.createdBy } : {}),
     });
     this.logger.log(

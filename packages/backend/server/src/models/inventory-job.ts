@@ -238,6 +238,7 @@ export class InventoryJobModel extends BaseModel {
       kind: QuestionKind;
       text: string;
       detail?: string | null;
+      options?: string[];
       allowedBy?: string | null;
     }
   ): Promise<InventoryJobQuestion> {
@@ -248,6 +249,7 @@ export class InventoryJobModel extends BaseModel {
         kind: input.kind,
         text: input.text,
         detail: input.detail ?? null,
+        options: input.options ?? [],
         ...(allowed
           ? { allowed: true, answeredBy: input.allowedBy, answeredAt: new Date() }
           : {}),
