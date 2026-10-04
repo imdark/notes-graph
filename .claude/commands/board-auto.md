@@ -5,8 +5,9 @@ description: Autonomously work the NotesGraph kanban board card-after-card with 
 # NotesGraph autonomous board worker
 
 You are the agent **@claude**. Work the kanban board as a self-driving loop:
-pull the most urgent eligible card, do it on its own branch, verify it, mark it
-done, move to the next — **without checking in between cards**. Keep pulling
+pull the most urgent eligible card, do it on its own branch, verify it, commit
+it, move to the next — **without checking in between cards**. A card is only
+done once its change is merged, deployed and verified live. Keep pulling
 until no eligible todo remains or you hit a real blocker.
 
 The whole point of this loop is **low input**: don't ask "should I do the next
@@ -69,8 +70,28 @@ stamps, `@mentions`, `#tags`, `#type:x`); raw edits corrupt the CRDT (caused the
    - Rust: `cargo test`.
 7. **Commit** `scripts/task-git.sh commit "<what+why>" <paths…>`. End the message
    with your session's attribution trailers; the script adds none.
-8. **Mark done** `update_task {status:"done", note:"<what shipped + how verified>"}`.
+8. **Mark committed — not done** `update_task {status:"committed", note:"<what
+   changed + commit + how verified>"}`. Done comes later, once it's live (see
+   "Shipping stages"). A card with nothing to ship (already fixed, a question
+   answered) goes straight to `done`.
 9. **Next card — immediately.** Don't ask. Go to step 1.
+
+## Shipping stages
+
+A card that ships code climbs `committed` → `merged` → `deployed` → `done` —
+**never** done just because the code is written. Each is a custom `update_task`
+status (rendered `COMMITTED`/`MERGED`/`DEPLOYED`; only `done` writes CLOSED):
+
+| status      | set when                                                         |
+|-------------|------------------------------------------------------------------|
+| `committed` | the work is committed on its branch (PR opened or pushed)        |
+| `merged`    | that branch landed on `main` (`gh pr view <branch> --json state` → `MERGED`) |
+| `deployed`  | a prod deploy containing `main` finished (`DEPLOY-DONE`)          |
+| `done`      | the deployed change was verified live                            |
+
+Stages only move forward. Before finishing, sweep: `list_blocks
+{docId:"_NYa0NxmRK", status:"committed"}`, then `merged`, then `deployed`, and
+promote each card whose next condition now holds, with a one-line note.
 
 ## Browser-verify recipes (learned the hard way)
 
@@ -125,6 +146,10 @@ milestones with the Monitor and keep going.
   milestones, exits `DEPLOY-EXITED`). The stack only rolls at `DEPLOY-DONE`
   (brief 502 while it boots) — killing the build before then is safe.
 - Verify: `curl -s -o /dev/null -w "%{http_code}" https://app.notesgraph.com/` → 200.
+- Then promote what it shipped: `merged` cards → `deployed` at `DEPLOY-DONE`,
+  and `deployed` → `done` once you've checked the change on prod. A deploy of
+  an unmerged (stacked) working tree doesn't make a card `merged`; it waits
+  until its branch lands on `main` and a deploy of `main` ships it.
 - SSH IP allowlist rotates (cellular/CGNAT); the script auto-opens ingress. If AWS
   SSO expired it can't — suggest the user run `! aws login`.
 - Mobile ships separately via the `deploy-android-apk` skill.
@@ -141,7 +166,8 @@ milestones with the Monitor and keep going.
 
 ## Finishing
 
-When no eligible todo remains, stop and report: cards completed (with branches),
-any bounced back to todo and why, and — if you deployed — the verification result.
+When no eligible todo remains, run the shipping-stage sweep, then stop and
+report: cards worked (with branches) and the stage each reached, any bounced
+back to todo and why, and — if you deployed — the verification result.
 To keep the loop running across turns with no prompting, drive it with `/loop`
 (or schedule a wakeup); each wake re-enters this file and pulls the next card.

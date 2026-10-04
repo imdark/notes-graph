@@ -6,7 +6,8 @@ description: Work the NotesGraph kanban board in a loop until no eligible todo c
 
 You are the agent **@claude**. Work the NotesGraph kanban board as a loop:
 claim the most urgent unclaimed todo, do it on its own branch, verify it,
-mark it done, and move to the next — until no eligible cards remain.
+commit it, and move to the next — until no eligible cards remain. A card is
+only done once its change is merged, deployed and verified live.
 
 $ARGUMENTS may name a board, a doc/block URL, or a section (e.g. "mobile:").
 If empty, default to the board found via the discovery step below and work the
@@ -58,9 +59,29 @@ edits or raw text corrupt the CRDT (this caused the "7 STARTED stamps" and
 7. **Commit.** `scripts/task-git.sh commit "<msg>" [paths...]` — stages the paths
    (or `-A`) and commits. Message: what changed + why, ending with your
    session's attribution trailers (the script adds none).
-8. **Mark done.** `update_task` → status done, with a note summarizing what shipped
-   (and how it was verified). This writes the CLOSED stamp.
+8. **Mark committed — not done.** `update_task` → status `committed`, with a note
+   summarizing what changed, the commit/branch, and how it was verified. A card
+   only reaches done once its change is live (see "Shipping stages" below).
+   A card with nothing to ship (a question answered, an already-fixed bug)
+   goes straight to done.
 9. **Next card.** Repeat from step 2.
+
+## Shipping stages
+
+A card that ships code climbs `committed` → `merged` → `deployed` → `done`; it
+is **never** marked done just because the code is written. Each is a custom
+`update_task` status (rendered `COMMITTED`/`MERGED`/`DEPLOYED`, no CLOSED stamp):
+
+| status      | set when                                                         |
+|-------------|------------------------------------------------------------------|
+| `committed` | the work is committed on its branch (PR opened or pushed)        |
+| `merged`    | that branch landed on `main` (`gh pr view <branch> --json state` → `MERGED`) |
+| `deployed`  | a prod deploy containing `main` finished (`DEPLOY-DONE`)          |
+| `done`      | the deployed change was verified live — writes CLOSED            |
+
+Stages only move forward. Before finishing a run, sweep the board:
+`list_blocks` with status `committed`, then `merged`, then `deployed`, and
+promote each card whose next condition now holds, with a one-line note.
 
 ## Deploying
 
@@ -73,6 +94,10 @@ min and OOM-risky if overlapped).
 - **Never run two deploys at once** — `deploy-prod.sh` holds a flock, and a second
   concurrent build OOM'd prod once. Let one finish before starting the next.
 - Verify after: `curl -s -o /dev/null -w "%{http_code}" https://app.notesgraph.com/` → 200.
+- Then promote the cards this deploy shipped: `merged` → `deployed` once it
+  finishes, and `deployed` → `done` once you've checked the change on prod.
+  Deploying a working tree that isn't merged doesn't make a card `merged` —
+  it stays where it is until its branch lands and a deploy of `main` ships it.
 
 ## Hard rules (learned the hard way)
 
@@ -90,6 +115,7 @@ min and OOM-risky if overlapped).
 
 ## Finishing
 
-When no eligible todo cards remain, stop the loop and report: which cards you
-completed (with branches), which you scoped back to todo and why, and whether a
-deploy went out + its verification result.
+When no eligible todo cards remain, run the shipping-stage sweep, then stop the
+loop and report: which cards you worked (with branches) and the stage each one
+reached, which you scoped back to todo and why, and whether a deploy went out +
+its verification result.

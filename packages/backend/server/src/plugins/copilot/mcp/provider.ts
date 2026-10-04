@@ -634,7 +634,7 @@ export class WorkspaceMcpProvider {
       name: 'get_board',
       title: 'Get Board',
       description:
-        'Read the virtual kanban/table boards defined in a document: each board is a saved query (scope) over task blocks — inline #tags, #key:value props, org status slice, and an optional due-within-days bound. Combine the scope with list_blocks to fetch the board\'s tasks, then act on a task with update_task (pull into in-progress, add notes, mark done). Find board documents with keyword_search or list_documents first.',
+        'Read the virtual kanban/table boards defined in a document: each board is a saved query (scope) over task blocks — inline #tags, #key:value props, org status slice, and an optional due-within-days bound. Combine the scope with list_blocks to fetch the board\'s tasks, then act on a task with update_task (pull into in-progress, add notes, move it through committed → merged → deployed → done as it ships). Find board documents with keyword_search or list_documents first.',
       parser: z.object({ docId: z.string() }),
       inputSchema: {
         type: 'object',
@@ -920,7 +920,7 @@ export class WorkspaceMcpProvider {
         title: 'Update Document',
         description:
           'Update an existing document with new markdown content (body only). Uses structural diffing to apply minimal changes, preserving document history and enabling real-time collaboration. Every update is stamped "Edited via MCP by <agent>". ' +
-          'Task workflow: task lists use org-mode annotations at the start of each list item — `[ ]` todo, `[-]` in progress, `[X]` done, or an UPPERCASE keyword — which kanban boards mirroring the list group by, plus planning annotations like `SCHEDULED: <date>`, `DEADLINE: <date>`, `STARTED: [date]`, `CLOSED: [date]` at the end of the line. To pick up a task, rewrite its annotation to `[-]` and append ` @<your-agent-name>` to the task line to claim it; mark it `[X]` when finished. Keep working memory and documentation in the task\'s own linked note (see link_document). ' +
+          'Task workflow: task lists use org-mode annotations at the start of each list item — `[ ]` todo, `[-]` in progress, `[X]` done, or an UPPERCASE keyword — which kanban boards mirroring the list group by, plus planning annotations like `SCHEDULED: <date>`, `DEADLINE: <date>`, `STARTED: [date]`, `CLOSED: [date]` at the end of the line. To pick up a task, rewrite its annotation to `[-]` and append ` @<your-agent-name>` to the task line to claim it; mark it `[X]` when finished. A task that ships code only becomes `[X]` once it is deployed and verified live — until then it climbs `COMMITTED` → `MERGED` → `DEPLOYED`. Keep working memory and documentation in the task\'s own linked note (see link_document). ' +
           'This does NOT update the document title. This tool not support insert or update database block and image yet.',
         parser: z.object({
           docId: z.string(),
@@ -1047,8 +1047,9 @@ export class WorkspaceMcpProvider {
         description:
           'Act on a single task block (from list_blocks / get_board / search_blocks) without rewriting the document: set its org status and/or append a progress note as a child block of the task. ' +
           "Statuses: 'todo' | 'in-progress' | 'done' | a custom keyword. Moving to in-progress stamps STARTED and claims the task with @<agent>; done stamps CLOSED (and checks the native checkbox); back to todo removes CLOSED. " +
+          "A task that ships code is not done when the code is written: it climbs the custom keywords 'committed' (on a branch / PR) → 'merged' (landed on the base branch) → 'deployed' (shipped to production) → 'done' (verified live). Never set done on a code change that isn't deployed and verified; a task with nothing to ship goes straight to done. " +
           'Notes are appended under the task, signed "<agent> via MCP". The edit is a surgical CRDT delta — safe alongside concurrent editors and database blocks. ' +
-          'Typical board workflow: get_board → list_blocks with the scope → update_task {status: "in-progress"} to pull a card → update_task {note} while working → update_task {status: "done"}.',
+          'Typical board workflow: get_board → list_blocks with the scope → update_task {status: "in-progress"} to pull a card → update_task {note} while working → update_task {status: "committed"}, then "merged" and "deployed" as the change ships → update_task {status: "done"} once it is verified live.',
         parser: z.object({
           docId: z.string(),
           blockId: z.string(),
@@ -1070,7 +1071,7 @@ export class WorkspaceMcpProvider {
             status: {
               type: 'string',
               description:
-                "New org status: 'todo' | 'in-progress' | 'done' | custom keyword. Omit to keep.",
+                "New org status: 'todo' | 'in-progress' | 'committed' | 'merged' | 'deployed' | 'done' | another custom keyword. Omit to keep.",
             },
             note: {
               type: 'string',
