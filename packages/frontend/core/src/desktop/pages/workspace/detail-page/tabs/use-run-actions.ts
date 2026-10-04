@@ -12,7 +12,7 @@ import { useCallback } from 'react';
 /**
  * Run-again and delete for a run in a list.
  *
- * Run again starts the same agent on the same target and shows it in that
+ * Run again starts (or queues) the same agent on the same target and shows it in that
  * note's Agents panel — the one place a run's output is shown — so from
  * anywhere but that note it opens the note first.
  */
@@ -43,14 +43,8 @@ export const useRunActions = ({ openDoc }: { openDoc: boolean }) => {
         });
         return;
       }
-      // Starting a run replaces the current one, which would stop it unasked.
-      if (sessionService.session$.value?.running) {
-        notify.error({
-          title: 'Another run is going',
-          message: 'Stop it or wait for it to finish first.',
-        });
-        return;
-      }
+      // While another run is going this queues behind it rather than
+      // replacing it.
       if (openDoc) workbench.openDoc(run.docId, { at: 'active' });
       workbench.openSidebar();
       workbench.activeView$.value.activeSidebarTab('agents');
