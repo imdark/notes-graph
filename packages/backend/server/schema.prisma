@@ -1788,6 +1788,8 @@ model InventoryJobQuestion {
   text       String    @db.Text
   /// For a permission: the tool input, so the person can see what they allow.
   detail     String?   @db.Text
+  /// For a question: choices to pick from; the person may still type their own.
+  options    String[]  @default([]) @db.Text
   answer     String?   @db.Text
   allowed    Boolean?
   answeredBy String?   @map("answered_by") @db.VarChar

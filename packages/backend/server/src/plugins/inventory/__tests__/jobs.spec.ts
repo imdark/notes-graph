@@ -227,6 +227,7 @@ const openQuestion = (overrides: Record<string, unknown> = {}) => ({
   kind: 'question',
   text: 'Who is Cosmo, and how old?',
   detail: null,
+  options: [],
   answer: null,
   allowed: null,
   createdAt: new Date(0),
@@ -242,6 +243,25 @@ test('a running job can ask its starter a question', async t => {
   t.is(question.kind, 'question');
   t.is(question.text, 'Who is Cosmo, and how old?');
   t.is(question.answeredAt, null);
+});
+
+test('a question can offer choices to pick from', async t => {
+  const { service } = questionService(storedJob({ createdBy: userId }));
+  const question = await service.ask(workspaceId, 'job-1', {
+    text: 'Open a PR to main?',
+    options: ['  Yes, open the PR ', '', 'No, stop here', 'Yes, open the PR', 7],
+  });
+  t.deepEqual(question.options, ['Yes, open the PR', 'No, stop here', '7']);
+});
+
+test('a permission keeps no choices; it is allow or deny', async t => {
+  const { service, asked } = questionService(storedJob({ createdBy: userId }));
+  await service.ask(workspaceId, 'job-1', {
+    kind: 'permission',
+    text: 'Allow Bash?',
+    options: ['maybe'],
+  });
+  t.deepEqual(asked[0].options, []);
 });
 
 test('a finished job cannot ask anything', async t => {

@@ -37,6 +37,8 @@ export interface RemoteQuestion {
   text: string;
   /** For a permission: the tool input being approved. */
   detail: string | null;
+  /** For a question: choices to pick from. Absent from older servers. */
+  options?: string[];
   answer: string | null;
   allowed: boolean | null;
   createdAt: number;

@@ -405,6 +405,12 @@ export const questionDetail = style({
   wordBreak: 'break-word',
 });
 
+export const questionOptions = style({
+  display: 'flex',
+  flexWrap: 'wrap',
+  gap: 8,
+});
+
 export const questionInput = style({
   width: '100%',
   resize: 'vertical',

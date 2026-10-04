@@ -53,6 +53,7 @@ export const AgentQuestionCard = ({
       isPermission ? parseEditPreview(question.text, question.detail) : null,
     [isPermission, question.text, question.detail]
   );
+  const options = isPermission ? [] : (question.options ?? []);
   const canSendAnswer = text.trim().length > 0 && state === 'idle';
 
   const onKeyDown = useCallback(
@@ -82,12 +83,35 @@ export const AgentQuestionCard = ({
         <span className={styles.hint}>Sent — it will carry on from here.</span>
       ) : (
         <>
+          {options.length > 0 ? (
+            <div
+              className={styles.questionOptions}
+              data-testid="agent-question-options"
+            >
+              {options.map(option => (
+                <Button
+                  key={option}
+                  disabled={state !== 'idle'}
+                  onClick={() => send({ answer: option })}
+                  data-testid="agent-question-option"
+                >
+                  {option}
+                </Button>
+              ))}
+            </div>
+          ) : null}
           <textarea
             className={styles.questionInput}
             value={text}
             onChange={e => setText(e.target.value)}
             onKeyDown={onKeyDown}
-            placeholder={isPermission ? 'Add a note (optional)' : 'Your answer'}
+            placeholder={
+              isPermission
+                ? 'Add a note (optional)'
+                : options.length > 0
+                  ? 'Or type your own answer'
+                  : 'Your answer'
+            }
             rows={isPermission ? 1 : 2}
             disabled={state === 'sending'}
             data-testid="agent-question-input"
