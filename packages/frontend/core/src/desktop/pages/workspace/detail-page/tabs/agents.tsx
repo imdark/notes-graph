@@ -6,6 +6,7 @@ import {
   AgentRunSessionService,
   AgentRunsStore,
   AgentsService,
+  agentTargetBlockIds,
 } from '@notesgraph/core/modules/agents';
 import { WorkspaceDialogService } from '@notesgraph/core/modules/dialogs';
 import { DocService } from '@notesgraph/core/modules/doc';
@@ -135,7 +136,19 @@ export const EditorAgentsPanel = () => {
                 <span className={styles.sectionLabel}>
                   {session.agentName} · {session.targetLabel}
                 </span>
-                <RunStatusBadge status={sessionStatus} />
+                <span className={styles.sessionHeadSide}>
+                  {agentTargetBlockIds(session.target).length > 0 ? (
+                    <button
+                      className={styles.linkButton}
+                      onClick={() => runActions.showTarget(session.target)}
+                      title="Scroll to the blocks this run is on"
+                      data-testid="agent-show-target"
+                    >
+                      Show
+                    </button>
+                  ) : null}
+                  <RunStatusBadge status={sessionStatus} />
+                </span>
               </div>
 
               {session.remoteJobId
@@ -274,6 +287,7 @@ export const EditorAgentsPanel = () => {
                     run={run}
                     now={now}
                     onOpen={setLogRunId}
+                    onShowTarget={runActions.showRunTarget}
                     onRetry={running ? undefined : runActions.retry}
                     onDelete={runActions.remove}
                   />

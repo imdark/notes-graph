@@ -10,6 +10,18 @@ export type AgentTarget =
   | { kind: 'selection'; docId: string; blockIds: string[] }
   | { kind: 'doc'; docId: string };
 
+/** The blocks a target points at, to show them in the editor; none for a doc. */
+export function agentTargetBlockIds(target: AgentTarget): string[] {
+  switch (target.kind) {
+    case 'block':
+      return [target.blockId];
+    case 'selection':
+      return target.blockIds;
+    case 'doc':
+      return [];
+  }
+}
+
 /** Identity of a target, for "one run per target at a time". */
 export function agentTargetKey(target: AgentTarget): string {
   switch (target.kind) {

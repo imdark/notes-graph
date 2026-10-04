@@ -306,7 +306,10 @@ const gutterButton = style({
 
 export const logLineNumber = style([gutterButton, { textAlign: 'right' }]);
 
-export const logTime = style([gutterButton, { minWidth: '9ch', textAlign: 'left' }]);
+export const logTime = style([
+  gutterButton,
+  { minWidth: '9ch', textAlign: 'left' },
+]);
 
 export const logLineText = style({
   whiteSpace: 'pre',
@@ -369,6 +372,13 @@ export const panelFooter = style({
   justifyContent: 'space-between',
   alignItems: 'center',
   width: '100%',
+});
+
+export const sessionHeadSide = style({
+  display: 'flex',
+  alignItems: 'center',
+  gap: 8,
+  flexShrink: 0,
 });
 
 export const linkButton = style({
