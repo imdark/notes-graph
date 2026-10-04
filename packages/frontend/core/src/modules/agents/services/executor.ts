@@ -243,7 +243,10 @@ export class AgentExecutorService extends Service implements AgentExecutor {
     yield { type: 'done', output: message };
   }
 
-  /** Targets with a run in flight, so a double-click can't start two. */
+  /**
+   * Agent + target pairs with a run in flight, so a double-click can't start
+   * two. Different agents on the same block may run side by side.
+   */
   private readonly inFlight = new Set<string>();
 
   /**
@@ -263,7 +266,7 @@ export class AgentExecutorService extends Service implements AgentExecutor {
     target: AgentTarget,
     signal: AbortSignal
   ): AsyncIterable<AgentEvent> {
-    const key = agentTargetKey(target);
+    const key = `${agent.id}:${agentTargetKey(target)}`;
     if (this.inFlight.has(key)) {
       throw new AgentAlreadyRunningError();
     }

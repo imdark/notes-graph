@@ -50,12 +50,12 @@ const useRunLog = (run: AgentRun | undefined): RunLogState => {
   const logsStore = useService(AgentRunLogsStore);
   const remoteRunner = useService(RemoteAgentRunnerService);
   const workspaceService = useService(WorkspaceService);
-  const session = useLiveData(sessionService.session$);
+  const sessions = useLiveData(sessionService.sessions$);
 
-  const live =
-    run && !run.remoteJobId && session?.runId === run.id && session.running
-      ? session
-      : null;
+  const session = run
+    ? sessions.find(({ runId }) => runId === run.id)
+    : undefined;
+  const live = run && !run.remoteJobId && session?.running ? session : null;
   const [state, setState] = useState<RunLogState>(EMPTY);
 
   // The transcript as last seen live. The executor saves it to IndexedDB as
@@ -169,7 +169,7 @@ export const AgentRunLogDialog = ({
   const sessionService = useService(AgentRunSessionService);
   const remoteRunner = useService(RemoteAgentRunnerService);
   const workspaceService = useService(WorkspaceService);
-  const session = useLiveData(sessionService.session$);
+  const sessions = useLiveData(sessionService.sessions$);
   const run = useLiveData(
     useMemo(
       () => (runId ? runsStore.watchRun(runId) : null),
@@ -183,14 +183,17 @@ export const AgentRunLogDialog = ({
   // A run can be stopped from here when this tab is driving it, or when it
   // is a device job (the server cancels it for whoever asks). An on-device
   // run in another tab has nothing here to stop.
-  const ownsRun = !!run && session?.runId === run.id && session.running;
+  const session = run
+    ? sessions.find(({ runId }) => runId === run.id)
+    : undefined;
+  const ownsRun = !!session?.running;
   const canStop =
     run?.status === 'running' && (ownsRun || !!run.remoteJobId);
   const [stopping, setStopping] = useState(false);
   const stop = useCallback(() => {
     if (!run) return;
-    if (ownsRun) {
-      sessionService.cancel();
+    if (session?.running) {
+      sessionService.cancel(session.id);
       return;
     }
     if (!run.remoteJobId) return;
@@ -205,7 +208,7 @@ export const AgentRunLogDialog = ({
         })
       )
       .finally(() => setStopping(false));
-  }, [ownsRun, remoteRunner, run, sessionService, workspaceService]);
+  }, [remoteRunner, run, session, sessionService, workspaceService]);
 
   const attachCommand = tmuxSession ? `tmux attach -t ${tmuxSession}` : null;
   const copyAttach = useCallback(() => {
