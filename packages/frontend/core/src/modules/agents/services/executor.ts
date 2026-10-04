@@ -8,6 +8,7 @@ import {
 } from '../stores/agents';
 import type { AgentRunLogsStore } from '../stores/agent-run-logs';
 import type { AgentRunsStore } from '../stores/agent-runs';
+import type { ChatModel, CloudAgentRunnerService } from './cloud-runner';
 import type { AgentContextService } from './context';
 import {
   type AgentFileToolsService,
@@ -61,6 +62,11 @@ const WALL_CLOCK_MS = 120_000;
  * device is still making progress on it.
  */
 const REMOTE_WALL_CLOCK_MS = 16 * 60_000;
+/**
+ * Each cloud step is a server round trip, and a tool loop takes several, so
+ * the on-device limit would cut off a run that is working.
+ */
+const CLOUD_WALL_CLOCK_MS = 10 * 60_000;
 /** How much of a tool result goes into the transcript. */
 const LOG_TOOL_RESULT_CHARS = 400;
 
@@ -94,17 +100,18 @@ export class AgentAlreadyRunningError extends Error {
 }
 
 /**
- * Runs agents in the tab against the on-device model.
+ * Runs agents in the tab, against the on-device model or the server's
+ * copilot model (`cloud`), or hands them to a registered device (`remote`).
  *
- * Two paths. An agent given file tools, in a workspace with a folder bound,
- * runs a reason→tool→result loop (see `runWithTools`). Anything else takes the
- * original text-only path: read the target, answer, done.
+ * In the tab there are two paths. An agent given file tools, in a workspace
+ * with a folder bound, runs a reason→tool→result loop (see `runWithTools`).
+ * Anything else takes the original text-only path: read the target, answer,
+ * done. Both take the model as a {@link ChatModel}, so on-device and cloud
+ * differ only in where each step's reply comes from.
  *
  * Tool calls use the fenced-block protocol in `tool-protocol.ts` rather than a
  * provider's native function calling, because the on-device harness is a small
- * WebLLM model. A server-side executor using the native
- * `llmDispatchToolLoopStream` can still be dropped in behind this interface
- * once a workspace has copilot configured.
+ * WebLLM model and the loop is shared with it.
  */
 export class AgentExecutorService extends Service implements AgentExecutor {
   constructor(
@@ -114,9 +121,29 @@ export class AgentExecutorService extends Service implements AgentExecutor {
     private readonly localLLM: LocalLLMService,
     private readonly fileTools: AgentFileToolsService,
     private readonly remoteRunner: RemoteAgentRunnerService,
+    private readonly cloudRunner: CloudAgentRunnerService,
     private readonly workspaceService: WorkspaceService
   ) {
     super();
+  }
+
+  /** The model an in-tab run asks each step: the browser's, or the server's. */
+  private async modelFor(
+    agent: Agent,
+    harness: 'on-device' | 'cloud'
+  ): Promise<ChatModel> {
+    if (harness === 'on-device') {
+      return (messages, signal) =>
+        this.localLLM.chatStream(messages, {
+          signal,
+          model: onDeviceModel(agent),
+        });
+    }
+    const workspaceId = this.workspaceId;
+    if (!workspaceId) {
+      throw new Error('No workspace is open, so there is no server to ask.');
+    }
+    return this.cloudRunner.open(workspaceId);
   }
 
   /** The workspace a remote job is queued against. */
@@ -134,6 +161,7 @@ export class AgentExecutorService extends Service implements AgentExecutor {
    */
   private async *runWithTools(
     agent: Agent,
+    model: ChatModel,
     contextText: string,
     toolNames: string[],
     signal: AbortSignal
@@ -161,10 +189,7 @@ export class AgentExecutorService extends Service implements AgentExecutor {
       yield logLine(`── step ${step + 1}`);
 
       let reply = '';
-      for await (const delta of this.localLLM.chatStream(messages, {
-        signal,
-        model: onDeviceModel(agent),
-      })) {
+      for await (const delta of model(messages, signal)) {
         reply += delta;
       }
       if (signal.aborted) return;
@@ -225,9 +250,9 @@ export class AgentExecutorService extends Service implements AgentExecutor {
    * The runtime an agent will actually use: its own choice, else on-device.
    *
    * The default used to follow the workspace's AI backend, but that is `cloud`
-   * unless someone switched it, and the cloud harness doesn't exist yet — so
-   * every agent left on the default failed before it started. Only an agent
-   * explicitly set to cloud gets that error now.
+   * unless someone switched it, and cloud needs a server with Copilot set up —
+   * so agents left on the default failed before they started on servers
+   * without it. Only an agent explicitly set to cloud runs there now.
    */
   harnessFor(agent: Agent): AgentHarness {
     return agent.harness ?? 'on-device';
@@ -250,7 +275,12 @@ export class AgentExecutorService extends Service implements AgentExecutor {
     // funnelled into one controller so the stream and the run record only ever
     // have to look at a single aborted flag.
     const controller = new AbortController();
-    const limit = harness === 'remote' ? REMOTE_WALL_CLOCK_MS : WALL_CLOCK_MS;
+    const limit =
+      harness === 'remote'
+        ? REMOTE_WALL_CLOCK_MS
+        : harness === 'cloud'
+          ? CLOUD_WALL_CLOCK_MS
+          : WALL_CLOCK_MS;
     let deadline: ReturnType<typeof setTimeout> | null = setTimeout(
       () => controller.abort(),
       limit
@@ -280,13 +310,6 @@ export class AgentExecutorService extends Service implements AgentExecutor {
     };
     yield { type: 'started', runId };
     try {
-      // Fail loudly rather than silently running somewhere the agent wasn't
-      // configured to run. `cloud` is still declared and unimplemented.
-      if (harness !== 'on-device' && harness !== 'remote') {
-        throw new Error(
-          `This agent is set to run on ${harness}, which isn't available here yet. Switch it to on-device in Settings → Agents.`
-        );
-      }
       const context = await this.contextService.build(target);
 
       if (harness === 'remote') {
@@ -306,6 +329,10 @@ export class AgentExecutorService extends Service implements AgentExecutor {
         return;
       }
 
+      // Opened before anything is logged, so a server with no copilot fails
+      // the run with its reason rather than after a half-written transcript.
+      const model = await this.modelFor(agent, harness);
+
       // An agent given file tools, in a workspace with a folder bound, runs
       // the tool loop; everything else keeps the original text-only path.
       const fileTools = agent.tools.filter(name =>
@@ -314,9 +341,10 @@ export class AgentExecutorService extends Service implements AgentExecutor {
       const useTools = fileTools.length > 0 && this.fileTools.available;
 
       if (useTools) {
-        yield record(logLine(`▶ ${agent.name} on-device, with ${fileTools.join(', ')}`));
+        yield record(logLine(`▶ ${agent.name} ${harness}, with ${fileTools.join(', ')}`));
         for await (const event of this.runWithTools(
           agent,
+          model,
           context.text,
           fileTools,
           controller.signal
@@ -338,7 +366,7 @@ export class AgentExecutorService extends Service implements AgentExecutor {
 
       yield { type: 'step', index: 0 };
       yield record(
-        logLine(`▶ ${agent.name} on-device · reading ${context.text.length} characters`)
+        logLine(`▶ ${agent.name} ${harness} · reading ${context.text.length} characters`)
       );
 
       const messages = [
@@ -356,10 +384,7 @@ export class AgentExecutorService extends Service implements AgentExecutor {
         { role: 'user' as const, content: context.text },
       ];
 
-      for await (const delta of this.localLLM.chatStream(messages, {
-        signal: controller.signal,
-        model: onDeviceModel(agent),
-      })) {
+      for await (const delta of model(messages, controller.signal)) {
         output += delta;
         log += delta;
         yield { type: 'text', delta };

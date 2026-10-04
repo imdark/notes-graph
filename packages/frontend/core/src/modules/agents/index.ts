@@ -57,6 +57,7 @@ import { FolderSyncService } from '../folder-sync';
 import { WorkspaceScope, WorkspaceService } from '../workspace';
 import { Agents } from './entities/agents';
 import { AgentsService } from './services/agents';
+import { CloudAgentRunnerService } from './services/cloud-runner';
 import { AgentContextService } from './services/context';
 import { AgentFileToolsService } from './services/file-tools';
 import { AgentExecutorService } from './services/executor';
@@ -73,6 +74,7 @@ export function configureAgentsModule(framework: Framework) {
     .service(AgentContextService, [DocsService])
     .service(AgentFileToolsService, [FolderSyncService])
     .service(RemoteAgentRunnerService, [WorkspaceServerService])
+    .service(CloudAgentRunnerService, [WorkspaceServerService])
     .service(AgentExecutorService, [
       AgentContextService,
       AgentRunsStore,
@@ -80,6 +82,7 @@ export function configureAgentsModule(framework: Framework) {
       LocalLLMService,
       AgentFileToolsService,
       RemoteAgentRunnerService,
+      CloudAgentRunnerService,
       WorkspaceService,
     ])
     .service(AgentRunSessionService, [AgentExecutorService])
