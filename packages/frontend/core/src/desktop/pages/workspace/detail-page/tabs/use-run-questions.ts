@@ -1,4 +1,5 @@
 import {
+  AgentExecutorService,
   type AgentRun,
   openQuestions,
   RemoteAgentRunnerService,
@@ -24,6 +25,7 @@ export const useRemoteRunStates = (
   runs: AgentRun[]
 ): Map<string, RemoteRunState> => {
   const remoteRunner = useService(RemoteAgentRunnerService);
+  const executor = useService(AgentExecutorService);
   const workspaceService = useService(WorkspaceService);
   const [states, setStates] = useState(() => new Map<string, RemoteRunState>());
 
@@ -72,13 +74,15 @@ export const useRemoteRunStates = (
               jobStatus: job.status,
             })
           );
+          // The row may lag because its tab closed; write the end it missed.
+          executor.settleFromJob(runId, job);
         }
       })().catch(() => {
         // A run we can't reach just shows as running; its log says why.
       });
     }
     return () => controller.abort();
-  }, [watched, remoteRunner, workspaceService]);
+  }, [watched, remoteRunner, workspaceService, executor]);
 
   return states;
 };

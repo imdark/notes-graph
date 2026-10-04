@@ -15,7 +15,10 @@ import { ZipTransformer } from '@blocksuite/notesgraph/widgets/linked-doc';
 import { notify } from '@notesgraph/component';
 import { NotesGraphLogoIcon } from '@notesgraph/component/brand';
 import { useAsyncCallback } from '@notesgraph/core/components/hooks/notesgraph-async-hooks';
-import { AgentRunsStore } from '@notesgraph/core/modules/agents';
+import {
+  AgentExecutorService,
+  AgentRunsStore,
+} from '@notesgraph/core/modules/agents';
 import { AppSidebarService } from '@notesgraph/core/modules/app-sidebar';
 import {
   AddPageButton,
@@ -40,7 +43,7 @@ import { useLiveData, useService, useServices } from '@notesgraph/infra';
 import { track } from '@notesgraph/track';
 import { cssVarV2 } from '@toeverything/theme/v2';
 import type { ReactElement } from 'react';
-import { memo, useCallback, useMemo } from 'react';
+import { memo, useCallback, useEffect, useMemo } from 'react';
 
 import {
   CollapsibleSection,
@@ -199,6 +202,9 @@ const DuplicatesButton = () => {
   );
 };
 
+/** How often to check runs that say running against how they really ended. */
+const RECONCILE_RUNS_MS = 30_000;
+
 const AgentsButton = () => {
   const { workbenchService } = useServices({
     WorkbenchService,
@@ -217,6 +223,21 @@ const AgentsButton = () => {
       [runsStore]
     )
   );
+
+  // A run whose tab closed mid-way would say running forever; while any do,
+  // check now and then whether they have in fact ended.
+  const executor = useService(AgentExecutorService);
+  useEffect(() => {
+    if (running === 0) return;
+    const reconcile = () => {
+      executor.reconcileRuns().catch(() => {
+        // Best effort: the next pass tries again.
+      });
+    };
+    reconcile();
+    const id = setInterval(reconcile, RECONCILE_RUNS_MS);
+    return () => clearInterval(id);
+  }, [executor, running]);
 
   return (
     <MenuLinkItem icon={<ToolIcon />} active={agentsActive} to={'/agents'}>

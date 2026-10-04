@@ -92,18 +92,27 @@ export class AgentRunsStore extends Store {
     this.table.update(runId, { remoteJobId, deviceKey });
   }
 
+  /** Rows that say they are running, whoever is (or was) running them. */
+  runningRuns(): AgentRun[] {
+    return (this.table.find() as AgentRun[]).filter(
+      run => run.status === 'running'
+    );
+  }
+
   finish(
     runId: string,
     outcome:
       | { status: 'done'; steps: number; output: string }
       | { status: 'cancelled'; steps: number }
-      | { status: 'error'; steps: number; error: string }
+      | { status: 'error'; steps: number; error: string },
+    /** When it ended, if not now — a run settled after the fact. */
+    endedAt = Date.now()
   ): void {
     const row = this.table.get(runId);
     if (!row) return;
     this.table.update(runId, {
       status: outcome.status,
-      durationMs: Date.now() - row.startedAt,
+      durationMs: Math.max(0, endedAt - row.startedAt),
       steps: outcome.steps,
       summary:
         outcome.status === 'done'
