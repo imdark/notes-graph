@@ -17,6 +17,7 @@ import { AgentQuestionCard } from './agent-question';
 import { AgentRunLogDialog } from './agent-run-log';
 import { RunRow, RunStatusBadge, useMinuteTick } from './agent-run-row';
 import * as styles from './agents.css';
+import { useRunActions } from './use-run-actions';
 
 /** Recent runs shown here; the Agents page has the rest. */
 const PANEL_RUNS = 8;
@@ -45,6 +46,7 @@ export const EditorAgentsPanel = () => {
   );
 
   const running = session?.running ?? false;
+  const runActions = useRunActions({ openDoc: false });
   const [logRunId, setLogRunId] = useState<string | null>(null);
   const closeLog = useCallback(() => setLogRunId(null), []);
 
@@ -219,7 +221,14 @@ export const EditorAgentsPanel = () => {
             ) : (
               <div className={styles.runList}>
                 {runs.slice(0, PANEL_RUNS).map(run => (
-                  <RunRow key={run.id} run={run} now={now} onOpen={setLogRunId} />
+                  <RunRow
+                    key={run.id}
+                    run={run}
+                    now={now}
+                    onOpen={setLogRunId}
+                    onRetry={running ? undefined : runActions.retry}
+                    onDelete={runActions.remove}
+                  />
                 ))}
               </div>
             )}

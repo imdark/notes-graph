@@ -295,6 +295,8 @@ export const NotesGraph_WORKSPACE_USERDATA_DB_SCHEMA = {
     targetKind: f.string(),
     docId: f.string(),
     blockId: f.string().optional(),
+    /** The blocks of a 'selection' run, so it can be run again. */
+    blockIds: f.json<string[]>().optional(),
     /** 'running' | 'done' | 'cancelled' | 'error' */
     status: f.string(),
     startedAt: f.number(),
