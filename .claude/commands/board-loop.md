@@ -56,7 +56,8 @@ edits or raw text corrupt the CRDT (this caused the "7 STARTED stamps" and
      screenshot. (See the `deploy-android-apk` / `test-mobile-emulator` skills.)
    - Types: `npx tsc --noEmit` on touched packages. Rust: `cargo test`.
 7. **Commit.** `scripts/task-git.sh commit "<msg>" [paths...]` — stages the paths
-   (or `-A`) and appends the standard trailers. Message: what changed + why.
+   (or `-A`) and commits. Message: what changed + why, ending with your
+   session's attribution trailers (the script adds none).
 8. **Mark done.** `update_task` → status done, with a note summarizing what shipped
    (and how it was verified). This writes the CLOSED stamp.
 9. **Next card.** Repeat from step 2.

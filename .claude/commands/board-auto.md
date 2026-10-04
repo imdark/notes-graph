@@ -67,7 +67,8 @@ stamps, `@mentions`, `#tags`, `#type:x`); raw edits corrupt the CRDT (caused the
      `… eval '<js>'` / `… shot <out.png>` → Read the shot. See the recipes below.
    - Mobile: `scripts/mobile-emulator.sh up|install|shot` → Read the shot.
    - Rust: `cargo test`.
-7. **Commit** `scripts/task-git.sh commit "<what+why>" <paths…>` (appends trailers).
+7. **Commit** `scripts/task-git.sh commit "<what+why>" <paths…>`. End the message
+   with your session's attribution trailers; the script adds none.
 8. **Mark done** `update_task {status:"done", note:"<what shipped + how verified>"}`.
 9. **Next card — immediately.** Don't ask. Go to step 1.
 
