@@ -37,6 +37,12 @@ export {
   type QueuedAgentRun,
 } from './services/run-session';
 export { type AgentBlockRef, lastBlockTouched } from './services/focus-block';
+export {
+  AgentTaskClaimService,
+  markTasksQueued,
+  QUEUED_STATUS,
+  releaseQueuedTasks,
+} from './services/task-claim';
 export { type LogLine, parseLogLines } from './services/log-lines';
 export {
   type AgentTarget,
@@ -69,6 +75,7 @@ import { AgentFileToolsService } from './services/file-tools';
 import { AgentExecutorService } from './services/executor';
 import { RemoteAgentRunnerService } from './services/remote-runner';
 import { AgentRunSessionService } from './services/run-session';
+import { AgentTaskClaimService } from './services/task-claim';
 import { AgentRunLogsStore } from './stores/agent-run-logs';
 import { AgentRunsStore } from './stores/agent-runs';
 import { AgentsStore } from './stores/agents';
@@ -91,7 +98,11 @@ export function configureAgentsModule(framework: Framework) {
       CloudAgentRunnerService,
       WorkspaceService,
     ])
-    .service(AgentRunSessionService, [AgentExecutorService])
+    .service(AgentTaskClaimService, [DocsService])
+    .service(AgentRunSessionService, [
+      AgentExecutorService,
+      AgentTaskClaimService,
+    ])
     .store(AgentsStore, [WorkspaceDBService])
     .store(AgentRunLogsStore)
     .store(AgentRunsStore, [WorkspaceDBService, AgentRunLogsStore])
