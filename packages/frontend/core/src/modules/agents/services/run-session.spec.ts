@@ -8,6 +8,7 @@ import type { Agent } from '../stores/agents';
 import { type AgentEvent, AgentExecutorService } from './executor';
 import { AgentRunSessionService } from './run-session';
 import type { AgentTarget } from './target';
+import { AgentTaskClaimService } from './task-claim';
 
 const agent = { id: 'a1', name: 'Worker' } as Agent;
 const remote = {
@@ -53,10 +54,36 @@ const fakeExecutor = () => {
       await ended;
     },
   };
+  const { calls, claimedAgain, claim } = fakeClaim();
   const framework = new Framework();
   framework.service(AgentExecutorService, executor as any);
-  framework.service(AgentRunSessionService, [AgentExecutorService]);
-  return { runs, sessions: framework.provider().get(AgentRunSessionService) };
+  framework.service(AgentTaskClaimService, claim as any);
+  framework.service(AgentRunSessionService, [
+    AgentExecutorService,
+    AgentTaskClaimService,
+  ]);
+  return {
+    runs,
+    calls,
+    claimedAgain,
+    sessions: framework.provider().get(AgentRunSessionService),
+  };
+};
+
+/** Records what was claimed and handed back, without touching a doc. */
+const fakeClaim = () => {
+  const calls: { op: 'claim' | 'release'; target: AgentTarget }[] = [];
+  const claimedAgain: (() => boolean)[] = [];
+  const claim = {
+    markQueued: async (target: AgentTarget) => {
+      calls.push({ op: 'claim', target });
+    },
+    release: async (target: AgentTarget, again: () => boolean) => {
+      calls.push({ op: 'release', target });
+      claimedAgain.push(again);
+    },
+  };
+  return { calls, claimedAgain, claim };
 };
 
 const tick = () => new Promise(resolve => setTimeout(resolve, 0));
@@ -196,7 +223,11 @@ describe('AgentRunSessionService', () => {
     };
     const framework = new Framework();
     framework.service(AgentExecutorService, executor as any);
-    framework.service(AgentRunSessionService, [AgentExecutorService]);
+    framework.service(AgentTaskClaimService, fakeClaim().claim as any);
+    framework.service(AgentRunSessionService, [
+      AgentExecutorService,
+      AgentTaskClaimService,
+    ]);
     const sessions = framework.provider().get(AgentRunSessionService);
     // A remote log can arrive cut mid-line.
     log.push('→ update_task  {"docId": "doc", "blo', 'ckId": "t2"}\n');
@@ -225,5 +256,72 @@ describe('AgentRunSessionService', () => {
       docId: 'doc',
       blockId: 'b1',
     });
+  });
+
+  test('a queued run claims its task at once, before any work', async () => {
+    const { runs, calls, sessions } = fakeExecutor();
+
+    void sessions.start(agent, block('b1'));
+    await tick();
+    void sessions.start(agent, block('b2'));
+    await tick();
+
+    expect(runs.map(r => r.blockId)).toEqual(['b1']);
+    expect(calls).toEqual([
+      { op: 'claim', target: block('b1') },
+      { op: 'claim', target: block('b2') },
+    ]);
+  });
+
+  test('asking again for a pending run does not claim twice', async () => {
+    const { calls, sessions } = fakeExecutor();
+
+    void sessions.start(remote, block('b1'));
+    void sessions.start(remote, block('b1'));
+    await tick();
+
+    expect(calls.filter(c => c.op === 'claim')).toHaveLength(1);
+  });
+
+  test('a run taken off the queue hands its task back', async () => {
+    const { calls, sessions } = fakeExecutor();
+
+    void sessions.start(agent, block('b1'));
+    await tick();
+    void sessions.start(agent, block('b2'));
+    sessions.dequeue(sessions.queue$.value[0].id);
+    await tick();
+
+    expect(calls.at(-1)).toEqual({ op: 'release', target: block('b2') });
+  });
+
+  test('stop all hands back the queued runs too', async () => {
+    const { calls, sessions } = fakeExecutor();
+
+    void sessions.start(agent, block('b1'));
+    await tick();
+    void sessions.start(agent, block('b2'));
+    sessions.cancelAll();
+    await tick();
+
+    expect(
+      calls.filter(c => c.op === 'release').map(c => c.target)
+    ).toEqual(expect.arrayContaining([block('b1'), block('b2')]));
+  });
+
+  test('a run that ends hands back its task unless asked for again', async () => {
+    const { runs, calls, claimedAgain, sessions } = fakeExecutor();
+
+    void sessions.start(remote, block('b1'));
+    await tick();
+    runs[0].finish();
+    await tick();
+
+    expect(calls.at(-1)).toEqual({ op: 'release', target: block('b1') });
+    expect(claimedAgain.at(-1)?.()).toBe(false);
+
+    void sessions.start(remote, block('b1'));
+    await tick();
+    expect(claimedAgain.at(-1)?.()).toBe(true);
   });
 });

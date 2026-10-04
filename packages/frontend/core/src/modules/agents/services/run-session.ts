@@ -5,6 +5,7 @@ import type { RemoteQuestion } from './remote-runner';
 import { AgentAlreadyRunningError, type AgentExecutorService } from './executor';
 import { type AgentBlockRef, lastBlockTouched } from './focus-block';
 import { type AgentTarget, agentTargetKey } from './target';
+import type { AgentTaskClaimService } from './task-claim';
 
 /** A run asked for while another was going, waiting its turn. */
 export interface QueuedAgentRun {
@@ -86,7 +87,10 @@ const runKey = (agentId: string, target: AgentTarget) =>
  * going queues behind it.
  */
 export class AgentRunSessionService extends Service {
-  constructor(private readonly executor: AgentExecutorService) {
+  constructor(
+    private readonly executor: AgentExecutorService,
+    private readonly taskClaim: AgentTaskClaimService
+  ) {
     super();
   }
 
@@ -126,9 +130,13 @@ export class AgentRunSessionService extends Service {
    * Run now, or queue behind the on-device run that's going. Resolves when
    * this run ends; callers that just want the panel to light up can ignore
    * the promise. Asking again for a run already going or queued does nothing.
+   *
+   * The tasks it is on are marked queued straight away, before any work, so
+   * another agent working the same list leaves them alone.
    */
   async start(agent: Agent, target: AgentTarget): Promise<void> {
     if (this.isPending(agent, target)) return;
+    this.claim(target);
     if (this.queues(agent) && this.onDeviceBusy) {
       this.queue$.setValue([
         ...this.queue$.value,
@@ -146,7 +154,25 @@ export class AgentRunSessionService extends Service {
 
   /** Take a run out of the queue before it starts. */
   dequeue(id: string): void {
+    const run = this.queue$.value.find(run => run.id === id);
     this.queue$.setValue(this.queue$.value.filter(run => run.id !== id));
+    if (run) this.unclaim(run.target);
+  }
+
+  private claim(target: AgentTarget): void {
+    this.taskClaim.markQueued(target).catch(() => {
+      // A run must not fail because its task couldn't be marked.
+    });
+  }
+
+  /** Hand back tasks the run never moved on from queued. */
+  private unclaim(target: AgentTarget): void {
+    const key = agentTargetKey(target);
+    const claimedAgain = () =>
+      this.sessions$.value.some(
+        session => session.running && agentTargetKey(session.target) === key
+      ) || this.queue$.value.some(run => agentTargetKey(run.target) === key);
+    this.taskClaim.release(target, claimedAgain).catch(() => {});
   }
 
   private runNext(): void {
@@ -240,6 +266,7 @@ export class AgentRunSessionService extends Service {
     } finally {
       this.controllers.delete(id);
       patch(prev => ({ ...prev, running: false, questions: [] }));
+      this.unclaim(target);
       if (onDevice) this.runNext();
     }
   }
@@ -252,6 +279,7 @@ export class AgentRunSessionService extends Service {
 
   /** Stop everything: every run going and all that are queued. */
   cancelAll(): void {
+    for (const run of this.queue$.value) this.unclaim(run.target);
     this.queue$.setValue([]);
     for (const id of [...this.controllers.keys()]) this.cancel(id);
   }

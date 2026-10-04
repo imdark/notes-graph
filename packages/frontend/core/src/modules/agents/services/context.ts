@@ -4,13 +4,13 @@ import {
   MarkdownAdapter,
   titleMiddleware,
 } from '@blocksuite/notesgraph/shared/adapters';
-import { parseOrgStatusPrefix } from '@blocksuite/notesgraph/shared/utils';
 import type { BlockModel, Store } from '@blocksuite/notesgraph/store';
 import { getStoreManager } from '@notesgraph/core/blocksuite/manager/store';
 import { Service } from '@notesgraph/infra';
 
 import type { DocsService } from '../../doc';
 import type { AgentTarget } from './target';
+import { QUEUED_STATUS, readTaskStatus } from './task-claim';
 
 /**
  * Hard cap on the doc markdown handed to a model, in characters. A long note
@@ -96,12 +96,13 @@ export class AgentContextService extends Service {
     const trail = this.ancestorTrail(store, model);
     if (trail) lines.push(`Under: ${trail}`);
 
-    const props = model.props as { type?: string; checked?: boolean };
-    const org = parseOrgStatusPrefix(text);
-    if (org) {
-      lines.push(`Status: ${org.statusText}`);
-    } else if (props.type === 'todo') {
-      lines.push(`Status: ${props.checked ? 'done' : 'not done'}`);
+    // The chip, a typed annotation, or the native checkbox.
+    const status = readTaskStatus(model);
+    if (status?.text === QUEUED_STATUS) {
+      // Marked queued when this run was asked for; it is this run's to do.
+      lines.push(`Status: ${QUEUED_STATUS} (queued for you; not done yet)`);
+    } else if (status) {
+      lines.push(`Status: ${status.text}`);
     }
 
     const { tags, properties } = this.collectTokens(text);
