@@ -11,6 +11,7 @@ import { WorkspaceDialogService } from '@notesgraph/core/modules/dialogs';
 import { DocService } from '@notesgraph/core/modules/doc';
 import { WorkbenchService } from '@notesgraph/core/modules/workbench';
 import { useLiveData, useService } from '@notesgraph/infra';
+import { nanoid } from 'nanoid';
 import { useCallback, useMemo, useState } from 'react';
 
 import { AgentQuestionCard } from './agent-question';
@@ -67,6 +68,20 @@ export const EditorAgentsPanel = () => {
       .then(() => notify.success({ title: 'Copied' }))
       .catch(() => notify.error({ title: "Couldn't copy" }));
   }, [session?.output]);
+
+  // Working down a list, the agent moves from block to block; this takes the
+  // reader to the one it is on (or last touched), opening its note if need be.
+  const focus = session?.focus ?? null;
+  const showFocus = useCallback(() => {
+    if (!focus) return;
+    workbench.openDoc({
+      docId: focus.docId,
+      mode: 'page',
+      blockIds: [focus.blockId],
+      // Scroll and highlight again even if the URL is already this block.
+      refreshKey: nanoid(),
+    });
+  }, [focus, workbench]);
 
   const sessionStatus = !session
     ? null
@@ -205,6 +220,20 @@ export const EditorAgentsPanel = () => {
                     </Button>
                   </>
                 )}
+                {focus ? (
+                  <Button
+                    variant="plain"
+                    onClick={showFocus}
+                    data-testid="show-agent-block"
+                    title={
+                      running
+                        ? 'Go to the block the agent is working on'
+                        : 'Go to the last block the agent worked on'
+                    }
+                  >
+                    Show block
+                  </Button>
+                ) : null}
                 {session.runId ? (
                   <Button
                     variant="plain"

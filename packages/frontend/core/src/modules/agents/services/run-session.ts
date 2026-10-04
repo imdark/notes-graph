@@ -3,6 +3,7 @@ import { LiveData, Service } from '@notesgraph/infra';
 import type { Agent } from '../stores/agents';
 import type { RemoteQuestion } from './remote-runner';
 import { AgentAlreadyRunningError, type AgentExecutorService } from './executor';
+import { type AgentBlockRef, lastBlockTouched } from './focus-block';
 import { type AgentTarget, agentTargetKey } from './target';
 
 /** A run asked for while another was going, waiting its turn. */
@@ -31,7 +32,25 @@ export interface AgentRunSession {
   questions: RemoteQuestion[];
   error: string | null;
   running: boolean;
+  /**
+   * The block the run is on: the last one a tool call named, else the block
+   * it was started on. What "Show block" jumps to.
+   */
+  focus: AgentBlockRef | null;
 }
+
+const targetFocus = (target: AgentTarget): AgentBlockRef | null => {
+  switch (target.kind) {
+    case 'block':
+      return { docId: target.docId, blockId: target.blockId };
+    case 'selection':
+      return target.blockIds[0]
+        ? { docId: target.docId, blockId: target.blockIds[0] }
+        : null;
+    case 'doc':
+      return null;
+  }
+};
 
 const targetLabel = (target: AgentTarget): string => {
   switch (target.kind) {
@@ -140,6 +159,7 @@ export class AgentRunSessionService extends Service {
       questions: [],
       error: null,
       running: true,
+      focus: targetFocus(target),
     });
 
     const patch = (fn: (prev: AgentRunSession) => AgentRunSession) => {
@@ -165,7 +185,16 @@ export class AgentRunSessionService extends Service {
             questions: event.questions,
           }));
         } else if (event.type === 'log') {
-          patch(prev => ({ ...prev, log: prev.log + event.text }));
+          patch(prev => {
+            const log = prev.log + event.text;
+            // A remote log arrives in chunks that can split a line, so look
+            // from the start of the line the new text continues.
+            const touched = lastBlockTouched(
+              log.slice(prev.log.lastIndexOf('\n') + 1),
+              target.docId
+            );
+            return { ...prev, log, focus: touched ?? prev.focus };
+          });
         } else if (event.type === 'text') {
           patch(prev => ({ ...prev, output: prev.output + event.delta }));
         } else if (event.type === 'error') {
