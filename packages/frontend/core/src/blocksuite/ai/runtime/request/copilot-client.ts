@@ -42,6 +42,8 @@ import {
 
 export enum Endpoint {
   Action = 'action',
+  /** Plain text deltas, no tool or reasoning objects. */
+  Stream = 'stream',
   StreamObject = 'stream-object',
   Images = 'images',
 }
