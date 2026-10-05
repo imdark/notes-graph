@@ -62,8 +62,8 @@ const SessionCard = ({
   return (
     <div className={styles.section} data-testid="agent-session">
       <div className={styles.panelFooter}>
-        <span className={styles.sectionLabel}>
-          {session.agentName} · {session.targetLabel}
+        <span className={styles.sectionLabel} title={session.agentName}>
+          {session.targetLabel}
         </span>
         <span className={styles.sessionHeadSide}>
           {session.focus || agentTargetBlockIds(session.target).length > 0 ? (
