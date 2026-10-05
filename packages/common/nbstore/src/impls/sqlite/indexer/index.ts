@@ -20,6 +20,8 @@ import { createNode } from './node-builder';
 import { queryRaw } from './query';
 import { getText, tryParseArrayField } from './utils';
 
+const JS_INDEX_REVISION = 1;
+
 export class SqliteIndexerStorage extends IndexerStorageBase {
   static readonly identifier = 'SqliteIndexerStorage';
   override readonly recommendRefreshInterval = 30 * 1000; // 5 seconds
@@ -244,6 +246,11 @@ export class SqliteIndexerStorage extends IndexerStorageBase {
   }
 
   async indexVersion(): Promise<number> {
-    return this.connection.apis.ftsIndexVersion();
+    // The native version only moves with a native rebuild; this offset lets a
+    // JS-side change to what gets indexed force a reindex too.
+    // 1: blocks crawled by the JS crawler, so task fields are indexed
+    return (
+      (await this.connection.apis.ftsIndexVersion()) + JS_INDEX_REVISION * 1000
+    );
   }
 }
