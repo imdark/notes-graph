@@ -14,6 +14,8 @@ export interface RemoteRunState {
   questions: RemoteQuestion[];
   /** The job's own status; the run row can lag it when its tab closed early. */
   jobStatus: RemoteJob['status'];
+  /** Epoch seconds a queued job is held until (a device's session limit). */
+  runAfter: number | null;
 }
 
 /**
@@ -72,6 +74,7 @@ export const useRemoteRunStates = (
             new Map(prev).set(runId, {
               questions: openQuestions(job),
               jobStatus: job.status,
+              runAfter: job.runAfter ?? null,
             })
           );
           // The row may lag because its tab closed; write the end it missed.

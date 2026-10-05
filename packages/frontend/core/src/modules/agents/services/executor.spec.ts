@@ -53,6 +53,7 @@ const setup = (
     fileTools?: object;
     cloudRunner?: object;
     researchTools?: object;
+    remoteRunner?: object;
   } = {}
 ) => {
   const finished: { runId: string; outcome: any; endedAt?: number }[] = [];
@@ -73,6 +74,7 @@ const setup = (
       if (!found) throw new Error('unreachable');
       return found;
     },
+    ...fakes.remoteRunner,
   };
   const framework = new Framework();
   framework
@@ -99,6 +101,33 @@ const setup = (
   const executor = framework.provider().get(AgentExecutorService);
   return { executor, finished, titles, described };
 };
+
+describe('AgentExecutorService device runs', () => {
+  test('a job held for the device’s session limit says so in its log', async () => {
+    const runAfter = Date.UTC(2026, 9, 5, 22, 11) / 1000;
+    const { executor } = setup([], {}, {
+      context: { build: async () => ({ text: 'x', label: 'a block', title: 'x' }) },
+      remoteRunner: {
+        enqueue: async () => job({ id: 'j9', status: 'queued' }),
+        agentTargets: async () => [],
+        watch: async function* () {
+          yield { job: job({ id: 'j9', status: 'queued', runAfter }), logDelta: '' };
+          yield { job: job({ id: 'j9', status: 'done', result: 'ok' }), logDelta: '' };
+        },
+      },
+    });
+    (executor as any).runsStore.attachRemote = () => {};
+    const logs: string[] = [];
+    for await (const event of executor.run(
+      { id: 'a1', name: 'W', harness: 'remote', deviceKey: 'laptop', model: 'workflow', tools: [], instructions: 'go', maxSteps: 4 } as any,
+      { kind: 'block', docId: 'doc', blockId: 'b1' },
+      new AbortController().signal
+    )) {
+      if (event.type === 'log') logs.push(event.text);
+    }
+    expect(logs.join('')).toMatch(/⏸ Session limit reached on laptop; waiting to run again at/);
+  });
+});
 
 describe('AgentExecutorService research runs', () => {
   test('the server model calls OmniSeek through the research tools, then answers', async () => {
