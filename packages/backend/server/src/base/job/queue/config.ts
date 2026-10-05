@@ -71,6 +71,14 @@ defineModuleConfig('job', {
     schema,
   },
 
+  'queues.monitor': {
+    desc: 'The config for the monitor job queue (scheduled checks)',
+    default: {
+      concurrency: 4,
+    },
+    schema,
+  },
+
   'queues.doc': {
     desc: 'The config for doc job queue',
     default: {

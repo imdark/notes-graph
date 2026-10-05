@@ -19,10 +19,13 @@ import { InventoryService } from './service';
   imports: [AuthModule, PermissionModule, WorkspaceModule],
   providers: [InventoryService, InventoryJobService, AgentPushService],
   controllers: [InventoryController],
+  // Monitors queue device jobs and push alerts through these.
+  exports: [InventoryJobService, AgentPushService],
 })
 export class InventoryModule {}
 
 export { InventoryJobService } from './jobs';
+export { AgentPushService } from './push';
 export { InventoryService } from './service';
 export * from './jobs';
 export * from './types';

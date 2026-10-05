@@ -1846,6 +1846,7 @@ enum NotificationType {
   InvitationReviewDeclined
   InvitationReviewRequest
   Mention
+  MonitorAlert
 }
 
 type NotificationWorkspaceType {

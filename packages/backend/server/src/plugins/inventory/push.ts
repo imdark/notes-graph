@@ -118,6 +118,26 @@ export class AgentPushService {
     });
   }
 
+  /** A monitor's alert, to its owner's phones; opening it goes to the block. */
+  async monitorAlert(
+    userId: string,
+    alert: {
+      monitorId: string;
+      name: string;
+      value: string;
+      reason: string;
+      workspaceId: string;
+      docId: string;
+      blockId: string;
+    }
+  ): Promise<void> {
+    await this.send(userId, {
+      type: 'monitor-alert',
+      server: this.url.baseUrl,
+      ...alert,
+    });
+  }
+
   private async send(userId: string, data: Record<string, string>) {
     const auth = this.credentials();
     if (!auth) return;

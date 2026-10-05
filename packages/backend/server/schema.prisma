@@ -39,6 +39,7 @@ model User {
   connectedAccounts           ConnectedAccount[]
   calendarAccounts            CalendarAccount[]
   pushTokens                  UserPushToken[]
+  monitors                    Monitor[]
   connectedDirectoryAccounts  DirectoryAccount[]
   sessions                    UserSession[]
   aiSessions                  AiSession[]
@@ -176,6 +177,7 @@ model Workspace {
   projects                   Project[]
   inventoryDevices           InventoryDevice[]
   inventoryJobs              InventoryJob[]
+  monitors                   Monitor[]
   projectDocs                ProjectDoc[]
   directoryAccounts          DirectoryAccount[]
 
@@ -1352,6 +1354,7 @@ enum NotificationType {
   InvitationReviewDeclined
   Comment
   CommentMention
+  MonitorAlert
 }
 
 enum NotificationLevel {
@@ -1825,4 +1828,64 @@ model UserPushToken {
 
   @@index([userId])
   @@map("user_push_tokens")
+}
+
+/// Watches something on a schedule and keeps a note block up to date: a
+/// website (fetched here), a command on a device (run by `wf agent serve`),
+/// or an agent run on a device that rewrites the block itself.
+model Monitor {
+  id              String    @id @default(uuid()) @db.VarChar
+  workspaceId     String    @map("workspace_id") @db.VarChar
+  createdBy       String    @map("created_by") @db.VarChar
+  name            String    @db.VarChar
+  docId           String    @map("doc_id") @db.VarChar
+  blockId         String    @map("block_id") @db.VarChar
+  /// 'check' (fetch, extract, compare) or 'agent' (an agent run rewrites the block)
+  kind            String    @db.VarChar
+  /// For a check: 'url' or 'command'.
+  source          String?   @db.VarChar
+  /// The device a command or agent runs on.
+  deviceKey       String?   @map("device_key") @db.VarChar
+  /// {url?, command?, extract?: {type, pattern?}, instructions?, model?, tools?}
+  spec            Json      @default("{}") @db.JsonB
+  intervalMinutes Int       @map("interval_minutes")
+  /// {type: 'change'|'above'|'below'|'always', value?}
+  condition       Json      @default("{\"type\":\"change\"}") @db.JsonB
+  /// {inApp, push, email}
+  alerts          Json      @default("{}") @db.JsonB
+  enabled         Boolean   @default(true)
+  nextRunAt       DateTime  @default(now()) @map("next_run_at") @db.Timestamptz(3)
+  lastRunAt       DateTime? @map("last_run_at") @db.Timestamptz(3)
+  lastValue       String?   @map("last_value") @db.Text
+  lastError       String?   @map("last_error") @db.Text
+  failureCount    Int       @default(0) @map("failure_count")
+  /// The device job a command or agent run is waiting on.
+  pendingJobId    String?   @map("pending_job_id") @db.VarChar
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  workspace Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User             @relation(fields: [createdBy], references: [id], onDelete: Cascade)
+  readings  MonitorReading[]
+
+  @@index([enabled, nextRunAt])
+  @@index([workspaceId, createdBy])
+  @@index([pendingJobId])
+  @@map("monitors")
+}
+
+/// One result of a monitor run: the value it found (null when it failed).
+model MonitorReading {
+  id        String   @id @default(uuid()) @db.VarChar
+  monitorId String   @map("monitor_id") @db.VarChar
+  value     String?  @db.Text
+  error     String?  @db.Text
+  changed   Boolean  @default(false)
+  alerted   Boolean  @default(false)
+  at        DateTime @default(now()) @db.Timestamptz(3)
+
+  monitor Monitor @relation(fields: [monitorId], references: [id], onDelete: Cascade)
+
+  @@index([monitorId, at])
+  @@map("monitor_readings")
 }

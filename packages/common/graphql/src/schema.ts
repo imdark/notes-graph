@@ -2640,6 +2640,7 @@ export enum NotificationType {
   InvitationReviewDeclined = 'InvitationReviewDeclined',
   InvitationReviewRequest = 'InvitationReviewRequest',
   Mention = 'Mention',
+  MonitorAlert = 'MonitorAlert',
 }
 
 export interface NotificationWorkspaceType {
