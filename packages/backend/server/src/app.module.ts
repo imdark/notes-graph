@@ -63,6 +63,7 @@ import { DirectoryModule } from './plugins/directory';
 import { GCloudModule } from './plugins/gcloud';
 import { IndexerModule } from './plugins/indexer';
 import { InventoryModule } from './plugins/inventory';
+import { BlockMonitorModule } from './plugins/monitor';
 import { OAuthModule } from './plugins/oauth';
 import { PaymentModule } from './plugins/payment';
 import { ResearchModule } from './plugins/research';
@@ -213,6 +214,7 @@ export function buildAppModule(env: Env) {
       CalendarModule,
       InventoryModule,
       ResearchModule,
+      BlockMonitorModule,
       DirectoryModule,
       TelemetryModule,
       CommentModule,

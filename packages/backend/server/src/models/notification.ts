@@ -122,11 +122,39 @@ export const CommentMentionNotificationCreateSchema =
     body: CommentNotificationBodySchema,
   });
 
+/** A monitor saw something worth telling its owner about. */
+export const MonitorAlertNotificationBodySchema = z.object({
+  workspaceId: IdSchema,
+  // The monitor's owner: the alert is about their own monitor.
+  createdByUserId: IdSchema,
+  monitorId: IdSchema,
+  name: z.string().trim().max(255),
+  value: z.string().max(1000).nullable(),
+  previous: z.string().max(1000).nullable(),
+  /** Why it fired, e.g. "changed" or "above 2000". */
+  reason: z.string().max(255),
+  doc: MentionDocSchema,
+});
+
+export type MonitorAlertNotificationBody = z.infer<
+  typeof MonitorAlertNotificationBodySchema
+>;
+
+export const MonitorAlertNotificationCreateSchema =
+  BaseNotificationCreateSchema.extend({
+    body: MonitorAlertNotificationBodySchema,
+  });
+
+export type MonitorAlertNotificationCreate = z.input<
+  typeof MonitorAlertNotificationCreateSchema
+>;
+
 export type UnionNotificationBody =
   | MentionNotificationBody
   | InvitationNotificationBody
   | InvitationReviewDeclinedNotificationBody
-  | CommentNotificationBody;
+  | CommentNotificationBody
+  | MonitorAlertNotificationBody;
 
 // #endregion
 
@@ -240,6 +268,25 @@ export class NotificationModel extends BaseModel {
       `Created ${type} notification ${row.id} to user ${data.userId} in workspace ${data.body.workspaceId}`
     );
     return row as CommentNotification;
+  }
+
+  // #endregion
+
+  // #region monitor
+
+  async createMonitorAlert(input: MonitorAlertNotificationCreate) {
+    const data = MonitorAlertNotificationCreateSchema.parse(input);
+    const type = NotificationType.MonitorAlert;
+    const row = await this.create({
+      userId: data.userId,
+      level: data.level,
+      type,
+      body: data.body,
+    });
+    this.logger.debug(
+      `Created ${type} notification ${row.id} to user ${data.userId} for monitor ${data.body.monitorId}`
+    );
+    return row;
   }
 
   // #endregion

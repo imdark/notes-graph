@@ -1,7 +1,7 @@
 import { render as rawRender } from '@react-email/components';
 import { type ComponentType, createElement, type ReactElement } from 'react';
 
-import { Comment, CommentMention, Mention } from './docs';
+import { Comment, CommentMention, Mention, MonitorAlert } from './docs';
 import {
   TeamBecomeAdmin,
   TeamBecomeCollaborator,
@@ -117,6 +117,10 @@ export const Renderers = {
   Mention: make(Mention, 'You were mentioned in NotesGraph'),
   Comment: make(Comment, 'New comment in NotesGraph'),
   CommentMention: make(CommentMention, 'You were mentioned in a comment'),
+  MonitorAlert: make(
+    MonitorAlert,
+    props => `${props.monitor.name}: ${props.monitor.value}`
+  ),
   //#endregion
 
   //#region Team

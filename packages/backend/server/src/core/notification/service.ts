@@ -11,6 +11,7 @@ import {
   MentionNotification,
   MentionNotificationCreate,
   Models,
+  MonitorAlertNotificationCreate,
   NotificationType,
   UnionNotificationBody,
   Workspace,
@@ -102,6 +103,49 @@ export class NotificationService {
       },
     });
     this.logger.debug(`Comment email sent to user ${receiver.id}`);
+  }
+
+  /**
+   * A monitor's alert: in the bell, and by email when `email` is set. The
+   * monitor's own setting decides email, not the mention-email preference,
+   * since the owner asked for this one explicitly.
+   */
+  async createMonitorAlert(
+    input: MonitorAlertNotificationCreate,
+    { email }: { email: boolean }
+  ) {
+    const notification = await this.models.notification.createMonitorAlert(input);
+    await this.publishCountChanged(input.userId, 'created');
+    if (email) {
+      const receiver = await this.models.user.getWorkspaceUser(input.userId);
+      if (receiver) {
+        const { body } = input;
+        await this.mailer.trySend({
+          name: 'MonitorAlert',
+          to: receiver.email,
+          props: {
+            monitor: {
+              name: body.name,
+              value: body.value ?? '—',
+              previous: body.previous ?? undefined,
+              reason: body.reason,
+            },
+            doc: {
+              title: body.doc.title,
+              url: this.url.link(
+                generateDocPath({
+                  workspaceId: body.workspaceId,
+                  docId: body.doc.id,
+                  mode: body.doc.mode,
+                  blockId: body.doc.blockId,
+                })
+              ),
+            },
+          },
+        });
+      }
+    }
+    return notification;
   }
 
   async createMention(input: MentionNotificationCreate) {

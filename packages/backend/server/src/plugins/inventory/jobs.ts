@@ -3,7 +3,7 @@ import type { InventoryJob, InventoryJobQuestion } from '@prisma/client';
 
 // See the note in service.ts: a plain HttpException is reported as a 500 by
 // the global filter, so bad input has to be a UserFriendlyError.
-import { ActionForbidden, BadRequest, NotFound } from '../../base';
+import { ActionForbidden, BadRequest, EventBus, NotFound } from '../../base';
 import { Models } from '../../models';
 import {
   JOB_TERMINAL,
@@ -12,6 +12,19 @@ import {
 } from '../../models/inventory-job';
 import { AgentPushService } from './push';
 import { isSessionLimit, sessionLimitRunAfter } from './session-limit';
+
+declare global {
+  interface Events {
+    /** A device job reached done, error or cancelled. */
+    'inventory.job.finished': {
+      workspaceId: string;
+      jobId: string;
+      status: string;
+      result: string | null;
+      error: string | null;
+    };
+  }
+}
 
 /** Wire shape for a job. Epoch seconds, matching the device DTO. */
 export interface JobDto {
@@ -176,7 +189,8 @@ export class InventoryJobService {
 
   constructor(
     private readonly models: Models,
-    @Optional() private readonly push?: AgentPushService
+    @Optional() private readonly push?: AgentPushService,
+    @Optional() private readonly event?: EventBus
   ) {}
 
   /** Push without holding up the request it rides on, or failing it. */
@@ -333,6 +347,16 @@ export class InventoryJobService {
       tmuxSession: body.tmuxSession ? String(body.tmuxSession).slice(0, 200) : undefined,
       leaseSeconds: body.leaseSeconds === undefined ? undefined : Number(body.leaseSeconds),
     });
+    // Whoever queued the job may be waiting on its end (a monitor, say).
+    if (job && (JOB_TERMINAL as readonly string[]).includes(job.status)) {
+      this.event?.emit('inventory.job.finished', {
+        workspaceId,
+        jobId: job.id,
+        status: job.status,
+        result: job.result,
+        error: job.error,
+      });
+    }
     return job ? toJobDto(job) : null;
   }
 

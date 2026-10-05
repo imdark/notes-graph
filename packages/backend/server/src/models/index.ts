@@ -12,6 +12,7 @@ import { BlobModel } from './blob';
 import { CalendarAccountModel } from './calendar-account';
 import { InventoryDeviceModel } from './inventory-device';
 import { InventoryJobModel } from './inventory-job';
+import { MonitorModel } from './monitor';
 import { CalendarEventModel } from './calendar-event';
 import { CalendarEventInstanceModel } from './calendar-event-instance';
 import { CalendarSubscriptionModel } from './calendar-subscription';
@@ -100,6 +101,7 @@ const MODELS = {
   inventoryDevice: InventoryDeviceModel,
   inventoryJob: InventoryJobModel,
   userPushToken: UserPushTokenModel,
+  monitor: MonitorModel,
   calendarSubscription: CalendarSubscriptionModel,
   calendarEvent: CalendarEventModel,
   calendarEventInstance: CalendarEventInstanceModel,
@@ -183,6 +185,7 @@ export * from './feature';
 export * from './history';
 export * from './inventory-job';
 export * from './magic-link-otp';
+export * from './monitor';
 export * from './notification';
 export * from './permission-projection';
 export * from './permission-write';

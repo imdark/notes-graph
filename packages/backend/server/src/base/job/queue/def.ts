@@ -30,6 +30,7 @@ export enum Queue {
   INDEXER = 'indexer',
   CALENDAR = 'calendar',
   DIRECTORY = 'directory',
+  MONITOR = 'monitor',
 }
 
 export const QUEUES = Object.values(Queue);
