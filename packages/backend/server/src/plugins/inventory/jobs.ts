@@ -11,6 +11,7 @@ import {
   type QuestionKind,
 } from '../../models/inventory-job';
 import { AgentPushService } from './push';
+import { isSessionLimit, sessionLimitRunAfter } from './session-limit';
 
 /** Wire shape for a job. Epoch seconds, matching the device DTO. */
 export interface JobDto {
@@ -33,6 +34,8 @@ export interface JobDto {
   /** Device-side tmux session the run is in, for `tmux attach -t`. */
   tmuxSession: string | null;
   claimedBy: string | null;
+  /** A queued job waits until this (the session limit's reset), if set. */
+  runAfter: number | null;
   /**
    * Transcript text from absolute offset `logFrom` to `logEnd`. Omitted from
    * listings, which would otherwise ship every job's transcript at once.
@@ -100,6 +103,7 @@ export function toJobDto(job: InventoryJob, options: JobDtoOptions = {}): JobDto
     steps: job.steps,
     tmuxSession: job.tmuxSession,
     claimedBy: job.claimedBy,
+    runAfter: job.runAfter ? job.runAfter.getTime() / 1000 : null,
     ...(options.logFrom === undefined ? {} : sliceLog(job, options.logFrom)),
     ...(options.questions ? { questions: options.questions.map(toQuestionDto) } : {}),
     createdAt: job.createdAt.getTime() / 1000,
@@ -201,6 +205,10 @@ export class InventoryJobService {
       throw new BadRequest(`context exceeds ${MAX_CONTEXT} characters`);
     }
 
+    // A device that hit its session limit can't run anything until it
+    // resets, so a job asked for meanwhile waits with the others.
+    const runAfter = await this.models.inventoryJob.heldUntil(workspaceId, deviceKey);
+
     const job = await this.models.inventoryJob.create({
       workspaceId,
       deviceKey,
@@ -215,9 +223,13 @@ export class InventoryJobService {
       docId: body.docId ? String(body.docId) : null,
       blockId: body.blockId ? String(body.blockId) : null,
       createdBy: userId,
+      runAfter,
     });
 
-    this.logger.log(`queued job ${job.id} for ${workspaceId}/${deviceKey}`);
+    this.logger.log(
+      `queued job ${job.id} for ${workspaceId}/${deviceKey}` +
+        (runAfter ? ` (held until ${runAfter.toISOString()})` : '')
+    );
     return toJobDto(job);
   }
 
@@ -265,12 +277,45 @@ export class InventoryJobService {
         `status must be one of running, ${JOB_TERMINAL.join(', ')}`
       );
     }
+    const result = body.result === undefined ? undefined : String(body.result ?? '');
+    const error = body.error === undefined ? undefined : String(body.error ?? '');
+    const logAppend = body.logAppend ? String(body.logAppend) : undefined;
+
+    // Claude stopped at the device's session limit: nothing was done, so the
+    // job goes back in the queue until the limit resets, and so does
+    // everything else waiting for that device, rather than failing in turn.
+    // A "done" whose whole answer is the limit message counts too.
+    const limit =
+      status === 'error' ? error : status === 'done' && (result ?? '').length < 300 ? result : undefined;
+    if (isSessionLimit(limit)) {
+      const runAfter = sessionLimitRunAfter(limit!);
+      const note =
+        `⏸ Claude session limit reached (${limit!.trim()}). ` +
+        `Queued to run again at ${runAfter.toISOString()}.\n`;
+      const requeued = await this.models.inventoryJob.requeue(
+        workspaceId,
+        id,
+        runAfter,
+        (logAppend ?? '') + (logAppend && !logAppend.endsWith('\n') ? '\n' : '') + note
+      );
+      if (requeued?.status === 'queued') {
+        const held = await this.models.inventoryJob.holdQueued(
+          workspaceId, requeued.deviceKey, runAfter
+        );
+        this.logger.log(
+          `job ${id} hit the session limit; ${held} job(s) on ` +
+            `${requeued.deviceKey} held until ${runAfter.toISOString()}`
+        );
+      }
+      return requeued ? toJobDto(requeued) : null;
+    }
+
     const job = await this.models.inventoryJob.report(workspaceId, id, {
       status,
-      result: body.result === undefined ? undefined : String(body.result ?? ''),
-      error: body.error === undefined ? undefined : String(body.error ?? ''),
+      result,
+      error,
       steps: body.steps === undefined ? undefined : Number(body.steps),
-      logAppend: body.logAppend ? String(body.logAppend) : undefined,
+      logAppend,
       tmuxSession: body.tmuxSession ? String(body.tmuxSession).slice(0, 200) : undefined,
       leaseSeconds: body.leaseSeconds === undefined ? undefined : Number(body.leaseSeconds),
     });

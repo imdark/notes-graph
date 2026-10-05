@@ -54,6 +54,11 @@ export interface RemoteJob {
   steps: number;
   /** tmux session on the device; `tmux attach -t` it there to watch. */
   tmuxSession: string | null;
+  /**
+   * Epoch seconds a queued job waits until: the device hit its Claude
+   * session limit and the job runs again once it resets.
+   */
+  runAfter?: number | null;
   /** Transcript from absolute offset `logFrom` to `logEnd`. */
   log?: string;
   logFrom?: number;

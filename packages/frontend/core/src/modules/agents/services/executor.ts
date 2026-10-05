@@ -564,6 +564,9 @@ export class AgentExecutorService extends Service implements AgentExecutor {
 
     yield { type: 'text', delta: `Queued on ${agent.deviceKey}…\n` };
 
+    // Set while the job waits out the device's session limit, so it is said
+    // once per wait rather than on every update.
+    let heldUntil: number | null = null;
     for await (const { job: update, logDelta } of this.remoteRunner.watch(
       workspaceId,
       job.id,
@@ -571,6 +574,15 @@ export class AgentExecutorService extends Service implements AgentExecutor {
     )) {
       if (logDelta) yield { type: 'log', text: logDelta };
       yield { type: 'waiting', jobId: job.id, questions: openQuestions(update) };
+      if (update.status === 'queued' && update.runAfter && update.runAfter !== heldUntil) {
+        heldUntil = update.runAfter;
+        const at = new Date(update.runAfter * 1000).toLocaleString();
+        yield {
+          type: 'text',
+          delta: `Session limit reached on ${agent.deviceKey}; waiting to run again at ${at}…\n`,
+        };
+        continue;
+      }
       if (update.status === 'running') {
         yield { type: 'step', index: Math.max(0, update.steps - 1) };
         continue;

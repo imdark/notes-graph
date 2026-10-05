@@ -28,6 +28,7 @@ export interface CreateInventoryJobInput {
   docId?: string | null;
   blockId?: string | null;
   createdBy?: string | null;
+  runAfter?: Date | null;
 }
 
 /**
@@ -65,6 +66,15 @@ export interface ReportInventoryJobInput {
   leaseSeconds?: number;
 }
 
+/**
+ * A job that can be handed to a runner: queued and not held back to a later
+ * time, or running on a lease that has lapsed.
+ */
+const claimable = (now: Date): Prisma.InventoryJobWhereInput[] => [
+  { status: 'queued', OR: [{ runAfter: null }, { runAfter: { lte: now } }] },
+  { status: 'running', leaseExpiresAt: { lt: now } },
+];
+
 @Injectable()
 export class InventoryJobModel extends BaseModel {
   async create(input: CreateInventoryJobInput): Promise<InventoryJob> {
@@ -83,6 +93,7 @@ export class InventoryJobModel extends BaseModel {
         docId: input.docId ?? null,
         blockId: input.blockId ?? null,
         createdBy: input.createdBy ?? null,
+        runAfter: input.runAfter ?? null,
       },
     });
   }
@@ -129,10 +140,7 @@ export class InventoryJobModel extends BaseModel {
       where: {
         workspaceId,
         deviceKey,
-        OR: [
-          { status: 'queued' },
-          { status: 'running', leaseExpiresAt: { lt: now } },
-        ],
+        OR: claimable(now),
       },
       orderBy: { createdAt: 'asc' },
     });
@@ -146,10 +154,7 @@ export class InventoryJobModel extends BaseModel {
         id: candidate.id,
         // Re-assert the claimable condition; if another runner took it
         // between the read and this write, count comes back 0.
-        OR: [
-          { status: 'queued' },
-          { status: 'running', leaseExpiresAt: { lt: now } },
-        ],
+        OR: claimable(now),
       },
       data: {
         status: 'running',
@@ -199,6 +204,70 @@ export class InventoryJobModel extends BaseModel {
           : new Date(Date.now() + (input.leaseSeconds ?? 300) * 1000),
       },
     });
+  }
+
+  /**
+   * Put a job that ended without doing its work back in the queue, not to be
+   * handed out before `runAfter`. A cancelled job stays cancelled.
+   */
+  async requeue(
+    workspaceId: string,
+    id: string,
+    runAfter: Date,
+    logAppend?: string
+  ): Promise<InventoryJob | null> {
+    const job = await this.get(workspaceId, id);
+    if (!job || job.status === 'cancelled') {
+      return job;
+    }
+    if (logAppend) {
+      await this.appendLog(id, logAppend);
+    }
+    return this.db.inventoryJob.update({
+      where: { id },
+      data: {
+        status: 'queued',
+        runAfter,
+        error: null,
+        claimedBy: null,
+        leaseExpiresAt: null,
+        tmuxSession: null,
+        finishedAt: null,
+      },
+    });
+  }
+
+  /** Hold every job still queued for a device until at least `runAfter`. */
+  async holdQueued(
+    workspaceId: string,
+    deviceKey: string,
+    runAfter: Date
+  ): Promise<number> {
+    const { count } = await this.db.inventoryJob.updateMany({
+      where: {
+        workspaceId,
+        deviceKey,
+        status: 'queued',
+        OR: [{ runAfter: null }, { runAfter: { lt: runAfter } }],
+      },
+      data: { runAfter },
+    });
+    return count;
+  }
+
+  /** The latest time a device's queued jobs are held to, if still ahead. */
+  async heldUntil(workspaceId: string, deviceKey: string): Promise<Date | null> {
+    const held = await this.db.inventoryJob.findFirst({
+      where: {
+        workspaceId,
+        deviceKey,
+        status: 'queued',
+        runAfter: { gt: new Date() },
+      },
+      orderBy: { runAfter: 'desc' },
+      select: { runAfter: true },
+    });
+    return held?.runAfter ?? null;
   }
 
   /**

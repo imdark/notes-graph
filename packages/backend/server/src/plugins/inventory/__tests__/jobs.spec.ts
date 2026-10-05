@@ -16,13 +16,14 @@ import { questionPushData } from '../push';
 const workspaceId = 'ws-1';
 const userId = 'user-1';
 
-function makeService(options: { device?: any } = {}) {
+function makeService(options: { device?: any; heldUntil?: Date } = {}) {
   const created: any[] = [];
   const models: any = {
     inventoryDevice: {
       get: async () => options.device ?? null,
     },
     inventoryJob: {
+      heldUntil: async () => options.heldUntil ?? null,
       create: async (input: any) => {
         const job = {
           id: 'job-1',
@@ -455,4 +456,71 @@ test('appended log text gets a stamp at each inner line start', t => {
     stampInnerLines('tail\n→ read_file\n\nok\n', stamp),
     'tail\n' + stamp + '→ read_file\n\n' + stamp + 'ok\n'
   );
+});
+
+test('a job asked for while its device is at the session limit waits too', async t => {
+  const heldUntil = new Date('2026-10-05T22:01:00Z');
+  const { service, created } = makeService({ device: agentTarget, heldUntil });
+  const job = await service.enqueue(workspaceId, userId, 'laptop', {
+    instructions: 'go',
+  });
+  t.is(created[0].runAfter, heldUntil);
+  t.is(job.runAfter, heldUntil.getTime() / 1000);
+});
+
+function makeReportService() {
+  const calls: Record<string, any[]> = { requeue: [], holdQueued: [], report: [] };
+  const job = {
+    id: 'job-1',
+    deviceKey: 'laptop',
+    status: 'running',
+    tools: [],
+    createdAt: new Date(0),
+  };
+  const models: any = {
+    inventoryJob: {
+      requeue: async (...args: any[]) => {
+        calls.requeue.push(args);
+        return { ...job, status: 'queued', runAfter: args[2] };
+      },
+      holdQueued: async (...args: any[]) => {
+        calls.holdQueued.push(args);
+        return 2;
+      },
+      report: async (...args: any[]) => {
+        calls.report.push(args);
+        return { ...job, ...args[2] };
+      },
+    },
+  };
+  return { service: new InventoryJobService(models), calls };
+}
+
+test('a run stopped by the session limit goes back in the queue', async t => {
+  const { service, calls } = makeReportService();
+  const reset = Math.floor(Date.now() / 1000) + 2 * 60 * 60;
+  const dto = await service.report(workspaceId, 'job-1', {
+    status: 'error',
+    error: `Claude AI usage limit reached|${reset}`,
+    logAppend: 'partial',
+  });
+
+  t.is(dto?.status, 'queued');
+  t.is(calls.report.length, 0);
+  const [, , runAfter, log] = calls.requeue[0];
+  // Just after the reset the message gave.
+  t.is(runAfter.getTime(), reset * 1000 + 60_000);
+  t.true(log.startsWith('partial\n⏸ Claude session limit reached'));
+  // Everything else waiting for that device waits with it.
+  t.deepEqual(calls.holdQueued[0], [workspaceId, 'laptop', runAfter]);
+});
+
+test('an ordinary failure is still a failure', async t => {
+  const { service, calls } = makeReportService();
+  const dto = await service.report(workspaceId, 'job-1', {
+    status: 'error',
+    error: 'error_max_turns',
+  });
+  t.is(dto?.status, 'error');
+  t.is(calls.requeue.length, 0);
 });
