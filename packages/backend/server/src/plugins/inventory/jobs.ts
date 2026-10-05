@@ -154,6 +154,14 @@ const MAX_ANSWER = 20_000;
 const MAX_OPTIONS = 10;
 const MAX_OPTION = 500;
 
+// The run's own tools only talk back to NotesGraph: naming the run or asking
+// the person something. A runner that still puts them to the user (one
+// started before they were pre-approved) gets them allowed here instead.
+const ALWAYS_ALLOWED_PERMISSIONS = new Set([
+  'Allow mcp__run__set_title?',
+  'Allow mcp__run__ask_user?',
+]);
+
 /** A question's choices: trimmed, non-empty, de-duplicated and capped. */
 function parseOptions(value: unknown): string[] {
   if (!Array.isArray(value)) {
@@ -401,8 +409,11 @@ export class InventoryJobService {
       throw new BadRequest('text is required');
     }
     // After "Allow all" a permission is recorded as allowed by whoever
-    // started the run, rather than waiting on them again.
-    const allowAll = kind === 'permission' && job.allowAllTools;
+    // started the run, rather than waiting on them again. So is one of the
+    // run's own tools.
+    const allowAll =
+      kind === 'permission' &&
+      (job.allowAllTools || ALWAYS_ALLOWED_PERMISSIONS.has(text));
     const question = await this.models.inventoryJob.ask(jobId, {
       kind,
       text: text.slice(0, MAX_QUESTION),
