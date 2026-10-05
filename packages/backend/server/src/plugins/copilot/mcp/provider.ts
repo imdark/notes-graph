@@ -851,11 +851,17 @@ export class WorkspaceMcpProvider {
           "Name of the AI model/agent making this edit (e.g. 'claude-sonnet-5'). Used for the 'Edited via MCP' attribution stamp appended to the document.",
       } as const;
 
+      // Notes read as the user's own voice, so an agent's bare "I" is
+      // ambiguous to whoever reads them later.
+      const firstPersonGuidance =
+        ' Writing voice: the notes are the user\'s, so never write a bare "I" — write "I (the agent)" when speaking for yourself and "I (the user)" when recording something in the user\'s own words.';
+
       const createDocument = defineTool({
         name: 'create_document',
         title: 'Create Document',
         description:
-          'Create a new document in the workspace with the given title and markdown content. Returns the ID of the created document. The document is stamped "Edited via MCP by <agent>" so its provenance stays visible in the doc and its history. This tool not support insert or update database block and image yet.',
+          'Create a new document in the workspace with the given title and markdown content. Returns the ID of the created document. The document is stamped "Edited via MCP by <agent>" so its provenance stays visible in the doc and its history. This tool not support insert or update database block and image yet.' +
+          firstPersonGuidance,
         parser: z.object({
           title: z.string().min(1),
           content: z.string(),
@@ -921,7 +927,8 @@ export class WorkspaceMcpProvider {
         description:
           'Update an existing document with new markdown content (body only). Uses structural diffing to apply minimal changes, preserving document history and enabling real-time collaboration. Every update is stamped "Edited via MCP by <agent>". ' +
           'Task workflow: task lists use org-mode annotations at the start of each list item — `[ ]` todo, `[-]` in progress, `[X]` done, or an UPPERCASE keyword — which kanban boards mirroring the list group by, plus planning annotations like `SCHEDULED: <date>`, `DEADLINE: <date>`, `STARTED: [date]`, `CLOSED: [date]` at the end of the line. To pick up a task, rewrite its annotation to `[-]` and append ` @<your-agent-name>` to the task line to claim it; mark it `[X]` when finished. A task that ships code only becomes `[X]` once it is deployed and verified live — until then it climbs `COMMITTED` → `MERGED` → `DEPLOYED`. Keep working memory and documentation in the task\'s own linked note (see link_document). ' +
-          'This does NOT update the document title. This tool not support insert or update database block and image yet.',
+          'This does NOT update the document title. This tool not support insert or update database block and image yet.' +
+          firstPersonGuidance,
         parser: z.object({
           docId: z.string(),
           content: z.string(),
@@ -1049,7 +1056,8 @@ export class WorkspaceMcpProvider {
           "Statuses: 'todo' | 'in-progress' | 'done' | a custom keyword. Moving to in-progress stamps STARTED and claims the task with @<agent>; done stamps CLOSED (and checks the native checkbox); back to todo removes CLOSED. " +
           "A task that ships code is not done when the code is written: it climbs the custom keywords 'committed' (on a branch / PR) → 'merged' (landed on the base branch) → 'deployed' (shipped to production) → 'done' (verified live). Never set done on a code change that isn't deployed and verified; a task with nothing to ship goes straight to done. " +
           'Notes are appended under the task, signed "<agent> via MCP". The edit is a surgical CRDT delta — safe alongside concurrent editors and database blocks. ' +
-          'Typical board workflow: get_board → list_blocks with the scope → update_task {status: "in-progress"} to pull a card → update_task {note} while working → update_task {status: "committed"}, then "merged" and "deployed" as the change ships → update_task {status: "done"} once it is verified live.',
+          'Typical board workflow: get_board → list_blocks with the scope → update_task {status: "in-progress"} to pull a card → update_task {note} while working → update_task {status: "committed"}, then "merged" and "deployed" as the change ships → update_task {status: "done"} once it is verified live.' +
+          firstPersonGuidance,
         parser: z.object({
           docId: z.string(),
           blockId: z.string(),
@@ -1126,7 +1134,8 @@ export class WorkspaceMcpProvider {
         name: 'update_block',
         title: 'Update Block',
         description:
-          'Replace the text of one specific block (paragraph, heading, list item — found via search_blocks / list_blocks / read_document) without rewriting the whole document. The new text is plain (that block\'s inline formatting is dropped; the rest of the doc is untouched); the edit is a surgical CRDT delta, safe alongside concurrent editors, and the document gets the standard "Edited via MCP" attribution stamp. For task status changes or progress notes prefer update_task, which handles org annotations and planning stamps.',
+          'Replace the text of one specific block (paragraph, heading, list item — found via search_blocks / list_blocks / read_document) without rewriting the whole document. The new text is plain (that block\'s inline formatting is dropped; the rest of the doc is untouched); the edit is a surgical CRDT delta, safe alongside concurrent editors, and the document gets the standard "Edited via MCP" attribution stamp. For task status changes or progress notes prefer update_task, which handles org annotations and planning stamps.' +
+          firstPersonGuidance,
         parser: z.object({
           docId: z.string(),
           blockId: z.string(),
