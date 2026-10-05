@@ -38,10 +38,11 @@ const harnessSummary = (agent: Agent) => {
   const where =
     agent.harness === 'remote'
       ? `on ${agent.deviceKey ?? 'a device'}`
-      : agent.harness === 'cloud'
+      : agent.harness === 'cloud' || agent.harness === 'research'
         ? 'in the cloud'
         : 'on this device';
-  const engine = deviceHarnessName(agent.model);
+  const engine =
+    agent.harness === 'research' ? 'Research' : deviceHarnessName(agent.model);
   return engine ? `${engine} ${where}` : where;
 };
 

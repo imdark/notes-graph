@@ -99,6 +99,7 @@ import { AgentContextService } from './services/context';
 import { AgentFileToolsService } from './services/file-tools';
 import { AgentExecutorService } from './services/executor';
 import { RemoteAgentRunnerService } from './services/remote-runner';
+import { ResearchToolsService } from './services/research-tools';
 import { AgentRunSessionService } from './services/run-session';
 import { AgentTaskClaimService } from './services/task-claim';
 import { AgentRunLogsStore } from './stores/agent-run-logs';
@@ -113,6 +114,7 @@ export function configureAgentsModule(framework: Framework) {
     .service(AgentFileToolsService, [FolderSyncService])
     .service(RemoteAgentRunnerService, [WorkspaceServerService])
     .service(CloudAgentRunnerService, [WorkspaceServerService])
+    .service(ResearchToolsService, [WorkspaceServerService])
     .service(AgentExecutorService, [
       AgentContextService,
       AgentRunsStore,
@@ -121,6 +123,7 @@ export function configureAgentsModule(framework: Framework) {
       AgentFileToolsService,
       RemoteAgentRunnerService,
       CloudAgentRunnerService,
+      ResearchToolsService,
       WorkspaceService,
     ])
     .service(AgentTaskClaimService, [DocsService])

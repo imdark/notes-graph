@@ -133,6 +133,11 @@ const ENVIRONMENTS: {
     label: 'Remote device',
     note: 'Runs on a machine registered in the device inventory',
   },
+  {
+    value: 'research',
+    label: 'Research (server)',
+    note: 'Server copilot with OmniSeek search and reading tools; needs OmniSeek on the server',
+  },
 ];
 
 /** What a run is for ("Type"), saved as the agent's `kind`. */
@@ -239,7 +244,7 @@ export const AgentEditor = ({
   const availableHarnesses =
     harness === 'remote'
       ? REMOTE_HARNESSES
-      : harness === 'cloud'
+      : harness === 'cloud' || harness === 'research'
         ? backendModels
         : LOCAL_MODELS;
 
@@ -601,7 +606,11 @@ export const AgentEditor = ({
                           'languages, reads papers and PDFs, follows citations, and ' +
                           'answers with sources. Needs OmniSeek running on that device.'
                         : "Default runs the device's configured AI provider."
-                  : 'A different on-device model is downloaded the first time it runs.'}
+                  : harness === 'research'
+                    ? 'The server’s model researches with OmniSeek: searches across ' +
+                      'languages, reads pages and papers, follows citations, and ' +
+                      'answers with sources.'
+                    : 'A different on-device model is downloaded the first time it runs.'}
               </span>
             </div>
 

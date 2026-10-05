@@ -24,13 +24,25 @@ import {
   type RemoteQuestion,
 } from './remote-runner';
 import { stampLines } from './log-lines';
+import {
+  RESEARCH_TOOL_RULES,
+  type ResearchToolsService,
+} from './research-tools';
 import { type AgentTarget, agentTargetKey } from './target';
 import {
   buildToolPrompt,
+  FILE_TOOL_RULES,
   type ParsedToolCall,
   parseToolCall,
   stripToolBlocks,
 } from './tool-protocol';
+
+/** Runs one tool call for the loop; returns the text the model reads. */
+type ToolDispatch = (
+  name: string,
+  args: Record<string, unknown>,
+  signal: AbortSignal
+) => Promise<string>;
 
 export type AgentEvent =
   /** First event of every run: the record its log is kept under. */
@@ -66,11 +78,16 @@ const WALL_CLOCK_MS = 120_000;
  */
 const CLOUD_WALL_CLOCK_MS = 10 * 60_000;
 /**
+ * A research run sweeps many sources, then reads the best of them in full;
+ * each of those is a fan-out on the server, so it gets longer again.
+ */
+const RESEARCH_WALL_CLOCK_MS = 20 * 60_000;
+/**
  * A run with no device job that still says running after this long was
  * orphaned: every in-tab run is cut off by its wall clock well before, so the
  * tab driving it must have closed before it could record the end.
  */
-const ORPHANED_AFTER_MS = CLOUD_WALL_CLOCK_MS + 60_000;
+const ORPHANED_AFTER_MS = RESEARCH_WALL_CLOCK_MS + 60_000;
 /** What an orphaned in-tab run is recorded as having ended with. */
 const ORPHANED_ERROR =
   'Interrupted: the tab running it closed before it finished.';
@@ -106,7 +123,9 @@ const modelLabel = (agent: Agent, harness: AgentHarness) =>
     ? (onDeviceModel(agent) ?? DEFAULT_LOCAL_MODEL)
     : harness === 'cloud'
       ? 'server default'
-      : agent.model || 'device default';
+      : harness === 'research'
+        ? 'server default + OmniSeek'
+        : agent.model || 'device default';
 
 const clip = (text: string, limit: number) =>
   text.length > limit ? `${text.slice(0, limit - 1)}…` : text;
@@ -151,15 +170,19 @@ export class AgentExecutorService extends Service implements AgentExecutor {
     private readonly fileTools: AgentFileToolsService,
     private readonly remoteRunner: RemoteAgentRunnerService,
     private readonly cloudRunner: CloudAgentRunnerService,
+    private readonly researchTools: ResearchToolsService,
     private readonly workspaceService: WorkspaceService
   ) {
     super();
   }
 
-  /** The model an in-tab run asks each step: the browser's, or the server's. */
+  /**
+   * The model an in-tab run asks each step: the browser's, or the server's
+   * (for cloud and research alike).
+   */
   private async modelFor(
     agent: Agent,
-    harness: 'on-device' | 'cloud'
+    harness: Exclude<AgentHarness, 'remote'>
   ): Promise<ChatModel> {
     if (harness === 'on-device') {
       return (messages, signal) =>
@@ -187,18 +210,20 @@ export class AgentExecutorService extends Service implements AgentExecutor {
    * A tool that throws is not fatal: the error text goes back to the model as
    * the step's result, so a wrong path or a malformed block costs one step and
    * can be corrected, which is the common case with a small on-device model.
+   *
+   * `tools` and `rules` are what the run is offered (file tools, research
+   * tools, or both) and `dispatch` runs them; set_title is always added.
    */
   private async *runWithTools(
     agent: Agent,
     model: ChatModel,
     contextText: string,
-    toolNames: string[],
+    tools: AgentToolSpec[],
+    rules: string[],
+    dispatch: ToolDispatch,
     signal: AbortSignal
   ): AsyncIterable<AgentEvent> {
-    const specs = [
-      ...FILE_TOOLS.filter(spec => toolNames.includes(spec.name)),
-      SET_TITLE_TOOL,
-    ];
+    const specs = [...tools, SET_TITLE_TOOL];
     const messages: {
       role: 'system' | 'user' | 'assistant';
       content: string;
@@ -209,7 +234,7 @@ export class AgentExecutorService extends Service implements AgentExecutor {
           agent.instructions.trim() ||
             'Help the reader with the content below.',
           '',
-          buildToolPrompt(specs),
+          buildToolPrompt(specs, rules),
         ].join('\n'),
       },
       { role: 'user', content: contextText },
@@ -265,7 +290,7 @@ export class AgentExecutorService extends Service implements AgentExecutor {
         result = title ? 'Title set.' : 'Error: title is required';
       } else {
         try {
-          result = await this.fileTools.call(call.name, call.args);
+          result = await dispatch(call.name, call.args, signal);
         } catch (err) {
           result = `Error: ${err instanceof Error ? err.message : String(err)}`;
         }
@@ -420,9 +445,11 @@ export class AgentExecutorService extends Service implements AgentExecutor {
     const limit =
       harness === 'remote'
         ? null
-        : harness === 'cloud'
-          ? CLOUD_WALL_CLOCK_MS
-          : WALL_CLOCK_MS;
+        : harness === 'research'
+          ? RESEARCH_WALL_CLOCK_MS
+          : harness === 'cloud'
+            ? CLOUD_WALL_CLOCK_MS
+            : WALL_CLOCK_MS;
     let deadline: ReturnType<typeof setTimeout> | null =
       limit === null ? null : setTimeout(() => controller.abort(), limit);
     // A run waiting on the reader is not stalled: the clock stops while a
@@ -485,22 +512,44 @@ export class AgentExecutorService extends Service implements AgentExecutor {
       const model = await this.modelFor(agent, harness);
 
       // An agent given file tools, in a workspace with a folder bound, runs
-      // the tool loop; everything else keeps the original text-only path.
-      const fileTools = agent.tools.filter(name =>
-        FILE_TOOL_NAMES.includes(name)
-      );
-      const useTools = fileTools.length > 0 && this.fileTools.available;
+      // the tool loop, as does every research run (its tools are the point);
+      // everything else keeps the original text-only path.
+      const fileTools = this.fileTools.available
+        ? FILE_TOOLS.filter(spec => agent.tools.includes(spec.name))
+        : [];
+      const researchTools =
+        harness === 'research' && this.workspaceId
+          ? await this.researchTools.specs(this.workspaceId)
+          : [];
+      const tools = [...fileTools, ...researchTools];
 
-      if (useTools) {
-        this.runsStore.describe(runId, { folder: this.fileTools.folderName });
+      if (tools.length > 0) {
+        if (fileTools.length) {
+          this.runsStore.describe(runId, { folder: this.fileTools.folderName });
+        }
+        const rules = [
+          ...(fileTools.length ? FILE_TOOL_RULES : []),
+          ...(researchTools.length ? RESEARCH_TOOL_RULES : []),
+        ];
+        const workspaceId = this.workspaceId;
+        const dispatch: ToolDispatch = (name, args, signal) =>
+          FILE_TOOL_NAMES.includes(name)
+            ? this.fileTools.call(name, args)
+            : researchTools.some(tool => tool.name === name) && workspaceId
+              ? this.researchTools.call(workspaceId, name, args, signal)
+              : Promise.reject(new Error(`There is no tool called ${name}.`));
         yield record(
-          logLine(`▶ ${agent.name} ${harness}, with ${fileTools.join(', ')}`)
+          logLine(
+            `▶ ${agent.name} ${harness}, with ${tools.map(t => t.name).join(', ')}`
+          )
         );
         for await (const event of this.runWithTools(
           agent,
           model,
           context.text,
-          fileTools,
+          tools,
+          rules,
+          dispatch,
           controller.signal
         )) {
           if (event.type === 'step') steps = event.index + 1;

@@ -23,29 +23,51 @@ export interface ParsedToolCall {
 /** ```tool ... ``` — tolerant of the whitespace small models sprinkle in. */
 const TOOL_BLOCK_RE = /```tool\s*\n([\s\S]*?)```/i;
 
-export function buildToolPrompt(tools: AgentToolSpec[]): string {
+/** What the model is told about the folder tools, when it has them. */
+export const FILE_TOOL_RULES = [
+  'The file tools work with the files in the folder bound to this workspace.',
+  'Read a file before overwriting it. Never invent file contents.',
+];
+
+/**
+ * The tool section of a system prompt. `rules` are the extra instructions
+ * that go with the tools on offer (see FILE_TOOL_RULES), so a run without
+ * file tools isn't told about a folder it doesn't have.
+ */
+export function buildToolPrompt(
+  tools: AgentToolSpec[],
+  rules: string[] = []
+): string {
   const lines = tools.map(tool => {
     const args = Object.entries(tool.args)
       .map(([key, hint]) => `"${key}": <${hint}>`)
       .join(', ');
     return `- ${tool.name}: ${tool.desc}\n  args: {${args}}`;
   });
+  // A concrete call to copy, from a tool the run actually has.
+  const example = tools[0];
+  const exampleArg = example ? Object.keys(example.args)[0] : undefined;
+  const exampleCall = example
+    ? JSON.stringify({
+        tool: example.name,
+        args: exampleArg ? { [exampleArg]: '...' } : {},
+      })
+    : '{"tool": "<name>", "args": {}}';
 
   return [
-    'You can use tools to work with the files in the folder bound to this',
-    'workspace. The available tools are:',
+    'You can use tools. The available tools are:',
     '',
     ...lines,
     '',
     'To use one, reply with ONLY a fenced block like this and nothing else:',
     '',
     '```tool',
-    '{"tool": "read_file", "args": {"path": "notes/idea.md"}}',
+    exampleCall,
     '```',
     '',
     'You will then be given the result and can use another tool or answer.',
     'When you are ready to answer, reply normally with no tool block.',
-    'Read a file before overwriting it. Never invent file contents.',
+    ...rules,
   ].join('\n');
 }
 

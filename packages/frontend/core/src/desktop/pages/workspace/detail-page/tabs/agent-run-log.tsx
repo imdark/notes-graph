@@ -174,6 +174,7 @@ const harnessLabel: Record<string, string> = {
   'on-device': 'On-device (in the browser)',
   cloud: 'Cloud (the server’s model)',
   remote: 'Remote device',
+  research: 'Research (the server’s model + OmniSeek)',
 };
 
 const targetLabel = (run: AgentRun) => {
@@ -212,7 +213,7 @@ const RunDetails = ({ run }: { run: AgentRun }) => {
     [
       'Machine',
       run.deviceKey ??
-        (harness === 'on-device' || harness === 'cloud'
+        (harness === 'on-device' || harness === 'cloud' || harness === 'research'
           ? 'This browser'
           : undefined),
     ],

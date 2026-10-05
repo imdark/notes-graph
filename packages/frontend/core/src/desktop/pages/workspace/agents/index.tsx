@@ -72,11 +72,12 @@ const displayStatus = (
 };
 
 const whereItRuns = (agent: Agent) => {
-  const engine = deviceHarnessName(agent.model);
+  const engine =
+    agent.harness === 'research' ? 'Research' : deviceHarnessName(agent.model);
   const place =
     agent.harness === 'remote'
       ? `on ${agent.deviceKey ?? 'a device'}`
-      : agent.harness === 'cloud'
+      : agent.harness === 'cloud' || agent.harness === 'research'
         ? 'in the cloud'
         : 'on this device';
   return engine ? `${engine} ${place}` : `Runs ${place}`;
