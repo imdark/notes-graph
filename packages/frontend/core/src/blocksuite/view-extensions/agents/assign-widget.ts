@@ -1,4 +1,3 @@
-import { type Container, createIdentifier } from '@blocksuite/global/di';
 import { PlusIcon, ToolIcon } from '@blocksuite/icons/lit';
 import {
   menu,
@@ -26,10 +25,7 @@ import { css, html, nothing } from 'lit';
 import { state } from 'lit/decorators.js';
 import { literal, unsafeStatic } from 'lit/static-html.js';
 
-/** Bridges the core framework into the editor so the widget can reach services. */
-const AgentsFrameworkIdentifier = createIdentifier<FrameworkProvider>(
-  'NotesGraphAgentsFramework'
-);
+import { AgentsFrameworkIdentifier } from './framework';
 
 const WIDGET_TAG = 'notesgraph-agent-assign-widget';
 
@@ -281,19 +277,13 @@ if (!customElements.get(WIDGET_TAG)) {
 }
 
 /**
- * Editor extensions for the assign-to-agent button: a DI binding that exposes
- * the framework, plus the widget on the blocks a task can live in — list items
- * (checkboxes) and paragraphs carrying an org status.
+ * Editor extensions for the assign-to-agent button: the widget on the blocks
+ * a task can live in — list items (checkboxes) and paragraphs carrying an org
+ * status. It reaches the framework through AgentsFrameworkIdentifier, which
+ * AgentsViewExtension binds.
  */
-export function agentAssignWidgetExtensions(
-  framework: FrameworkProvider
-): ExtensionType[] {
+export function agentAssignWidgetExtensions(): ExtensionType[] {
   return [
-    {
-      setup: (di: Container) => {
-        di.addImpl(AgentsFrameworkIdentifier, () => framework);
-      },
-    },
     WidgetViewExtension(
       'notesgraph:paragraph',
       WIDGET_TAG,
