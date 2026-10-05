@@ -1,8 +1,11 @@
 package app.notesgraph.pro.push
 
 import android.content.Intent
+import android.content.res.Configuration
+import android.graphics.Color
 import android.os.Build
 import android.os.Bundle
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Arrangement
@@ -33,12 +36,16 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.fragment.app.FragmentActivity
 import app.notesgraph.pro.AppLock
 import app.notesgraph.pro.MainActivity
 import app.notesgraph.pro.theme.NotesGraphTheme
+import app.notesgraph.pro.theme.ThemeMode
+import app.notesgraph.pro.theme.notesgraphDarkScheme
+import app.notesgraph.pro.theme.notesgraphLightScheme
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.json.JSONObject
@@ -54,9 +61,24 @@ import org.json.JSONObject
  */
 class AgentQuestionActivity : FragmentActivity() {
 
+    /** The app's own colour mode (it can differ from the system's). */
+    private var dark = false
+
     override fun onCreate(savedInstanceState: Bundle?) {
-        enableEdgeToEdge()
+        val systemDark = (resources.configuration.uiMode and
+            Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
+        dark = AppLock.isDark(this, systemDark)
+        val bars = if (dark) {
+            SystemBarStyle.dark(Color.TRANSPARENT)
+        } else {
+            SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT)
+        }
+        enableEdgeToEdge(statusBarStyle = bars, navigationBarStyle = bars)
         super.onCreate(savedInstanceState)
+        // Behind the unlock prompt, before the content is set.
+        window.decorView.setBackgroundColor(
+            (if (dark) notesgraphDarkScheme else notesgraphLightScheme).backgroundPrimary.toArgb()
+        )
         val pushed = AgentQuestion.fromBundle(intent.extras)
         if (pushed == null) {
             finish()
@@ -78,7 +100,7 @@ class AgentQuestionActivity : FragmentActivity() {
 
     private fun show(pushed: AgentQuestion) {
         setContent {
-            NotesGraphTheme {
+            NotesGraphTheme(mode = if (dark) ThemeMode.Dark else ThemeMode.Light) {
                 Surface(modifier = Modifier.fillMaxSize()) {
                     QuestionScreen(
                         pushed = pushed,

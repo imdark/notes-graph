@@ -2,7 +2,6 @@ package app.notesgraph.pro.push
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -19,6 +18,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -146,7 +146,8 @@ private data class DiffColors(
 
 @Composable
 private fun diffColors(): DiffColors =
-    if (isSystemInDarkTheme()) {
+    // Follow the screen's theme (the app's mode), not the system's.
+    if (MaterialTheme.colorScheme.surface.luminance() < 0.5f) {
         DiffColors(
             removedLine = Color(0x33F85149), addedLine = Color(0x332EA043),
             removedWord = Color(0x80F85149), addedWord = Color(0x802EA043),
