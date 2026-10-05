@@ -1,11 +1,12 @@
 import { focusTextModel } from '@blocksuite/notesgraph/rich-text';
 import { BlockComponent } from '@blocksuite/notesgraph/std';
-import { css, html } from 'lit';
+import { css, html, type PropertyValues } from 'lit';
 import { styleMap } from 'lit/directives/style-map.js';
 
 import {
   type DashboardBlockModel,
   MAX_DASHBOARD_COLUMNS,
+  type WidgetBlockModel,
   type WidgetBlockProps,
   WidgetBlockFlavour,
 } from './model';
@@ -110,12 +111,46 @@ export class DashboardBlockComponent extends BlockComponent<DashboardBlockModel>
       .ng-dashboard-grid {
         grid-template-columns: minmax(0, 1fr) !important;
       }
+      .ng-dashboard-grid > * {
+        grid-column: auto !important;
+      }
     }
   `;
 
   private get columns(): number {
     const columns = Math.round(this.model.props.columns$.value || 1);
     return Math.min(Math.max(columns, 1), MAX_DASHBOARD_COLUMNS);
+  }
+
+  /** Columns each chart tile spans, from the last render. */
+  private _spans = new Map<string, number>();
+
+  /**
+   * How many columns each chart tile spans, never wider than the row. Read
+   * through the props' signals, so a tile's width change re-renders this.
+   */
+  private tileSpans(columns: number): Map<string, number> {
+    const spans = new Map<string, number>();
+    for (const child of this.model.children) {
+      if (child.flavour !== WidgetBlockFlavour) continue;
+      const span = Math.round(
+        (child as WidgetBlockModel).props.span$.value || 1
+      );
+      spans.set(child.id, Math.min(Math.max(span, 1), columns));
+    }
+    return spans;
+  }
+
+  override updated(changed: PropertyValues) {
+    super.updated(changed);
+    // The tiles are the children's own elements, so place them directly.
+    // Dashboards don't nest, so the first grid inside is this one's.
+    const grid = this.querySelector('.ng-dashboard-grid');
+    if (!grid) return;
+    for (const tile of Array.from(grid.children) as HTMLElement[]) {
+      const span = this._spans.get(tile.dataset.blockId ?? '') ?? 1;
+      tile.style.gridColumn = span > 1 ? `span ${span}` : '';
+    }
   }
 
   private readonly _setColumns = (columns: number) => {
@@ -184,6 +219,7 @@ export class DashboardBlockComponent extends BlockComponent<DashboardBlockModel>
   override renderBlock() {
     const columns = this.columns;
     const empty = this.model.children.length === 0;
+    this._spans = this.tileSpans(columns);
     return html`<div class="ng-dashboard" data-testid="dashboard-block">
       <div class="ng-dashboard-header" contenteditable="false">
         <input

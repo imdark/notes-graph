@@ -1,13 +1,6 @@
 import { BlockComponent } from '@blocksuite/notesgraph/std';
 import type { FrameworkProvider } from '@notesgraph/infra';
-import {
-  css,
-  html,
-  nothing,
-  type PropertyValues,
-  svg,
-  type TemplateResult,
-} from 'lit';
+import { css, html, nothing, svg, type TemplateResult } from 'lit';
 import { state } from 'lit/decorators.js';
 import { styleMap } from 'lit/directives/style-map.js';
 
@@ -441,16 +434,6 @@ export class WidgetBlockComponent extends BlockComponent<WidgetBlockModel> {
 
   private get inDashboard(): boolean {
     return this.model.parent?.flavour === DashboardBlockFlavour;
-  }
-
-  override updated(changed: PropertyValues) {
-    super.updated(changed);
-    // Grid placement is the host's: it's the grid item in a dashboard.
-    const span = Math.min(
-      Math.max(Math.round(this.model.props.span$.value || 1), 1),
-      MAX_DASHBOARD_COLUMNS
-    );
-    this.style.gridColumn = this.inDashboard ? `span ${span}` : '';
   }
 
   private renderSettings() {
