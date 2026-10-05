@@ -53,6 +53,8 @@ export {
   type Agent,
   type AgentDraft,
   type AgentHarness,
+  type AgentKind,
+  agentKind,
   type AgentOutput,
   type AgentScope,
   type AgentTargetKind,
