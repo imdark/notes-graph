@@ -50,7 +50,9 @@ import org.json.JSONObject
  *
  * Opened from the notification. The push carries a clipped copy, so the
  * question is read back from the server first - which also tells us if it
- * was answered elsewhere in the meantime.
+ * was answered elsewhere in the meantime. Once it is answered, the next
+ * question still waiting in the notifications opens in its place, and each
+ * answered one leaves the shade at once.
  */
 class AgentQuestionActivity : FragmentActivity() {
 
@@ -112,14 +114,43 @@ private fun QuestionScreen(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    // The question on screen. Once it is settled, the next one still waiting
+    // in the shade takes its place, so a run of approvals is worked through
+    // here without going back to the notifications for each.
+    var current by remember { mutableStateOf(pushed) }
+    // Settled while this screen was open; their notifications may take a
+    // moment to leave the shade.
+    val settled = remember { mutableSetOf<String>() }
     var state by remember { mutableStateOf<LoadState>(LoadState.Loading) }
     var note by remember { mutableStateOf("") }
     var sending by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    // What happened to the previous question, shown above the next one.
+    var notice by remember { mutableStateOf<String?>(null) }
 
-    LaunchedEffect(pushed.questionId) {
-        state = try {
-            val reply = AgentApi.question(pushed.server, pushed.workspaceId, pushed.jobId, pushed.questionId)
+    fun nextPending() =
+        AgentNotifications.pending(context).firstOrNull { it.questionId !in settled }
+
+    /** Move on to the next waiting question, or end on [message] if none is left. */
+    suspend fun advance(message: String) {
+        val next = nextPending()
+        if (next != null) {
+            notice = message
+            note = ""
+            error = null
+            state = LoadState.Loading
+            current = next
+        } else {
+            state = LoadState.Closed(message)
+            delay(900)
+            onDone()
+        }
+    }
+
+    LaunchedEffect(current.questionId) {
+        val asked = current
+        val loaded = try {
+            val reply = AgentApi.question(asked.server, asked.workspaceId, asked.jobId, asked.questionId)
             val q = reply.getJSONObject("question")
             val jobStatus = reply.optString("jobStatus")
             when {
@@ -128,11 +159,11 @@ private fun QuestionScreen(
                 else -> {
                     val options = q.optJSONArray("options")
                     LoadState.Open(
-                        pushed.copy(
-                            text = q.optString("text", pushed.text),
+                        asked.copy(
+                            text = q.optString("text", asked.text),
                             detail = if (q.isNull("detail")) "" else q.optString("detail"),
                             options = options?.let { a -> List(a.length()) { a.getString(it) } }
-                                ?: pushed.options,
+                                ?: asked.options,
                         )
                     )
                 }
@@ -140,12 +171,21 @@ private fun QuestionScreen(
         } catch (e: AgentApi.HttpError) {
             if (e.status == 404) LoadState.Closed("This run is gone.")
             // Can't reach it: work from what the push carried.
-            else LoadState.Open(pushed).also { error = e.message }
+            else LoadState.Open(asked).also { error = e.message }
         } catch (e: Exception) {
             error = "Offline - showing what the notification carried."
-            LoadState.Open(pushed)
+            LoadState.Open(asked)
         }
-        if (state is LoadState.Closed) AgentNotifications.cancel(context, pushed.questionId)
+        if (loaded is LoadState.Closed) {
+            AgentNotifications.cancel(context, asked.questionId)
+            settled += asked.questionId
+            // Nothing to decide on this one; go straight to one that is waiting.
+            if (nextPending() != null) {
+                advance("${asked.agentName}: ${loaded.message}")
+                return@LaunchedEffect
+            }
+        }
+        state = loaded
     }
 
     fun send(body: JSONObject, summary: String) {
@@ -153,14 +193,20 @@ private fun QuestionScreen(
         sending = true
         error = null
         scope.launch {
-            val failed = AgentAnswerReceiver.answer(context.applicationContext, question, body, summary)
+            val failed = AgentAnswerReceiver.answer(
+                context.applicationContext, question, body, summary, quiet = true,
+            )
             sending = false
-            if (failed == null) {
-                state = LoadState.Closed("$summary. It carries on from here.")
-                delay(900)
-                onDone()
-            } else {
-                error = failed
+            when {
+                failed == null -> {
+                    settled += question.questionId
+                    advance("$summary. It carries on from here.")
+                }
+                !failed.stillWaiting -> {
+                    settled += question.questionId
+                    advance(failed.message)
+                }
+                else -> error = failed.message
             }
         }
     }
@@ -174,7 +220,14 @@ private fun QuestionScreen(
             .padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Text(pushed.agentName, style = MaterialTheme.typography.titleLarge)
+        notice?.let {
+            Text(
+                it,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Text(current.agentName, style = MaterialTheme.typography.titleLarge)
         when (val s = state) {
             LoadState.Loading -> Text("Loading…")
             is LoadState.Closed -> {
