@@ -4,6 +4,7 @@ import {
   AgentRunLogsStore,
   AgentRunSessionService,
   AgentRunsStore,
+  deviceHarnessName,
   openQuestions,
   RemoteAgentRunnerService,
   type RemoteQuestion,
@@ -216,7 +217,7 @@ const RunDetails = ({ run }: { run: AgentRun }) => {
           : undefined),
     ],
     ['Harness', harness ? (harnessLabel[harness] ?? harness) : undefined],
-    ['Model', run.model],
+    ['Model', deviceHarnessName(run.model) ?? run.model],
     ['Folder', run.folder ?? (harness === 'remote' ? undefined : 'None bound')],
     ['Started', new Date(run.startedAt).toLocaleString()],
     [

@@ -25,9 +25,28 @@ export const CLAUDE_CODE_MODEL = 'claude-code';
  */
 export const WORKFLOW_MODEL = 'workflow';
 
+/**
+ * Claude Code with the device's OmniSeek attached (github.com/Battam1111/omniseek):
+ * cross-lingual search, reading papers and PDFs, transcription, and a
+ * citation graph, for runs that research rather than edit.
+ */
+export const RESEARCH_MODEL = 'research';
+
 /** Models that run Claude Code on the device; they exist only remotely. */
 export const isDeviceClaudeModel = (model: string | undefined) =>
-  model === CLAUDE_CODE_MODEL || model === WORKFLOW_MODEL;
+  model === CLAUDE_CODE_MODEL ||
+  model === WORKFLOW_MODEL ||
+  model === RESEARCH_MODEL;
+
+/** What a device Claude model is called in lists; null for any other model. */
+export const deviceHarnessName = (model: string | undefined) =>
+  model === RESEARCH_MODEL
+    ? 'Research'
+    : model === WORKFLOW_MODEL
+      ? 'Workflow'
+      : model === CLAUDE_CODE_MODEL
+        ? 'Claude Code'
+        : null;
 
 /** Something a running job asked the person who started it. */
 export interface RemoteQuestion {

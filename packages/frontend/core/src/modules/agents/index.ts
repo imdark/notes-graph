@@ -3,9 +3,11 @@ export { AgentIcon, agentIconData } from './views/agent-icon';
 export { AgentsService, DEFAULT_AGENT_TOOLS } from './services/agents';
 export {
   CLAUDE_CODE_MODEL,
+  deviceHarnessName,
   type EnqueueRemoteJob,
   isDeviceClaudeModel,
   openQuestions,
+  RESEARCH_MODEL,
   type RemoteJob,
   type RemoteJobUpdate,
   type RemoteQuestion,

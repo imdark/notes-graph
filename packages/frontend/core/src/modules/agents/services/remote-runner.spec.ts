@@ -7,10 +7,23 @@ import { Framework } from '@notesgraph/infra';
 import { describe, expect, test } from 'vitest';
 
 import {
+  deviceHarnessName,
+  isDeviceClaudeModel,
   openQuestions,
   RemoteAgentRunnerService,
   type RemoteJob,
+  RESEARCH_MODEL,
 } from './remote-runner';
+
+describe('device harnesses', () => {
+  test('research runs Claude Code on the device, named as such', () => {
+    expect(isDeviceClaudeModel(RESEARCH_MODEL)).toBe(true);
+    expect(deviceHarnessName(RESEARCH_MODEL)).toBe('Research');
+    expect(deviceHarnessName('claude-code')).toBe('Claude Code');
+    expect(deviceHarnessName('workflow')).toBe('Workflow');
+    expect(deviceHarnessName('Llama-3.2-1B-Instruct-q4f16_1-MLC')).toBeNull();
+  });
+});
 
 const job = (overrides: Partial<RemoteJob>): RemoteJob => ({
   id: 'job-1',
