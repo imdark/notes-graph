@@ -8,6 +8,7 @@ import type { WORKSPACE_DIALOG_SCHEMA } from '@notesgraph/core/modules/dialogs/c
 import { useLiveData, useService } from '@notesgraph/infra';
 
 import { AddToProjectDialog } from './add-to-project';
+import { AgentBlockRunsDialog } from './agent-block-runs';
 import { ChangePasswordDialog } from './change-password';
 import { CollectionEditorDialog } from './collection-editor';
 import { ConvertToProjectDialog } from './convert-to-project';
@@ -54,6 +55,7 @@ const WORKSPACE_DIALOGS = {
   'collection-selector': CollectionSelectorDialog,
   'date-selector': DateSelectorDialog,
   'block-schedule': BlockScheduleDialog,
+  'agent-block-runs': AgentBlockRunsDialog,
   setting: SettingDialog,
   import: ImportDialog,
   'project-members': ProjectMembersDialog,
