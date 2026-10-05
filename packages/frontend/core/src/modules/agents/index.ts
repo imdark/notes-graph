@@ -12,6 +12,16 @@ export {
   RemoteAgentRunnerService,
   WORKFLOW_MODEL,
 } from './services/remote-runner';
+export {
+  type ChatMessage,
+  type ChatModel,
+  CloudAgentRunnerService,
+} from './services/cloud-runner';
+export {
+  forkMessages,
+  forkTranscript,
+  splitSuggestion,
+} from './services/question-fork';
 export { AgentContextService } from './services/context';
 export {
   AgentFileToolError,
