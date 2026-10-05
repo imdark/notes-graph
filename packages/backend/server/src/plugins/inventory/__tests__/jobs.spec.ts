@@ -352,6 +352,18 @@ test('after "Allow all" a permission is recorded as allowed, not asked', async t
   t.false('allowedBy' in asked[1]);
 });
 
+test("the run's own tools are allowed without asking", async t => {
+  const { service, asked } = questionService(storedJob({ createdBy: userId }));
+  await service.ask(workspaceId, 'job-1', {
+    kind: 'permission',
+    text: 'Allow mcp__run__set_title?',
+    detail: '{"title":"Pick a show"}',
+  });
+  await service.ask(workspaceId, 'job-1', { kind: 'permission', text: 'Allow Bash?' });
+  t.is(asked[0].allowedBy, userId);
+  t.false('allowedBy' in asked[1]);
+});
+
 test('a question is answered once', async t => {
   const { service } = questionService(
     storedJob({ createdBy: userId }),
