@@ -6,6 +6,7 @@ import { getSelectedModelsCommand } from '@blocksuite/notesgraph-shared/commands
 import {
   insertPositionToIndex,
   type InsertToPosition,
+  isNoteLevelContainer,
 } from '@blocksuite/notesgraph-shared/utils';
 import { type EditorHost, TextSelection } from '@blocksuite/std';
 import type { BlockModel, Store } from '@blocksuite/store';
@@ -200,7 +201,7 @@ export const mirrorListToDatabase = (host: EditorHost, viewType: string) => {
   // — after the whole top-level list containing the anchor.
   let insertParent = host.store.getParent(anchor);
   let topAncestor: BlockModel = anchor;
-  while (insertParent && insertParent.flavour !== 'notesgraph:note') {
+  while (insertParent && !isNoteLevelContainer(insertParent)) {
     topAncestor = insertParent;
     insertParent = host.store.getParent(insertParent);
   }

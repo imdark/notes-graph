@@ -22,7 +22,12 @@ export const SurfaceRefBlockSchema = defineBlockSchema({
   metadata: {
     version: 1,
     role: 'content',
-    parent: ['notesgraph:note', 'notesgraph:paragraph', 'notesgraph:list'],
+    parent: [
+      'notesgraph:note',
+      'notesgraph:column',
+      'notesgraph:paragraph',
+      'notesgraph:list',
+    ],
   },
   toModel: () => new SurfaceRefBlockModel(),
 });

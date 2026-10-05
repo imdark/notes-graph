@@ -5,6 +5,7 @@ export const blockQueryViews: ViewMeta[] = [
   viewPresets.tableViewMeta,
   viewPresets.kanbanViewMeta,
   viewPresets.ganttViewMeta,
+  viewPresets.chartViewMeta,
 ];
 
 export const blockQueryViewMap = Object.fromEntries(

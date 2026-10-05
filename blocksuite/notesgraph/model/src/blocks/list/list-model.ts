@@ -43,6 +43,7 @@ export const ListBlockSchema = defineBlockSchema({
     version: 1,
     role: 'content',
     parent: [
+      'notesgraph:column',
       'notesgraph:note',
       'notesgraph:database',
       'notesgraph:list',

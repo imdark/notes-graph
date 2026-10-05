@@ -6,6 +6,7 @@ export const databaseBlockViews: ViewMeta[] = [
   viewPresets.kanbanViewMeta,
   viewPresets.calendarViewMeta,
   viewPresets.ganttViewMeta,
+  viewPresets.chartViewMeta,
   viewPresets.listViewMeta,
 ];
 

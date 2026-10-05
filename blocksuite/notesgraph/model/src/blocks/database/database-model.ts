@@ -71,7 +71,7 @@ export const DatabaseBlockSchema = defineBlockSchema({
   metadata: {
     role: 'hub',
     version: 3,
-    parent: ['notesgraph:note'],
+    parent: ['notesgraph:note', 'notesgraph:column'],
     children: ['notesgraph:paragraph', 'notesgraph:list'],
   },
   toModel: () => new DatabaseBlockModel(),

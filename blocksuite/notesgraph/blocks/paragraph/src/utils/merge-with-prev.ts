@@ -4,6 +4,7 @@ import {
   BookmarkBlockModel,
   CalloutBlockModel,
   CodeBlockModel,
+  ColumnBlockModel,
   DatabaseBlockModel,
   DividerBlockModel,
   EdgelessTextBlockModel,
@@ -24,6 +25,7 @@ import {
   getDocTitleInlineEditor,
   getPrevContentBlock,
   matchModels,
+  removeColumn,
 } from '@blocksuite/notesgraph-shared/utils';
 import { BlockSelection, type EditorHost } from '@blocksuite/std';
 import type { BlockModel, Text } from '@blocksuite/store';
@@ -46,6 +48,13 @@ export function mergeWithPrev(editorHost: EditorHost, model: BlockModel) {
   const doc = model.store;
   const parent = doc.getParent(model);
   if (!parent) return false;
+
+  if (
+    matchModels(parent, [ColumnBlockModel]) &&
+    parent.firstChild() === model
+  ) {
+    return handleColumnStart(editorHost, model, parent);
+  }
 
   const prevBlock = getPrevContentBlock(editorHost, model);
   if (!prevBlock) {
@@ -142,6 +151,33 @@ export function mergeWithPrev(editorHost: EditorHost, model: BlockModel) {
   }
 
   return false;
+}
+
+/**
+ * The first line of a column has nothing before it to merge into — the
+ * previous column's text is a separate box. An empty line goes away; the
+ * last empty line of a column takes the column with it.
+ */
+function handleColumnStart(
+  editorHost: EditorHost,
+  model: BlockModel,
+  column: ColumnBlockModel
+) {
+  const doc = model.store;
+  if (model.text?.length || model.children.length) return true;
+  const next = doc.getNext(model);
+  if (next) {
+    doc.captureSync();
+    doc.deleteBlock(model);
+    focusTextModel(editorHost.std, next.id, 0);
+    return true;
+  }
+  const focusId = removeColumn(doc, column);
+  if (focusId) {
+    const target = doc.getBlock(focusId)?.model;
+    focusTextModel(editorHost.std, focusId, target?.text?.length ?? 0);
+  }
+  return true;
 }
 
 function handleNoPreviousSibling(editorHost: EditorHost, model: ExtendedModel) {

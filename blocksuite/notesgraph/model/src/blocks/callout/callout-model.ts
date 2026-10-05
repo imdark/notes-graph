@@ -29,6 +29,7 @@ export const CalloutBlockSchema = defineBlockSchema({
     version: 1,
     role: 'hub',
     parent: [
+      'notesgraph:column',
       'notesgraph:note',
       'notesgraph:database',
       'notesgraph:paragraph',

@@ -5,17 +5,20 @@ import {
 } from '@blocksuite/notesgraph/std';
 import type { BlockModel, ExtensionType } from '@blocksuite/notesgraph/store';
 import type { FrameworkProvider } from '@notesgraph/infra';
-import { css, html, nothing } from 'lit';
+import { css, html, nothing, svg } from 'lit';
 import { state } from 'lit/decorators.js';
 import { literal, unsafeStatic } from 'lit/static-html.js';
 
 import {
   type AgentRun,
   AgentRunsStore,
+  formatTrendValue,
   hasAgentClaim,
   type Monitor,
   MonitorsService,
   runsForBlock,
+  sparklinePath,
+  type Trend,
 } from '../../../modules/agents';
 import { WorkspaceDialogService } from '../../../modules/dialogs';
 import { AgentsFrameworkIdentifier } from './framework';
@@ -24,6 +27,10 @@ const WIDGET_TAG = 'notesgraph-block-agent-runs-widget';
 
 /** Gap kept between the end of the line's text and the chips. */
 const GAP_PX = 8;
+
+/** Size of the readings sparkline on a monitor's chip. */
+const TREND_WIDTH = 36;
+const TREND_HEIGHT = 12;
 
 /**
  * A small chip at the end of a block an agent was put on — run on it directly,
@@ -84,6 +91,16 @@ export class BlockAgentRunsWidget extends WidgetComponent {
     .ng-monitor-dot[data-state='paused'] {
       background: var(--notesgraph-text-disable-color, #a9a9ad);
     }
+    .ng-monitor-trend path {
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 1.25;
+      stroke-linejoin: round;
+      stroke-linecap: round;
+    }
+    .ng-monitor-trend-value {
+      font-variant-numeric: tabular-nums;
+    }
   `;
 
   private _framework: FrameworkProvider | null = null;
@@ -95,6 +112,10 @@ export class BlockAgentRunsWidget extends WidgetComponent {
   /** Monitors writing into this block. */
   @state()
   private accessor monitors: Monitor[] = [];
+
+  /** Each monitor's numeric readings over time, once fetched. */
+  @state()
+  private accessor trends = new Map<string, Trend | null>();
 
   override firstUpdated() {
     const framework = this.std.getOptional(AgentsFrameworkIdentifier);
@@ -121,6 +142,15 @@ export class BlockAgentRunsWidget extends WidgetComponent {
       );
       // Most blocks have none: don't re-render them on every refresh.
       if (mine.length || this.monitors.length) this.monitors = mine;
+      for (const monitor of mine) {
+        monitorsService
+          .trend(monitor)
+          .then(trend => {
+            if (this.trends.get(monitor.id) === trend) return;
+            this.trends = new Map(this.trends).set(monitor.id, trend);
+          })
+          .catch(() => {});
+      }
     });
     this._disposables.add(() => monitorsSub.unsubscribe());
     this._disposables.add(monitorsService.watch());
@@ -232,8 +262,29 @@ export class BlockAgentRunsWidget extends WidgetComponent {
       data-testid="block-monitor"
       @click=${(e: Event) => this._openMonitor(e, monitor)}
       @mousedown=${(e: Event) => e.stopPropagation()}
-      ><span class="ng-monitor-dot" data-state=${state}></span>📡</span
+      ><span class="ng-monitor-dot" data-state=${state}></span>📡${this.renderTrend(
+        monitor
+      )}</span
     >`;
+  }
+
+  /** A sparkline of its numeric readings and the latest one. */
+  private renderTrend(monitor: Monitor) {
+    const trend = this.trends.get(monitor.id);
+    if (!trend) return nothing;
+    return html`<svg
+        class="ng-monitor-trend"
+        data-testid="block-monitor-trend"
+        width=${TREND_WIDTH}
+        height=${TREND_HEIGHT}
+        viewBox="0 0 ${TREND_WIDTH} ${TREND_HEIGHT}"
+        aria-hidden="true"
+      >
+        ${svg`<path d=${sparklinePath(trend, TREND_WIDTH, TREND_HEIGHT)} />`}
+      </svg>
+      <span class="ng-monitor-trend-value"
+        >${formatTrendValue(trend.latest)}</span
+      >`;
   }
 
   private get blockRuns(): AgentRun[] {
