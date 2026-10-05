@@ -73,6 +73,16 @@ export const targetTitle = (
   return null;
 };
 
+/**
+ * Whether a block is a task still waiting for someone to take it: to-do, not
+ * queued, in progress or done. Any agent that claims a task moves it off
+ * to-do, so this is also "no agent is on it".
+ */
+export const isOpenTask = (model: BlockModel): boolean => {
+  const status = readTaskStatus(model);
+  return !!status && orgStatusLabel(status.text) === 'Todo';
+};
+
 /** Rewrite a task's status as a chip, the way the kanban board does. */
 const writeStatus = (
   model: BlockModel,

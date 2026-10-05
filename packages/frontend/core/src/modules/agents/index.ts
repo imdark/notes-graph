@@ -44,6 +44,7 @@ export {
 export { type AgentBlockRef, lastBlockTouched } from './services/focus-block';
 export {
   AgentTaskClaimService,
+  isOpenTask,
   markTasksQueued,
   QUEUED_STATUS,
   releaseQueuedTasks,

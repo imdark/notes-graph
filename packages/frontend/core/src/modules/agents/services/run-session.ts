@@ -2,7 +2,10 @@ import { LiveData, Service } from '@notesgraph/infra';
 
 import { type Agent, type AgentKind, agentKind } from '../stores/agents';
 import type { RemoteQuestion } from './remote-runner';
-import { AgentAlreadyRunningError, type AgentExecutorService } from './executor';
+import {
+  AgentAlreadyRunningError,
+  type AgentExecutorService,
+} from './executor';
 import { type AgentBlockRef, lastBlockTouched } from './focus-block';
 import {
   type AgentTarget,
@@ -134,7 +137,8 @@ export class AgentRunSessionService extends Service {
       this.sessions$.value.some(
         session =>
           session.running && runKey(session.agentId, session.target) === key
-      ) || this.queue$.value.some(run => runKey(run.agent.id, run.target) === key)
+      ) ||
+      this.queue$.value.some(run => runKey(run.agent.id, run.target) === key)
     );
   }
 
@@ -210,14 +214,19 @@ export class AgentRunSessionService extends Service {
       });
   }
 
-  /** Hand back tasks the run never moved on from queued. */
-  private unclaim(target: AgentTarget): void {
+  /** Whether any agent's run is going or queued on this target. */
+  isBusyOn(target: AgentTarget): boolean {
     const key = agentTargetKey(target);
-    const claimedAgain = () =>
+    return (
       this.sessions$.value.some(
         session => session.running && agentTargetKey(session.target) === key
-      ) || this.queue$.value.some(run => agentTargetKey(run.target) === key);
-    this.taskClaim.release(target, claimedAgain).catch(() => {});
+      ) || this.queue$.value.some(run => agentTargetKey(run.target) === key)
+    );
+  }
+
+  /** Hand back tasks the run never moved on from queued. */
+  private unclaim(target: AgentTarget): void {
+    this.taskClaim.release(target, () => this.isBusyOn(target)).catch(() => {});
   }
 
   private runNext(): void {

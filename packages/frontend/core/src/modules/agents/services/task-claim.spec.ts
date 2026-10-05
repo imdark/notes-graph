@@ -1,7 +1,7 @@
 import type { Store } from '@blocksuite/notesgraph/store';
 import { describe, expect, test } from 'vitest';
 
-import { markTasksQueued, releaseQueuedTasks } from './task-claim';
+import { isOpenTask, markTasksQueued, releaseQueuedTasks } from './task-claim';
 
 type Op = { insert: string; attributes?: { orgStatus?: string } };
 
@@ -50,7 +50,12 @@ const storeOf = (
 describe('markTasksQueued', () => {
   test('marks a to-do chip, a typed annotation and an unticked checkbox', () => {
     const { store, status } = storeOf({
-      chip: { ops: [{ insert: ' ', attributes: { orgStatus: '[ ]' } }, { insert: ' a' }] },
+      chip: {
+        ops: [
+          { insert: ' ', attributes: { orgStatus: '[ ]' } },
+          { insert: ' a' },
+        ],
+      },
       typed: { ops: [{ insert: 'TODO b' }] },
       box: { ops: [{ insert: 'c' }], props: { type: 'todo', checked: false } },
     });
@@ -69,7 +74,12 @@ describe('markTasksQueued', () => {
 
   test('leaves tasks in progress or done, and non-tasks, alone', () => {
     const { store, status } = storeOf({
-      going: { ops: [{ insert: ' ', attributes: { orgStatus: '[-]' } }, { insert: ' a' }] },
+      going: {
+        ops: [
+          { insert: ' ', attributes: { orgStatus: '[-]' } },
+          { insert: ' a' },
+        ],
+      },
       done: { ops: [{ insert: 'b' }], props: { type: 'todo', checked: true } },
       prose: { ops: [{ insert: 'just a line' }] },
     });
@@ -81,11 +91,49 @@ describe('markTasksQueued', () => {
   });
 });
 
+describe('isOpenTask', () => {
+  test('is a to-do no agent has taken yet', () => {
+    const { store } = storeOf({
+      box: { ops: [{ insert: 'a' }], props: { type: 'todo', checked: false } },
+      typed: { ops: [{ insert: 'TODO b' }] },
+      queued: {
+        ops: [
+          { insert: ' ', attributes: { orgStatus: 'QUEUED' } },
+          { insert: ' c' },
+        ],
+      },
+      going: {
+        ops: [
+          { insert: ' ', attributes: { orgStatus: '[-]' } },
+          { insert: ' d' },
+        ],
+      },
+      done: { ops: [{ insert: 'e' }], props: { type: 'todo', checked: true } },
+      prose: { ops: [{ insert: 'just a line' }] },
+    });
+    const open = (id: string) => isOpenTask(store.getBlock(id)!.model);
+
+    expect(
+      ['box', 'typed', 'queued', 'going', 'done', 'prose'].map(open)
+    ).toEqual([true, true, false, false, false, false]);
+  });
+});
+
 describe('releaseQueuedTasks', () => {
   test('hands back a task still queued, not one the agent moved on', () => {
     const { store, status } = storeOf({
-      waiting: { ops: [{ insert: ' ', attributes: { orgStatus: 'QUEUED' } }, { insert: ' a' }] },
-      taken: { ops: [{ insert: ' ', attributes: { orgStatus: '[X]' } }, { insert: ' b' }] },
+      waiting: {
+        ops: [
+          { insert: ' ', attributes: { orgStatus: 'QUEUED' } },
+          { insert: ' a' },
+        ],
+      },
+      taken: {
+        ops: [
+          { insert: ' ', attributes: { orgStatus: '[X]' } },
+          { insert: ' b' },
+        ],
+      },
     });
 
     releaseQueuedTasks(store, ['waiting', 'taken']);
