@@ -1,4 +1,5 @@
 import {
+  BLOCK_ID_ATTR,
   WidgetComponent,
   WidgetViewExtension,
 } from '@blocksuite/notesgraph/std';
@@ -21,6 +22,9 @@ import { AgentsFrameworkIdentifier } from './framework';
 
 const WIDGET_TAG = 'notesgraph-block-agent-runs-widget';
 
+/** Gap kept between the end of the line's text and the chips. */
+const GAP_PX = 8;
+
 /**
  * A small chip at the end of a block an agent was put on — run on it directly,
  * or claimed by one working down the list it sits in — that opens the runs
@@ -28,8 +32,8 @@ const WIDGET_TAG = 'notesgraph-block-agent-runs-widget';
  */
 export class BlockAgentRunsWidget extends WidgetComponent {
   static override styles = css`
-    /* float at the trailing edge of the block, on its first line, like the
-       schedule chip */
+    /* float at the trailing edge of the block, on the last line of its text;
+       _place drops it onto a line of its own when the text runs under it */
     :host {
       position: absolute;
       top: 0;
@@ -120,6 +124,89 @@ export class BlockAgentRunsWidget extends WidgetComponent {
     });
     this._disposables.add(() => monitorsSub.unsubscribe());
     this._disposables.add(monitorsService.watch());
+
+    // Where the text ends moves with edits and with the editor's width.
+    const editor = this._lineEditor();
+    if (editor) {
+      const observer = new ResizeObserver(this._schedulePlace);
+      observer.observe(editor);
+      this._disposables.add(() => observer.disconnect());
+    }
+    const yText = this.model.text?.yText;
+    if (yText) {
+      yText.observe(this._schedulePlace);
+      this._disposables.add(() => yText.unobserve(this._schedulePlace));
+    }
+    this._disposables.add(() => this._reserveLine(0));
+  }
+
+  override updated() {
+    this._schedulePlace();
+  }
+
+  private _placeFrame = 0;
+
+  /** Whether the last placement moved the chips or reserved room for them. */
+  private _placed = false;
+
+  private readonly _schedulePlace = () => {
+    // Most blocks show no chips: nothing to measure, and nothing to undo
+    // unless an earlier placement did something.
+    if (!this.offsetWidth && !this._placed) return;
+    // The line's text re-renders on its own schedule after an edit; measure
+    // once it has, not against the text as it was.
+    cancelAnimationFrame(this._placeFrame);
+    this._placeFrame = requestAnimationFrame(() => this._place());
+  };
+
+  /** The inline editor of this block's own line (it comes before its children). */
+  private _lineEditor(): HTMLElement | null {
+    return (
+      this.parentElement
+        ?.closest(`[${BLOCK_ID_ATTR}]`)
+        ?.querySelector<HTMLElement>('rich-text .inline-editor') ?? null
+    );
+  }
+
+  /** Room under the line's text for the chips, so they don't sit on the next block. */
+  private _reserveLine(height: number) {
+    const wrapper = this._lineEditor()?.closest('rich-text')?.parentElement;
+    if (wrapper) wrapper.style.paddingBottom = height ? `${height}px` : '';
+  }
+
+  /**
+   * Sit at the trailing edge of the text's last line when there is room after
+   * it; otherwise break onto a line of its own under the text.
+   */
+  private _place() {
+    const parent = this.offsetParent;
+    const editor = this._lineEditor();
+    const width = this.offsetWidth;
+    if (!parent || !editor || !width) {
+      this.style.transform = '';
+      this._reserveLine(0);
+      this._placed = false;
+      return;
+    }
+    this._placed = true;
+
+    const range = document.createRange();
+    range.selectNodeContents(editor);
+    const rects = range.getClientRects();
+    const end = rects[rects.length - 1];
+    const box = parent.getBoundingClientRect();
+    const height = this.offsetHeight;
+    if (!end || end.right + GAP_PX + width <= box.right) {
+      this._reserveLine(0);
+      // On a one-line block the first-line placement from the styles is right.
+      this.style.transform =
+        !end || end.top === rects[0].top
+          ? ''
+          : `translateY(${end.top - box.top + (end.height - height) / 2}px)`;
+      return;
+    }
+    this._reserveLine(height);
+    this.style.transform = `translateY(${end.bottom - box.top}px)`;
   }
 
   private readonly _openMonitor = (e: Event, monitor: Monitor) => {
