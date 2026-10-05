@@ -1,7 +1,13 @@
 import type { Store } from '@blocksuite/notesgraph/store';
 import { describe, expect, test } from 'vitest';
 
-import { isOpenTask, markTasksQueued, releaseQueuedTasks } from './task-claim';
+import {
+  isOpenTask,
+  markTasksQueued,
+  releaseQueuedTasks,
+  targetTaskIds,
+  unfinishedTaskIds,
+} from './task-claim';
 
 type Op = { insert: string; attributes?: { orgStatus?: string } };
 
@@ -116,6 +122,76 @@ describe('isOpenTask', () => {
     expect(
       ['box', 'typed', 'queued', 'going', 'done', 'prose'].map(open)
     ).toEqual([true, true, false, false, false, false]);
+  });
+});
+
+/** A tree of blocks, each a task with a status or plain prose. */
+const treeOf = (
+  root: string,
+  blocks: Record<string, { status?: string; children?: string[] }>
+) => {
+  const models = new Map<string, unknown>();
+  const model = (id: string): any => {
+    if (!models.has(id)) {
+      const { status, children = [] } = blocks[id];
+      models.set(id, {
+        id,
+        props: {},
+        text: new FakeText(
+          status
+            ? [
+                { insert: ' ', attributes: { orgStatus: status } },
+                { insert: ` ${id}` },
+              ]
+            : [{ insert: id }]
+        ),
+        get children() {
+          return children.map(model);
+        },
+      });
+    }
+    return models.get(id);
+  };
+  return {
+    root: model(root),
+    getBlock: (id: string) => (blocks[id] ? { model: model(id) } : null),
+  } as unknown as Store;
+};
+
+describe('targetTaskIds and unfinishedTaskIds', () => {
+  const store = treeOf('page', {
+    page: { children: ['heading', 'list'] },
+    heading: { children: [] },
+    list: { status: '[-]', children: ['a', 'b', 'c', 'd'] },
+    a: { status: '[ ]' },
+    b: { status: '[X]' },
+    c: { status: 'QUEUED', children: ['e'] },
+    d: { status: 'BLOCKED' },
+    e: { status: 'TODO' },
+  });
+
+  test('a run on a parent is on it and every task under it', () => {
+    const target = { kind: 'block', docId: 'doc', blockId: 'list' } as const;
+    expect(targetTaskIds(store, target)).toEqual([
+      'list',
+      'a',
+      'b',
+      'c',
+      'e',
+      'd',
+    ]);
+    expect(unfinishedTaskIds(store, target)).toEqual(['list', 'a', 'c', 'e']);
+  });
+
+  test('a whole note is on all its tasks; a selection on each once', () => {
+    expect(targetTaskIds(store, { kind: 'doc', docId: 'doc' })).toHaveLength(6);
+    expect(
+      targetTaskIds(store, {
+        kind: 'selection',
+        docId: 'doc',
+        blockIds: ['c', 'e', 'heading', 'gone'],
+      })
+    ).toEqual(['c', 'e']);
   });
 });
 
