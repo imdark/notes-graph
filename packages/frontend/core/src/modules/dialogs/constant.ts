@@ -1,5 +1,6 @@
 import type { DocMode } from '@blocksuite/notesgraph/model';
 
+import type { Agent, AgentScope } from '../agents';
 import type { WorkspaceMetadata } from '../workspace';
 
 export type SettingTab =
@@ -87,6 +88,8 @@ export type WORKSPACE_DIALOG_SCHEMA = {
     text: string;
     position?: [number, number, number, number]; // [x, y, width, height]
   }) => void;
+  /** Create an agent; resolves to the new agent, or nothing if cancelled. */
+  'agent-editor': (props: { scope?: AgentScope }) => Agent;
   import: () => {
     docIds: string[];
     entryId?: string;
