@@ -200,11 +200,75 @@ const NotificationItem = ({ notification }: { notification: Notification }) => {
     <InvitationReviewDeclinedNotificationItem notification={notification} />
   ) : type === NotificationType.InvitationReviewApproved ? (
     <InvitationReviewApprovedNotificationItem notification={notification} />
+  ) : type === NotificationType.MonitorAlert ? (
+    <MonitorAlertNotificationItem notification={notification} />
   ) : (
     <div className={styles.itemContainer}>
       <Avatar size={22} />
       <div className={styles.itemNotSupported}>
         {t['com.notesgraph.notification.unsupported']()} ({type})
+      </div>
+      <DeleteButton notification={notification} />
+    </div>
+  );
+};
+
+/** The body a monitor alert carries (see the server's monitor plugin). */
+interface MonitorAlertBody {
+  workspace?: { id: string };
+  name: string;
+  value: string | null;
+  previous: string | null;
+  reason: string;
+  doc: Pick<MentionNotificationBodyType['doc'], 'id' | 'title' | 'mode'> & {
+    blockId?: string;
+  };
+}
+
+/** A monitor saw a change or crossed its threshold; opens the block it keeps. */
+const MonitorAlertNotificationItem = ({
+  notification,
+}: {
+  notification: Notification;
+}) => {
+  const notificationListService = useService(NotificationListService);
+  const { jumpToPageBlock } = useNavigateHelper();
+  const t = useI18n();
+  const body = notification.body as unknown as MonitorAlertBody;
+
+  const handleClick = useCallback(() => {
+    if (!body.workspace?.id) return;
+    notificationListService.readNotification(notification.id).catch(err => {
+      console.error(err);
+    });
+    jumpToPageBlock(
+      body.workspace.id,
+      body.doc.id,
+      body.doc.mode,
+      body.doc.blockId ? [body.doc.blockId] : undefined
+    );
+  }, [body, jumpToPageBlock, notificationListService, notification]);
+
+  return (
+    <div className={styles.itemContainer} onClick={handleClick}>
+      <Avatar size={22} name="📡" />
+      <div className={styles.itemMain}>
+        <span>
+          <b className={styles.itemNameLabel}>{body.name}</b>
+          {body.value !== null ? (
+            <>
+              {' '}
+              is now <b>{body.value}</b>
+              {body.previous !== null ? <> (was {body.previous})</> : null}
+            </>
+          ) : null}{' '}
+          — {body.reason}, in {body.doc.title || t['Untitled']()}
+        </span>
+        <div className={styles.itemDate}>
+          {i18nTime(notification.createdAt, {
+            relative: true,
+          })}
+        </div>
       </div>
       <DeleteButton notification={notification} />
     </div>

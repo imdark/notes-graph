@@ -11,6 +11,7 @@ import {
   AgentsService,
   type AgentTarget,
 } from '@notesgraph/core/modules/agents';
+import { WorkspaceDialogService } from '@notesgraph/core/modules/dialogs';
 import { WorkbenchService } from '@notesgraph/core/modules/workbench';
 import type { FrameworkProvider } from '@notesgraph/infra';
 import { html } from 'lit';
@@ -48,9 +49,28 @@ export function AgentsSlashMenuConfigExtension(framework: FrameworkProvider) {
         // than breaking the whole slash menu.
         return [];
       }
-      if (agents.length === 0) return [];
 
-      return agents.map<SlashMenuItem>(agent => ({
+      // Keep this block up to date from a website, a command or an agent.
+      const monitor: SlashMenuItem = {
+        name: 'Monitor this block…',
+        description: 'Keep it up to date from a website, a command or an agent',
+        icon: html`<div style="color: var(--notesgraph-primary-color)">📡</div>`,
+        searchAlias: ['monitor', 'watch', 'track', 'price', 'alert'],
+        group: GROUP,
+        when: () => currentBlockId(ctx) !== null,
+        action: () => {
+          const blockId = currentBlockId(ctx);
+          if (!blockId) return;
+          const block = ctx.std.store.getBlock(blockId)?.model;
+          framework.get(WorkspaceDialogService).open('monitor-editor', {
+            docId: ctx.std.host.store.id,
+            blockId,
+            text: block?.text?.toString() ?? '',
+          });
+        },
+      };
+
+      return [monitor, ...agents.map<SlashMenuItem>(agent => ({
         name: agent.name,
         description: 'Run this agent on the current block',
         icon: html`<div style="color: var(--notesgraph-primary-color)">
@@ -77,7 +97,7 @@ export function AgentsSlashMenuConfigExtension(framework: FrameworkProvider) {
           workbench.activeView$.value.activeSidebarTab('agents');
           void framework.get(AgentRunSessionService).start(agent, target);
         },
-      }));
+      }))];
     },
   });
 }

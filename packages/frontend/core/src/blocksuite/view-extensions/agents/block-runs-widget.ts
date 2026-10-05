@@ -12,6 +12,8 @@ import {
   type AgentRun,
   AgentRunsStore,
   hasAgentClaim,
+  type Monitor,
+  MonitorsService,
   runsForBlock,
 } from '../../../modules/agents';
 import { WorkspaceDialogService } from '../../../modules/dialogs';
@@ -62,6 +64,22 @@ export class BlockAgentRunsWidget extends WidgetComponent {
       border-radius: 50%;
       background: var(--notesgraph-primary-color, #1e96eb);
     }
+    .ng-agent-runs-chips {
+      display: inline-flex;
+      gap: 4px;
+    }
+    .ng-monitor-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--notesgraph-success-color, #10b981);
+    }
+    .ng-monitor-dot[data-state='error'] {
+      background: var(--notesgraph-error-color, #eb4335);
+    }
+    .ng-monitor-dot[data-state='paused'] {
+      background: var(--notesgraph-text-disable-color, #a9a9ad);
+    }
   `;
 
   private _framework: FrameworkProvider | null = null;
@@ -70,13 +88,19 @@ export class BlockAgentRunsWidget extends WidgetComponent {
   @state()
   private accessor docRuns: AgentRun[] = [];
 
+  /** Monitors writing into this block. */
+  @state()
+  private accessor monitors: Monitor[] = [];
+
   override firstUpdated() {
     const framework = this.std.getOptional(AgentsFrameworkIdentifier);
     if (!framework) return;
     this._framework = framework;
     let runsStore: AgentRunsStore;
+    let monitorsService: MonitorsService;
     try {
       runsStore = framework.get(AgentRunsStore);
+      monitorsService = framework.get(MonitorsService);
     } catch {
       // No workspace scope (e.g. a detached editor).
       return;
@@ -85,6 +109,44 @@ export class BlockAgentRunsWidget extends WidgetComponent {
       .watchRunsForDoc(this.std.store.id)
       .subscribe(runs => (this.docRuns = runs));
     this._disposables.add(() => sub.unsubscribe());
+
+    const docId = this.std.store.id;
+    const monitorsSub = monitorsService.monitors$.subscribe(all => {
+      const mine = all.filter(
+        m => m.docId === docId && m.blockId === this.model.id
+      );
+      // Most blocks have none: don't re-render them on every refresh.
+      if (mine.length || this.monitors.length) this.monitors = mine;
+    });
+    this._disposables.add(() => monitorsSub.unsubscribe());
+    this._disposables.add(monitorsService.watch());
+  }
+
+  private readonly _openMonitor = (e: Event, monitor: Monitor) => {
+    e.preventDefault();
+    e.stopPropagation();
+    this._framework?.get(WorkspaceDialogService).open('monitor-editor', {
+      docId: monitor.docId,
+      blockId: monitor.blockId,
+      monitorId: monitor.id,
+    });
+  };
+
+  private renderMonitor(monitor: Monitor) {
+    const state = !monitor.enabled ? 'paused' : monitor.lastError ? 'error' : 'ok';
+    const title = !monitor.enabled
+      ? `${monitor.name}: paused${monitor.lastError ? ` (${monitor.lastError})` : ''}`
+      : monitor.lastError
+        ? `${monitor.name}: last check failed: ${monitor.lastError}`
+        : `${monitor.name}: monitored, next check ${new Date(monitor.nextRunAt * 1000).toLocaleTimeString()}`;
+    return html`<span
+      class="ng-agent-runs-chip"
+      title=${title}
+      data-testid="block-monitor"
+      @click=${(e: Event) => this._openMonitor(e, monitor)}
+      @mousedown=${(e: Event) => e.stopPropagation()}
+      ><span class="ng-monitor-dot" data-state=${state}></span>📡</span
+    >`;
   }
 
   private get blockRuns(): AgentRun[] {
@@ -118,18 +180,26 @@ export class BlockAgentRunsWidget extends WidgetComponent {
 
   override render() {
     const runs = this.blockRuns;
-    if (runs.length === 0) return nothing;
+    const monitors = this.monitors;
+    if (runs.length === 0 && monitors.length === 0) return nothing;
     const running = runs.some(run => run.status === 'running');
     const label =
       runs.length === 1 ? runs[0].agentName : `${runs.length} agent runs`;
-    return html`<span
-      class="ng-agent-runs-chip"
-      title="Show the agent runs on this block"
-      data-testid="block-agent-runs"
-      @click=${(e: Event) => this._open(e, runs)}
-      @mousedown=${(e: Event) => e.stopPropagation()}
-      >${running ? html`<span class="ng-agent-runs-dot"></span>` : nothing}🤖
-      ${label}</span
+    // One widget for both chips, so they sit side by side at the line's end
+    // rather than two floating widgets landing on top of each other.
+    return html`<span class="ng-agent-runs-chips"
+      >${monitors.map(monitor => this.renderMonitor(monitor))}${runs.length
+        ? html`<span
+            class="ng-agent-runs-chip"
+            title="Show the agent runs on this block"
+            data-testid="block-agent-runs"
+            @click=${(e: Event) => this._open(e, runs)}
+            @mousedown=${(e: Event) => e.stopPropagation()}
+            >${running
+              ? html`<span class="ng-agent-runs-dot"></span>`
+              : nothing}🤖 ${label}</span
+          >`
+        : nothing}</span
     >`;
   }
 }
