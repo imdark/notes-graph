@@ -39,6 +39,7 @@ export const CodeBlockSchema = defineBlockSchema({
     version: 1,
     role: 'content',
     parent: [
+      'notesgraph:column',
       'notesgraph:note',
       'notesgraph:paragraph',
       'notesgraph:list',

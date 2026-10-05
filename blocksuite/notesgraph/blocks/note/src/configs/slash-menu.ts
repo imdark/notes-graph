@@ -23,6 +23,7 @@ import {
 } from '@blocksuite/notesgraph-widget-slash-menu';
 import { BlockSelection } from '@blocksuite/std';
 
+import { columnsSlashMenuItems } from '../columns/slash-menu';
 import { updateBlockAlign, updateBlockType } from '../commands';
 import { tooltips } from './tooltips';
 
@@ -65,6 +66,8 @@ const noteSlashMenuConfig: SlashMenuConfig = {
       .map((config, index) =>
         createConversionItem(config, `1_List@${index++}`)
       ),
+
+    ...columnsSlashMenuItems,
 
     ...textAlignConfigs.map((config, index) =>
       createAlignItem(config, `2_Align@${index++}`)

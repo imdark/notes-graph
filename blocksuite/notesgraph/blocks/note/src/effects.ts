@@ -1,3 +1,7 @@
+import {
+  ColumnBlockComponent,
+  ColumnsBlockComponent,
+} from './columns/columns-block';
 import { EdgelessNoteBackground } from './components/edgeless-note-background';
 import { EdgelessNoteBorderDropdownMenu } from './components/edgeless-note-border-dropdown-menu';
 import { EdgelessNoteDisplayModeDropdownMenu } from './components/edgeless-note-display-mode-dropdown-menu';
@@ -12,6 +16,8 @@ import {
 } from './note-edgeless-block';
 export function effects() {
   customElements.define('notesgraph-note', NoteBlockComponent);
+  customElements.define('notesgraph-columns', ColumnsBlockComponent);
+  customElements.define('notesgraph-column', ColumnBlockComponent);
   customElements.define(NOTESGRAPH_EDGELESS_NOTE, EdgelessNoteBlockComponent);
   customElements.define('edgeless-note-mask', EdgelessNoteMask);
   customElements.define('edgeless-note-background', EdgelessNoteBackground);

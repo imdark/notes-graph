@@ -29,6 +29,10 @@ export class NoteViewExtension extends ViewExtensionProvider {
       FlavourExtension(flavour),
       NoteSlashMenuConfigExtension,
       NoteKeymapExtension,
+      FlavourExtension('notesgraph:columns'),
+      FlavourExtension('notesgraph:column'),
+      BlockViewExtension('notesgraph:columns', literal`notesgraph-columns`),
+      BlockViewExtension('notesgraph:column', literal`notesgraph-column`),
     ]);
 
     const isEdgeless = this.isEdgeless(context.scope);

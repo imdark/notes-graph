@@ -29,6 +29,7 @@ export const LatexBlockSchema = defineBlockSchema({
     version: 1,
     role: 'content',
     parent: [
+      'notesgraph:column',
       'notesgraph:note',
       'notesgraph:edgeless-text',
       'notesgraph:paragraph',

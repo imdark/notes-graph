@@ -11,6 +11,7 @@ import {
 } from '@blocksuite/notesgraph-shared/services';
 import {
   findOrgTimestampIn,
+  isNoteLevelContainer,
   ORG_STATUS_CANONICAL,
   orgStatusMatches,
   parseOrgStatusPrefix,
@@ -550,7 +551,7 @@ const noteInsertPoint = (
 ): { parent: BlockModel; index: number } | null => {
   let insertParent = host.store.getParent(target);
   let topAncestor: BlockModel = target;
-  while (insertParent && insertParent.flavour !== 'notesgraph:note') {
+  while (insertParent && !isNoteLevelContainer(insertParent)) {
     topAncestor = insertParent;
     insertParent = host.store.getParent(insertParent);
   }
@@ -615,8 +616,9 @@ const addQueryDatabaseAt = (
   if (!databaseModel) return null;
   const datasource = new QueryListDataSource(databaseModel);
   // The list view (Task List) is the one built around the generic filter/sort
-  // bar, so give it the task columns to operate on.
-  if (viewType === 'list') {
+  // bar, so give it the task columns to operate on. A chart needs them too:
+  // without Status there is nothing to bucket tasks by.
+  if (viewType === 'list' || viewType === 'chart') {
     seedTaskColumns(datasource);
   }
   datasource.viewManager.viewAdd(viewType);

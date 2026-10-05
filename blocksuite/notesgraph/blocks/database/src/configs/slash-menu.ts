@@ -1,5 +1,6 @@
 import { viewPresets } from '@blocksuite/data-view/view-presets';
 import {
+  ChartPanelIcon,
   DatabaseKanbanViewIcon,
   DatabaseTableViewIcon,
   TimelineIcon,
@@ -150,6 +151,35 @@ export const databaseSlashMenuConfig: SlashMenuConfig = {
     },
 
     {
+      name: 'Chart View',
+      description: 'Bar, line, donut or number chart of a table.',
+      searchAlias: ['database', 'chart', 'graph', 'plot', 'bar', 'dashboard'],
+      icon: ChartPanelIcon(),
+      group: '7_Database@3',
+      when: ({ model }) =>
+        !isInsideBlockByFlavour(model.store, model, 'notesgraph:edgeless-text'),
+      action: ({ std }) => {
+        std.command
+          .chain()
+          .pipe(getSelectedModelsCommand)
+          .pipe(insertDatabaseBlockCommand, {
+            viewType: viewPresets.chartViewMeta.type,
+            place: 'after',
+            removeEmptyLine: true,
+          })
+          .pipe(({ insertedDatabaseBlockId }) => {
+            if (insertedDatabaseBlockId) {
+              const telemetry = std.getOptional(TelemetryProvider);
+              telemetry?.track('BlockCreated', {
+                blockType: 'notesgraph:database',
+              });
+            }
+          })
+          .run();
+      },
+    },
+
+    {
       name: 'Query Board',
       description: 'Kanban of every task matching #tags across the workspace.',
       searchAlias: ['database', 'kanban', 'query', 'filter', 'tasks'],
@@ -236,6 +266,29 @@ export const databaseSlashMenuConfig: SlashMenuConfig = {
             table: viewPresets.tableViewMeta.type,
             kanban: viewPresets.kanbanViewMeta.type,
           });
+          std
+            .getOptional(TelemetryProvider)
+            ?.track('BlockCreated', { blockType: 'notesgraph:database' });
+        });
+      },
+    },
+    {
+      name: 'Task Chart',
+      description: 'Chart of tasks matching #tags, by status, date and more.',
+      searchAlias: ['database', 'query', 'chart', 'graph', 'dashboard', 'tasks'],
+      icon: ChartPanelIcon(),
+      group: '7_Database@7',
+      when: ({ model }) =>
+        !isInsideBlockByFlavour(model.store, model, 'notesgraph:edgeless-text'),
+      action: ({ std, model }) => {
+        promptQueryFilter(std, 'Task Chart').then(filter => {
+          if (!filter) return;
+          insertQueryDatabase(
+            std.host,
+            viewPresets.chartViewMeta.type,
+            model,
+            filter
+          );
           std
             .getOptional(TelemetryProvider)
             ?.track('BlockCreated', { blockType: 'notesgraph:database' });
