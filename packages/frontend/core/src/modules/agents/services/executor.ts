@@ -702,10 +702,11 @@ export class AgentExecutorService extends Service implements AgentExecutor {
       if (update.status === 'queued' && update.runAfter && update.runAfter !== heldUntil) {
         heldUntil = update.runAfter;
         const at = new Date(update.runAfter * 1000).toLocaleString();
-        yield {
-          type: 'text',
-          delta: `Session limit reached on ${agent.deviceKey}; waiting to run again at ${at}…\n`,
-        };
+        const held = `Session limit reached on ${agent.deviceKey}; waiting to run again at ${at}…`;
+        // In the log too: a held run has nothing else to show there, and an
+        // empty log reads as a stuck run.
+        yield logLine(`⏸ ${held}`);
+        yield { type: 'text', delta: `${held}\n` };
         continue;
       }
       if (update.status === 'running') {

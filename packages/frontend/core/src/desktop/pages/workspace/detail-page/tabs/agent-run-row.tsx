@@ -31,11 +31,13 @@ export const useMinuteTick = () => {
 };
 
 /** A run's status as a reader thinks of it; `waiting` is a running run with a question open. */
-export type RunDisplayStatus = AgentRun['status'] | 'waiting';
+/** `queued`: a device job no device has picked up yet, or one held back. */
+export type RunDisplayStatus = AgentRun['status'] | 'waiting' | 'queued';
 
 const statusLabel: Record<RunDisplayStatus, string> = {
   running: 'Running',
   waiting: 'Needs you',
+  queued: 'Queued',
   done: 'Done',
   cancelled: 'Cancelled',
   error: 'Failed',

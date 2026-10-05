@@ -67,6 +67,8 @@ const displayStatus = (
       return 'error';
     case 'cancelled':
       return 'cancelled';
+    case 'queued':
+      return 'queued';
     default:
       return 'running';
   }
