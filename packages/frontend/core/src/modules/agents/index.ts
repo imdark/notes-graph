@@ -36,6 +36,11 @@ export {
   AgentRunSessionService,
   type QueuedAgentRun,
 } from './services/run-session';
+export {
+  hasAgentClaim,
+  runsForBlock,
+  runTargetsBlock,
+} from './services/block-runs';
 export { type AgentBlockRef, lastBlockTouched } from './services/focus-block';
 export {
   AgentTaskClaimService,

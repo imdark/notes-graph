@@ -87,6 +87,11 @@ export type WORKSPACE_DIALOG_SCHEMA = {
     text: string;
     position?: [number, number, number, number]; // [x, y, width, height]
   }) => void;
+  /** The agent runs that worked on a block, from its runs chip. */
+  'agent-block-runs': (props: {
+    runIds: string[];
+    position?: [number, number, number, number]; // [x, y, width, height]
+  }) => void;
   import: () => {
     docIds: string[];
     entryId?: string;
