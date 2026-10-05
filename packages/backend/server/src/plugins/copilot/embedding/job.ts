@@ -7,6 +7,7 @@ import {
   EventBus,
   JobQueue,
   mapAnyError,
+  NoCopilotProviderAvailable,
   OneDay,
   OnEvent,
   OnJob,
@@ -56,6 +57,20 @@ export class CopilotEmbeddingJob {
     if (this.supportEmbedding) {
       this.client = await this.embeddingClients.refresh();
     }
+  }
+
+  /**
+   * The database can store embeddings but no provider serves the embedding
+   * model, so every doc would fail the same way: hundreds of identical
+   * errors an hour, and none of them fixable per doc. Say so once and stop
+   * until the config changes (`config.changed` runs setup again).
+   */
+  private pauseForMissingProvider(error: NoCopilotProviderAvailable) {
+    if (!this.supportEmbedding) return;
+    this.supportEmbedding = false;
+    this.logger.warn(
+      `Embedding paused until the copilot config changes: ${error.message}`
+    );
   }
 
   // public this client to allow overriding in tests
@@ -524,6 +539,10 @@ export class CopilotEmbeddingJob {
           contextId,
           docId,
         });
+      }
+      if (error instanceof NoCopilotProviderAvailable) {
+        this.pauseForMissingProvider(error);
+        return;
       }
       if (
         error instanceof CopilotContextFileNotSupported &&
