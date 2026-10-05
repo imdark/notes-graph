@@ -10,7 +10,7 @@ import { Service } from '@notesgraph/infra';
 
 import type { DocsService } from '../../doc';
 import type { AgentTarget } from './target';
-import { QUEUED_STATUS, readTaskStatus } from './task-claim';
+import { QUEUED_STATUS, readTaskStatus, targetTitle } from './task-claim';
 
 /**
  * Hard cap on the doc markdown handed to a model, in characters. A long note
@@ -27,6 +27,8 @@ export interface AgentContext {
   text: string;
   /** Human-readable description of what was targeted, for the run record. */
   label: string;
+  /** The block it is on, by its text; absent for a whole note. */
+  title?: string;
 }
 
 /**
@@ -78,6 +80,7 @@ export class AgentContextService extends Service {
 
       return {
         label,
+        title: targetTitle(store, target) ?? undefined,
         text: [`Note: ${title}`, '', ...parts].join('\n').trim(),
       };
     } finally {

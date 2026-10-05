@@ -14,6 +14,8 @@ export interface AgentRun {
   docId: string;
   blockId?: string;
   blockIds?: string[];
+  /** The text of the (first) block it ran on, as it was when it started. */
+  targetTitle?: string;
   status: AgentRunStatus;
   startedAt: number;
   durationMs?: number;
@@ -90,6 +92,12 @@ export class AgentRunsStore extends Store {
   attachRemote(runId: string, remoteJobId: string, deviceKey: string): void {
     if (!this.table.get(runId)) return;
     this.table.update(runId, { remoteJobId, deviceKey });
+  }
+
+  /** Name the run by the task it is on, once that has been read. */
+  setTargetTitle(runId: string, targetTitle: string): void {
+    if (!this.table.get(runId)) return;
+    this.table.update(runId, { targetTitle });
   }
 
   /** Rows that say they are running, whoever is (or was) running them. */

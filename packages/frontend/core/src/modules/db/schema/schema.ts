@@ -297,6 +297,8 @@ export const NotesGraph_WORKSPACE_USERDATA_DB_SCHEMA = {
     blockId: f.string().optional(),
     /** The blocks of a 'selection' run, so it can be run again. */
     blockIds: f.json<string[]>().optional(),
+    /** The text of the (first) block it ran on, to list the run by its task. */
+    targetTitle: f.string().optional(),
     /** 'running' | 'done' | 'cancelled' | 'error' */
     status: f.string(),
     startedAt: f.number(),

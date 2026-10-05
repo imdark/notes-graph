@@ -407,6 +407,7 @@ export class AgentExecutorService extends Service implements AgentExecutor {
     yield { type: 'started', runId };
     try {
       const context = await this.contextService.build(target);
+      if (context.title) this.runsStore.setTargetTitle(runId, context.title);
 
       if (harness === 'remote') {
         for await (const event of this.runRemote(
