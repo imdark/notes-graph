@@ -1,4 +1,4 @@
-import { Button, Modal, notify } from '@notesgraph/component';
+import { Button, Modal, notify, RadioGroup } from '@notesgraph/component';
 import {
   type AgentRun,
   AgentRunLogsStore,
@@ -10,7 +10,14 @@ import {
 } from '@notesgraph/core/modules/agents';
 import { WorkspaceService } from '@notesgraph/core/modules/workspace';
 import { useLiveData, useService } from '@notesgraph/infra';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 
 import { AgentLogView } from './agent-log-view';
 import { AgentQuestionCard } from './agent-question';
@@ -124,7 +131,11 @@ const useRunLog = (run: AgentRun | undefined): RunLogState => {
           });
         })
         .catch(() => {
-          setState({ ...EMPTY, note: "Couldn't read the log.", loading: false });
+          setState({
+            ...EMPTY,
+            note: "Couldn't read the log.",
+            loading: false,
+          });
         });
     }
     return () => controller.abort();
@@ -158,6 +169,83 @@ const statusLabel: Record<AgentRun['status'], string> = {
   error: 'Failed',
 };
 
+const harnessLabel: Record<string, string> = {
+  'on-device': 'On-device (in the browser)',
+  cloud: 'Cloud (the server’s model)',
+  remote: 'Remote device',
+};
+
+const targetLabel = (run: AgentRun) => {
+  switch (run.targetKind) {
+    case 'block':
+      return run.blockId ? `Block ${run.blockId}` : 'A block';
+    case 'selection': {
+      const count = run.blockIds?.length;
+      return count
+        ? `${count} selected block${count === 1 ? '' : 's'}`
+        : 'A selection';
+    }
+    case 'doc':
+      return 'The whole note';
+    default:
+      return run.targetKind;
+  }
+};
+
+const LOG_TAB = 'log';
+const DETAILS_TAB = 'details';
+const TABS = [
+  { value: LOG_TAB, label: 'Log' },
+  { value: DETAILS_TAB, label: 'Details' },
+];
+
+/**
+ * What a run was set up with: the blocks it read, where it ran and on what.
+ * Runs recorded before these were kept have only some of it.
+ */
+const RunDetails = ({ run }: { run: AgentRun }) => {
+  // Older rows have no harness; a device job id still says it went remote.
+  const harness = run.harness ?? (run.remoteJobId ? 'remote' : undefined);
+  const rows: [string, string | undefined][] = [
+    ['Input', targetLabel(run)],
+    [
+      'Machine',
+      run.deviceKey ??
+        (harness === 'on-device' || harness === 'cloud'
+          ? 'This browser'
+          : undefined),
+    ],
+    ['Harness', harness ? (harnessLabel[harness] ?? harness) : undefined],
+    ['Model', run.model],
+    ['Folder', run.folder ?? (harness === 'remote' ? undefined : 'None bound')],
+    ['Started', new Date(run.startedAt).toLocaleString()],
+    [
+      'Duration',
+      run.durationMs !== undefined ? formatDuration(run.durationMs) : undefined,
+    ],
+    ['Steps', run.steps !== undefined ? String(run.steps) : undefined],
+    ['Device job', run.remoteJobId],
+  ];
+  return (
+    <div className={styles.logDialogBody} data-testid="agent-run-details">
+      <dl className={styles.runDetails}>
+        {rows.map(([label, value]) => (
+          <Fragment key={label}>
+            <dt className={styles.runDetailLabel}>{label}</dt>
+            <dd className={styles.runDetailValue}>{value ?? 'Not recorded'}</dd>
+          </Fragment>
+        ))}
+      </dl>
+      {run.input ? (
+        <>
+          <span className={styles.hint}>What it was given to read</span>
+          <pre className={styles.runDetailInput}>{run.input}</pre>
+        </>
+      ) : null}
+    </div>
+  );
+};
+
 export const AgentRunLogDialog = ({
   runId,
   onClose,
@@ -187,8 +275,7 @@ export const AgentRunLogDialog = ({
     ? sessions.find(({ runId }) => runId === run.id)
     : undefined;
   const ownsRun = !!session?.running;
-  const canStop =
-    run?.status === 'running' && (ownsRun || !!run.remoteJobId);
+  const canStop = run?.status === 'running' && (ownsRun || !!run.remoteJobId);
   const [stopping, setStopping] = useState(false);
   const stop = useCallback(() => {
     if (!run) return;
@@ -209,6 +296,10 @@ export const AgentRunLogDialog = ({
       )
       .finally(() => setStopping(false));
   }, [remoteRunner, run, session, sessionService, workspaceService]);
+
+  // Each run opens on its log.
+  const [tab, setTab] = useState(LOG_TAB);
+  useEffect(() => setTab(LOG_TAB), [runId]);
 
   const attachCommand = tmuxSession ? `tmux attach -t ${tmuxSession}` : null;
   const copyAttach = useCallback(() => {
@@ -238,59 +329,74 @@ export const AgentRunLogDialog = ({
       title={run ? `${run.agentName} · ${statusLabel[run.status]}` : 'Run log'}
       description={meta}
     >
-      <div className={styles.logDialogBody} data-testid="agent-run-log">
-        {attachCommand && run?.status === 'running' ? (
-          <div className={styles.attachRow}>
-            <span className={styles.hint}>Watch it live on {run.deviceKey}:</span>
-            <code className={styles.attachCommand}>{attachCommand}</code>
-            <Button onClick={copyAttach}>
-              Copy
-            </Button>
+      <div className={styles.logDialogBody}>
+        {run ? (
+          <RadioGroup
+            width="100%"
+            value={tab}
+            onChange={setTab}
+            items={TABS}
+            data-testid="agent-run-log-tabs"
+          />
+        ) : null}
+        {run && tab === DETAILS_TAB ? (
+          <RunDetails run={run} />
+        ) : (
+          <div className={styles.logDialogBody} data-testid="agent-run-log">
+            {attachCommand && run?.status === 'running' ? (
+              <div className={styles.attachRow}>
+                <span className={styles.hint}>
+                  Watch it live on {run.deviceKey}:
+                </span>
+                <code className={styles.attachCommand}>{attachCommand}</code>
+                <Button onClick={copyAttach}>Copy</Button>
+              </div>
+            ) : null}
+
+            {run?.remoteJobId
+              ? questions.map(question => (
+                  <AgentQuestionCard
+                    key={question.id}
+                    jobId={run.remoteJobId as string}
+                    question={question}
+                  />
+                ))
+              : null}
+
+            {run?.status === 'error' && run.error ? (
+              <p className={styles.error}>{run.error}</p>
+            ) : null}
+
+            {note ? <p className={styles.empty}>{note}</p> : null}
+
+            <AgentLogView
+              log={log}
+              resetKey={runId}
+              placeholder={
+                loading
+                  ? 'Loading…'
+                  : run?.status === 'running'
+                    ? 'Waiting for output…'
+                    : note
+                      ? ''
+                      : 'This run left no log.'
+              }
+            />
+
+            {canStop ? (
+              <div className={styles.sessionActions}>
+                <Button
+                  variant="error"
+                  disabled={stopping}
+                  onClick={stop}
+                  data-testid="agent-run-log-stop"
+                >
+                  Stop run
+                </Button>
+              </div>
+            ) : null}
           </div>
-        ) : null}
-
-        {run?.remoteJobId
-          ? questions.map(question => (
-              <AgentQuestionCard
-                key={question.id}
-                jobId={run.remoteJobId as string}
-                question={question}
-              />
-            ))
-          : null}
-
-        {run?.status === 'error' && run.error ? (
-          <p className={styles.error}>{run.error}</p>
-        ) : null}
-
-        {note ? <p className={styles.empty}>{note}</p> : null}
-
-        <AgentLogView
-          log={log}
-          resetKey={runId}
-          placeholder={
-            loading
-              ? 'Loading…'
-              : run?.status === 'running'
-                ? 'Waiting for output…'
-                : note
-                  ? ''
-                  : 'This run left no log.'
-          }
-        />
-
-        {canStop ? (
-          <div className={styles.sessionActions}>
-            <Button
-              variant="error"
-              disabled={stopping}
-              onClick={stop}
-              data-testid="agent-run-log-stop"
-            >
-              Stop run
-            </Button>
-          </div>
-        ) : null}
+        )}
       </div>
     </Modal>
   );

@@ -156,7 +156,14 @@ export class RemoteAgentRunnerService extends Service {
   /** List the devices in this workspace that accept agent work. */
   async agentTargets(workspaceId: string) {
     const data = await this.json<{
-      devices: { key: string; name: string; state: string; kind: string }[];
+      devices: {
+        key: string;
+        name: string;
+        state: string;
+        kind: string;
+        /** The folder the device works in, when it was registered with one. */
+        path?: string | null;
+      }[];
     }>(`${this.base(workspaceId)}/devices?agentTarget=true`);
     return data.devices;
   }

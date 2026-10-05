@@ -313,6 +313,14 @@ export const NotesGraph_WORKSPACE_USERDATA_DB_SCHEMA = {
      */
     remoteJobId: f.string().optional(),
     deviceKey: f.string().optional(),
+    /** 'on-device' | 'cloud' | 'remote' — where the run went. */
+    harness: f.string().optional(),
+    /** The model the run asked, as far as this tab knows it. */
+    model: f.string().optional(),
+    /** The folder the run worked in: the bound folder, or the device's. */
+    folder: f.string().optional(),
+    /** The start of what the run was given to read. */
+    input: f.string().optional(),
   },
 } as const satisfies DBSchemaBuilder;
 export type NotesGraphWorkspaceUserdataDbSchema =
