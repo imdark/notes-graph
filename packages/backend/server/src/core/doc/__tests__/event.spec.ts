@@ -119,6 +119,37 @@ test('should ignore update doc content to database when snapshot parse failed', 
   t.is(content, null);
 });
 
+test('should skip a doc the parser says is not a page, without failing the event', async t => {
+  const { models, docReader, listener } = t.context;
+  mock.method(docReader, 'parseDocContent', () => {
+    throw new Error('invalid_binary');
+  });
+  const spy = Sinon.spy(models.doc, 'upsertMeta');
+  await t.notThrowsAsync(
+    listener.markDocContentCacheStale({
+      workspaceId: workspace.id,
+      docId: randomUUID(),
+      blob: Buffer.from([1, 0]),
+    })
+  );
+  t.is(spy.callCount, 0);
+});
+
+test('should still fail the event on other parse errors', async t => {
+  const { docReader, listener } = t.context;
+  mock.method(docReader, 'parseDocContent', () => {
+    throw new Error('boom');
+  });
+  await t.throwsAsync(
+    listener.markDocContentCacheStale({
+      workspaceId: workspace.id,
+      docId: randomUUID(),
+      blob: Buffer.from([1, 0]),
+    }),
+    { message: 'boom' }
+  );
+});
+
 test('should update workspace content to database when workspace is updated', async t => {
   const { docReader, models, adapter, listener } = t.context;
   const updates: Buffer[] = [];

@@ -20,6 +20,11 @@ function isIgnorableDocEventError(error: unknown) {
   return false;
 }
 
+/** The native parser's answer for a Y doc that holds no page. */
+function isNotAPageDoc(error: unknown) {
+  return error instanceof Error && error.message === 'invalid_binary';
+}
+
 @Injectable()
 export class DocEventsListener {
   private readonly logger = new Logger(DocEventsListener.name);
@@ -48,7 +53,22 @@ export class DocEventsListener {
     // update doc content to database
     try {
       if (isDoc) {
-        const content = this.docReader.parseDocContent(blob, docId);
+        let content: ReturnType<DocReader['parseDocContent']>;
+        try {
+          content = this.docReader.parseDocContent(blob, docId);
+        } catch (error) {
+          // Not every synced Y doc is a note: one with no page structure
+          // (no blocks, no meta) has no title or summary to keep. That is
+          // nothing to fix, so it's skipped quietly instead of logged as an
+          // error on every snapshot and every restart.
+          if (isNotAPageDoc(error)) {
+            this.logger.debug(
+              `Skip summary for ${workspaceId}/${docId}: not a page doc`
+            );
+            return;
+          }
+          throw error;
+        }
         if (!content) {
           return;
         }
