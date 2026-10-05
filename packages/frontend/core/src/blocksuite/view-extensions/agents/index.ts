@@ -35,7 +35,9 @@ export class AgentsViewExtension extends ViewExtensionProvider<AgentsViewOptions
     const framework = options?.framework;
     if (!framework) return;
     context.register(AgentsSlashMenuConfigExtension(framework));
-    if (context.scope === 'page' || context.scope === 'edgeless') {
+    // Every editable editor, phone included: the phone's editor runs in the
+    // mobile-* scopes, and without them its to-do lines got no assign button.
+    if (!this.isPreview(context.scope)) {
       // One binding for both widgets: a second would stop the editor loading.
       context.register(agentsFrameworkExtension(framework));
       context.register(agentRunsWidgetExtensions());

@@ -8,11 +8,11 @@ import { describe, expect, test } from 'vitest';
 
 import { AgentsViewExtension } from '.';
 
-/** Everything the agents view registers into a page editor. */
-const registered = () => {
+/** Everything the agents view registers into an editor of the given scope. */
+const registered = (scope = 'page') => {
   const extensions: ExtensionType[] = [];
   const context: any = {
-    scope: 'page',
+    scope,
     register: (ext: ExtensionType | ExtensionType[]) =>
       extensions.push(...[ext].flat()),
   };
@@ -30,5 +30,14 @@ describe('AgentsViewExtension', () => {
     expect(() => {
       for (const ext of registered()) ext.setup?.(container);
     }).not.toThrow();
+  });
+
+  test('puts the block widgets in the phone editor too', () => {
+    // The phone's editor runs in mobile-page; its to-do lines once got no
+    // assign button because only 'page' and 'edgeless' registered them.
+    expect(registered('mobile-page').length).toBe(registered('page').length);
+    expect(registered('preview-page').length).toBeLessThan(
+      registered('page').length
+    );
   });
 });
