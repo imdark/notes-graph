@@ -13,6 +13,7 @@ import { AgentContextService } from './context';
 import { AgentExecutorService } from './executor';
 import { AgentFileToolsService } from './file-tools';
 import { RemoteAgentRunnerService, type RemoteJob } from './remote-runner';
+import { ResearchToolsService } from './research-tools';
 
 const MINUTE = 60_000;
 
@@ -40,12 +41,28 @@ const job = (over: Partial<RemoteJob>): RemoteJob => ({
   ...over,
 });
 
-/** An executor over fake runs and jobs, recording what it settles. */
-const setup = (runs: AgentRun[], jobs: Record<string, RemoteJob>) => {
+/**
+ * An executor over fake runs and jobs, recording what it settles. `fakes`
+ * swaps in the services a whole run needs (context, models, tools).
+ */
+const setup = (
+  runs: AgentRun[],
+  jobs: Record<string, RemoteJob>,
+  fakes: {
+    context?: object;
+    fileTools?: object;
+    cloudRunner?: object;
+    researchTools?: object;
+  } = {}
+) => {
   const finished: { runId: string; outcome: any; endedAt?: number }[] = [];
   const titles: { runId: string; title: string }[] = [];
+  const described: Record<string, unknown>[] = [];
   const runsStore = {
     runningRuns: () => runs.filter(run => run.status === 'running'),
+    start: () => 'run-1',
+    describe: (_runId: string, details: Record<string, unknown>) =>
+      described.push(details),
     finish: (runId: string, outcome: any, endedAt?: number) =>
       finished.push({ runId, outcome, endedAt }),
     setTitle: (runId: string, title: string) => titles.push({ runId, title }),
@@ -59,13 +76,14 @@ const setup = (runs: AgentRun[], jobs: Record<string, RemoteJob>) => {
   };
   const framework = new Framework();
   framework
-    .service(AgentContextService, {} as any)
+    .service(AgentContextService, (fakes.context ?? {}) as any)
     .store(AgentRunsStore, runsStore as any)
-    .store(AgentRunLogsStore, {} as any)
+    .store(AgentRunLogsStore, { put: async () => {} } as any)
     .service(LocalLLMService, {} as any)
-    .service(AgentFileToolsService, {} as any)
+    .service(AgentFileToolsService, (fakes.fileTools ?? {}) as any)
     .service(RemoteAgentRunnerService, remoteRunner as any)
-    .service(CloudAgentRunnerService, {} as any)
+    .service(CloudAgentRunnerService, (fakes.cloudRunner ?? {}) as any)
+    .service(ResearchToolsService, (fakes.researchTools ?? {}) as any)
     .service(WorkspaceService, { workspace: { id: 'ws' } } as any)
     .service(AgentExecutorService, [
       AgentContextService,
@@ -75,11 +93,98 @@ const setup = (runs: AgentRun[], jobs: Record<string, RemoteJob>) => {
       AgentFileToolsService,
       RemoteAgentRunnerService,
       CloudAgentRunnerService,
+      ResearchToolsService,
       WorkspaceService,
     ]);
   const executor = framework.provider().get(AgentExecutorService);
-  return { executor, finished, titles };
+  return { executor, finished, titles, described };
 };
+
+describe('AgentExecutorService research runs', () => {
+  test('the server model calls OmniSeek through the research tools, then answers', async () => {
+    // The model asks for one search, then answers from its result.
+    const replies = [
+      '```tool\n{"tool": "omniseek_search", "args": {"query": "graph RAG"}}\n```',
+      'GraphRAG beats plain RAG on global questions [https://arxiv.org/abs/2404.16130].',
+    ];
+    const prompts: string[] = [];
+    const calls: unknown[] = [];
+    const { executor, finished, described } = setup([], {}, {
+      context: { build: async () => ({ text: 'Survey graph RAG', label: 'a block', title: 'Survey graph RAG' }) },
+      fileTools: { available: false },
+      cloudRunner: {
+        open: async () =>
+          async function* (messages: { content: string }[]) {
+            prompts.push(messages[0].content);
+            yield replies.shift() ?? '';
+          },
+      },
+      researchTools: {
+        specs: async () => [
+          { name: 'omniseek_search', desc: 'Search widely', args: { query: 'what to look for' }, mutates: false },
+        ],
+        call: async (workspaceId: string, name: string, args: unknown) => {
+          calls.push({ workspaceId, name, args });
+          return '1. From Local to Global: A Graph RAG Approach — arxiv.org/abs/2404.16130';
+        },
+      },
+    });
+
+    const events = [];
+    for await (const event of executor.run(
+      { id: 'a1', name: 'Researcher', harness: 'research', tools: [], instructions: '', maxSteps: 4 } as any,
+      { kind: 'block', docId: 'doc', blockId: 'b1' },
+      new AbortController().signal
+    )) {
+      events.push(event);
+    }
+
+    expect(calls).toEqual([
+      { workspaceId: 'ws', name: 'omniseek_search', args: { query: 'graph RAG' } },
+    ]);
+    // Told about the research tools and how to cite, and not about a folder.
+    expect(prompts[0]).toContain('omniseek_search');
+    expect(prompts[0]).toContain('source URL');
+    expect(prompts[0]).not.toContain('bound to this workspace');
+    expect(described[0]).toMatchObject({ harness: 'research', model: 'server default + OmniSeek' });
+    expect(finished[0].outcome).toMatchObject({
+      status: 'done',
+      output: expect.stringContaining('arxiv.org/abs/2404.16130'),
+    });
+  });
+
+  test('a tool the run was not given is refused, not dispatched', async () => {
+    const replies = [
+      '```tool\n{"tool": "omniseek_curator_act", "args": {}}\n```',
+      'Could not do that.',
+    ];
+    const logs: string[] = [];
+    const { executor } = setup([], {}, {
+      context: { build: async () => ({ text: 'x', label: 'a block', title: 'x' }) },
+      fileTools: { available: false },
+      cloudRunner: {
+        open: async () =>
+          async function* () {
+            yield replies.shift() ?? '';
+          },
+      },
+      researchTools: {
+        specs: async () => [{ name: 'omniseek_search', desc: 's', args: {}, mutates: false }],
+        call: async () => {
+          throw new Error('must not be called');
+        },
+      },
+    });
+    for await (const event of executor.run(
+      { id: 'a1', name: 'R', harness: 'research', tools: [], instructions: '', maxSteps: 4 } as any,
+      { kind: 'block', docId: 'doc', blockId: 'b1' },
+      new AbortController().signal
+    )) {
+      if (event.type === 'log') logs.push(event.text);
+    }
+    expect(logs.join('')).toContain('There is no tool called omniseek_curator_act');
+  });
+});
 
 describe('AgentExecutorService.reconcileRuns', () => {
   test('a device run whose job finished takes the job’s end', async () => {

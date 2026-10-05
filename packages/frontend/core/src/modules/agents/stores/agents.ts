@@ -21,8 +21,11 @@ export type AgentOutput = 'panel';
  * the run is queued against a device and that device claims it. Nothing
  * here connects outward, so a machine behind NAT works the same as one on
  * the desk.
+ *
+ * `research` is `cloud` with OmniSeek's search and reading tools, which the
+ * server reaches on the agent's behalf (see ResearchToolsService).
  */
-export type AgentHarness = 'on-device' | 'cloud' | 'remote';
+export type AgentHarness = 'on-device' | 'cloud' | 'remote' | 'research';
 
 /**
  * What a run of the agent is for, which decides how the app shows it.
@@ -129,7 +132,8 @@ export class AgentsStore extends Store {
       harness:
         row.harness === 'on-device' ||
         row.harness === 'cloud' ||
-        row.harness === 'remote'
+        row.harness === 'remote' ||
+        row.harness === 'research'
           ? row.harness
           : undefined,
       model: row.model ?? undefined,

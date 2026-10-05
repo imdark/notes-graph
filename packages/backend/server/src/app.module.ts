@@ -65,6 +65,7 @@ import { IndexerModule } from './plugins/indexer';
 import { InventoryModule } from './plugins/inventory';
 import { OAuthModule } from './plugins/oauth';
 import { PaymentModule } from './plugins/payment';
+import { ResearchModule } from './plugins/research';
 import { WorkerModule } from './plugins/worker';
 
 export const FunctionalityModules = [
@@ -211,6 +212,7 @@ export function buildAppModule(env: Env) {
       OAuthModule,
       CalendarModule,
       InventoryModule,
+      ResearchModule,
       DirectoryModule,
       TelemetryModule,
       CommentModule,
