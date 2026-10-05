@@ -2595,5 +2595,19 @@
   "com.notesgraph.integration.calendar.open-note": "Open note",
   "com.notesgraph.mobile.setting.security.title": "Security",
   "com.notesgraph.mobile.setting.security.app-lock": "Lock app with device PIN or biometrics",
-  "com.notesgraph.mobile.setting.security.app-lock.unavailable": "Set a screen lock on your phone to use this."
+  "com.notesgraph.mobile.setting.security.app-lock.unavailable": "Set a screen lock on your phone to use this.",
+  "com.notesgraph.mobile.voice-tasks.title": "Dictate tasks",
+  "com.notesgraph.mobile.voice-tasks.hint": "Say a task, pause, then say the next. Saying “next task” also starts a new one.",
+  "com.notesgraph.mobile.voice-tasks.placeholder": "Your tasks appear here, one per line. You can fix them before adding.",
+  "com.notesgraph.mobile.voice-tasks.listen": "Start listening",
+  "com.notesgraph.mobile.voice-tasks.stop": "Stop listening",
+  "com.notesgraph.mobile.voice-tasks.add": "Add {{count}} tasks",
+  "com.notesgraph.mobile.voice-tasks.add_one": "Add {{count}} task",
+  "com.notesgraph.mobile.voice-tasks.add_other": "Add {{count}} tasks",
+  "com.notesgraph.mobile.voice-tasks.added": "Added {{count}} tasks",
+  "com.notesgraph.mobile.voice-tasks.added_one": "Added {{count}} task",
+  "com.notesgraph.mobile.voice-tasks.added_other": "Added {{count}} tasks",
+  "com.notesgraph.mobile.voice-tasks.error.permission": "Allow microphone access to dictate tasks.",
+  "com.notesgraph.mobile.voice-tasks.error.unavailable": "Speech recognition isn't available on this device.",
+  "com.notesgraph.mobile.voice-tasks.error.failed": "Listening stopped. Tap the mic to try again."
 }
