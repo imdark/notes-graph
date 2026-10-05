@@ -34,6 +34,7 @@ import {
 } from '../detail-page/tabs/use-run-questions';
 import { useRunActions } from '../detail-page/tabs/use-run-actions';
 import * as styles from './agents-page.css';
+import { MonitorsSection } from './monitors-section';
 
 type RunFilter = 'all' | 'waiting' | 'running' | 'error' | 'done';
 
@@ -336,6 +337,8 @@ const AgentsPage = () => {
                 </div>
               )}
             </section>
+
+            <MonitorsSection now={now} />
 
             <section className={styles.section}>
               <div className={styles.sectionTitle}>

@@ -88,6 +88,15 @@ export type WORKSPACE_DIALOG_SCHEMA = {
     text: string;
     position?: [number, number, number, number]; // [x, y, width, height]
   }) => void;
+  /** Make or change the monitor that keeps a block up to date. */
+  'monitor-editor': (props: {
+    docId: string;
+    blockId: string;
+    /** The block's text, to suggest a name. */
+    text?: string;
+    /** Edit this monitor instead of making a new one. */
+    monitorId?: string;
+  }) => void;
   /** The agent runs that worked on a block, from its runs chip. */
   'agent-block-runs': (props: {
     runIds: string[];

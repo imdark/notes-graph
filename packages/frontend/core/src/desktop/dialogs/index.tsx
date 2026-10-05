@@ -10,6 +10,7 @@ import { useLiveData, useService } from '@notesgraph/infra';
 import { AddToProjectDialog } from './add-to-project';
 import { AgentBlockRunsDialog } from './agent-block-runs';
 import { AgentEditorDialog } from './agent-editor';
+import { MonitorEditorDialog } from './monitor-editor';
 import { ChangePasswordDialog } from './change-password';
 import { CollectionEditorDialog } from './collection-editor';
 import { ConvertToProjectDialog } from './convert-to-project';
@@ -58,6 +59,7 @@ const WORKSPACE_DIALOGS = {
   'block-schedule': BlockScheduleDialog,
   'agent-block-runs': AgentBlockRunsDialog,
   'agent-editor': AgentEditorDialog,
+  'monitor-editor': MonitorEditorDialog,
   setting: SettingDialog,
   import: ImportDialog,
   'project-members': ProjectMembersDialog,

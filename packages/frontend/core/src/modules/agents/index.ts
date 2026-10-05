@@ -26,6 +26,20 @@ export {
 } from './services/question-fork';
 export { AgentContextService } from './services/context';
 export {
+  type ConditionType,
+  type ExtractType,
+  MIN_INTERVAL_MINUTES,
+  type Monitor,
+  type MonitorAlerts,
+  type MonitorCondition,
+  type MonitorDraft,
+  type MonitorKind,
+  type MonitorReading,
+  MonitorsService,
+  type MonitorSource,
+  type MonitorSpec,
+} from './services/monitors';
+export {
   AgentFileToolError,
   AgentFileToolsService,
   FILE_TOOL_NAMES,
@@ -99,6 +113,7 @@ import { AgentContextService } from './services/context';
 import { AgentFileToolsService } from './services/file-tools';
 import { AgentExecutorService } from './services/executor';
 import { RemoteAgentRunnerService } from './services/remote-runner';
+import { MonitorsService } from './services/monitors';
 import { ResearchToolsService } from './services/research-tools';
 import { AgentRunSessionService } from './services/run-session';
 import { AgentTaskClaimService } from './services/task-claim';
@@ -115,6 +130,7 @@ export function configureAgentsModule(framework: Framework) {
     .service(RemoteAgentRunnerService, [WorkspaceServerService])
     .service(CloudAgentRunnerService, [WorkspaceServerService])
     .service(ResearchToolsService, [WorkspaceServerService])
+    .service(MonitorsService, [WorkspaceServerService, WorkspaceService])
     .service(AgentExecutorService, [
       AgentContextService,
       AgentRunsStore,
