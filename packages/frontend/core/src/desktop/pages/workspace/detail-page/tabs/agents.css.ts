@@ -207,6 +207,37 @@ export const logDialogBody = style({
   minHeight: 0,
 });
 
+export const runDetails = style({
+  display: 'grid',
+  gridTemplateColumns: 'max-content 1fr',
+  gap: '6px 16px',
+  margin: 0,
+  fontSize: cssVar('fontSm'),
+});
+
+export const runDetailLabel = style({
+  color: cssVarV2('text/secondary'),
+});
+
+export const runDetailValue = style({
+  margin: 0,
+  color: cssVarV2('text/primary'),
+  wordBreak: 'break-word',
+});
+
+export const runDetailInput = style({
+  margin: 0,
+  maxHeight: 240,
+  overflow: 'auto',
+  whiteSpace: 'pre-wrap',
+  fontFamily: cssVar('fontMonoFamily'),
+  fontSize: cssVar('fontXs'),
+  padding: '6px 8px',
+  borderRadius: 4,
+  background: cssVarV2('layer/background/secondary'),
+  color: cssVarV2('text/primary'),
+});
+
 export const attachRow = style({
   display: 'flex',
   alignItems: 'center',
