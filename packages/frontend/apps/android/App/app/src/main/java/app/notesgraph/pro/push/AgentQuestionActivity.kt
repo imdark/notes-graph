@@ -192,7 +192,14 @@ private fun QuestionScreen(
                     color = MaterialTheme.colorScheme.primary,
                 )
                 Text(q.text, style = MaterialTheme.typography.bodyLarge)
-                if (q.detail.isNotEmpty()) {
+                // File edits get a diff; Bash and other tools their command
+                // and fields - as on the web card - instead of raw JSON.
+                val preview = remember(q.text, q.detail) {
+                    if (q.isPermission) ToolPreview.parse(q.text, q.detail) else null
+                }
+                if (preview != null) {
+                    ToolPreviewView(preview)
+                } else if (q.detail.isNotEmpty()) {
                     Surface(
                         color = MaterialTheme.colorScheme.surfaceVariant,
                         shape = MaterialTheme.shapes.small,
@@ -274,6 +281,6 @@ private fun QuestionScreen(
     }
 }
 
-/** Tool input arrives as JSON; indented, it reads like the web card's fields. */
+/** Detail that didn't parse into a preview, indented if it is JSON at all. */
 private fun prettyJson(detail: String): String =
     runCatching { JSONObject(detail).toString(2).replace("\\/", "/") }.getOrDefault(detail)
