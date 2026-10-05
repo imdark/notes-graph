@@ -39,6 +39,9 @@ const SessionCard = ({
 }) => {
   const sessionService = useService(AgentRunSessionService);
   const { running } = session;
+  // A worker's result is the note it changed; what it says at the end is a
+  // report on that, so there's no answer to copy.
+  const answers = session.agentKind === 'answer';
 
   const copyOutput = useCallback(() => {
     if (!session.output) return;
@@ -114,7 +117,9 @@ const SessionCard = ({
       ) : (
         <p className={styles.empty}>
           {!running
-            ? 'It finished without an answer. The log shows what it did.'
+            ? answers
+              ? 'It finished without an answer. The log shows what it did.'
+              : 'It finished. The log shows what it did.'
             : session.questions.length > 0
               ? 'Waiting for you…'
               : 'Working…'}
@@ -134,7 +139,7 @@ const SessionCard = ({
           </Button>
         ) : (
           <>
-            {session.output ? (
+            {answers && session.output ? (
               <Button
                 variant="primary"
                 onClick={copyOutput}
@@ -159,9 +164,14 @@ const SessionCard = ({
         ) : null}
       </div>
 
-      {!running && session.output ? (
+      {!running && answers && session.output ? (
         <span className={styles.hint}>
           Nothing is written to the note — copy what you want to keep.
+        </span>
+      ) : null}
+      {!running && !answers ? (
+        <span className={styles.hint}>
+          It works in the note itself — its changes are already there.
         </span>
       ) : null}
     </div>

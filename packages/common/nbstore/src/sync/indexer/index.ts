@@ -433,17 +433,16 @@ export class IndexerSyncImpl implements IndexerSync {
 
           let blocks: IndexerDocument<'block'>[] = [];
           let preview: string | undefined;
+          let crawled = false;
 
-          const nativeResult = await this.tryNativeCrawlDocData(docId);
-          if (nativeResult) {
-            blocks = nativeResult.block;
-            preview = nativeResult.summary;
-          } else {
-            const docBin = await this.doc.getDoc(docId);
-            if (!docBin) {
-              // doc is deleted, just skip
-              continue;
-            }
+          // The JS crawler goes first: it is the only one that extracts the
+          // block task fields (todoStatus, todoTrail, tags, props, orgStatus,
+          // org timestamps). The native crawler doesn't, so a device whose
+          // index came from it (Android/iOS/Electron) matched no tasks, and
+          // every task list in a journal rendered empty there. Native stays
+          // as the fallback for a doc the JS side can't read or parse.
+          const docBin = await this.doc.getDoc(docId);
+          if (docBin) {
             const docYDoc = new YDoc({ guid: docId });
             applyUpdate(docYDoc, docBin.bin);
 
@@ -460,8 +459,20 @@ export class IndexerSyncImpl implements IndexerSync {
               }
               blocks = result.blocks;
               preview = result.preview;
+              crawled = true;
             } catch (error) {
               console.error('error crawling doc', error);
+            }
+          }
+
+          if (!crawled) {
+            const nativeResult = await this.tryNativeCrawlDocData(docId);
+            if (nativeResult) {
+              blocks = nativeResult.block;
+              preview = nativeResult.summary;
+            } else if (!docBin) {
+              // doc is deleted, just skip
+              continue;
             }
           }
 

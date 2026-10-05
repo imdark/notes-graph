@@ -730,6 +730,78 @@ test('indexer defers indexed clock persistence until a refresh happens on delaye
   }
 });
 
+test('indexer indexes task fields even when the storage has a native crawler', async () => {
+  // The native crawler returns no task fields, so a SQLite-backed device
+  // (Android/iOS/Electron) that used it had an index with no tasks in it.
+  class ReadableDocStorage extends TestDocStorage {
+    override async getDoc(docId: string): Promise<DocRecord | null> {
+      return {
+        docId,
+        bin: encodeStateAsUpdate(new YDoc()),
+        timestamp: new Date('2026-01-01T00:00:00.000Z'),
+      };
+    }
+  }
+  const docStorage = new ReadableDocStorage(
+    'workspace-id',
+    new Map([['doc1', new Date('2026-01-01T00:00:00.000Z')]]),
+    async () => ({
+      title: 'Doc 1',
+      summary: 'summary',
+      blocks: [{ blockId: 'task-1', flavour: 'notesgraph:list' }],
+    })
+  );
+  const inserted: IndexerDocument<'block'>[] = [];
+  class CapturingIndexerStorage extends TrackingIndexerStorage {
+    override async insert<T extends keyof IndexerSchema>(
+      table: T,
+      document: IndexerDocument<T>
+    ): Promise<void> {
+      if (table === 'block') {
+        inserted.push(document as IndexerDocument<'block'>);
+      }
+    }
+  }
+  const sync = new IndexerSyncImpl(
+    docStorage,
+    {
+      local: new CapturingIndexerStorage([], 0),
+      remotes: {},
+    },
+    new TrackingIndexerSyncStorage([])
+  );
+
+  vi.spyOn(reader, 'readAllDocsFromRootDoc').mockImplementation(
+    () => new Map([['doc1', { title: 'Doc 1' }]])
+  );
+  vi.spyOn(reader, 'readAllBlocksFromDoc').mockResolvedValue({
+    title: 'Doc 1',
+    summary: 'summary',
+    blocks: [
+      {
+        docId: 'doc1',
+        blockId: 'task-1',
+        flavour: 'notesgraph:list',
+        content: 'buy milk',
+        todoStatus: 'todo',
+        todoTrail: 'Personal',
+        yblock: new YDoc().getMap(),
+      },
+    ],
+  });
+
+  try {
+    sync.start();
+    await sync.waitForCompleted();
+
+    expect(inserted).toHaveLength(1);
+    expect(inserted[0].get('todoStatus')).toBe('todo');
+    expect(inserted[0].get('todoTrail')).toBe('Personal');
+  } finally {
+    sync.stop();
+  }
+});
+
 test('indexer completion waits for the current job to finish', async () => {
   const docsInRootDoc = new Map([['doc1', { title: 'Doc 1' }]]);
   const crawlStarted = deferred<void>();

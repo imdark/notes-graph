@@ -1,5 +1,9 @@
 import { Button, notify } from '@notesgraph/component';
-import { parseLogLines } from '@notesgraph/core/modules/agents';
+import {
+  groupLogLines,
+  type LogLine,
+  parseLogLines,
+} from '@notesgraph/core/modules/agents';
 import {
   type MouseEvent,
   useCallback,
@@ -39,6 +43,10 @@ interface LineRange {
  * Clicking a line number selects that line (Shift-click selects a range) to
  * copy; clicking a time switches every line between the clock and the time
  * since the run's first line.
+ *
+ * Tool calls and their results fold into one row per run of them, so the
+ * agent's reasoning reads straight through; a row unfolds on click, and
+ * "Show tool calls" unfolds them all.
  */
 export const AgentLogView = ({
   log,
@@ -79,6 +87,7 @@ export const AgentLogView = ({
     stickToEnd.current = true;
     anchor.current = null;
     setSelected(null);
+    setExpanded(new Set());
   }, [resetKey]);
 
   const onLineNumber = useCallback((e: MouseEvent, number: number) => {
@@ -98,6 +107,26 @@ export const AgentLogView = ({
 
   const toggleTimes = useCallback(() => setRelative(prev => !prev), []);
 
+  const segments = useMemo(() => groupLogLines(lines), [lines]);
+  const hasTools = useMemo(
+    () => segments.some(segment => segment.kind === 'tools'),
+    [segments]
+  );
+  // Folded runs of tool lines the reader opened, by their first line number.
+  const [expanded, setExpanded] = useState<ReadonlySet<number>>(new Set());
+  const [showTools, setShowTools] = useState(false);
+  const toggleGroup = useCallback((first: number) => {
+    setExpanded(prev => {
+      const next = new Set(prev);
+      if (!next.delete(first)) next.add(first);
+      return next;
+    });
+  }, []);
+  const toggleShowTools = useCallback(() => {
+    setShowTools(prev => !prev);
+    setExpanded(new Set());
+  }, []);
+
   const copySelected = useCallback(() => {
     if (!selected) return;
     const text = lines
@@ -112,21 +141,105 @@ export const AgentLogView = ({
 
   const numberWidth = String(lines.length).length;
 
+  const renderLine = (line: LogLine) => {
+    const isSelected =
+      !!selected && line.number >= selected.from && line.number <= selected.to;
+    return (
+      <div
+        key={line.number}
+        className={styles.logLine}
+        data-selected={isSelected || undefined}
+      >
+        <span className={styles.logGutter}>
+          <button
+            className={styles.logLineNumber}
+            style={{ minWidth: `${numberWidth + 1}ch` }}
+            onClick={e => onLineNumber(e, line.number)}
+            title="Select line (Shift-click for a range)"
+            data-testid="agent-log-line-number"
+          >
+            {line.number}
+          </button>
+          {hasTimes ? (
+            line.at !== null ? (
+              <button
+                className={styles.logTime}
+                onClick={toggleTimes}
+                title={`${new Date(line.at).toLocaleString()} — click to show ${relative ? 'clock time' : 'time since start'}`}
+                data-testid="agent-log-time"
+              >
+                {relative && startAt !== null
+                  ? elapsed(line.at - startAt)
+                  : clockTime(line.at)}
+              </button>
+            ) : (
+              <span className={styles.logTime} />
+            )
+          ) : null}
+        </span>
+        <span className={styles.logLineText}>{line.text || ' '}</span>
+      </div>
+    );
+  };
+
+  /** The one row a folded run of tool lines shows; click to unfold it. */
+  const renderFold = (lines: LogLine[], tools: string[], open: boolean) => {
+    const first = lines[0].number;
+    const last = lines[lines.length - 1].number;
+    const names = [...new Set(tools)].join(', ');
+    return (
+      <div key={`tools-${first}`} className={styles.logLine}>
+        <span className={styles.logGutter}>
+          <span
+            className={styles.logLineNumber}
+            style={{ minWidth: `${numberWidth + 1}ch` }}
+          />
+          {hasTimes ? <span className={styles.logTime} /> : null}
+        </span>
+        <button
+          className={styles.logFold}
+          onClick={() => toggleGroup(first)}
+          title={`${open ? 'Hide' : 'Show'} lines ${first}–${last}`}
+          data-testid="agent-log-tools-fold"
+        >
+          {open ? '▾ ' : '▸ '}
+          {tools.length
+            ? `${tools.length} tool call${tools.length === 1 ? '' : 's'} · ${names}`
+            : `tool output · ${lines.length} line${lines.length === 1 ? '' : 's'}`}
+        </button>
+      </div>
+    );
+  };
+
   return (
     <div className={styles.logView}>
-      {selected ? (
+      {selected || hasTools ? (
         <div className={styles.logToolbar}>
-          <span className={styles.hint}>
-            {selected.from === selected.to
-              ? `Line ${selected.from}`
-              : `Lines ${selected.from}–${selected.to}`}
-          </span>
-          <Button onClick={copySelected}>
-            Copy
-          </Button>
-          <Button variant="plain" onClick={() => setSelected(null)}>
-            Clear
-          </Button>
+          {selected ? (
+            <>
+              <span className={styles.hint}>
+                {selected.from === selected.to
+                  ? `Line ${selected.from}`
+                  : `Lines ${selected.from}–${selected.to}`}
+              </span>
+              <Button onClick={copySelected}>
+                Copy
+              </Button>
+              <Button variant="plain" onClick={() => setSelected(null)}>
+                Clear
+              </Button>
+            </>
+          ) : null}
+          {hasTools ? (
+            <Button
+              variant="plain"
+              className={styles.logToolsToggle}
+              onClick={toggleShowTools}
+              data-testid="agent-log-tools-toggle"
+            >
+              {showTools ? 'Hide tool calls' : 'Show tool calls'}
+            </Button>
+          ) : null}
         </div>
       ) : null}
       <div
@@ -139,47 +252,14 @@ export const AgentLogView = ({
           <div className={styles.logPlaceholder}>{placeholder}</div>
         ) : (
           <div className={styles.logLines}>
-            {lines.map(line => {
-              const isSelected =
-                !!selected &&
-                line.number >= selected.from &&
-                line.number <= selected.to;
-              return (
-                <div
-                  key={line.number}
-                  className={styles.logLine}
-                  data-selected={isSelected || undefined}
-                >
-                  <span className={styles.logGutter}>
-                    <button
-                      className={styles.logLineNumber}
-                      style={{ minWidth: `${numberWidth + 1}ch` }}
-                      onClick={e => onLineNumber(e, line.number)}
-                      title="Select line (Shift-click for a range)"
-                      data-testid="agent-log-line-number"
-                    >
-                      {line.number}
-                    </button>
-                    {hasTimes ? (
-                      line.at !== null ? (
-                        <button
-                          className={styles.logTime}
-                          onClick={toggleTimes}
-                          title={`${new Date(line.at).toLocaleString()} — click to show ${relative ? 'clock time' : 'time since start'}`}
-                          data-testid="agent-log-time"
-                        >
-                          {relative && startAt !== null
-                            ? elapsed(line.at - startAt)
-                            : clockTime(line.at)}
-                        </button>
-                      ) : (
-                        <span className={styles.logTime} />
-                      )
-                    ) : null}
-                  </span>
-                  <span className={styles.logLineText}>{line.text || ' '}</span>
-                </div>
-              );
+            {segments.map(segment => {
+              if (segment.kind === 'line') return renderLine(segment.line);
+              if (showTools) return segment.lines.map(renderLine);
+              const open = expanded.has(segment.lines[0].number);
+              return [
+                renderFold(segment.lines, segment.tools, open),
+                ...(open ? segment.lines.map(renderLine) : []),
+              ];
             })}
           </div>
         )}

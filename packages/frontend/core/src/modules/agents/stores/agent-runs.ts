@@ -14,6 +14,8 @@ export interface AgentRun {
   docId: string;
   blockId?: string;
   blockIds?: string[];
+  /** Absent on runs recorded before runs had titles; show the agent's name. */
+  title?: string;
   status: AgentRunStatus;
   startedAt: number;
   durationMs?: number;
@@ -23,7 +25,18 @@ export interface AgentRun {
   /** The device job this run became, when it ran remotely. */
   remoteJobId?: string;
   deviceKey?: string;
+  /** Rows recorded before these were kept have none of the four below. */
+  harness?: string;
+  model?: string;
+  folder?: string;
+  /** The start of the context the run read, clipped to INPUT_CHARS. */
+  input?: string;
 }
+
+/** What a run was set up with, recorded as it learns each part. */
+export type AgentRunDetails = Partial<
+  Pick<AgentRun, 'harness' | 'model' | 'folder' | 'input'>
+>;
 
 /**
  * Newest runs to keep. Runs live in userdata, which syncs — an unbounded
@@ -34,6 +47,12 @@ const MAX_RUNS = 60;
 
 /** How much of a result to keep for the run list. */
 const SUMMARY_CHARS = 200;
+
+/** How much of a run's input to keep for its details; rows sync. */
+const INPUT_CHARS = 1000;
+
+/** Longest run title kept, matching the server's cap on a job's. */
+const TITLE_CHARS = 200;
 
 /**
  * Run history, in this user's userdata DB rather than the shared workspace one:
@@ -57,14 +76,14 @@ export class AgentRunsStore extends Store {
       .map(db => LiveData.from(db.agentRuns.find$(), []))
       .flat()
       .map(rows =>
-        (rows as AgentRun[])
-          .slice()
-          .sort((a, b) => b.startedAt - a.startedAt)
+        (rows as AgentRun[]).slice().sort((a, b) => b.startedAt - a.startedAt)
       );
   }
 
   watchRunsForDoc(docId: string): LiveData<AgentRun[]> {
-    return this.watchRuns().map(runs => runs.filter(run => run.docId === docId));
+    return this.watchRuns().map(runs =>
+      runs.filter(run => run.docId === docId)
+    );
   }
 
   start(agent: { id: string; name: string }, target: AgentTarget): string {
@@ -86,10 +105,33 @@ export class AgentRunsStore extends Store {
     return this.watchRuns().map(runs => runs.find(run => run.id === runId));
   }
 
+  /** Name the run: from its target as it starts, then as the agent calls it. */
+  setTitle(runId: string, title: string): void {
+    const clean = title.replace(/\s+/g, ' ').trim().slice(0, TITLE_CHARS);
+    const row = this.table.get(runId);
+    if (!clean || !row || row.title === clean) return;
+    this.table.update(runId, { title: clean });
+  }
+
   /** Record which device job a remote run became, so its log can be found. */
   attachRemote(runId: string, remoteJobId: string, deviceKey: string): void {
     if (!this.table.get(runId)) return;
     this.table.update(runId, { remoteJobId, deviceKey });
+  }
+
+  /** Record what a run was set up with, for its details tab. */
+  describe(runId: string, details: AgentRunDetails): void {
+    if (!this.table.get(runId)) return;
+    const patch = Object.fromEntries(
+      Object.entries(details).filter(([, value]) => value !== undefined)
+    ) as AgentRunDetails;
+    if (patch.input !== undefined) {
+      patch.input =
+        patch.input.length > INPUT_CHARS
+          ? `${patch.input.slice(0, INPUT_CHARS - 1)}…`
+          : patch.input;
+    }
+    if (Object.keys(patch).length) this.table.update(runId, patch);
   }
 
   /** Rows that say they are running, whoever is (or was) running them. */

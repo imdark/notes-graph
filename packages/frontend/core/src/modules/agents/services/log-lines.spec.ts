@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 
-import { parseLogLines, stampLines } from './log-lines';
+import { groupLogLines, parseLogLines, stampLines } from './log-lines';
 
 const at = Date.parse('2026-10-03T12:00:00.000Z');
 
@@ -24,5 +24,46 @@ describe('log lines', () => {
 
   test('an empty log has no lines', () => {
     expect(parseLogLines('')).toEqual([]);
+  });
+});
+
+describe('grouping tool lines', () => {
+  const shape = (log: string) =>
+    groupLogLines(parseLogLines(log)).map(segment =>
+      segment.kind === 'line'
+        ? segment.line.text
+        : { tools: segment.tools, lines: segment.lines.length }
+    );
+
+  test('folds consecutive calls and results between the reasoning', () => {
+    const log = [
+      '▶ started · model x',
+      'Let me look for the note.',
+      '→ keyword_search  {"query":"Cosmo"}',
+      '  ← [{"id":"a"}]',
+      '→ read_document  {"docId":"a"}',
+      '  ✗ Error: not found',
+      'It is gone, so I will ask.',
+      '✗ failed after 3 turns',
+    ].join('\n');
+    expect(shape(log)).toEqual([
+      '▶ started · model x',
+      'Let me look for the note.',
+      { tools: ['keyword_search', 'read_document'], lines: 4 },
+      'It is gone, so I will ask.',
+      '✗ failed after 3 turns',
+    ]);
+  });
+
+  test("folds a subagent's calls but keeps its reasoning", () => {
+    const log = [
+      '    ↳ Checking the repo.',
+      '    ↳ → Grep  {"pattern":"x"}',
+      '    ↳   ← 3 matches',
+    ].join('\n');
+    expect(shape(log)).toEqual([
+      '    ↳ Checking the repo.',
+      { tools: ['Grep'], lines: 2 },
+    ]);
   });
 });

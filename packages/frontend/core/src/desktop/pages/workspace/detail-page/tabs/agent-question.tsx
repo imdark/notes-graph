@@ -7,6 +7,7 @@ import { WorkspaceService } from '@notesgraph/core/modules/workspace';
 import { useService } from '@notesgraph/infra';
 import { type KeyboardEvent, useCallback, useMemo, useState } from 'react';
 
+import { AgentQuestionFork } from './agent-question-fork';
 import * as styles from './agents.css';
 import { parseEditPreview } from './edit-diff';
 import { EditDiffView } from './edit-diff-view';
@@ -32,6 +33,8 @@ export const AgentQuestionCard = ({
   const [text, setText] = useState('');
   const [state, setState] = useState<'idle' | 'sending' | 'sent'>('idle');
   const [error, setError] = useState<string | null>(null);
+  // A side chat to ask about the question before answering it.
+  const [forkOpen, setForkOpen] = useState(false);
 
   const send = useCallback(
     (answer: { answer?: string; allowed?: boolean; allowAll?: boolean }) => {
@@ -95,6 +98,23 @@ export const AgentQuestionCard = ({
         <span className={styles.hint}>Sent — it will carry on from here.</span>
       ) : (
         <>
+          {forkOpen ? (
+            <AgentQuestionFork
+              jobId={jobId}
+              question={question}
+              onUseAnswer={isPermission ? undefined : setText}
+              onClose={() => setForkOpen(false)}
+            />
+          ) : (
+            <button
+              className={styles.linkButton}
+              style={{ alignSelf: 'flex-start' }}
+              onClick={() => setForkOpen(true)}
+              data-testid="agent-question-fork-open"
+            >
+              Not sure? Ask about this first
+            </button>
+          )}
           {options.length > 0 ? (
             <div
               className={styles.questionOptions}

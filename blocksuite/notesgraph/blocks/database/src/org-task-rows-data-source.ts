@@ -1,5 +1,3 @@
-import { IS_MOBILE } from '@blocksuite/global/env';
-import { FeatureFlagService } from '@blocksuite/notesgraph-shared/services';
 import {
   applyOrgStatusTimestamps,
   findOrgTimestampIn,
@@ -121,14 +119,11 @@ export abstract class OrgTaskRowsDataSource extends DatabaseBlockDataSource {
       .map(v => v.id);
   });
 
+  // Task views edit plain list items (status, text), not database cells, so
+  // they stay editable on mobile without the experimental
+  // `enable_mobile_database_editing` flag.
   override readonly$: ReadonlySignal<boolean> = computed(() => {
-    return (
-      this._model.store.readonly ||
-      (IS_MOBILE &&
-        !this._model.store.provider
-          .get(FeatureFlagService)
-          .getFlag('enable_mobile_database_editing'))
-    );
+    return this._model.store.readonly;
   });
 
   protected override getModelById(rowId: string): BlockModel | undefined {

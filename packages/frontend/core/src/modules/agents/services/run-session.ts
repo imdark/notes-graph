@@ -1,10 +1,17 @@
 import { LiveData, Service } from '@notesgraph/infra';
 
-import type { Agent } from '../stores/agents';
+import { type Agent, type AgentKind, agentKind } from '../stores/agents';
 import type { RemoteQuestion } from './remote-runner';
-import { AgentAlreadyRunningError, type AgentExecutorService } from './executor';
+import {
+  AgentAlreadyRunningError,
+  type AgentExecutorService,
+} from './executor';
 import { type AgentBlockRef, lastBlockTouched } from './focus-block';
-import { type AgentTarget, agentTargetKey } from './target';
+import {
+  type AgentTarget,
+  agentTargetBlockIds,
+  agentTargetKey,
+} from './target';
 import type { AgentTaskClaimService } from './task-claim';
 
 /** A run asked for while another was going, waiting its turn. */
@@ -23,6 +30,8 @@ export interface AgentRunSession {
   agentId: string;
   agentName: string;
   agentEmoji?: string;
+  /** Whether the output is an answer to keep or a report on work done. */
+  agentKind: AgentKind;
   target: AgentTarget;
   /** What was targeted, in words, for the panel header. */
   targetLabel: string;
@@ -66,6 +75,12 @@ const targetLabel = (target: AgentTarget): string => {
     case 'doc':
       return 'this note';
   }
+};
+
+/** The label once the task it is on has been read: the task, by its text. */
+const titledLabel = (target: AgentTarget, title: string): string => {
+  const more = agentTargetBlockIds(target).length - 1;
+  return more > 0 ? `“${title}” and ${more} more` : `“${title}”`;
 };
 
 const runKey = (agentId: string, target: AgentTarget) =>
@@ -122,7 +137,8 @@ export class AgentRunSessionService extends Service {
       this.sessions$.value.some(
         session =>
           session.running && runKey(session.agentId, session.target) === key
-      ) || this.queue$.value.some(run => runKey(run.agent.id, run.target) === key)
+      ) ||
+      this.queue$.value.some(run => runKey(run.agent.id, run.target) === key)
     );
   }
 
@@ -137,6 +153,7 @@ export class AgentRunSessionService extends Service {
   async start(agent: Agent, target: AgentTarget): Promise<void> {
     if (this.isPending(agent, target)) return;
     this.claim(target);
+    this.name(agent, target);
     if (this.queues(agent) && this.onDeviceBusy) {
       this.queue$.setValue([
         ...this.queue$.value,
@@ -165,24 +182,65 @@ export class AgentRunSessionService extends Service {
     });
   }
 
-  /** Hand back tasks the run never moved on from queued. */
-  private unclaim(target: AgentTarget): void {
+  /**
+   * Label the run — queued or going — by the task it is on, once its text is
+   * read, so a list of runs down a task list reads as the tasks themselves.
+   */
+  private name(agent: Agent, target: AgentTarget): void {
+    if (target.kind === 'doc') return;
+    const key = runKey(agent.id, target);
+    this.taskClaim
+      .titleOf(target)
+      .then(title => {
+        if (!title) return;
+        const targetLabel = titledLabel(target, title);
+        this.queue$.setValue(
+          this.queue$.value.map(run =>
+            runKey(run.agent.id, run.target) === key
+              ? { ...run, targetLabel }
+              : run
+          )
+        );
+        this.sessions$.setValue(
+          this.sessions$.value.map(session =>
+            runKey(session.agentId, session.target) === key
+              ? { ...session, targetLabel }
+              : session
+          )
+        );
+      })
+      .catch(() => {
+        // The generic label stands.
+      });
+  }
+
+  /** Whether any agent's run is going or queued on this target. */
+  isBusyOn(target: AgentTarget): boolean {
     const key = agentTargetKey(target);
-    const claimedAgain = () =>
+    return (
       this.sessions$.value.some(
         session => session.running && agentTargetKey(session.target) === key
-      ) || this.queue$.value.some(run => agentTargetKey(run.target) === key);
-    this.taskClaim.release(target, claimedAgain).catch(() => {});
+      ) || this.queue$.value.some(run => agentTargetKey(run.target) === key)
+    );
+  }
+
+  /** Hand back tasks the run never moved on from queued. */
+  private unclaim(target: AgentTarget): void {
+    this.taskClaim.release(target, () => this.isBusyOn(target)).catch(() => {});
   }
 
   private runNext(): void {
     const [next, ...rest] = this.queue$.value;
     if (!next) return;
     this.queue$.setValue(rest);
-    void this.runNow(next.agent, next.target);
+    void this.runNow(next.agent, next.target, next.targetLabel);
   }
 
-  private async runNow(agent: Agent, target: AgentTarget): Promise<void> {
+  private async runNow(
+    agent: Agent,
+    target: AgentTarget,
+    label = targetLabel(target)
+  ): Promise<void> {
     const id = `s${++this.nextId}`;
     const controller = new AbortController();
     this.controllers.set(id, controller);
@@ -201,8 +259,9 @@ export class AgentRunSessionService extends Service {
         agentId: agent.id,
         agentName: agent.name,
         agentEmoji: agent.emoji,
+        agentKind: agentKind(agent),
         target,
-        targetLabel: targetLabel(target),
+        targetLabel: label,
         output: '',
         log: '',
         remoteJobId: null,

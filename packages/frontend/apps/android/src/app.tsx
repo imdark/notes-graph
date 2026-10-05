@@ -40,6 +40,7 @@ import {
   NbstoreProvider,
 } from '@notesgraph/core/modules/storage';
 import { PopupWindowProvider } from '@notesgraph/core/modules/url';
+import { SpeechToTextProvider } from '@notesgraph/core/modules/voice-tasks';
 import { ClientSchemeProvider } from '@notesgraph/core/modules/url/providers/client-schema';
 import {
   configureBrowserWorkbenchModule,
@@ -66,6 +67,7 @@ import { HashCash } from './plugins/hashcash';
 import { NbStoreNativeDBApis } from './plugins/nbstore';
 import { NotesGraphTheme } from './plugins/notesgraph-theme';
 import { Preview } from './plugins/preview';
+import { nativeSpeechToText } from './speech-to-text-glue';
 import {
   deleteEndpointToken,
   readEndpointToken,
@@ -254,6 +256,8 @@ framework.impl(AppLockProvider, {
   getState: () => AppLock.getState(),
   setEnabled: enabled => AppLock.setEnabled({ enabled }),
 });
+
+framework.impl(SpeechToTextProvider, nativeSpeechToText);
 
 // ------ some apis for native ------
 (window as any).getCurrentServerBaseUrl = () => {

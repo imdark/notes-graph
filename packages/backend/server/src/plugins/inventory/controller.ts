@@ -279,6 +279,26 @@ export class InventoryController {
     return { job };
   }
 
+  /**
+   * The agent names its run. Workspace.Read, like report: it is the job's
+   * own side of work it was already given.
+   */
+  @Post('/workspaces/:workspaceId/jobs/:jobId/title')
+  async setJobTitle(
+    @CurrentUser() user: CurrentUserType,
+    @Param('workspaceId') workspaceId: string,
+    @Param('jobId') jobId: string,
+    @Body() body: Record<string, unknown>
+  ) {
+    this.assertEnabled();
+    await this.ac.user(user.id).workspace(workspaceId).assert('Workspace.Read');
+    const job = await this.jobs.setTitle(workspaceId, jobId, body ?? {});
+    if (!job) {
+      throw new NotFoundException(`No job '${jobId}' in this workspace`);
+    }
+    return { job };
+  }
+
   @Post('/workspaces/:workspaceId/jobs/:jobId/cancel')
   async cancelJob(
     @CurrentUser() user: CurrentUserType,

@@ -82,6 +82,8 @@ const fakeClaim = () => {
       calls.push({ op: 'release', target });
       claimedAgain.push(again);
     },
+    titleOf: async (target: AgentTarget) =>
+      target.kind === 'block' ? `Task ${target.blockId}` : null,
   };
   return { calls, claimedAgain, claim };
 };
@@ -147,6 +149,30 @@ describe('AgentRunSessionService', () => {
     const last = sessions.sessions$.value.at(-1);
     expect(last?.target).toEqual(block('b2'));
     expect(last?.running).toBe(true);
+  });
+
+  test('runs and queued runs are labelled by the task they are on', async () => {
+    const { runs, sessions } = fakeExecutor();
+
+    void sessions.start(agent, block('b1'));
+    void sessions.start(agent, block('b2'));
+    void sessions.start(agent, {
+      kind: 'selection',
+      docId: 'doc',
+      blockIds: ['b3', 'b4', 'b5'],
+    });
+    await tick();
+
+    expect(sessions.sessions$.value[0].targetLabel).toBe('“Task b1”');
+    expect(sessions.queue$.value.map(r => r.targetLabel)).toEqual([
+      '“Task b2”',
+      '3 selected blocks',
+    ]);
+
+    // The label it had while queued carries over once it starts.
+    runs[0].finish();
+    await tick();
+    expect(sessions.sessions$.value.at(-1)?.targetLabel).toBe('“Task b2”');
   });
 
   test('asking again for a running or queued run does nothing', async () => {

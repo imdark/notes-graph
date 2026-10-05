@@ -42,6 +42,47 @@ export const readTaskStatus = (
   return null;
 };
 
+/** How much of a task's text names it in a run list. */
+const TITLE_CHARS = 120;
+
+/** A block's text as a reader names it: without its status, on one line. */
+export const taskTitle = (model: BlockModel): string => {
+  const text = model.text?.toString() ?? '';
+  const status = readTaskStatus(model);
+  return text
+    .slice(status?.length ?? 0)
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, TITLE_CHARS);
+};
+
+/**
+ * The title of the first block a run is on that has any text, so a run on a
+ * task can be listed by the task rather than as "a block". Null for a whole
+ * note, which is already named by its note.
+ */
+export const targetTitle = (
+  store: Store,
+  target: AgentTarget
+): string | null => {
+  for (const id of agentTargetBlockIds(target)) {
+    const model = store.getBlock(id)?.model;
+    const title = model ? taskTitle(model) : '';
+    if (title) return title;
+  }
+  return null;
+};
+
+/**
+ * Whether a block is a task still waiting for someone to take it: to-do, not
+ * queued, in progress or done. Any agent that claims a task moves it off
+ * to-do, so this is also "no agent is on it".
+ */
+export const isOpenTask = (model: BlockModel): boolean => {
+  const status = readTaskStatus(model);
+  return !!status && orgStatusLabel(status.text) === 'Todo';
+};
+
 /** Rewrite a task's status as a chip, the way the kanban board does. */
 const writeStatus = (
   model: BlockModel,
@@ -126,16 +167,24 @@ export class AgentTaskClaimService extends Service {
     );
   }
 
-  private async withStore(
+  /** What the tasks a run is on are called; see {@link targetTitle}. */
+  async titleOf(target: AgentTarget): Promise<string | null> {
+    return (
+      (await this.withStore(target, store => targetTitle(store, target))) ??
+      null
+    );
+  }
+
+  private async withStore<T>(
     target: AgentTarget,
-    fn: (store: Store) => void
-  ): Promise<void> {
+    fn: (store: Store) => T
+  ): Promise<T | undefined> {
     // A whole note isn't one task; there is nothing to claim.
     if (target.kind === 'doc') return;
     const { doc, release } = this.docsService.open(target.docId);
     try {
       await doc.waitForSyncReady();
-      fn(doc.blockSuiteDoc);
+      return fn(doc.blockSuiteDoc);
     } finally {
       release();
     }

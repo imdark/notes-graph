@@ -32,6 +32,7 @@ import app.notesgraph.pro.plugin.AuthPlugin
 import app.notesgraph.pro.plugin.HashCashPlugin
 import app.notesgraph.pro.plugin.NbStorePlugin
 import app.notesgraph.pro.plugin.PreviewPlugin
+import app.notesgraph.pro.plugin.SpeechToTextPlugin
 import app.notesgraph.pro.service.GraphQLService
 import app.notesgraph.pro.service.SSEService
 import app.notesgraph.pro.service.WebService
@@ -69,6 +70,7 @@ class MainActivity : BridgeActivity(), AIButtonPlugin.Callback, NotesGraphThemeP
                 HashCashPlugin::class.java,
                 NbStorePlugin::class.java,
                 PreviewPlugin::class.java,
+                SpeechToTextPlugin::class.java,
             )
         )
     }

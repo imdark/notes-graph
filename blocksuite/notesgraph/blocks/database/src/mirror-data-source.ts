@@ -1,10 +1,8 @@
-import { IS_MOBILE } from '@blocksuite/global/env';
 import type {
   DatabaseBlockModel,
   ListBlockModel,
 } from '@blocksuite/notesgraph-model';
 import { getSelectedModelsCommand } from '@blocksuite/notesgraph-shared/commands';
-import { FeatureFlagService } from '@blocksuite/notesgraph-shared/services';
 import {
   insertPositionToIndex,
   type InsertToPosition,
@@ -102,11 +100,7 @@ export class MirrorListDataSource extends OrgTaskRowsDataSource {
   override readonly$: ReadonlySignal<boolean> = computed(() => {
     return (
       this._model.store.readonly ||
-      (this.sourceStore$.value?.readonly ?? true) ||
-      (IS_MOBILE &&
-        !this._model.store.provider
-          .get(FeatureFlagService)
-          .getFlag('enable_mobile_database_editing'))
+      (this.sourceStore$.value?.readonly ?? true)
     );
   });
 

@@ -12,6 +12,16 @@ export {
   RemoteAgentRunnerService,
   WORKFLOW_MODEL,
 } from './services/remote-runner';
+export {
+  type ChatMessage,
+  type ChatModel,
+  CloudAgentRunnerService,
+} from './services/cloud-runner';
+export {
+  forkMessages,
+  forkTranscript,
+  splitSuggestion,
+} from './services/question-fork';
 export { AgentContextService } from './services/context';
 export {
   AgentFileToolError,
@@ -36,14 +46,25 @@ export {
   AgentRunSessionService,
   type QueuedAgentRun,
 } from './services/run-session';
+export {
+  hasAgentClaim,
+  runsForBlock,
+  runTargetsBlock,
+} from './services/block-runs';
 export { type AgentBlockRef, lastBlockTouched } from './services/focus-block';
 export {
   AgentTaskClaimService,
+  isOpenTask,
   markTasksQueued,
   QUEUED_STATUS,
   releaseQueuedTasks,
 } from './services/task-claim';
-export { type LogLine, parseLogLines } from './services/log-lines';
+export {
+  groupLogLines,
+  type LogLine,
+  type LogSegment,
+  parseLogLines,
+} from './services/log-lines';
 export {
   type AgentTarget,
   agentTargetBlockIds,
@@ -53,6 +74,8 @@ export {
   type Agent,
   type AgentDraft,
   type AgentHarness,
+  type AgentKind,
+  agentKind,
   type AgentOutput,
   type AgentScope,
   type AgentTargetKind,

@@ -91,6 +91,11 @@ export class AgentFileToolsService extends Service {
     return this.folderSync.rootHandle !== null;
   }
 
+  /** The bound folder's name; the browser never reveals its full path. */
+  get folderName(): string | undefined {
+    return this.folderSync.rootHandle?.name;
+  }
+
   private assertAvailable() {
     if (!this.available) {
       throw new AgentFileToolError(

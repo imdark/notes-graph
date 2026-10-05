@@ -80,6 +80,7 @@ import { configureThemeEditorModule } from './theme-editor';
 import { configureUrlModule } from './url';
 import { configureUserspaceModule } from './userspace';
 import { configureVirtualViewsModule } from './virtual-views';
+import { configureVoiceTasksModule } from './voice-tasks';
 import { configureWorkspaceModule } from './workspace';
 import { configureIndexerEmbeddingModule } from './workspace-indexer-embedding';
 import { configureWorkspacePropertyModule } from './workspace-property';
@@ -148,6 +149,7 @@ export function configureCommonModules(framework: Framework) {
   configureAIPlaygroundModule(framework);
   configureAIButtonModule(framework);
   configureAppLockModule(framework);
+  configureVoiceTasksModule(framework);
   configureAIDraftModule(framework);
   configureAIToolsConfigModule(framework);
   configureAIModelModule(framework);

@@ -49,11 +49,18 @@ export interface RemoteJob {
   id: string;
   deviceKey: string;
   status: 'queued' | 'running' | 'done' | 'error' | 'cancelled';
+  /** What the run is called; the agent may rename it. Absent from older servers. */
+  title?: string | null;
   result: string | null;
   error: string | null;
   steps: number;
   /** tmux session on the device; `tmux attach -t` it there to watch. */
   tmuxSession: string | null;
+  /**
+   * Epoch seconds a queued job waits until: the device hit its Claude
+   * session limit and the job runs again once it resets.
+   */
+  runAfter?: number | null;
   /** Transcript from absolute offset `logFrom` to `logEnd`. */
   log?: string;
   logFrom?: number;
@@ -83,6 +90,8 @@ export interface EnqueueRemoteJob {
   model?: string;
   tools?: string[];
   maxSteps?: number;
+  /** What the run starts out called; the agent may rename it. */
+  title?: string;
   targetKind?: string;
   docId?: string;
   blockId?: string;
@@ -156,7 +165,14 @@ export class RemoteAgentRunnerService extends Service {
   /** List the devices in this workspace that accept agent work. */
   async agentTargets(workspaceId: string) {
     const data = await this.json<{
-      devices: { key: string; name: string; state: string; kind: string }[];
+      devices: {
+        key: string;
+        name: string;
+        state: string;
+        kind: string;
+        /** The folder the device works in, when it was registered with one. */
+        path?: string | null;
+      }[];
     }>(`${this.base(workspaceId)}/devices?agentTarget=true`);
     return data.devices;
   }
@@ -209,8 +225,8 @@ export class RemoteAgentRunnerService extends Service {
   }
 
   /**
-   * Poll a job to completion, yielding whenever its status changes, its
-   * transcript grows, or what it is waiting to be answered changes. Only
+   * Poll a job to completion, yielding whenever its status or title changes,
+   * its transcript grows, or what it is waiting to be answered changes. Only
    * the new part of the transcript is fetched each time.
    *
    * With `cancelOnAbort` (the default — the tab that started the run), an
@@ -227,6 +243,7 @@ export class RemoteAgentRunnerService extends Service {
   ): AsyncIterable<RemoteJobUpdate> {
     let lastStatus = '';
     let lastOpen = '';
+    let lastTitle: string | null | undefined;
     let logFrom = 0;
     try {
       while (!signal.aborted) {
@@ -236,9 +253,15 @@ export class RemoteAgentRunnerService extends Service {
         const open = openQuestions(job)
           .map(q => q.id)
           .join(',');
-        if (job.status !== lastStatus || logDelta || open !== lastOpen) {
+        if (
+          job.status !== lastStatus ||
+          logDelta ||
+          open !== lastOpen ||
+          job.title !== lastTitle
+        ) {
           lastStatus = job.status;
           lastOpen = open;
+          lastTitle = job.title;
           yield { job, logDelta };
         }
         if (['done', 'error', 'cancelled'].includes(job.status)) {

@@ -129,6 +129,10 @@ export const runName = style({
   fontWeight: 500,
   color: cssVarV2('text/primary'),
   whiteSpace: 'nowrap',
+  // A run's title is its block's text, which can be a whole sentence.
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  minWidth: 0,
 });
 
 export const runMeta = style({
@@ -205,6 +209,37 @@ export const logDialogBody = style({
   flexDirection: 'column',
   gap: 10,
   minHeight: 0,
+});
+
+export const runDetails = style({
+  display: 'grid',
+  gridTemplateColumns: 'max-content 1fr',
+  gap: '6px 16px',
+  margin: 0,
+  fontSize: cssVar('fontSm'),
+});
+
+export const runDetailLabel = style({
+  color: cssVarV2('text/secondary'),
+});
+
+export const runDetailValue = style({
+  margin: 0,
+  color: cssVarV2('text/primary'),
+  wordBreak: 'break-word',
+});
+
+export const runDetailInput = style({
+  margin: 0,
+  maxHeight: 240,
+  overflow: 'auto',
+  whiteSpace: 'pre-wrap',
+  fontFamily: cssVar('fontMonoFamily'),
+  fontSize: cssVar('fontXs'),
+  padding: '6px 8px',
+  borderRadius: 4,
+  background: cssVarV2('layer/background/secondary'),
+  color: cssVarV2('text/primary'),
 });
 
 export const attachRow = style({
@@ -314,6 +349,24 @@ export const logTime = style([
 export const logLineText = style({
   whiteSpace: 'pre',
   paddingRight: 12,
+});
+
+export const logFold = style({
+  whiteSpace: 'pre',
+  paddingRight: 12,
+  border: 'none',
+  background: 'none',
+  font: 'inherit',
+  color: cssVarV2('text/secondary'),
+  cursor: 'pointer',
+  textAlign: 'left',
+  selectors: {
+    '&:hover': { color: cssVarV2('text/primary') },
+  },
+});
+
+export const logToolsToggle = style({
+  marginLeft: 'auto',
 });
 
 export const statusBadge = style({
@@ -437,6 +490,50 @@ export const questionOptions = style({
   display: 'flex',
   flexWrap: 'wrap',
   gap: 8,
+});
+
+export const forkPanel = style({
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 8,
+  padding: '8px 10px',
+  borderRadius: 6,
+  border: `1px dashed ${cssVarV2('layer/insideBorder/border')}`,
+  background: cssVarV2('layer/background/secondary'),
+});
+
+export const forkHead = style({
+  display: 'flex',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+});
+
+export const forkMessages = style({
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 8,
+  maxHeight: 320,
+  overflow: 'auto',
+});
+
+export const forkUser = style({
+  alignSelf: 'flex-end',
+  maxWidth: '85%',
+  margin: 0,
+  padding: '6px 10px',
+  borderRadius: 8,
+  background: cssVarV2('layer/background/primary'),
+  fontSize: cssVar('fontSm'),
+  lineHeight: 1.5,
+  color: cssVarV2('text/primary'),
+  whiteSpace: 'pre-wrap',
+});
+
+export const forkReply = style({
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'flex-start',
+  gap: 6,
 });
 
 export const questionInput = style({

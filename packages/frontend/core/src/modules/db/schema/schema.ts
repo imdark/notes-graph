@@ -34,6 +34,12 @@ const agentTable = {
   /** The system prompt, authored by the reader. */
   instructions: f.string(),
   /**
+   * What a run is for: 'answer' (replies in the panel, nothing written back)
+   * or 'worker' (does work in the note). Unset on older rows, which infer it
+   * from the harness — see `agentKind`.
+   */
+  kind: f.string().optional(),
+  /**
    * Which runtime executes this agent: 'on-device' (WebLLM in the browser),
    * 'cloud' (the server's copilot), or 'remote' (a machine registered in the
    * device inventory). Unset follows the workspace's own AI backend setting,
@@ -297,6 +303,11 @@ export const NotesGraph_WORKSPACE_USERDATA_DB_SCHEMA = {
     blockId: f.string().optional(),
     /** The blocks of a 'selection' run, so it can be run again. */
     blockIds: f.json<string[]>().optional(),
+    /**
+     * What the run is about, for run lists: the gist of its block when it
+     * starts, replaced by the agent's own name for it once it gives one.
+     */
+    title: f.string().optional(),
     /** 'running' | 'done' | 'cancelled' | 'error' */
     status: f.string(),
     startedAt: f.number(),
@@ -313,6 +324,14 @@ export const NotesGraph_WORKSPACE_USERDATA_DB_SCHEMA = {
      */
     remoteJobId: f.string().optional(),
     deviceKey: f.string().optional(),
+    /** 'on-device' | 'cloud' | 'remote' — where the run went. */
+    harness: f.string().optional(),
+    /** The model the run asked, as far as this tab knows it. */
+    model: f.string().optional(),
+    /** The folder the run worked in: the bound folder, or the device's. */
+    folder: f.string().optional(),
+    /** The start of what the run was given to read. */
+    input: f.string().optional(),
   },
 } as const satisfies DBSchemaBuilder;
 export type NotesGraphWorkspaceUserdataDbSchema =

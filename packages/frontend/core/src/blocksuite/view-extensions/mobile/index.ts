@@ -4,6 +4,7 @@ import {
 } from '@blocksuite/notesgraph/ext-loader';
 import { KeyboardToolbarExtension } from '@notesgraph/core/blocksuite/view-extensions/mobile/keyboard-toolbar-extension';
 import { MobileFeatureFlagControl } from '@notesgraph/core/blocksuite/view-extensions/mobile/mobile-feature-flag-control';
+import { VoiceTasksKeyboardToolbarExtension } from '@notesgraph/core/blocksuite/view-extensions/mobile/voice-tasks-toolbar';
 import { FrameworkProvider } from '@notesgraph/infra';
 import { z } from 'zod';
 
@@ -26,6 +27,7 @@ export class MobileViewExtension extends ViewExtensionProvider<MobileViewOptions
     const framework = options?.framework;
     if (framework) {
       context.register(KeyboardToolbarExtension(framework));
+      context.register(VoiceTasksKeyboardToolbarExtension(framework));
     }
 
     context.register(MobileFeatureFlagControl);

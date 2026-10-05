@@ -18,6 +18,7 @@ import {
   PageHeader,
   SuggestedParentBanner,
 } from '@notesgraph/core/mobile/components';
+import { VoiceTasksSheet } from '@notesgraph/core/mobile/components/voice-tasks';
 import { AIButtonService } from '@notesgraph/core/modules/ai-button';
 import { ServerService } from '@notesgraph/core/modules/cloud';
 import { DocService } from '@notesgraph/core/modules/doc';
@@ -273,6 +274,7 @@ const DetailPageImpl = ({
           </NotesGraphErrorBoundary>
         </div>
       </div>
+      {!readonly && <VoiceTasksSheet />}
     </FrameworkScope>
   );
 };
