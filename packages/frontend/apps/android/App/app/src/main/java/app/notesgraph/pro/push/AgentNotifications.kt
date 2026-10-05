@@ -9,6 +9,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
+import android.os.Bundle
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.RemoteInput
@@ -30,6 +31,7 @@ import app.notesgraph.pro.R
 object AgentNotifications {
     const val CHANNEL_ID = "agent-questions"
     private const val NOTIFICATION_ID = 1
+    private const val EXTRA_QUESTION = "app.notesgraph.pro.agent.QUESTION"
     /** How long "Sent" stays up before it clears itself. */
     private const val SENT_TIMEOUT_MS = 4_000L
 
@@ -79,6 +81,9 @@ object AgentNotifications {
                     .build()
             )
         if (error != null) builder.setSubText("Not sent: $error")
+        // Lets [pending] find what is still waiting; "Sent" replaces this
+        // notification without it.
+        builder.addExtras(Bundle().apply { putBundle(EXTRA_QUESTION, question.toBundle()) })
 
         if (question.isPermission) {
             builder.addAction(button(context, question, "Allow", AgentAnswerReceiver.ALLOW))
@@ -111,6 +116,13 @@ object AgentNotifications {
     fun cancel(context: Context, questionId: String) {
         NotificationManagerCompat.from(context).cancel(questionId, NOTIFICATION_ID)
     }
+
+    /** Questions still up in the shade waiting on an answer, oldest first. */
+    fun pending(context: Context): List<AgentQuestion> =
+        context.getSystemService(NotificationManager::class.java).activeNotifications
+            .filter { it.id == NOTIFICATION_ID && it.tag != null }
+            .sortedBy { it.postTime }
+            .mapNotNull { AgentQuestion.fromBundle(it.notification.extras.getBundle(EXTRA_QUESTION)) }
 
     private fun base(context: Context, question: AgentQuestion) =
         NotificationCompat.Builder(context, CHANNEL_ID)

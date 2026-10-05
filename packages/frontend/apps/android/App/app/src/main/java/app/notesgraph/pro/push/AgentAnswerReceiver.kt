@@ -56,32 +56,45 @@ class AgentAnswerReceiver : BroadcastReceiver() {
 
         private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
+        /** Why an answer did not go, and whether the question still waits for one. */
+        class Failure(val message: String, val stillWaiting: Boolean)
+
         /**
          * Send an answer and show how it went on the question's notification:
          * "Sent", or the question again with why it did not go. Shared with
-         * [AgentQuestionActivity]. Returns the error, if any.
+         * [AgentQuestionActivity], which says "Sent" itself and so passes
+         * [quiet] to just clear the notification. Returns the failure, if any.
          */
         suspend fun answer(
             context: Context,
             question: AgentQuestion,
             body: JSONObject,
             summary: String,
-        ): String? = try {
-            AgentApi.answer(question.server, question.workspaceId, question.jobId, question.questionId, body)
-            AgentNotifications.sent(context, question, "$summary - it carries on from here.")
-            null
-        } catch (e: AgentApi.HttpError) {
-            // Answered elsewhere, or the run ended: nothing left to decide here.
-            if (e.status == 400 || e.status == 404) {
-                AgentNotifications.sent(context, question, e.message ?: "No longer waiting.")
-            } else {
-                AgentNotifications.show(context, question, e.message)
+            quiet: Boolean = false,
+        ): Failure? {
+            fun done(message: String) {
+                if (quiet) AgentNotifications.cancel(context, question.questionId)
+                else AgentNotifications.sent(context, question, message)
             }
-            e.message
-        } catch (e: Exception) {
-            Timber.w(e, "[agent-push] answer failed")
-            AgentNotifications.show(context, question, "no connection")
-            e.message ?: "no connection"
+            return try {
+                AgentApi.answer(question.server, question.workspaceId, question.jobId, question.questionId, body)
+                done("$summary - it carries on from here.")
+                null
+            } catch (e: AgentApi.HttpError) {
+                val message = e.message ?: "HTTP ${e.status}"
+                // Answered elsewhere, or the run ended: nothing left to decide here.
+                if (e.status == 400 || e.status == 404) {
+                    done(e.message ?: "No longer waiting.")
+                    Failure(message, stillWaiting = false)
+                } else {
+                    AgentNotifications.show(context, question, e.message)
+                    Failure(message, stillWaiting = true)
+                }
+            } catch (e: Exception) {
+                Timber.w(e, "[agent-push] answer failed")
+                AgentNotifications.show(context, question, "no connection")
+                Failure(e.message ?: "no connection", stillWaiting = true)
+            }
         }
     }
 }
