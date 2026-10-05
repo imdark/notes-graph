@@ -199,12 +199,12 @@ const RunRowContent = ({
     <>
       <div className={styles.runText}>
         <span className={styles.runHead}>
-          <span className={styles.runName} title={run.title}>
+          <span
+            className={styles.runName}
+            title={run.title ? `${run.title} (${run.agentName})` : undefined}
+          >
             {run.title || run.agentName}
           </span>
-          {run.title ? (
-            <span className={styles.runWhen}>{run.agentName}</span>
-          ) : null}
           {onOpenDoc && run.docId ? (
             <>
               <span className={styles.runWhen}>on</span>
