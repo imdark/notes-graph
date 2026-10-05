@@ -2,6 +2,7 @@ import { CloseIcon, MicrophoneIcon } from '@blocksuite/icons/rc';
 import { Button, IconButton, Modal, toast } from '@notesgraph/component';
 import { EditorService } from '@notesgraph/core/modules/editor';
 import {
+  appendDictation,
   insertTasks,
   splitDictatedTasks,
   type SpeechToTextError,
@@ -15,8 +16,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as styles from './sheet.css';
 
 /**
- * Dictate a batch of tasks: each pause starts a new task (as does saying
- * "next task"), the transcript stays editable for fixing what the recognizer
+ * Dictate a batch of tasks: saying "next task" starts a new one (pausing
+ * doesn't), the transcript stays editable for fixing what the recognizer
  * misheard, and "Add" writes them all as to-do items where the caret was.
  *
  * Mounted once per open doc; opened through VoiceTasksService from the
@@ -58,9 +59,7 @@ export const VoiceTasksSheet = () => {
         onSegment: segment => {
           if (!current()) return;
           setPartial('');
-          const line = segment.trim();
-          if (!line) return;
-          setText(prev => (prev.trim() ? `${prev.trimEnd()}\n${line}` : line));
+          setText(prev => appendDictation(prev, segment));
         },
         onEnd: endError => {
           if (!current()) return;
@@ -97,7 +96,7 @@ export const VoiceTasksSheet = () => {
   // What's still being said counts too: tapping Add mid-sentence shouldn't
   // drop the sentence.
   const tasks = useMemo(
-    () => splitDictatedTasks([text, partial].join('\n')),
+    () => splitDictatedTasks(appendDictation(text, partial)),
     [text, partial]
   );
 
