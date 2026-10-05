@@ -65,6 +65,7 @@ import { DatabaseConfigExtension } from './config.js';
 import { EditorHostKey } from './context/host-context.js';
 import { DatabaseBlockDataSource } from './data-source.js';
 import { MirrorListDataSource } from './mirror-data-source.js';
+import { OrgTaskRowsDataSource } from './org-task-rows-data-source.js';
 import {
   parseQueryTokens,
   QueryListDataSource,
@@ -572,6 +573,8 @@ export class DatabaseBlockComponent extends CaptionedBlockComponent<DatabaseBloc
 
   handleMobileEditing() {
     if (!IS_MOBILE) return;
+    // Task views (query boards, mirrored lists) are editable on mobile.
+    if (this.dataSource.value instanceof OrgTaskRowsDataSource) return;
 
     let notifyClosed = true;
     const handler = () => {
