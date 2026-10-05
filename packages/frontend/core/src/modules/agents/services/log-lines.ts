@@ -39,3 +39,37 @@ export const parseLogLines = (log: string): LogLine[] => {
       : { number: i + 1, at: null, text: line };
   });
 };
+
+/**
+ * A tool call (`→ <tool>  <args>`) or its indented result (`  ← …` / `  ✗ …`),
+ * as both on-device runs (executor.ts) and device runs (`wf agent serve`)
+ * write them; a device's subagent lines are indented under a `↳`. A run's
+ * own `✗ failed …` line is not indented, so it stays out.
+ */
+const TOOL_CALL = /^\s*(?:↳ )?→ (\S+)/;
+const TOOL_RESULT = /^(?:\s*↳)?\s+[←✗] /;
+
+export type LogSegment =
+  | { kind: 'line'; line: LogLine }
+  /** A run of consecutive tool lines, shown folded by default. */
+  | { kind: 'tools'; lines: LogLine[]; tools: string[] };
+
+/** Fold each run of consecutive tool call/result lines into one segment. */
+export const groupLogLines = (lines: LogLine[]): LogSegment[] => {
+  const segments: LogSegment[] = [];
+  for (const line of lines) {
+    const call = TOOL_CALL.exec(line.text);
+    if (!call && !TOOL_RESULT.test(line.text)) {
+      segments.push({ kind: 'line', line });
+      continue;
+    }
+    let last = segments.at(-1);
+    if (last?.kind !== 'tools') {
+      last = { kind: 'tools', lines: [], tools: [] };
+      segments.push(last);
+    }
+    last.lines.push(line);
+    if (call) last.tools.push(call[1]);
+  }
+  return segments;
+};
