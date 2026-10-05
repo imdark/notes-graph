@@ -49,6 +49,7 @@ export const ListBlockSchema = defineBlockSchema({
       'notesgraph:paragraph',
       'notesgraph:edgeless-text',
       'notesgraph:callout',
+      'notesgraph:dashboard',
     ],
   },
   toModel: () => new ListBlockModel(),

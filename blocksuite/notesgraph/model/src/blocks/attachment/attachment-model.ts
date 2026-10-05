@@ -95,6 +95,7 @@ export const AttachmentBlockSchema = defineBlockSchema({
       'notesgraph:edgeless-text',
       'notesgraph:paragraph',
       'notesgraph:list',
+      'notesgraph:dashboard',
     ],
     children: ['@attachment-viewer'],
   },

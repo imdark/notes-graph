@@ -70,6 +70,7 @@ export const BookmarkBlockSchema = defineBlockSchema({
       'notesgraph:edgeless-text',
       'notesgraph:paragraph',
       'notesgraph:list',
+      'notesgraph:dashboard',
     ],
   },
   toModel: () => new BookmarkBlockModel(),
