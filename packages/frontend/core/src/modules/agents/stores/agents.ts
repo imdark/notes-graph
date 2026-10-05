@@ -24,6 +24,28 @@ export type AgentOutput = 'panel';
  */
 export type AgentHarness = 'on-device' | 'cloud' | 'remote';
 
+/**
+ * What a run of the agent is for, which decides how the app shows it.
+ *
+ * - `answer` replies to a question about the note. Nothing is written back,
+ *   so the reply is the result: the run card shows it and offers to copy it.
+ * - `worker` does work in the note — ticks off a task list, edits blocks,
+ *   files what it learns. The note is the result; whatever it says at the end
+ *   is a report on what it did, not something to copy.
+ */
+export type AgentKind = 'answer' | 'worker';
+
+/**
+ * An agent's kind, for rows saved before it was a setting: a Claude Code or
+ * Workflow agent on a device works in the notes; anything else answers.
+ */
+export const agentKind = (agent: Pick<Agent, 'kind' | 'harness' | 'model'>) =>
+  agent.kind ??
+  (agent.harness === 'remote' &&
+  (agent.model === 'claude-code' || agent.model === 'workflow')
+    ? 'worker'
+    : 'answer');
+
 export interface Agent {
   id: string;
   scope: AgentScope;
@@ -33,6 +55,8 @@ export interface Agent {
   /** Legacy: rows written before `icon` stored a bare emoji. Read-only. */
   emoji?: string;
   instructions: string;
+  /** Unset on rows saved before it existed; read it through `agentKind`. */
+  kind?: AgentKind;
   harness?: AgentHarness;
   model?: string;
   tools: string[];
@@ -58,6 +82,7 @@ interface AgentRowShape {
   icon?: IconData | null;
   emoji?: string | null;
   instructions: string;
+  kind?: string | null;
   harness?: string | null;
   model?: string | null;
   tools: string[];
@@ -98,6 +123,8 @@ export class AgentsStore extends Store {
       icon: row.icon ?? undefined,
       emoji: row.emoji ?? undefined,
       instructions: row.instructions,
+      kind:
+        row.kind === 'answer' || row.kind === 'worker' ? row.kind : undefined,
       harness:
         row.harness === 'on-device' ||
         row.harness === 'cloud' ||
@@ -127,6 +154,7 @@ export class AgentsStore extends Store {
       icon: draft.icon,
       emoji: draft.emoji,
       instructions: draft.instructions,
+      kind: draft.kind,
       harness: draft.harness,
       deviceKey: draft.deviceKey,
       model: draft.model,
@@ -198,6 +226,7 @@ export class AgentsStore extends Store {
       icon: agent.icon,
       emoji: agent.emoji,
       instructions: agent.instructions,
+      kind: agent.kind,
       harness: agent.harness,
       deviceKey: agent.deviceKey,
       model: agent.model,

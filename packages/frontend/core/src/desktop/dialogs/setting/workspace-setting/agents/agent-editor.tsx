@@ -18,6 +18,8 @@ import {
   agentIconData,
   type AgentDraft,
   type AgentHarness,
+  type AgentKind,
+  agentKind,
   type AgentScope,
   type AgentTargetKind,
   CLAUDE_CODE_MODEL,
@@ -127,6 +129,20 @@ const ENVIRONMENTS: {
   },
 ];
 
+/** What a run is for ("Type"), saved as the agent's `kind`. */
+const KINDS: { value: AgentKind; label: string; note: string }[] = [
+  {
+    value: 'answer',
+    label: 'Answers',
+    note: 'Replies in the panel; nothing is written to the note',
+  },
+  {
+    value: 'worker',
+    label: 'Works in the note',
+    note: 'Edits the note itself — works a task list, fills in blocks',
+  },
+];
+
 const TARGETS: { kind: AgentTargetKind; label: string }[] = [
   { kind: 'block', label: 'A single block' },
   { kind: 'selection', label: 'A selection' },
@@ -155,6 +171,9 @@ export const AgentEditor = ({
     agent ? agentIconData(agent) : undefined
   );
   const [instructions, setInstructions] = useState(agent?.instructions ?? '');
+  // Left unset until picked, so an older agent keeps following its harness
+  // (see `agentKind`) rather than being pinned by merely opening the editor.
+  const [kind, setKind] = useState<AgentKind | undefined>(agent?.kind);
   const [tools, setTools] = useState<string[]>(
     agent?.tools ?? READ_TOOLS.slice(0, 5).map(t => t.name)
   );
@@ -242,6 +261,7 @@ export const AgentEditor = ({
       name: name.trim(),
       icon,
       instructions: instructions.trim(),
+      kind,
       harness,
       // Only meaningful for a remote agent; don't leave a stale key behind
       // on one that has been switched back to running locally.
@@ -373,6 +393,33 @@ export const AgentEditor = ({
               />
               <span className={styles.hint}>
                 The block or note being run against is supplied automatically.
+              </span>
+            </div>
+
+            <div className={styles.field}>
+              <span className={styles.label}>Type</span>
+              {/* Until one is picked this shows what the harness implies, so
+                  switching harness moves it along. */}
+              <div className={styles.checkGrid} role="radiogroup">
+                {KINDS.map(({ value, label, note }) => {
+                  const picked = agentKind({ kind, harness, model }) === value;
+                  return (
+                    <label key={value} className={styles.check} title={note}>
+                      <Checkbox
+                        role="radio"
+                        aria-checked={picked}
+                        checked={picked}
+                        onChange={() => setKind(value)}
+                        data-testid={`agent-editor-kind-${value}`}
+                      />
+                      {label}
+                    </label>
+                  );
+                })}
+              </div>
+              <span className={styles.hint}>
+                An answer is shown in the run panel with a Copy button. A worker
+                changes the note itself, so its run shows what it did instead.
               </span>
             </div>
 

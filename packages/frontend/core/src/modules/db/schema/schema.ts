@@ -34,6 +34,12 @@ const agentTable = {
   /** The system prompt, authored by the reader. */
   instructions: f.string(),
   /**
+   * What a run is for: 'answer' (replies in the panel, nothing written back)
+   * or 'worker' (does work in the note). Unset on older rows, which infer it
+   * from the harness — see `agentKind`.
+   */
+  kind: f.string().optional(),
+  /**
    * Which runtime executes this agent: 'on-device' (WebLLM in the browser),
    * 'cloud' (the server's copilot), or 'remote' (a machine registered in the
    * device inventory). Unset follows the workspace's own AI backend setting,

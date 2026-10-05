@@ -1,6 +1,6 @@
 import { LiveData, Service } from '@notesgraph/infra';
 
-import type { Agent } from '../stores/agents';
+import { type Agent, type AgentKind, agentKind } from '../stores/agents';
 import type { RemoteQuestion } from './remote-runner';
 import { AgentAlreadyRunningError, type AgentExecutorService } from './executor';
 import { type AgentBlockRef, lastBlockTouched } from './focus-block';
@@ -23,6 +23,8 @@ export interface AgentRunSession {
   agentId: string;
   agentName: string;
   agentEmoji?: string;
+  /** Whether the output is an answer to keep or a report on work done. */
+  agentKind: AgentKind;
   target: AgentTarget;
   /** What was targeted, in words, for the panel header. */
   targetLabel: string;
@@ -201,6 +203,7 @@ export class AgentRunSessionService extends Service {
         agentId: agent.id,
         agentName: agent.name,
         agentEmoji: agent.emoji,
+        agentKind: agentKind(agent),
         target,
         targetLabel: targetLabel(target),
         output: '',
