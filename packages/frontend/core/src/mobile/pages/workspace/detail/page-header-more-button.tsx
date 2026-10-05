@@ -2,10 +2,12 @@ import {
   DeleteIcon,
   EdgelessIcon,
   InformationIcon,
+  MicrophoneIcon,
   MoreHorizontalIcon,
   PageIcon,
   TocIcon,
 } from '@blocksuite/icons/rc';
+import { TextSelection } from '@blocksuite/notesgraph/std';
 import {
   IconButton,
   notify,
@@ -29,6 +31,7 @@ import { MobileTocMenu } from '@notesgraph/core/mobile/components/toc-menu';
 import { DocService } from '@notesgraph/core/modules/doc';
 import { DocModeRegistryService } from '@notesgraph/core/modules/doc-mode-registry';
 import { EditorService } from '@notesgraph/core/modules/editor';
+import { VoiceTasksService } from '@notesgraph/core/modules/voice-tasks';
 import { ViewService } from '@notesgraph/core/modules/workbench/services/view';
 import { preventDefault } from '@notesgraph/core/utils';
 import { useI18n } from '@notesgraph/i18n';
@@ -96,6 +99,18 @@ export const PageHeaderMenuButton = () => {
     handleMenuOpenChange(false);
   }, [handleMenuOpenChange, location.pathname]);
 
+  const voiceTasks = useService(VoiceTasksService);
+  const mode = useLiveData(editorService.editor.mode$);
+  const handleDictateTasks = useCallback(() => {
+    if (!docId) return;
+    // The menu took focus from the editor, but the caret's selection
+    // survives it: tasks go where the user was writing, or else at the end.
+    const anchorBlockId =
+      editorContainer?.host?.std.selection.find(TextSelection)?.from.blockId ??
+      null;
+    voiceTasks.open({ docId, anchorBlockId });
+  }, [docId, editorContainer, voiceTasks]);
+
   const handleToggleFavorite = useCallback(() => {
     track.$.header.docOptions.toggleFavorite();
     toggleFavorite();
@@ -131,6 +146,15 @@ export const PageHeaderMenuButton = () => {
     <>
       <EditorModeSwitch />
       <JournalTodayActivityMenuItem suffix={<MenuSeparator />} />
+      {voiceTasks.supported && canEdit && mode === 'page' && (
+        <MobileMenuItem
+          prefixIcon={<MicrophoneIcon />}
+          data-testid="editor-option-menu-dictate-tasks"
+          onSelect={handleDictateTasks}
+        >
+          {t['com.notesgraph.mobile.voice-tasks.title']()}
+        </MobileMenuItem>
+      )}
       {docModes.length > 1 && (
         <MobileMenuItem
           prefixIcon={primaryMode === 'page' ? <EdgelessIcon /> : <PageIcon />}
