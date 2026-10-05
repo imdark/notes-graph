@@ -7,6 +7,7 @@ import { z } from 'zod';
 
 import { agentAssignWidgetExtensions } from './assign-widget';
 import { agentRunsWidgetExtensions } from './block-runs-widget';
+import { agentsFrameworkExtension } from './framework';
 import { AgentsSlashMenuConfigExtension } from './slash-menu';
 
 const optionsSchema = z.object({
@@ -35,8 +36,10 @@ export class AgentsViewExtension extends ViewExtensionProvider<AgentsViewOptions
     if (!framework) return;
     context.register(AgentsSlashMenuConfigExtension(framework));
     if (context.scope === 'page' || context.scope === 'edgeless') {
-      context.register(agentRunsWidgetExtensions(framework));
-      context.register(agentAssignWidgetExtensions(framework));
+      // One binding for both widgets: a second would stop the editor loading.
+      context.register(agentsFrameworkExtension(framework));
+      context.register(agentRunsWidgetExtensions());
+      context.register(agentAssignWidgetExtensions());
     }
   }
 }

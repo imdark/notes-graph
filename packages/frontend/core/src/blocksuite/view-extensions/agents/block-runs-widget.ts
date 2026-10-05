@@ -1,4 +1,3 @@
-import { type Container, createIdentifier } from '@blocksuite/global/di';
 import {
   WidgetComponent,
   WidgetViewExtension,
@@ -16,11 +15,7 @@ import {
   runsForBlock,
 } from '../../../modules/agents';
 import { WorkspaceDialogService } from '../../../modules/dialogs';
-
-/** Bridges the core framework into the editor so the widget can reach runs. */
-export const AgentsFrameworkIdentifier = createIdentifier<FrameworkProvider>(
-  'NotesGraphAgentsFramework'
-);
+import { AgentsFrameworkIdentifier } from './framework';
 
 const WIDGET_TAG = 'notesgraph-block-agent-runs-widget';
 
@@ -144,18 +139,12 @@ if (!customElements.get(WIDGET_TAG)) {
 }
 
 /**
- * Editor extensions for the runs chip: a DI binding that exposes the
- * framework, plus the widget on paragraph and list blocks.
+ * Editor extensions for the runs chip: the widget on paragraph and list
+ * blocks. It reaches the framework through AgentsFrameworkIdentifier, which
+ * AgentsViewExtension binds.
  */
-export function agentRunsWidgetExtensions(
-  framework: FrameworkProvider
-): ExtensionType[] {
+export function agentRunsWidgetExtensions(): ExtensionType[] {
   return [
-    {
-      setup: (di: Container) => {
-        di.addImpl(AgentsFrameworkIdentifier, () => framework);
-      },
-    },
     WidgetViewExtension(
       'notesgraph:paragraph',
       WIDGET_TAG,
