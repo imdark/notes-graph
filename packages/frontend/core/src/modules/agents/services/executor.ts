@@ -9,9 +9,10 @@ import {
 import type { AgentRunLogsStore } from '../stores/agent-run-logs';
 import type { AgentRunsStore } from '../stores/agent-runs';
 import type { ChatModel, CloudAgentRunnerService } from './cloud-runner';
-import type { AgentContextService } from './context';
+import type { AgentContext, AgentContextService } from './context';
 import {
   type AgentFileToolsService,
+  type AgentToolSpec,
   FILE_TOOL_NAMES,
   FILE_TOOLS,
 } from './file-tools';
@@ -42,6 +43,8 @@ export type AgentEvent =
    * changes; an empty list means it is no longer waiting.
    */
   | { type: 'waiting'; jobId: string; questions: RemoteQuestion[] }
+  /** The agent named its run; run lists show this rather than the block's text. */
+  | { type: 'title'; title: string }
   | { type: 'tool'; name: string; args: unknown }
   | { type: 'text'; delta: string }
   | { type: 'done'; output: string }
@@ -96,6 +99,17 @@ const onDeviceModel = (agent: Agent) =>
 
 const clip = (text: string, limit: number) =>
   text.length > limit ? `${text.slice(0, limit - 1)}…` : text;
+
+/**
+ * Offered alongside an agent's own tools in the tool loop. It changes no
+ * file, so it is handled here rather than by the file tools.
+ */
+const SET_TITLE_TOOL: AgentToolSpec = {
+  name: 'set_title',
+  desc: 'Name this run in a few words once you know what it is doing; shown in the run list',
+  args: { title: 'short title, e.g. "Draft reply to Sam about the lease"' },
+  mutates: false,
+};
 
 export class AgentAlreadyRunningError extends Error {
   constructor() {
@@ -170,7 +184,10 @@ export class AgentExecutorService extends Service implements AgentExecutor {
     toolNames: string[],
     signal: AbortSignal
   ): AsyncIterable<AgentEvent> {
-    const specs = FILE_TOOLS.filter(spec => toolNames.includes(spec.name));
+    const specs = [
+      ...FILE_TOOLS.filter(spec => toolNames.includes(spec.name)),
+      SET_TITLE_TOOL,
+    ];
     const messages: { role: 'system' | 'user' | 'assistant'; content: string }[] =
       [
         {
@@ -225,10 +242,18 @@ export class AgentExecutorService extends Service implements AgentExecutor {
       yield logLine(`→ ${call.name}  ${clip(JSON.stringify(call.args), 160)}`);
 
       let result: string;
-      try {
-        result = await this.fileTools.call(call.name, call.args);
-      } catch (err) {
-        result = `Error: ${err instanceof Error ? err.message : String(err)}`;
+      if (call.name === SET_TITLE_TOOL.name) {
+        const title = String(
+          (call.args as { title?: unknown } | null)?.title ?? ''
+        ).trim();
+        if (title) yield { type: 'title', title };
+        result = title ? 'Title set.' : 'Error: title is required';
+      } else {
+        try {
+          result = await this.fileTools.call(call.name, call.args);
+        } catch (err) {
+          result = `Error: ${err instanceof Error ? err.message : String(err)}`;
+        }
       }
       yield logLine(
         `  ${result.startsWith('Error:') ? '✗' : '←'} ${clip(result.replace(/\s+/g, ' '), LOG_TOOL_RESULT_CHARS)}`
@@ -265,6 +290,7 @@ export class AgentExecutorService extends Service implements AgentExecutor {
    */
   settleFromJob(runId: string, job: RemoteJob): void {
     if (this.liveRuns.has(runId)) return;
+    if (job.title) this.runsStore.setTitle(runId, job.title);
     const endedAt = job.finishedAt ? job.finishedAt * 1000 : Date.now();
     const steps = job.steps ?? 0;
     switch (job.status) {
@@ -402,19 +428,22 @@ export class AgentExecutorService extends Service implements AgentExecutor {
     let log = '';
     const record = (event: AgentEvent): AgentEvent => {
       if (event.type === 'log' && harness !== 'remote') log += event.text;
+      if (event.type === 'title') this.runsStore.setTitle(runId, event.title);
       return event;
     };
     yield { type: 'started', runId };
     try {
       const context = await this.contextService.build(target);
+      this.runsStore.setTitle(runId, context.title);
 
       if (harness === 'remote') {
         for await (const event of this.runRemote(
           runId,
           agent,
-          context.text,
+          context,
           controller.signal
         )) {
+          record(event);
           if (event.type === 'step') steps = event.index + 1;
           if (event.type === 'text') output += event.delta;
           if (event.type === 'done') output = event.output;
@@ -537,7 +566,7 @@ export class AgentExecutorService extends Service implements AgentExecutor {
   private async *runRemote(
     runId: string,
     agent: Agent,
-    context: string,
+    context: AgentContext,
     signal: AbortSignal
   ): AsyncIterable<AgentEvent> {
     const workspaceId = this.workspaceId;
@@ -555,7 +584,8 @@ export class AgentExecutorService extends Service implements AgentExecutor {
       agentId: agent.id,
       agentName: agent.name,
       instructions: agent.instructions,
-      context,
+      context: context.text,
+      title: context.title,
       model: agent.model,
       tools: agent.tools,
       maxSteps: agent.maxSteps,
@@ -564,12 +594,17 @@ export class AgentExecutorService extends Service implements AgentExecutor {
 
     yield { type: 'text', delta: `Queued on ${agent.deviceKey}…\n` };
 
+    let title = job.title ?? context.title;
     for await (const { job: update, logDelta } of this.remoteRunner.watch(
       workspaceId,
       job.id,
       signal
     )) {
       if (logDelta) yield { type: 'log', text: logDelta };
+      if (update.title && update.title !== title) {
+        title = update.title;
+        yield { type: 'title', title };
+      }
       yield { type: 'waiting', jobId: job.id, questions: openQuestions(update) };
       if (update.status === 'running') {
         yield { type: 'step', index: Math.max(0, update.steps - 1) };

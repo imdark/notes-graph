@@ -14,6 +14,8 @@ export interface AgentRun {
   docId: string;
   blockId?: string;
   blockIds?: string[];
+  /** Absent on runs recorded before runs had titles; show the agent's name. */
+  title?: string;
   status: AgentRunStatus;
   startedAt: number;
   durationMs?: number;
@@ -34,6 +36,9 @@ const MAX_RUNS = 60;
 
 /** How much of a result to keep for the run list. */
 const SUMMARY_CHARS = 200;
+
+/** Longest run title kept, matching the server's cap on a job's. */
+const TITLE_CHARS = 200;
 
 /**
  * Run history, in this user's userdata DB rather than the shared workspace one:
@@ -84,6 +89,14 @@ export class AgentRunsStore extends Store {
 
   watchRun(runId: string): LiveData<AgentRun | undefined> {
     return this.watchRuns().map(runs => runs.find(run => run.id === runId));
+  }
+
+  /** Name the run: from its target as it starts, then as the agent calls it. */
+  setTitle(runId: string, title: string): void {
+    const clean = title.replace(/\s+/g, ' ').trim().slice(0, TITLE_CHARS);
+    const row = this.table.get(runId);
+    if (!clean || !row || row.title === clean) return;
+    this.table.update(runId, { title: clean });
   }
 
   /** Record which device job a remote run became, so its log can be found. */

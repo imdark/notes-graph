@@ -27,6 +27,7 @@ export interface CreateInventoryJobInput {
   targetKind?: string | null;
   docId?: string | null;
   blockId?: string | null;
+  title?: string | null;
   createdBy?: string | null;
 }
 
@@ -82,6 +83,7 @@ export class InventoryJobModel extends BaseModel {
         targetKind: input.targetKind ?? null,
         docId: input.docId ?? null,
         blockId: input.blockId ?? null,
+        title: input.title ?? null,
         createdBy: input.createdBy ?? null,
       },
     });
@@ -199,6 +201,23 @@ export class InventoryJobModel extends BaseModel {
           : new Date(Date.now() + (input.leaseSeconds ?? 300) * 1000),
       },
     });
+  }
+
+  /**
+   * Rename a job. Separate from `report`, which renews the lease: the agent
+   * names its run from inside the job, not as the runner, and must not
+   * shorten the lease the runner holds.
+   */
+  async setTitle(
+    workspaceId: string,
+    id: string,
+    title: string
+  ): Promise<InventoryJob | null> {
+    const job = await this.get(workspaceId, id);
+    if (!job) {
+      return null;
+    }
+    return this.db.inventoryJob.update({ where: { id }, data: { title } });
   }
 
   /**

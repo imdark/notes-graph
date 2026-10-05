@@ -235,7 +235,11 @@ export const AgentRunLogDialog = ({
       open={!!runId}
       onOpenChange={open => !open && onClose()}
       width={720}
-      title={run ? `${run.agentName} · ${statusLabel[run.status]}` : 'Run log'}
+      title={
+        run
+          ? `${run.title || run.agentName} · ${statusLabel[run.status]}`
+          : 'Run log'
+      }
       description={meta}
     >
       <div className={styles.logDialogBody} data-testid="agent-run-log">

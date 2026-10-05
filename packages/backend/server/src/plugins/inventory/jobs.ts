@@ -26,6 +26,8 @@ export interface JobDto {
   targetKind: string | null;
   docId: string | null;
   blockId: string | null;
+  /** What the run is about; null when neither the starter nor the agent named it. */
+  title: string | null;
   status: string;
   result: string | null;
   error: string | null;
@@ -94,6 +96,7 @@ export function toJobDto(job: InventoryJob, options: JobDtoOptions = {}): JobDto
     targetKind: job.targetKind,
     docId: job.docId,
     blockId: job.blockId,
+    title: job.title,
     status: job.status,
     result: job.result,
     error: job.error,
@@ -145,6 +148,16 @@ function parseOptions(value: unknown): string[] {
   return [...new Set(options)].slice(0, MAX_OPTIONS);
 }
 const MAX_CONTEXT = 200_000;
+const MAX_TITLE = 200;
+
+/** A run title on one line, or null when there is nothing left of it. */
+function parseTitle(value: unknown): string | null {
+  const title = String(value ?? '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, MAX_TITLE);
+  return title || null;
+}
 
 /**
  * Dispatching agent work to registered devices.
@@ -214,6 +227,7 @@ export class InventoryJobService {
       targetKind: body.targetKind ? String(body.targetKind) : null,
       docId: body.docId ? String(body.docId) : null,
       blockId: body.blockId ? String(body.blockId) : null,
+      title: parseTitle(body.title),
       createdBy: userId,
     });
 
@@ -274,6 +288,20 @@ export class InventoryJobService {
       tmuxSession: body.tmuxSession ? String(body.tmuxSession).slice(0, 200) : undefined,
       leaseSeconds: body.leaseSeconds === undefined ? undefined : Number(body.leaseSeconds),
     });
+    return job ? toJobDto(job) : null;
+  }
+
+  /** The agent names its run once it knows what it is doing. */
+  async setTitle(
+    workspaceId: string,
+    id: string,
+    body: Record<string, unknown>
+  ): Promise<JobDto | null> {
+    const title = parseTitle(body.title);
+    if (!title) {
+      throw new BadRequest('title is required');
+    }
+    const job = await this.models.inventoryJob.setTitle(workspaceId, id, title);
     return job ? toJobDto(job) : null;
   }
 

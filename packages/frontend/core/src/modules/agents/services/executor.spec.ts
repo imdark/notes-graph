@@ -43,10 +43,12 @@ const job = (over: Partial<RemoteJob>): RemoteJob => ({
 /** An executor over fake runs and jobs, recording what it settles. */
 const setup = (runs: AgentRun[], jobs: Record<string, RemoteJob>) => {
   const finished: { runId: string; outcome: any; endedAt?: number }[] = [];
+  const titles: { runId: string; title: string }[] = [];
   const runsStore = {
     runningRuns: () => runs.filter(run => run.status === 'running'),
     finish: (runId: string, outcome: any, endedAt?: number) =>
       finished.push({ runId, outcome, endedAt }),
+    setTitle: (runId: string, title: string) => titles.push({ runId, title }),
   };
   const remoteRunner = {
     get: async (_workspaceId: string, jobId: string) => {
@@ -76,7 +78,7 @@ const setup = (runs: AgentRun[], jobs: Record<string, RemoteJob>) => {
       WorkspaceService,
     ]);
   const executor = framework.provider().get(AgentExecutorService);
-  return { executor, finished };
+  return { executor, finished, titles };
 };
 
 describe('AgentExecutorService.reconcileRuns', () => {
@@ -100,6 +102,14 @@ describe('AgentExecutorService.reconcileRuns', () => {
         endedAt: startedAt + 2 * MINUTE,
       },
     ]);
+  });
+
+  test('a device run takes the title its agent gave it', async () => {
+    const { executor, titles } = setup([row({ remoteJobId: 'j1' })], {
+      j1: job({ status: 'done', title: 'Pick a show for Cosmo' }),
+    });
+    await executor.reconcileRuns();
+    expect(titles).toEqual([{ runId: 'r1', title: 'Pick a show for Cosmo' }]);
   });
 
   test('a device run still going, or unreachable, is left alone', async () => {
