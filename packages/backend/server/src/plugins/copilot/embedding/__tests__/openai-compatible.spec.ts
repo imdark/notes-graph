@@ -29,7 +29,7 @@ test('embeds in batches against {url}/embeddings, in input order', async t => {
   const input = Array.from({ length: 20 }, (_, i) => `chunk ${i}`);
   const result = await client.getEmbeddings(input);
 
-  t.is(requests.length, 2, '16 per request, so two requests');
+  t.is(requests.length, 3, '8 per request: 8, 8 and 4');
   t.is(requests[0].url, 'http://ollama:11434/v1/embeddings');
   t.deepEqual(requests[0].body.model, 'qwen3-embedding:0.6b');
   t.is(result.length, 20);
@@ -53,4 +53,28 @@ test('an error from the endpoint carries its status and body', async t => {
   await t.throwsAsync(client.getEmbeddings(['a']), {
     message: /HTTP 404: model not found/,
   });
+});
+
+test('never has more than two requests in flight, however many jobs ask', async t => {
+  let inFlight = 0;
+  let peak = 0;
+  const fetchImpl = (async (_url: string, init: RequestInit) => {
+    inFlight += 1;
+    peak = Math.max(peak, inFlight);
+    await new Promise(resolve => setTimeout(resolve, 10));
+    inFlight -= 1;
+    const body = JSON.parse(String(init.body));
+    return Response.json({
+      data: (body.input as string[]).map((_, index) => ({
+        index,
+        embedding: new Array(EMBEDDING_DIMENSIONS).fill(0),
+      })),
+    });
+  }) as unknown as typeof fetch;
+  const client = new OpenAICompatibleEmbeddingClient('http://x/v1', 'm', fetchImpl);
+  // Ten embedding jobs at once, as the copilot queue runs them.
+  await Promise.all(
+    Array.from({ length: 10 }, () => client.getEmbeddings(['a', 'b', 'c']))
+  );
+  t.is(peak, 2);
 });
