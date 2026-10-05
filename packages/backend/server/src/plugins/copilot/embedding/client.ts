@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto';
 
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 
+import { Config } from '../../../base';
 import { CopilotFailedToGenerateEmbedding } from '../../../base/error/errors.gen';
 import {
   ChunkSimilarity,
@@ -201,17 +202,104 @@ class ProductionEmbeddingClient extends EmbeddingClient {
   }
 }
 
+/** Inputs per request; keeps one request small for a CPU-served model. */
+const OPENAI_COMPATIBLE_BATCH = 16;
+/** A CPU model takes a while on a big batch; never hang a job for ever. */
+const OPENAI_COMPATIBLE_TIMEOUT_MS = 120_000;
+
+/**
+ * Embeddings from an OpenAI-compatible endpoint (`POST {url}/embeddings`),
+ * e.g. an open model served by Ollama next to the server. Reranking falls
+ * back to vector distance (the base class), which needs no model at all.
+ */
+export class OpenAICompatibleEmbeddingClient extends EmbeddingClient {
+  constructor(
+    private readonly url: string,
+    private readonly model: string,
+    private readonly fetchImpl: typeof fetch = fetch
+  ) {
+    super();
+  }
+
+  private fail(message: string): never {
+    throw new CopilotFailedToGenerateEmbedding({
+      provider: `${this.model} at ${this.url}`,
+      message,
+    });
+  }
+
+  private async embedBatch(input: string[], signal?: AbortSignal) {
+    const response = await this.fetchImpl(
+      `${this.url.replace(/\/$/, '')}/embeddings`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: this.model, input }),
+        signal: signal
+          ? AbortSignal.any([signal, AbortSignal.timeout(OPENAI_COMPATIBLE_TIMEOUT_MS)])
+          : AbortSignal.timeout(OPENAI_COMPATIBLE_TIMEOUT_MS),
+      }
+    );
+    if (!response.ok) {
+      this.fail(`HTTP ${response.status}: ${(await response.text()).slice(0, 200)}`);
+    }
+    const body = (await response.json()) as {
+      data?: { index: number; embedding: number[] }[];
+    };
+    const data = (body.data ?? []).toSorted((a, b) => a.index - b.index);
+    if (data.length !== input.length) {
+      this.fail(`Expected ${input.length} embeddings, got ${data.length}`);
+    }
+    for (const item of data) {
+      if (item.embedding?.length !== EMBEDDING_DIMENSIONS) {
+        this.fail(
+          `Expected ${EMBEDDING_DIMENSIONS} dimensions, got ${item.embedding?.length}; pick a model that outputs ${EMBEDDING_DIMENSIONS}`
+        );
+      }
+    }
+    return data.map(item => item.embedding);
+  }
+
+  override async configured(): Promise<boolean> {
+    return !!this.url && !!this.model;
+  }
+
+  async getEmbeddings(
+    input: string[],
+    options?: EmbeddingCallOptionsInput
+  ): Promise<Embedding[]> {
+    const { signal } = normalizeEmbeddingCallOptions(options);
+    const vectors: number[][] = [];
+    for (let i = 0; i < input.length; i += OPENAI_COMPATIBLE_BATCH) {
+      vectors.push(
+        ...(await this.embedBatch(input.slice(i, i + OPENAI_COMPATIBLE_BATCH), signal))
+      );
+    }
+    return vectors.map((embedding, index) => ({
+      index,
+      embedding,
+      content: input[index],
+    }));
+  }
+}
+
 @Injectable()
 export class CopilotEmbeddingClientService {
   private client: EmbeddingClient | undefined;
 
   constructor(
     private readonly taskPolicy: TaskPolicy,
-    private readonly runtime: CapabilityRuntime
+    private readonly runtime: CapabilityRuntime,
+    @Optional() private readonly config?: Config
   ) {}
 
   async refresh() {
-    const client = new ProductionEmbeddingClient(this.taskPolicy, this.runtime);
+    // An open model configured to serve embeddings wins over the hosted
+    // default, which needs a provider key this deployment may not have.
+    const { url = '', model = '' } = this.config?.copilot.embedding ?? {};
+    const client: EmbeddingClient = url
+      ? new OpenAICompatibleEmbeddingClient(url, model)
+      : new ProductionEmbeddingClient(this.taskPolicy, this.runtime);
     await client.configured();
     this.client = client;
     return this.client;
