@@ -2,6 +2,10 @@ import { NotesGraphSchemas } from '@blocksuite/notesgraph/schemas';
 import { Schema } from '@blocksuite/notesgraph/store';
 import { AIChatBlockSchema } from '@notesgraph/core/blocksuite/ai/blocks/ai-chat-block/model';
 import { TranscriptionBlockSchema } from '@notesgraph/core/blocksuite/ai/blocks/transcription-block/model';
+import {
+  DashboardBlockSchema,
+  WidgetBlockSchema,
+} from '@notesgraph/core/blocksuite/dashboard/model';
 
 let _schema: Schema | null = null;
 export function getNotesGraphWorkspaceSchema() {
@@ -12,6 +16,8 @@ export function getNotesGraphWorkspaceSchema() {
       ...NotesGraphSchemas,
       AIChatBlockSchema,
       TranscriptionBlockSchema,
+      DashboardBlockSchema,
+      WidgetBlockSchema,
     ]);
   }
 

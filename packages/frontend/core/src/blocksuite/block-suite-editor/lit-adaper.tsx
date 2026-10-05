@@ -175,6 +175,7 @@ export const usePatchSpecs = (mode: DocMode, shared?: boolean) => {
       .iconPicker(framework)
       .schedule(framework)
       .agents(framework)
+      .dashboard(framework)
       .comment(enableComment, framework).value;
 
     if (BUILD_CONFIG.isMobileEdition) {

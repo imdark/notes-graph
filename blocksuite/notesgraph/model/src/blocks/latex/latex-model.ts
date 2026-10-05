@@ -33,6 +33,7 @@ export const LatexBlockSchema = defineBlockSchema({
       'notesgraph:edgeless-text',
       'notesgraph:paragraph',
       'notesgraph:list',
+      'notesgraph:dashboard',
     ],
   },
   toModel: () => {

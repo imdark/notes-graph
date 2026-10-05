@@ -35,6 +35,7 @@ export const CalloutBlockSchema = defineBlockSchema({
       'notesgraph:list',
       'notesgraph:edgeless-text',
       'notesgraph:transcription',
+      'notesgraph:dashboard',
     ],
     children: ['notesgraph:paragraph', 'notesgraph:list'],
   },

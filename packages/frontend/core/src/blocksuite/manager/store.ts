@@ -3,6 +3,7 @@ import { getInternalStoreExtensions } from '@blocksuite/notesgraph/extensions/st
 import { AIStoreExtension } from '@notesgraph/core/blocksuite/store-extensions/ai';
 import type { FeatureFlagService } from '@notesgraph/core/modules/feature-flag';
 
+import { DashboardStoreExtension } from '../store-extensions/dashboard';
 import { FeatureFlagStoreExtension } from '../store-extensions/feature-flag';
 import { LinkCardStoreExtension } from '../store-extensions/link-card';
 
@@ -29,6 +30,7 @@ class StoreProvider {
     this._manager = new StoreExtensionManager([
       ...getInternalStoreExtensions(),
       AIStoreExtension,
+      DashboardStoreExtension,
       FeatureFlagStoreExtension,
       LinkCardStoreExtension,
     ]);
