@@ -72,20 +72,31 @@ const fakeExecutor = () => {
 
 /** Records what was claimed and handed back, without touching a doc. */
 const fakeClaim = () => {
-  const calls: { op: 'claim' | 'release'; target: AgentTarget }[] = [];
+  const calls: { op: 'claim' | 'start' | 'release'; target: AgentTarget }[] =
+    [];
   const claimedAgain: (() => boolean)[] = [];
+  const started: Promise<string[]>[] = [];
   const claim = {
     markQueued: async (target: AgentTarget) => {
       calls.push({ op: 'claim', target });
     },
-    release: async (target: AgentTarget, again: () => boolean) => {
+    markStarted: async (target: AgentTarget) => {
+      calls.push({ op: 'start', target });
+      return target.kind === 'block' ? [target.blockId] : [];
+    },
+    release: async (
+      target: AgentTarget,
+      again: () => boolean,
+      moved: Promise<string[]> = Promise.resolve([])
+    ) => {
       calls.push({ op: 'release', target });
       claimedAgain.push(again);
+      started.push(moved);
     },
     titleOf: async (target: AgentTarget) =>
       target.kind === 'block' ? `Task ${target.blockId}` : null,
   };
-  return { calls, claimedAgain, claim };
+  return { calls, claimedAgain, started, claim };
 };
 
 const tick = () => new Promise(resolve => setTimeout(resolve, 0));
@@ -333,6 +344,45 @@ describe('AgentRunSessionService', () => {
     expect(
       calls.filter(c => c.op === 'release').map(c => c.target)
     ).toEqual(expect.arrayContaining([block('b1'), block('b2')]));
+  });
+
+  test('a queued task goes in progress once the agent picks the run up', async () => {
+    let pickUp!: () => void;
+    let finish!: () => void;
+    const executor = {
+      harnessFor: (a: Agent) => a.harness ?? 'on-device',
+      async *run(): AsyncIterable<AgentEvent> {
+        yield { type: 'started', runId: 'run-1' };
+        // A device run waits for the device to take its job.
+        await new Promise<void>(resolve => (pickUp = resolve));
+        yield { type: 'step', index: 0 };
+        yield { type: 'step', index: 1 };
+        await new Promise<void>(resolve => (finish = resolve));
+      },
+    };
+    const { calls, started, claim } = fakeClaim();
+    const framework = new Framework();
+    framework.service(AgentExecutorService, executor as any);
+    framework.service(AgentTaskClaimService, claim as any);
+    framework.service(AgentRunSessionService, [
+      AgentExecutorService,
+      AgentTaskClaimService,
+    ]);
+    const sessions = framework.provider().get(AgentRunSessionService);
+
+    void sessions.start(remote, block('b1'));
+    await tick();
+    expect(calls.map(c => c.op)).toEqual(['claim']);
+
+    pickUp();
+    await tick();
+    // Once, however many steps follow.
+    expect(calls.map(c => c.op)).toEqual(['claim', 'start']);
+
+    finish();
+    await tick();
+    expect(calls.at(-1)).toEqual({ op: 'release', target: block('b1') });
+    expect(await started.at(-1)).toEqual(['b1']);
   });
 
   test('a run that ends hands back its task unless asked for again', async () => {

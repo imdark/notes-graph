@@ -1,7 +1,12 @@
 import type { Store } from '@blocksuite/notesgraph/store';
 import { describe, expect, test } from 'vitest';
 
-import { isOpenTask, markTasksQueued, releaseQueuedTasks } from './task-claim';
+import {
+  isOpenTask,
+  markTasksQueued,
+  markTasksStarted,
+  releaseQueuedTasks,
+} from './task-claim';
 
 type Op = { insert: string; attributes?: { orgStatus?: string } };
 
@@ -140,5 +145,52 @@ describe('releaseQueuedTasks', () => {
 
     expect(status('waiting')).toBe('[ ]');
     expect(status('taken')).toBe('[X]');
+  });
+
+  test('hands back a task it started, not one the agent started', () => {
+    const chip = (orgStatus: string) => ({
+      ops: [{ insert: ' ', attributes: { orgStatus } }, { insert: ' a' }],
+    });
+    const { store, status } = storeOf({
+      ours: chip('[-]'),
+      theirs: chip('[-]'),
+      finished: chip('[X]'),
+    });
+
+    releaseQueuedTasks(store, ['ours', 'theirs', 'finished'], [
+      'ours',
+      'finished',
+    ]);
+
+    expect(status('ours')).toBe('[ ]');
+    expect(status('theirs')).toBe('[-]');
+    expect(status('finished')).toBe('[X]');
+  });
+});
+
+describe('markTasksStarted', () => {
+  test('moves a queued task to in progress, leaves the rest alone', () => {
+    const { store, status } = storeOf({
+      queued: {
+        ops: [
+          { insert: ' ', attributes: { orgStatus: 'QUEUED' } },
+          { insert: ' a' },
+        ],
+      },
+      done: {
+        ops: [
+          { insert: ' ', attributes: { orgStatus: '[X]' } },
+          { insert: ' b' },
+        ],
+      },
+      box: { ops: [{ insert: 'c' }], props: { type: 'todo', checked: false } },
+    });
+
+    expect(markTasksStarted(store, ['queued', 'done', 'box', 'gone'])).toEqual(
+      ['queued']
+    );
+    expect(status('queued')).toBe('[-]');
+    expect(status('done')).toBe('[X]');
+    expect(status('box')).toBeUndefined();
   });
 });
