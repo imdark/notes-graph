@@ -22,12 +22,24 @@ const MAX_DOC_CHARS = 12_000;
 
 const HASHTAG_RE = /#([\p{L}\p{N}_-]+)(?::([\p{L}\p{N}._-]+))?/gu;
 
+/** Org planning stamps and `@agent` claims: bookkeeping, not what a task says. */
+const PLANNING_RE =
+  /\b(?:SCHEDULED|DEADLINE|STARTED|CLOSED):\s*[<[][^>\]]*[>\]]|(?:^|\s)@[\w.-]+/g;
+
+/** Longest run title taken from a block; the agent may name it better later. */
+const TITLE_CHARS = 80;
+
 export interface AgentContext {
   /** The prose handed to the model. */
   text: string;
   /** Human-readable description of what was targeted, for the run record. */
   label: string;
+  /** What the run starts out called in run lists: the gist of its target. */
+  title: string;
 }
+
+const clipTitle = (text: string) =>
+  text.length > TITLE_CHARS ? `${text.slice(0, TITLE_CHARS - 1)}…` : text;
 
 /**
  * Turns an {@link AgentTarget} into the text an agent reads.
@@ -54,6 +66,7 @@ export class AgentContextService extends Service {
         const clipped = markdown.length > MAX_DOC_CHARS;
         return {
           label: `note "${title}"`,
+          title: clipTitle(title),
           text: [
             `# Note: ${title}`,
             '',
@@ -76,13 +89,34 @@ export class AgentContextService extends Service {
           ? `a block in "${title}"`
           : `${blockIds.length} blocks in "${title}"`;
 
+      const first = blockIds
+        .map(id => this.blockTitle(store, id))
+        .find((text): text is string => !!text);
+      const more = blockIds.length > 1 ? ` (+${blockIds.length - 1})` : '';
+
       return {
         label,
+        title: first ? `${clipTitle(first)}${more}` : clipTitle(title),
         text: [`Note: ${title}`, '', ...parts].join('\n').trim(),
       };
     } finally {
       release();
     }
+  }
+
+  /** A block's words without its status, tags or planning stamps. */
+  private blockTitle(store: Store, blockId: string): string | null {
+    const model = store.getBlock(blockId)?.model;
+    const text = model?.text?.toString();
+    if (!model || !text) return null;
+    const status = readTaskStatus(model);
+    const words = text
+      .slice(status?.length ?? 0)
+      .replace(PLANNING_RE, ' ')
+      .replace(HASHTAG_RE, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    return words || null;
   }
 
   /** The block's own text plus what makes it legible out of context. */

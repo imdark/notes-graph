@@ -303,6 +303,11 @@ export const NotesGraph_WORKSPACE_USERDATA_DB_SCHEMA = {
     blockId: f.string().optional(),
     /** The blocks of a 'selection' run, so it can be run again. */
     blockIds: f.json<string[]>().optional(),
+    /**
+     * What the run is about, for run lists: the gist of its block when it
+     * starts, replaced by the agent's own name for it once it gives one.
+     */
+    title: f.string().optional(),
     /** 'running' | 'done' | 'cancelled' | 'error' */
     status: f.string(),
     startedAt: f.number(),

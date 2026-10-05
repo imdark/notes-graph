@@ -129,6 +129,10 @@ export const runName = style({
   fontWeight: 500,
   color: cssVarV2('text/primary'),
   whiteSpace: 'nowrap',
+  // A run's title is its block's text, which can be a whole sentence.
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  minWidth: 0,
 });
 
 export const runMeta = style({

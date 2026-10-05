@@ -1749,6 +1749,9 @@ model InventoryJob {
   targetKind     String?   @map("target_kind") @db.VarChar
   docId          String?   @map("doc_id") @db.VarChar
   blockId        String?   @map("block_id") @db.VarChar
+  /// What the run is about: taken from its block when queued, then renamed
+  /// by the agent once it knows.
+  title          String?   @db.VarChar
   status         String    @default("queued") @db.VarChar
   result         String?   @db.Text
   error          String?   @db.Text
