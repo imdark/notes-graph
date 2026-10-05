@@ -6,7 +6,7 @@ import {
   type AgentRun,
   AgentRunsStore,
   AgentsService,
-  isDeviceClaudeModel,
+  deviceHarnessName,
 } from '@notesgraph/core/modules/agents';
 import { WorkspaceDialogService } from '@notesgraph/core/modules/dialogs';
 import {
@@ -72,7 +72,7 @@ const displayStatus = (
 };
 
 const whereItRuns = (agent: Agent) => {
-  const engine = isDeviceClaudeModel(agent.model) ? 'Claude Code' : null;
+  const engine = deviceHarnessName(agent.model);
   const place =
     agent.harness === 'remote'
       ? `on ${agent.deviceKey ?? 'a device'}`

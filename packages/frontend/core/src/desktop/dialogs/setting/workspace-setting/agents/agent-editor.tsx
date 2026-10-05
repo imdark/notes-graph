@@ -27,6 +27,7 @@ import {
   FILE_TOOLS,
   isDeviceClaudeModel,
   RemoteAgentRunnerService,
+  RESEARCH_MODEL,
   WORKFLOW_MODEL,
 } from '@notesgraph/core/modules/agents';
 import {
@@ -98,6 +99,11 @@ const REMOTE_HARNESSES = [
     id: WORKFLOW_MODEL,
     name: 'Workflow',
     category: 'Claude Code as wf start + wf ai: ticket, branch, worktree',
+  },
+  {
+    id: RESEARCH_MODEL,
+    name: 'Research (OmniSeek)',
+    category: 'Claude Code + OmniSeek: deep, cross-lingual, cited',
   },
 ];
 
@@ -590,7 +596,11 @@ export const AgentEditor = ({
                       ? 'The same Claude Code, started like `wf start` + `wf ai`: ' +
                         'a ticket in the device’s task backend, its own branch and ' +
                         'worktree, and the project’s Claude account and skills.'
-                      : "Default runs the device's configured AI provider."
+                      : model === RESEARCH_MODEL
+                        ? 'Claude Code with OmniSeek on the device: searches across ' +
+                          'languages, reads papers and PDFs, follows citations, and ' +
+                          'answers with sources. Needs OmniSeek running on that device.'
+                        : "Default runs the device's configured AI provider."
                   : 'A different on-device model is downloaded the first time it runs.'}
               </span>
             </div>

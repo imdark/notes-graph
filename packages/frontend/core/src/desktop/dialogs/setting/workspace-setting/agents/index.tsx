@@ -13,6 +13,7 @@ import {
   type AgentDraft,
   type AgentScope,
   AgentsService,
+  deviceHarnessName,
   isDeviceClaudeModel,
 } from '@notesgraph/core/modules/agents';
 import { WorkspaceService } from '@notesgraph/core/modules/workspace';
@@ -40,7 +41,8 @@ const harnessSummary = (agent: Agent) => {
       : agent.harness === 'cloud'
         ? 'in the cloud'
         : 'on this device';
-  return isDeviceClaudeModel(agent.model) ? `Claude Code ${where}` : where;
+  const engine = deviceHarnessName(agent.model);
+  return engine ? `${engine} ${where}` : where;
 };
 
 const AgentList = ({

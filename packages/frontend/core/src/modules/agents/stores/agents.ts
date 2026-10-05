@@ -37,7 +37,8 @@ export type AgentKind = 'answer' | 'worker';
 
 /**
  * An agent's kind, for rows saved before it was a setting: a Claude Code or
- * Workflow agent on a device works in the notes; anything else answers.
+ * Workflow agent on a device works in the notes; anything else, research
+ * included, answers.
  */
 export const agentKind = (agent: Pick<Agent, 'kind' | 'harness' | 'model'>) =>
   agent.kind ??
