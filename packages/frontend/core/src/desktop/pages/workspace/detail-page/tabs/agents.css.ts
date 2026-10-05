@@ -439,6 +439,50 @@ export const questionOptions = style({
   gap: 8,
 });
 
+export const forkPanel = style({
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 8,
+  padding: '8px 10px',
+  borderRadius: 6,
+  border: `1px dashed ${cssVarV2('layer/insideBorder/border')}`,
+  background: cssVarV2('layer/background/secondary'),
+});
+
+export const forkHead = style({
+  display: 'flex',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+});
+
+export const forkMessages = style({
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 8,
+  maxHeight: 320,
+  overflow: 'auto',
+});
+
+export const forkUser = style({
+  alignSelf: 'flex-end',
+  maxWidth: '85%',
+  margin: 0,
+  padding: '6px 10px',
+  borderRadius: 8,
+  background: cssVarV2('layer/background/primary'),
+  fontSize: cssVar('fontSm'),
+  lineHeight: 1.5,
+  color: cssVarV2('text/primary'),
+  whiteSpace: 'pre-wrap',
+});
+
+export const forkReply = style({
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'flex-start',
+  gap: 6,
+});
+
 export const questionInput = style({
   width: '100%',
   resize: 'vertical',
