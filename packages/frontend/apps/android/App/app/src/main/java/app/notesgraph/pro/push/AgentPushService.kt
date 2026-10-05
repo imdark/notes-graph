@@ -34,6 +34,14 @@ class AgentPushService : FirebaseMessagingService() {
                 .split(',')
                 .filter { it.isNotEmpty() }
                 .forEach { AgentNotifications.cancel(this, it) }
+            "monitor-alert" -> {
+                // Same rule as questions: only from servers this phone is signed in to.
+                val server = data["server"].orEmpty()
+                val known = runBlocking { servers(this@AgentPushService) }
+                if (known.any { canonicalEndpoint(it) == canonicalEndpoint(server) }) {
+                    MonitorNotifications.show(this, data)
+                }
+            }
         }
     }
 
