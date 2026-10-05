@@ -43,7 +43,12 @@ export {
   QUEUED_STATUS,
   releaseQueuedTasks,
 } from './services/task-claim';
-export { type LogLine, parseLogLines } from './services/log-lines';
+export {
+  groupLogLines,
+  type LogLine,
+  type LogSegment,
+  parseLogLines,
+} from './services/log-lines';
 export {
   type AgentTarget,
   agentTargetBlockIds,

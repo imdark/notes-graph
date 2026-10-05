@@ -351,6 +351,24 @@ export const logLineText = style({
   paddingRight: 12,
 });
 
+export const logFold = style({
+  whiteSpace: 'pre',
+  paddingRight: 12,
+  border: 'none',
+  background: 'none',
+  font: 'inherit',
+  color: cssVarV2('text/secondary'),
+  cursor: 'pointer',
+  textAlign: 'left',
+  selectors: {
+    '&:hover': { color: cssVarV2('text/primary') },
+  },
+});
+
+export const logToolsToggle = style({
+  marginLeft: 'auto',
+});
+
 export const statusBadge = style({
   display: 'inline-flex',
   alignItems: 'center',
