@@ -195,15 +195,13 @@ const RunRowContent = ({
   onShowTarget?: (run: AgentRun) => void;
 }) => {
   const blockCount = run.blockId ? 1 : (run.blockIds?.length ?? 0);
-  // A run on a task is listed by the task; older runs, recorded without one,
-  // fall back to a count.
+  // A run on a task is listed by the task, next to the Show block button;
+  // older runs were recorded without one.
   const targetText = run.targetTitle
     ? blockCount > 1
       ? `“${run.targetTitle}” and ${blockCount - 1} more`
       : `“${run.targetTitle}”`
-    : blockCount === 1
-      ? 'Show block'
-      : `Show ${blockCount} blocks`;
+    : null;
   return (
     <>
       <div className={styles.runText}>
@@ -215,19 +213,7 @@ const RunRowContent = ({
               <DocLink docId={run.docId} onOpenDoc={onOpenDoc} />
             </>
           ) : null}
-          {onShowTarget && blockCount > 0 ? (
-            <InlineLink
-              title={
-                run.targetTitle
-                  ? `Go to ${run.targetTitle}`
-                  : 'Scroll to the blocks it ran on'
-              }
-              onActivate={() => onShowTarget(run)}
-              testId="agent-run-show-target"
-            >
-              {targetText}
-            </InlineLink>
-          ) : run.targetTitle ? (
+          {targetText ? (
             <span
               className={styles.runWhen}
               title={run.targetTitle}
@@ -235,6 +221,15 @@ const RunRowContent = ({
             >
               {targetText}
             </span>
+          ) : null}
+          {onShowTarget && blockCount > 0 ? (
+            <InlineLink
+              title="Scroll to the blocks it ran on"
+              onActivate={() => onShowTarget(run)}
+              testId="agent-run-show-target"
+            >
+              {blockCount === 1 ? 'Show block' : `Show ${blockCount} blocks`}
+            </InlineLink>
           ) : null}
         </span>
         <span className={styles.runMeta} data-status={run.status}>
