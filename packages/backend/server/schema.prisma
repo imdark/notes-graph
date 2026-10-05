@@ -1765,6 +1765,9 @@ model InventoryJob {
   /// Set by "Allow all" on a permission: every later tool in this run is
   /// allowed without asking.
   allowAllTools  Boolean   @default(false) @map("allow_all_tools")
+  /// A queued job is not handed out before this: set when a run hit the
+  /// device's Claude session limit, to when that limit resets.
+  runAfter       DateTime? @map("run_after") @db.Timestamptz(3)
   startedAt      DateTime? @map("started_at") @db.Timestamptz(3)
   finishedAt     DateTime? @map("finished_at") @db.Timestamptz(3)
   createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
