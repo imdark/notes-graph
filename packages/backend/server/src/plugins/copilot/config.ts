@@ -198,6 +198,10 @@ declare global {
         key: string;
       }>;
       storage: ConfigItem<StorageProviderConfig>;
+      embedding: {
+        url: ConfigItem<string>;
+        model: ConfigItem<string>;
+      };
       providers: {
         profiles: ConfigItem<CopilotProviderProfile[]>;
         defaults: ConfigItem<CopilotProviderDefaults>;
@@ -214,6 +218,21 @@ declare global {
 }
 
 defineModuleConfig('copilot', {
+  // An open embedding model served next to the server (e.g. Ollama with
+  // qwen3-embedding:0.6b), so notes can be embedded without a hosted API.
+  // It must return EMBEDDING_DIMENSIONS-long vectors (1024).
+  'embedding.url': {
+    desc: 'Base URL of an OpenAI-compatible embeddings API, e.g. http://ollama:11434/v1. When set, doc embeddings use it instead of the hosted default model.',
+    default: '',
+    shape: z.string(),
+    env: ['NOTESGRAPH_EMBEDDING_URL', 'string'],
+  },
+  'embedding.model': {
+    desc: 'The model to ask the embeddings API at embedding.url for.',
+    default: 'qwen3-embedding:0.6b',
+    shape: z.string(),
+    env: ['NOTESGRAPH_EMBEDDING_MODEL', 'string'],
+  },
   enabled: {
     desc: 'Whether to enable the copilot plugin. <br> Document: <a href="https://docs.notesgraph.com/self-host-notesgraph/administer/ai" target="_blank">https://docs.notesgraph.com/self-host-notesgraph/administer/ai</a>',
     default: false,
