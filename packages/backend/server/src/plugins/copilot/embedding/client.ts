@@ -203,9 +203,16 @@ class ProductionEmbeddingClient extends EmbeddingClient {
 }
 
 /** Inputs per request; keeps one request small for a CPU-served model. */
-const OPENAI_COMPATIBLE_BATCH = 16;
-/** A CPU model takes a while on a big batch; never hang a job for ever. */
-const OPENAI_COMPATIBLE_TIMEOUT_MS = 120_000;
+const OPENAI_COMPATIBLE_BATCH = 8;
+/**
+ * Requests in flight at once. A CPU-served model does about a chunk a
+ * second; ten embedding jobs firing at it together only queue up inside it,
+ * time out there, and have their finished work thrown away. The rest wait
+ * their turn here instead.
+ */
+const OPENAI_COMPATIBLE_MAX_IN_FLIGHT = 2;
+/** Per request, counted from when it is sent, not while it waits its turn. */
+const OPENAI_COMPATIBLE_TIMEOUT_MS = 5 * 60_000;
 
 /**
  * Embeddings from an OpenAI-compatible endpoint (`POST {url}/embeddings`),
@@ -213,6 +220,23 @@ const OPENAI_COMPATIBLE_TIMEOUT_MS = 120_000;
  * back to vector distance (the base class), which needs no model at all.
  */
 export class OpenAICompatibleEmbeddingClient extends EmbeddingClient {
+  private inFlight = 0;
+  private readonly waiting: (() => void)[] = [];
+
+  /** Run `send` when one of the in-flight slots is free. */
+  private async throttled<T>(send: () => Promise<T>): Promise<T> {
+    if (this.inFlight >= OPENAI_COMPATIBLE_MAX_IN_FLIGHT) {
+      await new Promise<void>(resolve => this.waiting.push(resolve));
+    }
+    this.inFlight += 1;
+    try {
+      return await send();
+    } finally {
+      this.inFlight -= 1;
+      this.waiting.shift()?.();
+    }
+  }
+
   constructor(
     private readonly url: string,
     private readonly model: string,
@@ -229,6 +253,11 @@ export class OpenAICompatibleEmbeddingClient extends EmbeddingClient {
   }
 
   private async embedBatch(input: string[], signal?: AbortSignal) {
+    return await this.throttled(() => this.sendBatch(input, signal));
+  }
+
+  private async sendBatch(input: string[], signal?: AbortSignal) {
+    signal?.throwIfAborted();
     const response = await this.fetchImpl(
       `${this.url.replace(/\/$/, '')}/embeddings`,
       {
