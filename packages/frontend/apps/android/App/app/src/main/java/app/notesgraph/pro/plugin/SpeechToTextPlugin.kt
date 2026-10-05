@@ -21,8 +21,8 @@ import java.util.Locale
 /**
  * Dictation for the web layer, which has no speech recognition of its own in
  * the Android WebView. Android's recognizer hears one utterance at a time, so
- * each is reported as a segment and listening restarts until stop() - that's
- * what turns the speaker's pauses into separate tasks.
+ * each is reported as a segment and listening restarts until stop(). The web
+ * layer joins segments back up; only saying "next task" starts a new task.
  *
  * Events, each tagged with the `session` that start() resolved with:
  *  - `partial` { text }: the utterance in progress
