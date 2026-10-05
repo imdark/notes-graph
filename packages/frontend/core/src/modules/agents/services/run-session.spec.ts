@@ -32,7 +32,8 @@ const fakeExecutor = () => {
     agentId: string;
     blockId: string;
     signal: AbortSignal;
-    finish: () => void;
+    /** End the run; with `answered`, as a run that gave its answer. */
+    finish: (answered?: boolean) => void;
   }[] = [];
   const executor = {
     harnessFor: (a: Agent) => a.harness ?? 'on-device',
@@ -41,8 +42,10 @@ const fakeExecutor = () => {
       target: AgentTarget,
       signal: AbortSignal
     ): AsyncIterable<AgentEvent> {
-      let finish!: () => void;
-      const ended = new Promise<void>(resolve => (finish = resolve));
+      let finish!: (answered?: boolean) => void;
+      const ended = new Promise<boolean>(
+        resolve => (finish = answered => resolve(!!answered))
+      );
       signal.addEventListener('abort', () => finish());
       runs.push({
         agentId: a.id,
@@ -51,10 +54,10 @@ const fakeExecutor = () => {
         finish,
       });
       yield { type: 'started', runId: `run-${runs.length}` };
-      await ended;
+      if (await ended) yield { type: 'done', output: 'ok' };
     },
   };
-  const { calls, claimedAgain, claim } = fakeClaim();
+  const { calls, claimedAgain, claim, open } = fakeClaim();
   const framework = new Framework();
   framework.service(AgentExecutorService, executor as any);
   framework.service(AgentTaskClaimService, claim as any);
@@ -66,15 +69,21 @@ const fakeExecutor = () => {
     runs,
     calls,
     claimedAgain,
+    open,
     sessions: framework.provider().get(AgentRunSessionService),
   };
 };
 
-/** Records what was claimed and handed back, without touching a doc. */
+/**
+ * Records what was claimed and handed back, without touching a doc. `open`
+ * is the target's unfinished tasks, which a test sets as a run "does" them.
+ */
 const fakeClaim = () => {
   const calls: { op: 'claim' | 'release'; target: AgentTarget }[] = [];
   const claimedAgain: (() => boolean)[] = [];
+  const open = { ids: [] as string[] };
   const claim = {
+    unfinished: async () => [...open.ids],
     markQueued: async (target: AgentTarget) => {
       calls.push({ op: 'claim', target });
     },
@@ -85,7 +94,7 @@ const fakeClaim = () => {
     titleOf: async (target: AgentTarget) =>
       target.kind === 'block' ? `Task ${target.blockId}` : null,
   };
-  return { calls, claimedAgain, claim };
+  return { calls, claimedAgain, claim, open };
 };
 
 const tick = () => new Promise(resolve => setTimeout(resolve, 0));
@@ -330,9 +339,9 @@ describe('AgentRunSessionService', () => {
     sessions.cancelAll();
     await tick();
 
-    expect(
-      calls.filter(c => c.op === 'release').map(c => c.target)
-    ).toEqual(expect.arrayContaining([block('b1'), block('b2')]));
+    expect(calls.filter(c => c.op === 'release').map(c => c.target)).toEqual(
+      expect.arrayContaining([block('b1'), block('b2')])
+    );
   });
 
   test('a run that ends hands back its task unless asked for again', async () => {
@@ -349,5 +358,83 @@ describe('AgentRunSessionService', () => {
     void sessions.start(remote, block('b1'));
     await tick();
     expect(claimedAgain.at(-1)?.()).toBe(true);
+  });
+
+  test('a task list is run again until every task is done', async () => {
+    const { runs, open, calls, sessions } = fakeExecutor();
+    open.ids = ['t1', 't2', 't3'];
+
+    void sessions.start(remote, block('list'));
+    await tick();
+    open.ids = ['t3'];
+    runs[0].finish(true);
+    await tick();
+
+    expect(runs).toHaveLength(2);
+    expect(sessions.sessions$.value).toHaveLength(1);
+    expect(sessions.sessions$.value[0].running).toBe(true);
+    // Not handed back between passes; claimed again for the next.
+    expect(calls.map(c => c.op)).toEqual(['claim', 'claim']);
+
+    open.ids = [];
+    runs[1].finish(true);
+    await tick();
+
+    expect(runs).toHaveLength(2);
+    expect(calls.at(-1)).toEqual({ op: 'release', target: block('list') });
+  });
+
+  test('a pass that finishes no task ends the loop', async () => {
+    const { runs, open, sessions } = fakeExecutor();
+    open.ids = ['t1', 't2'];
+
+    void sessions.start(remote, block('list'));
+    await tick();
+    runs[0].finish(true);
+    await tick();
+
+    expect(runs).toHaveLength(1);
+    expect(sessions.sessions$.value[0].running).toBe(false);
+  });
+
+  test('a run that fails or is stopped is not run again', async () => {
+    const { runs, open, sessions } = fakeExecutor();
+    open.ids = ['t1', 't2'];
+
+    void sessions.start(remote, block('a'));
+    void sessions.start(remote, block('b'));
+    await tick();
+    open.ids = ['t2'];
+    // Ended with no answer, as an error or cancel does.
+    runs[0].finish();
+    sessions.cancel(sessions.sessions$.value[1].id);
+    await tick();
+
+    expect(runs).toHaveLength(2);
+  });
+
+  test('dismissing a run before its next pass stops the loop', async () => {
+    const { runs, open, sessions } = fakeExecutor();
+    open.ids = ['t1', 't2'];
+    let settle!: () => void;
+    const settled = new Promise<void>(resolve => (settle = resolve));
+    // Hold the post-run read, as the real one waits for edits to sync.
+    const claim = (sessions as any).taskClaim;
+    const read = claim.unfinished;
+    claim.unfinished = async (target: AgentTarget, wait?: boolean) => {
+      if (wait) await settled;
+      return read(target);
+    };
+
+    void sessions.start(remote, block('list'));
+    await tick();
+    open.ids = ['t2'];
+    runs[0].finish(true);
+    await tick();
+    sessions.dismiss(sessions.sessions$.value[0].id);
+    settle();
+    await tick();
+
+    expect(runs).toHaveLength(1);
   });
 });

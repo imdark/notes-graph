@@ -20,7 +20,15 @@ export interface QueuedAgentRun {
   agent: Agent;
   target: AgentTarget;
   targetLabel: string;
+  /** Which run over the target's task list this is; see `continueList`. */
+  pass: number;
 }
+
+/**
+ * Most runs over one task list before it stops, however many tasks each
+ * finishes, so a list that keeps growing can't keep an agent going forever.
+ */
+const MAX_LIST_PASSES = 10;
 
 export interface AgentRunSession {
   /** This session, for stopping or dismissing it; not the run record. */
@@ -151,6 +159,15 @@ export class AgentRunSessionService extends Service {
    * another agent working the same list leaves them alone.
    */
   async start(agent: Agent, target: AgentTarget): Promise<void> {
+    await this.schedule(agent, target, 1);
+  }
+
+  /** {@link start}, for the `pass`th run over the target's task list. */
+  private async schedule(
+    agent: Agent,
+    target: AgentTarget,
+    pass: number
+  ): Promise<void> {
     if (this.isPending(agent, target)) return;
     this.claim(target);
     this.name(agent, target);
@@ -162,11 +179,12 @@ export class AgentRunSessionService extends Service {
           agent,
           target,
           targetLabel: targetLabel(target),
+          pass,
         },
       ]);
       return;
     }
-    await this.runNow(agent, target);
+    await this.runNow(agent, target, targetLabel(target), pass);
   }
 
   /** Take a run out of the queue before it starts. */
@@ -233,18 +251,23 @@ export class AgentRunSessionService extends Service {
     const [next, ...rest] = this.queue$.value;
     if (!next) return;
     this.queue$.setValue(rest);
-    void this.runNow(next.agent, next.target, next.targetLabel);
+    void this.runNow(next.agent, next.target, next.targetLabel, next.pass);
   }
 
   private async runNow(
     agent: Agent,
     target: AgentTarget,
-    label = targetLabel(target)
+    label: string,
+    pass: number
   ): Promise<void> {
     const id = `s${++this.nextId}`;
     const controller = new AbortController();
     this.controllers.set(id, controller);
     const onDevice = this.queues(agent);
+    // What was left to do as the run started, to tell whether it got any of
+    // it done.
+    const before = this.taskClaim.unfinished(target).catch((): string[] => []);
+    let answered = false;
 
     // The last run of this agent on this target has ended; this one takes
     // its place rather than stacking up beside it.
@@ -312,6 +335,8 @@ export class AgentRunSessionService extends Service {
           patch(prev => ({ ...prev, output: prev.output + event.delta }));
         } else if (event.type === 'error') {
           patch(prev => ({ ...prev, error: event.message }));
+        } else if (event.type === 'done') {
+          answered = true;
         }
       }
     } catch (err) {
@@ -323,10 +348,54 @@ export class AgentRunSessionService extends Service {
             : String(err);
       patch(prev => ({ ...prev, error: message }));
     } finally {
-      this.controllers.delete(id);
       patch(prev => ({ ...prev, running: false, questions: [] }));
-      this.unclaim(target);
       if (onDevice) this.runNext();
+      if (answered && !controller.signal.aborted) {
+        // The controller stays registered until the list is settled, so
+        // stopping or dismissing the run also stops the next pass.
+        void this.continueList(id, controller, agent, target, before, pass);
+      } else {
+        this.controllers.delete(id);
+        this.unclaim(target);
+      }
+    }
+  }
+
+  /**
+   * Work a task list until it is done: once a run over it ends, run again
+   * while tasks are still open and the run just ended finished some. A run
+   * that finished none ends the loop, since another would only repeat it;
+   * so does stopping or dismissing the run.
+   */
+  private async continueList(
+    sessionId: string,
+    controller: AbortController,
+    agent: Agent,
+    target: AgentTarget,
+    before: Promise<string[]>,
+    pass: number
+  ): Promise<void> {
+    let again = false;
+    try {
+      const [was, left] = await Promise.all([
+        before,
+        this.taskClaim.unfinished(target, true),
+      ]);
+      again =
+        !controller.signal.aborted &&
+        this.sessions$.value.some(session => session.id === sessionId) &&
+        left.length > 0 &&
+        left.length < was.length &&
+        pass < MAX_LIST_PASSES;
+    } catch {
+      // The list couldn't be read; leave it as the run left it.
+    } finally {
+      this.controllers.delete(sessionId);
+    }
+    if (again) {
+      await this.schedule(agent, target, pass + 1);
+    } else {
+      this.unclaim(target);
     }
   }
 

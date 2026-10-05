@@ -14,6 +14,9 @@ export const QUEUED_STATUS = 'QUEUED';
 /** How long a finished run waits before handing back a task it left queued. */
 const RELEASE_SETTLE_MS = 5_000;
 
+const settled = () =>
+  new Promise(resolve => setTimeout(resolve, RELEASE_SETTLE_MS));
+
 /**
  * A task's org status: the chip embed (one attributed character at the start
  * whose `orgStatus` holds the org text), a raw typed annotation like `[-] `,
@@ -83,6 +86,52 @@ export const isOpenTask = (model: BlockModel): boolean => {
   return !!status && orgStatusLabel(status.text) === 'Todo';
 };
 
+/**
+ * Whether a task still needs work: to do, queued or in progress. Done, and
+ * any other keyword (COMMITTED, BLOCKED, …), is out of a run's hands.
+ */
+export const isUnfinishedTask = (model: BlockModel): boolean => {
+  const status = readTaskStatus(model);
+  if (!status) return false;
+  if (status.text === QUEUED_STATUS) return true;
+  const label = orgStatusLabel(status.text);
+  return label === 'Todo' || label === 'In Progress';
+};
+
+/**
+ * The tasks a run is on, in note order: each targeted block that is a task
+ * and every task nested under one — a run on a list's parent is on its
+ * items — or, for a whole note, every task in it.
+ */
+export function targetTaskIds(store: Store, target: AgentTarget): string[] {
+  const ids: string[] = [];
+  const seen = new Set<string>();
+  const walk = (model: BlockModel) => {
+    if (seen.has(model.id)) return;
+    seen.add(model.id);
+    if (readTaskStatus(model)) ids.push(model.id);
+    for (const child of model.children) walk(child);
+  };
+  const roots =
+    target.kind === 'doc'
+      ? store.root
+        ? [store.root]
+        : []
+      : agentTargetBlockIds(target)
+          .map(id => store.getBlock(id)?.model)
+          .filter((model): model is BlockModel => !!model);
+  for (const root of roots) walk(root);
+  return ids;
+}
+
+/** The tasks a run is on that still need work; see {@link isUnfinishedTask}. */
+export function unfinishedTaskIds(store: Store, target: AgentTarget): string[] {
+  return targetTaskIds(store, target).filter(id => {
+    const model = store.getBlock(id)?.model;
+    return !!model && isUnfinishedTask(model);
+  });
+}
+
 /** Rewrite a task's status as a chip, the way the kanban board does. */
 const writeStatus = (
   model: BlockModel,
@@ -145,8 +194,23 @@ export class AgentTaskClaimService extends Service {
 
   async markQueued(target: AgentTarget): Promise<void> {
     await this.withStore(target, store =>
-      markTasksQueued(store, agentTargetBlockIds(target))
+      markTasksQueued(store, targetTaskIds(store, target))
     );
+  }
+
+  /**
+   * The tasks a run is on that still need work. With `settle`, first gives a
+   * device's or MCP agent's status edits time to sync here, as after a run.
+   */
+  async unfinished(target: AgentTarget, settle = false): Promise<string[]> {
+    if (settle) await settled();
+    const { doc, release } = this.docsService.open(target.docId);
+    try {
+      await doc.waitForSyncReady();
+      return unfinishedTaskIds(doc.blockSuiteDoc, target);
+    } finally {
+      release();
+    }
   }
 
   /**
@@ -160,10 +224,10 @@ export class AgentTaskClaimService extends Service {
     // A device or MCP agent writes its own status on the server; give that
     // edit time to sync here, so a task it just finished isn't read as still
     // queued and reopened.
-    await new Promise(resolve => setTimeout(resolve, RELEASE_SETTLE_MS));
+    await settled();
     if (claimedAgain()) return;
     await this.withStore(target, store =>
-      releaseQueuedTasks(store, agentTargetBlockIds(target))
+      releaseQueuedTasks(store, targetTaskIds(store, target))
     );
   }
 
