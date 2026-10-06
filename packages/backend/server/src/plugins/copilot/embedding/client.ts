@@ -203,16 +203,26 @@ class ProductionEmbeddingClient extends EmbeddingClient {
 }
 
 /** Inputs per request; keeps one request small for a CPU-served model. */
-const OPENAI_COMPATIBLE_BATCH = 8;
+const OPENAI_COMPATIBLE_BATCH = 4;
 /**
- * Requests in flight at once. A CPU-served model does about a chunk a
- * second; ten embedding jobs firing at it together only queue up inside it,
- * time out there, and have their finished work thrown away. The rest wait
- * their turn here instead.
+ * Requests in flight at once. A CPU-served model works through one request
+ * at a time; a second only waits inside it, where it can outlast the client
+ * timeout and have its finished work thrown away. The rest wait here.
  */
-const OPENAI_COMPATIBLE_MAX_IN_FLIGHT = 2;
+const OPENAI_COMPATIBLE_MAX_IN_FLIGHT = 1;
 /** Per request, counted from when it is sent, not while it waits its turn. */
 const OPENAI_COMPATIBLE_TIMEOUT_MS = 5 * 60_000;
+
+/**
+ * What some models expect before a search query (not before the passages
+ * being searched), matched by model name.
+ */
+const QUERY_PREFIXES: [RegExp, string][] = [
+  [
+    /mxbai-embed/i,
+    'Represent this sentence for searching relevant passages: ',
+  ],
+];
 
 /**
  * Embeddings from an OpenAI-compatible endpoint (`POST {url}/embeddings`),
@@ -291,6 +301,15 @@ export class OpenAICompatibleEmbeddingClient extends EmbeddingClient {
 
   override async configured(): Promise<boolean> {
     return !!this.url && !!this.model;
+  }
+
+  override async getEmbedding(
+    query: string,
+    options?: EmbeddingCallOptionsInput
+  ) {
+    const prefix =
+      QUERY_PREFIXES.find(([model]) => model.test(this.model))?.[1] ?? '';
+    return await super.getEmbedding(prefix + query, options);
   }
 
   async getEmbeddings(

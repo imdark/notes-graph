@@ -29,7 +29,7 @@ test('embeds in batches against {url}/embeddings, in input order', async t => {
   const input = Array.from({ length: 20 }, (_, i) => `chunk ${i}`);
   const result = await client.getEmbeddings(input);
 
-  t.is(requests.length, 3, '8 per request: 8, 8 and 4');
+  t.is(requests.length, 5, '4 per request');
   t.is(requests[0].url, 'http://ollama:11434/v1/embeddings');
   t.deepEqual(requests[0].body.model, 'qwen3-embedding:0.6b');
   t.is(result.length, 20);
@@ -55,7 +55,7 @@ test('an error from the endpoint carries its status and body', async t => {
   });
 });
 
-test('never has more than two requests in flight, however many jobs ask', async t => {
+test('sends one request at a time, however many jobs ask', async t => {
   let inFlight = 0;
   let peak = 0;
   const fetchImpl = (async (_url: string, init: RequestInit) => {
@@ -76,5 +76,37 @@ test('never has more than two requests in flight, however many jobs ask', async 
   await Promise.all(
     Array.from({ length: 10 }, () => client.getEmbeddings(['a', 'b', 'c']))
   );
-  t.is(peak, 2);
+  t.is(peak, 1);
+});
+
+test('an mxbai search query carries the prefix the model expects', async t => {
+  const { fetchImpl, requests } = fakeEndpoint();
+  const client = new OpenAICompatibleEmbeddingClient(
+    'http://x/v1',
+    'mixedbread-ai/mxbai-embed-large-v1',
+    fetchImpl
+  );
+  await client.getEmbedding('rtx 5090 deals');
+  await client.getEmbeddings(['a passage']);
+
+  t.deepEqual(requests[0].body.input, [
+    'Represent this sentence for searching relevant passages: rtx 5090 deals',
+  ]);
+  t.deepEqual(requests[1].body.input, ['a passage'], 'passages go as they are');
+});
+
+test('a failed try that a retry fixes still returns the embeddings', async t => {
+  let calls = 0;
+  const { fetchImpl: ok } = fakeEndpoint();
+  const fetchImpl = (async (url: string, init: RequestInit) => {
+    calls += 1;
+    if (calls === 1) throw new Error('timed out');
+    return await ok(url, init);
+  }) as unknown as typeof fetch;
+  const client = new OpenAICompatibleEmbeddingClient('http://x/v1', 'm', fetchImpl);
+
+  const result = await client.generateEmbeddings([{ index: 3, content: 'a' }]);
+
+  t.is(calls, 2);
+  t.is(result[0].index, 3);
 });

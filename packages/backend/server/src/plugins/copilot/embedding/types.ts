@@ -194,20 +194,20 @@ export abstract class EmbeddingClient {
     const normalizedOptions = normalizeEmbeddingCallOptions(options);
     const retry = 3;
 
-    let embeddings: Embedding[] = [];
+    let embeddings: Embedding[] | undefined;
     let error = null;
-    for (let i = 0; i < retry; i++) {
+    for (let i = 0; i < retry && !embeddings; i++) {
       try {
         embeddings = await this.getEmbeddings(
           chunks.map(c => c.content),
           normalizedOptions
         );
-        break;
       } catch (e) {
+        // A retry that succeeds wins over an earlier failure.
         error = e;
       }
     }
-    if (error) throw error;
+    if (!embeddings) throw error;
 
     // fix the index of the embeddings
     return embeddings.map(e => ({ ...e, index: chunks[e.index].index }));

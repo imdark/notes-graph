@@ -51,7 +51,7 @@ export class CopilotWorkspaceConfigModel extends BaseModel {
     // NOTE: for unknown reason, the transaction will timeout if call from event handler
     // so we use an independent client here
     const docIds = await this.database.$queryRaw<{ id: string }[]>`
-      SELECT s.guid as id
+      SELECT DISTINCT s.guid as id
         FROM snapshots AS s
           LEFT JOIN ai_workspace_embeddings e
             ON e.workspace_id = s.workspace_id
@@ -63,7 +63,8 @@ export class CopilotWorkspaceConfigModel extends BaseModel {
           AND s.guid <> s.workspace_id
           AND s.guid NOT LIKE '%$%'
           AND s.guid NOT LIKE '%:settings:%'
-          AND e.doc_id IS NULL
+          -- never embedded, or cut short partway (see PENDING_EMBEDDING_AT)
+          AND (e.doc_id IS NULL OR e.updated_at = to_timestamp(0))
           AND id.doc_id IS NULL
           AND s.blob <> E'\\\\x0000';`;
 
