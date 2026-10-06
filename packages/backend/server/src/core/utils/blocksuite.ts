@@ -1,3 +1,5 @@
+import * as Y from 'yjs';
+
 import {
   parsePageDocFromBinary,
   parseWorkspaceDocFromBinary,
@@ -64,6 +66,30 @@ const SUMMARY_BLOCK_FLAVOURS = new Set([
 ]);
 
 /**
+ * Link blocks whose title, description and URL count as text in a doc's full
+ * content (what's embedded for search), though not in a preview. A note of
+ * saved links has no paragraphs, and would otherwise read as empty.
+ */
+const LINK_BLOCK_FLAVOURS = new Set([
+  'notesgraph:bookmark',
+  'notesgraph:embed-youtube',
+  'notesgraph:embed-github',
+  'notesgraph:embed-figma',
+  'notesgraph:embed-loom',
+  'notesgraph:embed-iframe',
+]);
+
+/** A link block's text: its title, description and URL, the ones it has. */
+function linkBlockText(block: Y.Map<unknown> | undefined): string {
+  if (!block) return '';
+  return ['prop:title', 'prop:description', 'prop:url']
+    .map(key => block.get(key))
+    .map(value => (value == null ? '' : String(value).trim()))
+    .filter(Boolean)
+    .join(' — ');
+}
+
+/**
  * Builds a doc summary the same way parsePageDoc does, except joining each
  * block's content with a space instead of concatenating directly — the
  * upstream native summary (parsePageDocFromBinary, and the `summary` field
@@ -84,10 +110,28 @@ export function buildDocSummary(
   const result = parseYDocFromBinary(Buffer.from(docSnapshot), docId);
   if (!result) return null;
 
+  const full = maxSummaryLength < 0;
+  // The native parser doesn't expose link props, so read them from the doc,
+  // decoded only if a full read finds a link block.
+  let blocks: Y.Map<Y.Map<unknown>> | undefined;
+  const linkText = (blockId: string) => {
+    if (!blocks) {
+      const doc = new Y.Doc();
+      Y.applyUpdate(doc, docSnapshot);
+      blocks = doc.getMap('blocks');
+    }
+    return linkBlockText(blocks.get(blockId));
+  };
+
   let summary = '';
   for (const block of result.blocks) {
-    if (!SUMMARY_BLOCK_FLAVOURS.has(block.flavour)) continue;
-    const content = Array.isArray(block.content) ? block.content[0] : undefined;
+    const content =
+      full && LINK_BLOCK_FLAVOURS.has(block.flavour)
+        ? linkText(block.blockId)
+        : SUMMARY_BLOCK_FLAVOURS.has(block.flavour) &&
+            Array.isArray(block.content)
+          ? block.content[0]
+          : undefined;
     if (!content) continue;
     if (summary.length > 0) {
       summary += ' ';
