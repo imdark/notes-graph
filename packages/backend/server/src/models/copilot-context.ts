@@ -22,6 +22,13 @@ import {
 type UpdateCopilotContextInput = Pick<CopilotContext, 'config'>;
 
 /**
+ * `updated_at` of a doc's chunks saved while the doc is still being embedded.
+ * Older than any doc edit, so the doc keeps reading as needing embedding
+ * (see `checkDocNeedEmbedded`) until every chunk is in.
+ */
+export const PENDING_EMBEDDING_AT = new Date(0);
+
+/**
  * Copilot Job Model
  */
 @Injectable()
@@ -205,7 +212,8 @@ export class CopilotContextModel extends BaseModel {
     contextOrWorkspaceId: string,
     fileOrDocId: string,
     embeddings: Embedding[],
-    withId = true
+    withId = true,
+    updatedAt = new Date()
   ) {
     const groups = embeddings.map(e =>
       [
@@ -215,7 +223,7 @@ export class CopilotContextModel extends BaseModel {
         e.index,
         e.content,
         Prisma.raw(`'[${e.embedding.join(',')}]'`),
-        new Date(),
+        updatedAt,
       ].filter(v => v !== undefined)
     );
     return Prisma.join(groups.map(row => Prisma.sql`(${Prisma.join(row)})`));
@@ -293,10 +301,16 @@ export class CopilotContextModel extends BaseModel {
     return file?.map(f => clearEmbeddingContent(f.content)).join('\n');
   }
 
+  /**
+   * Save a doc's chunk embeddings. With `pending`, they're stamped as not yet
+   * done, so the doc still reads as needing embedding until
+   * {@link finishWorkspaceEmbedding}; a run cut short resumes from them.
+   */
   async insertWorkspaceEmbedding(
     workspaceId: string,
     docId: string,
-    embeddings: Embedding[]
+    embeddings: Embedding[],
+    options?: { pending?: boolean }
   ) {
     if (embeddings.length === 0) {
       this.logger.warn(
@@ -309,7 +323,8 @@ export class CopilotContextModel extends BaseModel {
       workspaceId,
       docId,
       embeddings,
-      false
+      false,
+      options?.pending ? PENDING_EMBEDDING_AT : new Date()
     );
     await this.db.$executeRaw`
       INSERT INTO "ai_workspace_embeddings"
@@ -321,6 +336,36 @@ export class CopilotContextModel extends BaseModel {
         embedding = EXCLUDED.embedding,
         updated_at = excluded.updated_at;
     `;
+  }
+
+  /** Each saved chunk's content, by chunk index, to skip what's already done. */
+  async getWorkspaceChunks(
+    workspaceId: string,
+    docId: string
+  ): Promise<Map<number, string>> {
+    const rows = await this.db.aiWorkspaceEmbedding.findMany({
+      where: { workspaceId, docId },
+      select: { chunk: true, content: true },
+    });
+    return new Map(rows.map(row => [row.chunk, row.content]));
+  }
+
+  /**
+   * Every chunk of the doc is saved: mark them done, and drop chunks the doc
+   * no longer has.
+   */
+  async finishWorkspaceEmbedding(
+    workspaceId: string,
+    docId: string,
+    chunks: number[]
+  ) {
+    await this.db.aiWorkspaceEmbedding.deleteMany({
+      where: { workspaceId, docId, chunk: { notIn: chunks } },
+    });
+    await this.db.aiWorkspaceEmbedding.updateMany({
+      where: { workspaceId, docId },
+      data: { updatedAt: new Date() },
+    });
   }
 
   async fulfillEmptyEmbedding(workspaceId: string, docId: string) {

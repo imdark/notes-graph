@@ -401,6 +401,54 @@ export class CopilotEmbeddingJob {
     return null;
   }
 
+  /**
+   * Embed a doc one chunk at a time, saving each as it's done, so a long doc
+   * isn't one request that can time out and lose all its work. Chunks already
+   * saved with the same content (a run cut short) are skipped. Returns false
+   * if the workspace's embedding was stopped partway.
+   */
+  private async embedDocChunks(
+    workspaceId: string,
+    docId: string,
+    fragment: DocFragment,
+    signal: AbortSignal
+  ): Promise<boolean> {
+    if (!this.embeddingClient) return false;
+    const file = new File(
+      [fragment.summary],
+      `${fragment.title || 'Untitled'}.md`
+    );
+    const chunks = this.formatDocChunks(
+      (await this.embeddingClient.getFileChunks(file, signal)).flat(),
+      fragment
+    );
+    const saved = await this.models.copilotContext.getWorkspaceChunks(
+      workspaceId,
+      docId
+    );
+    const options = this.workspaceIndexingOptions(workspaceId, signal);
+    for (const chunk of chunks) {
+      if (saved.get(chunk.index) === chunk.content) continue;
+      if (signal.aborted) return false;
+      const embeddings = await this.embeddingClient.generateEmbeddings(
+        [chunk],
+        options
+      );
+      await this.models.copilotContext.insertWorkspaceEmbedding(
+        workspaceId,
+        docId,
+        embeddings,
+        { pending: true }
+      );
+    }
+    await this.models.copilotContext.finishWorkspaceEmbedding(
+      workspaceId,
+      docId,
+      chunks.map(chunk => chunk.index)
+    );
+    return true;
+  }
+
   private formatDocChunks(chunks: Chunk[], fragment: DocFragment): Chunk[] {
     return chunks.map(chunk => ({
       index: chunk.index,
@@ -488,22 +536,13 @@ export class CopilotEmbeddingJob {
               return;
             }
 
-            const embeddings = await this.embeddingClient.getFileEmbeddings(
-              new File(
-                [fragment.summary],
-                `${fragment.title || 'Untitled'}.md`
-              ),
-              chunks => this.formatDocChunks(chunks, fragment),
-              this.workspaceIndexingOptions(workspaceId, signal)
+            const finished = await this.embedDocChunks(
+              workspaceId,
+              docId,
+              fragment,
+              signal
             );
-
-            for (const chunks of embeddings) {
-              await this.models.copilotContext.insertWorkspaceEmbedding(
-                workspaceId,
-                docId,
-                chunks
-              );
-            }
+            if (!finished) return;
             this.logger.debug(
               `Doc ${docId} in workspace ${workspaceId} has summary, embedding done.`
             );

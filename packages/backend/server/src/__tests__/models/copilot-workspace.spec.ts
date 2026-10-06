@@ -470,3 +470,79 @@ test('should filter outdated doc id style in embedding status', async t => {
     t.snapshot(status, 'should count docs after filtering outdated');
   }
 });
+
+test('a doc embedded partway still needs embedding until finished', async t => {
+  const docId = randomUUID();
+  await t.context.doc.upsert({
+    spaceId: workspace.id,
+    docId,
+    blob: Uint8Array.from([1, 2, 3]),
+    timestamp: Date.now(),
+    editorId: user.id,
+  });
+  const chunk = (index: number, content: string) => ({
+    index,
+    content,
+    embedding: Array.from({ length: 1024 }, () => 1),
+  });
+
+  // Done before: chunks 0-2. Now the run gets through chunk 0, then stops.
+  await t.context.copilotContext.insertWorkspaceEmbedding(workspace.id, docId, [
+    chunk(1, 'old one'),
+    chunk(2, 'old two'),
+  ]);
+  await t.context.copilotContext.insertWorkspaceEmbedding(
+    workspace.id,
+    docId,
+    [chunk(0, 'zero')],
+    { pending: true }
+  );
+
+  t.true(
+    await t.context.copilotWorkspace.checkDocNeedEmbedded(workspace.id, docId),
+    'a pending chunk keeps the doc needing embedding'
+  );
+  t.true(
+    (await t.context.copilotWorkspace.findDocsToEmbed(workspace.id)).includes(
+      docId
+    ),
+    'the startup scan picks it up again'
+  );
+  t.deepEqual(
+    [
+      ...(
+        await t.context.copilotContext.getWorkspaceChunks(workspace.id, docId)
+      ).entries(),
+    ].sort(([a], [b]) => a - b),
+    [
+      [0, 'zero'],
+      [1, 'old one'],
+      [2, 'old two'],
+    ]
+  );
+
+  // The next run saves chunk 1; the doc now has two chunks.
+  await t.context.copilotContext.insertWorkspaceEmbedding(
+    workspace.id,
+    docId,
+    [chunk(1, 'one')],
+    { pending: true }
+  );
+  await t.context.copilotContext.finishWorkspaceEmbedding(workspace.id, docId, [
+    0, 1,
+  ]);
+
+  t.false(
+    await t.context.copilotWorkspace.checkDocNeedEmbedded(workspace.id, docId)
+  );
+  t.false(
+    (await t.context.copilotWorkspace.findDocsToEmbed(workspace.id)).includes(
+      docId
+    )
+  );
+  t.is(
+    await t.context.copilotContext.getWorkspaceContent(workspace.id, docId),
+    'zero\none',
+    'the chunk the doc no longer has is gone'
+  );
+});
