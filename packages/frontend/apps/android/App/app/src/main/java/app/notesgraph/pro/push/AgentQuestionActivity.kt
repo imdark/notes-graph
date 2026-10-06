@@ -1,8 +1,12 @@
 package app.notesgraph.pro.push
 
+import android.content.Context
 import android.content.Intent
+import android.content.res.Configuration
+import android.graphics.Color
 import android.os.Build
 import android.os.Bundle
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Arrangement
@@ -38,7 +42,9 @@ import androidx.compose.ui.unit.dp
 import androidx.fragment.app.FragmentActivity
 import app.notesgraph.pro.AppLock
 import app.notesgraph.pro.MainActivity
+import app.notesgraph.pro.R
 import app.notesgraph.pro.theme.NotesGraphTheme
+import app.notesgraph.pro.theme.ThemeMode
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.json.JSONObject
@@ -56,9 +62,36 @@ import org.json.JSONObject
  */
 class AgentQuestionActivity : FragmentActivity() {
 
+    // The app's own colour mode, which can differ from the system's; the web
+    // layer reports it and AppLock keeps it.
+    private var dark = false
+
+    /**
+     * Runs the whole activity in the app's mode, not just the Compose content:
+     * the DayNight window behind it - all that shows while the app lock asks
+     * to unlock, and before the first frame - would otherwise follow the system.
+     */
+    override fun attachBaseContext(newBase: Context) {
+        val systemDark = (newBase.resources.configuration.uiMode and
+            Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
+        dark = AppLock.isDark(newBase, systemDark)
+        super.attachBaseContext(newBase)
+        applyOverrideConfiguration(Configuration().apply {
+            uiMode = if (dark) Configuration.UI_MODE_NIGHT_YES else Configuration.UI_MODE_NIGHT_NO
+        })
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
-        enableEdgeToEdge()
+        val bars = if (dark) {
+            SystemBarStyle.dark(Color.TRANSPARENT)
+        } else {
+            SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT)
+        }
+        enableEdgeToEdge(statusBarStyle = bars, navigationBarStyle = bars)
         super.onCreate(savedInstanceState)
+        window.setBackgroundDrawableResource(
+            if (dark) R.color.layer_background_primary_dark else R.color.layer_background_primary
+        )
         val pushed = AgentQuestion.fromBundle(intent.extras)
         if (pushed == null) {
             finish()
@@ -80,7 +113,7 @@ class AgentQuestionActivity : FragmentActivity() {
 
     private fun show(pushed: AgentQuestion) {
         setContent {
-            NotesGraphTheme {
+            NotesGraphTheme(mode = if (dark) ThemeMode.Dark else ThemeMode.Light) {
                 Surface(modifier = Modifier.fillMaxSize()) {
                     QuestionScreen(
                         pushed = pushed,
