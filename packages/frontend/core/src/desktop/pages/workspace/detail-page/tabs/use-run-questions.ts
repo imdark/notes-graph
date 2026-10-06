@@ -10,6 +10,8 @@ import { WorkspaceService } from '@notesgraph/core/modules/workspace';
 import { useService } from '@notesgraph/infra';
 import { useEffect, useMemo, useState } from 'react';
 
+import type { RunDisplayStatus } from './agent-run-row';
+
 export interface RemoteRunState {
   questions: RemoteQuestion[];
   /** The job's own status; the run row can lag it when its tab closed early. */
@@ -17,6 +19,31 @@ export interface RemoteRunState {
   /** Epoch seconds a queued job is held until (a device's session limit). */
   runAfter: number | null;
 }
+
+/**
+ * What a run should read as. A remote run's row is written by the tab that
+ * started it, so if that tab closed mid-run the row still says running; the
+ * device job is the truth then.
+ */
+export const displayStatus = (
+  run: AgentRun,
+  remote: RemoteRunState | undefined
+): RunDisplayStatus => {
+  if (run.status !== 'running' || !remote) return run.status;
+  if (remote.questions.length > 0) return 'waiting';
+  switch (remote.jobStatus) {
+    case 'done':
+      return 'done';
+    case 'error':
+      return 'error';
+    case 'cancelled':
+      return 'cancelled';
+    case 'queued':
+      return 'queued';
+    default:
+      return 'running';
+  }
+};
 
 /**
  * Follow every running remote run in `runs` and report what each is waiting

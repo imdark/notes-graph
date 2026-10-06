@@ -25,7 +25,7 @@ import { useRunActions } from './use-run-actions';
 const PANEL_RUNS = 8;
 
 /** One run going, or finished and not yet dismissed. */
-const SessionCard = ({
+export const SessionCard = ({
   session,
   queued,
   onViewLog,
