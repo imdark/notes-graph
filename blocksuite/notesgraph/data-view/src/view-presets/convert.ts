@@ -1,5 +1,6 @@
 import { createViewConvert } from '../core/view/convert.js';
 import { calendarViewModel } from './calendar/index.js';
+import { chartViewModel } from './chart/index.js';
 import { ganttViewModel } from './gantt/index.js';
 import { kanbanViewModel } from './kanban/index.js';
 import { listViewModel } from './list/index.js';
@@ -104,5 +105,32 @@ export const viewConverts = [
     filter: data.filter,
     sort: data.sort,
     header: data.header,
+  })),
+  // A chart keeps the rows the view was showing; a board's lanes become the
+  // chart's buckets, so "Board → Chart" counts the cards in each lane.
+  createViewConvert(kanbanViewModel, chartViewModel, data => ({
+    filter: data.filter,
+    ...(data.groupBy
+      ? {
+          chart: {
+            kind: 'bar' as const,
+            groupBy: data.groupBy.columnId,
+            hideEmpty: data.groupBy.hideEmpty,
+            metric: { op: 'count' as const },
+          },
+        }
+      : {}),
+  })),
+  createViewConvert(tableViewModel, chartViewModel, data => ({
+    filter: data.filter,
+  })),
+  createViewConvert(listViewModel, chartViewModel, data => ({
+    filter: data.filter,
+  })),
+  createViewConvert(chartViewModel, tableViewModel, data => ({
+    filter: data.filter,
+  })),
+  createViewConvert(chartViewModel, listViewModel, data => ({
+    filter: data.filter,
   })),
 ];

@@ -65,11 +65,13 @@ export const BookmarkBlockSchema = defineBlockSchema({
     version: 1,
     role: 'content',
     parent: [
+      'notesgraph:column',
       'notesgraph:note',
       'notesgraph:surface',
       'notesgraph:edgeless-text',
       'notesgraph:paragraph',
       'notesgraph:list',
+      'notesgraph:dashboard',
     ],
   },
   toModel: () => new BookmarkBlockModel(),

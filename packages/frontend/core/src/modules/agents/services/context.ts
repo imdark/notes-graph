@@ -10,7 +10,13 @@ import { Service } from '@notesgraph/infra';
 
 import type { DocsService } from '../../doc';
 import type { AgentTarget } from './target';
-import { QUEUED_STATUS, readTaskStatus } from './task-claim';
+import {
+  QUEUED_STATUS,
+  readTaskStatus,
+  targetTaskIds,
+  taskTitle,
+  unfinishedTaskIds,
+} from './task-claim';
 
 /**
  * Hard cap on the doc markdown handed to a model, in characters. A long note
@@ -61,6 +67,8 @@ export class AgentContextService extends Service {
       const store = doc.blockSuiteDoc;
       const title = doc.title$.value || 'Untitled';
 
+      const taskList = this.taskList(store, target);
+
       if (target.kind === 'doc') {
         const markdown = await this.docMarkdown(store);
         const clipped = markdown.length > MAX_DOC_CHARS;
@@ -72,6 +80,7 @@ export class AgentContextService extends Service {
             '',
             clipped ? markdown.slice(0, MAX_DOC_CHARS) : markdown,
             clipped ? '\n\n[note truncated]' : '',
+            taskList ? `\n${taskList}` : '',
           ]
             .join('\n')
             .trim(),
@@ -97,11 +106,46 @@ export class AgentContextService extends Service {
       return {
         label,
         title: first ? `${clipTitle(first)}${more}` : clipTitle(title),
-        text: [`Note: ${title}`, '', ...parts].join('\n').trim(),
+        text: [
+          `Note: ${title}`,
+          '',
+          ...parts,
+          ...(taskList ? ['', taskList] : []),
+        ]
+          .join('\n')
+          .trim(),
       };
     } finally {
       release();
     }
+  }
+
+  /**
+   * A run on a list of tasks is asked to work the whole list, not just read
+   * it: every task with its id and status, and what to do until all are done.
+   * Null when the run is on one task or none. A pass that leaves some open is
+   * followed by another (see AgentRunSessionService), which reads this afresh.
+   */
+  private taskList(store: Store, target: AgentTarget): string | null {
+    const ids = targetTaskIds(store, target);
+    if (ids.length < 2) return null;
+    const open = unfinishedTaskIds(store, target).length;
+    const lines = ids.map(id => {
+      const model = store.getBlock(id)?.model;
+      const status = model ? readTaskStatus(model)?.text : null;
+      return `- ${status ?? '[ ]'} ${model ? taskTitle(model) : ''} (blockId: ${id})`;
+    });
+    return [
+      `## Task list: ${open} of ${ids.length} not done yet (docId: ${target.docId})`,
+      '',
+      ...lines,
+      '',
+      'Work through every task above that is not done, one after another,',
+      'until all of them are. For each: do it, then mark it done in the note',
+      '(update_task with its docId and blockId, if you have it) before moving',
+      "on. If one can't be done, give it a status that says why (e.g. BLOCKED)",
+      'with a note, and go on to the next rather than stopping.',
+    ].join('\n');
   }
 
   /** A block's words without its status, tags or planning stamps. */

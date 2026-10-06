@@ -1,10 +1,12 @@
 import { calendarViewMeta } from './calendar/index.js';
+import { chartViewMeta } from './chart/index.js';
 import { ganttViewMeta } from './gantt/index.js';
 import { kanbanViewMeta } from './kanban/index.js';
 import { listViewMeta } from './list/index.js';
 import { tableViewMeta } from './table/index.js';
 
 export * from './calendar/index.js';
+export * from './chart/index.js';
 export * from './convert.js';
 export * from './gantt/index.js';
 export * from './kanban/index.js';
@@ -17,4 +19,5 @@ export const viewPresets = {
   calendarViewMeta: calendarViewMeta,
   ganttViewMeta: ganttViewMeta,
   listViewMeta: listViewMeta,
+  chartViewMeta: chartViewMeta,
 };

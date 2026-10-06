@@ -1,7 +1,14 @@
 import type { Store } from '@blocksuite/notesgraph/store';
 import { describe, expect, test } from 'vitest';
 
-import { isOpenTask, markTasksQueued, releaseQueuedTasks } from './task-claim';
+import {
+  isOpenTask,
+  markTasksQueued,
+  markTasksStarted,
+  releaseQueuedTasks,
+  targetTaskIds,
+  unfinishedTaskIds,
+} from './task-claim';
 
 type Op = { insert: string; attributes?: { orgStatus?: string } };
 
@@ -119,6 +126,76 @@ describe('isOpenTask', () => {
   });
 });
 
+/** A tree of blocks, each a task with a status or plain prose. */
+const treeOf = (
+  root: string,
+  blocks: Record<string, { status?: string; children?: string[] }>
+) => {
+  const models = new Map<string, unknown>();
+  const model = (id: string): any => {
+    if (!models.has(id)) {
+      const { status, children = [] } = blocks[id];
+      models.set(id, {
+        id,
+        props: {},
+        text: new FakeText(
+          status
+            ? [
+                { insert: ' ', attributes: { orgStatus: status } },
+                { insert: ` ${id}` },
+              ]
+            : [{ insert: id }]
+        ),
+        get children() {
+          return children.map(model);
+        },
+      });
+    }
+    return models.get(id);
+  };
+  return {
+    root: model(root),
+    getBlock: (id: string) => (blocks[id] ? { model: model(id) } : null),
+  } as unknown as Store;
+};
+
+describe('targetTaskIds and unfinishedTaskIds', () => {
+  const store = treeOf('page', {
+    page: { children: ['heading', 'list'] },
+    heading: { children: [] },
+    list: { status: '[-]', children: ['a', 'b', 'c', 'd'] },
+    a: { status: '[ ]' },
+    b: { status: '[X]' },
+    c: { status: 'QUEUED', children: ['e'] },
+    d: { status: 'BLOCKED' },
+    e: { status: 'TODO' },
+  });
+
+  test('a run on a parent is on it and every task under it', () => {
+    const target = { kind: 'block', docId: 'doc', blockId: 'list' } as const;
+    expect(targetTaskIds(store, target)).toEqual([
+      'list',
+      'a',
+      'b',
+      'c',
+      'e',
+      'd',
+    ]);
+    expect(unfinishedTaskIds(store, target)).toEqual(['list', 'a', 'c', 'e']);
+  });
+
+  test('a whole note is on all its tasks; a selection on each once', () => {
+    expect(targetTaskIds(store, { kind: 'doc', docId: 'doc' })).toHaveLength(6);
+    expect(
+      targetTaskIds(store, {
+        kind: 'selection',
+        docId: 'doc',
+        blockIds: ['c', 'e', 'heading', 'gone'],
+      })
+    ).toEqual(['c', 'e']);
+  });
+});
+
 describe('releaseQueuedTasks', () => {
   test('hands back a task still queued, not one the agent moved on', () => {
     const { store, status } = storeOf({
@@ -140,5 +217,52 @@ describe('releaseQueuedTasks', () => {
 
     expect(status('waiting')).toBe('[ ]');
     expect(status('taken')).toBe('[X]');
+  });
+
+  test('hands back a task it started, not one the agent started', () => {
+    const chip = (orgStatus: string) => ({
+      ops: [{ insert: ' ', attributes: { orgStatus } }, { insert: ' a' }],
+    });
+    const { store, status } = storeOf({
+      ours: chip('[-]'),
+      theirs: chip('[-]'),
+      finished: chip('[X]'),
+    });
+
+    releaseQueuedTasks(store, ['ours', 'theirs', 'finished'], [
+      'ours',
+      'finished',
+    ]);
+
+    expect(status('ours')).toBe('[ ]');
+    expect(status('theirs')).toBe('[-]');
+    expect(status('finished')).toBe('[X]');
+  });
+});
+
+describe('markTasksStarted', () => {
+  test('moves a queued task to in progress, leaves the rest alone', () => {
+    const { store, status } = storeOf({
+      queued: {
+        ops: [
+          { insert: ' ', attributes: { orgStatus: 'QUEUED' } },
+          { insert: ' a' },
+        ],
+      },
+      done: {
+        ops: [
+          { insert: ' ', attributes: { orgStatus: '[X]' } },
+          { insert: ' b' },
+        ],
+      },
+      box: { ops: [{ insert: 'c' }], props: { type: 'todo', checked: false } },
+    });
+
+    expect(markTasksStarted(store, ['queued', 'done', 'box', 'gone'])).toEqual(
+      ['queued']
+    );
+    expect(status('queued')).toBe('[-]');
+    expect(status('done')).toBe('[X]');
+    expect(status('box')).toBeUndefined();
   });
 });

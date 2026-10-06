@@ -24,6 +24,7 @@ import {
   type FormulaValue,
   insertPositionToIndex,
   type InsertToPosition,
+  isNoteLevelContainer,
 } from '@blocksuite/notesgraph-shared/utils';
 import type { EditorHost } from '@blocksuite/std';
 import { type BlockModel } from '@blocksuite/store';
@@ -719,7 +720,7 @@ export const convertToDatabase = (host: EditorHost, viewType: string) => {
   // how deep they were nested.
   let parentModel = host.store.getParent(firstModel);
   let topAncestor: BlockModel = firstModel;
-  while (parentModel && parentModel.flavour !== 'notesgraph:note') {
+  while (parentModel && !isNoteLevelContainer(parentModel)) {
     topAncestor = parentModel;
     parentModel = host.store.getParent(parentModel);
   }

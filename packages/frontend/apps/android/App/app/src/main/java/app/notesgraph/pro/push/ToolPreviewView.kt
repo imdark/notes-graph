@@ -2,7 +2,6 @@ package app.notesgraph.pro.push
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -26,6 +25,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
+import app.notesgraph.pro.theme.NotesGraphTheme
 
 /** Unchanged lines kept around each change; longer runs fold away. */
 private const val CONTEXT = 3
@@ -146,7 +146,7 @@ private data class DiffColors(
 
 @Composable
 private fun diffColors(): DiffColors =
-    if (isSystemInDarkTheme()) {
+    if (NotesGraphTheme.isDark) {
         DiffColors(
             removedLine = Color(0x33F85149), addedLine = Color(0x332EA043),
             removedWord = Color(0x80F85149), addedWord = Color(0x802EA043),

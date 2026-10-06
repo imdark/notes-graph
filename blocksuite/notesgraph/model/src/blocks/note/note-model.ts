@@ -80,6 +80,7 @@ export const NoteBlockSchema = defineBlockSchema({
       'notesgraph:database',
       'notesgraph:data-view',
       'notesgraph:callout',
+      'notesgraph:columns',
     ],
   },
   toModel: () => {

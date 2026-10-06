@@ -87,4 +87,23 @@ describe('MonitorsService', () => {
     await expect(service.revalidate()).rejects.toThrow('This server has no monitors yet.');
     expect(service.error$.value).toBe('This server has no monitors yet.');
   });
+
+  test('the trend is fetched once per reading, however many ask', async () => {
+    const reading = (value: string, at: number) => ({
+      value,
+      error: null,
+      changed: false,
+      alerted: false,
+      at,
+    });
+    const { service, calls } = setup(() => ({
+      body: { readings: [reading('3', 30), reading('1', 10)] },
+    }));
+    const first = await service.trend(monitor({ lastRunAt: 30 }));
+    await service.trend(monitor({ lastRunAt: 30 }));
+    expect(calls.map(c => c.path)).toEqual(['/api/workspaces/ws/monitors/m1/readings']);
+    expect(first?.points.map(p => p.value)).toEqual([1, 3]);
+    await service.trend(monitor({ lastRunAt: 40 }));
+    expect(calls).toHaveLength(2);
+  });
 });

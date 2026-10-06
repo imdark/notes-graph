@@ -43,6 +43,7 @@ export const ParagraphBlockSchema = defineBlockSchema({
     version: 1,
     role: 'content',
     parent: [
+      'notesgraph:column',
       'notesgraph:note',
       'notesgraph:database',
       'notesgraph:paragraph',
@@ -50,6 +51,7 @@ export const ParagraphBlockSchema = defineBlockSchema({
       'notesgraph:edgeless-text',
       'notesgraph:callout',
       'notesgraph:transcription',
+      'notesgraph:dashboard',
     ],
   },
   toModel: () => new ParagraphBlockModel(),

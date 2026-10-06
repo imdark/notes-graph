@@ -2,7 +2,11 @@ import {
   type StoreExtensionContext,
   StoreExtensionProvider,
 } from '@blocksuite/notesgraph-ext-loader';
-import { NoteBlockSchemaExtension } from '@blocksuite/notesgraph-model';
+import {
+  ColumnBlockSchemaExtension,
+  ColumnsBlockSchemaExtension,
+  NoteBlockSchemaExtension,
+} from '@blocksuite/notesgraph-model';
 import { z } from 'zod';
 
 import {
@@ -27,6 +31,8 @@ export class NoteStoreExtension extends StoreExtensionProvider<
   ) {
     super.setup(context);
     context.register(NoteBlockSchemaExtension);
+    context.register(ColumnsBlockSchemaExtension);
+    context.register(ColumnBlockSchemaExtension);
     if (options?.mode === 'edgeless') {
       context.register(EdgelessNoteBlockAdapterExtensions);
     } else {

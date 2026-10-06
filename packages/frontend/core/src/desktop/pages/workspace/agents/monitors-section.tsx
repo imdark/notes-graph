@@ -1,9 +1,16 @@
 import { Button, notify } from '@notesgraph/component';
-import { type Monitor, MonitorsService } from '@notesgraph/core/modules/agents';
+import {
+  formatTrendValue,
+  type Monitor,
+  MonitorsService,
+  sparklinePath,
+  type Trend,
+} from '@notesgraph/core/modules/agents';
 import { WorkspaceDialogService } from '@notesgraph/core/modules/dialogs';
 import { WorkbenchService } from '@notesgraph/core/modules/workbench';
 import { useLiveData, useService } from '@notesgraph/infra';
-import { useCallback, useEffect } from 'react';
+import { cssVar } from '@toeverything/theme';
+import { useCallback, useEffect, useState } from 'react';
 
 import { relativeTime } from '../detail-page/tabs/agent-run-row';
 import * as styles from './agents-page.css';
@@ -29,6 +36,56 @@ export const watches = (monitor: Monitor) =>
         : host(monitor.spec.url),
     every(monitor.intervalMinutes),
   ].join(' · ');
+
+const TREND_WIDTH = 180;
+const TREND_HEIGHT = 32;
+
+/** Its numeric readings over time, with the range they span. */
+const MonitorTrend = ({ monitor }: { monitor: Monitor }) => {
+  const monitorsService = useService(MonitorsService);
+  const [trend, setTrend] = useState<Trend | null>(null);
+
+  useEffect(() => {
+    let live = true;
+    monitorsService
+      .trend(monitor)
+      .then(next => live && setTrend(next))
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+    // The list refreshes every minute; trend() only refetches on a new reading.
+  }, [monitorsService, monitor]);
+
+  if (!trend) return null;
+  return (
+    <span
+      style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}
+      title={`${trend.points.length} readings, ${formatTrendValue(trend.min)} to ${formatTrendValue(trend.max)}`}
+      data-testid="agents-page-monitor-trend"
+    >
+      <svg
+        width={TREND_WIDTH}
+        height={TREND_HEIGHT}
+        viewBox={`0 0 ${TREND_WIDTH} ${TREND_HEIGHT}`}
+        style={{ color: cssVar('primaryColor'), flexShrink: 0 }}
+        aria-hidden="true"
+      >
+        <path
+          d={sparklinePath(trend, TREND_WIDTH, TREND_HEIGHT, 2)}
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={1.5}
+          strokeLinejoin="round"
+          strokeLinecap="round"
+        />
+      </svg>
+      <span className={styles.agentCardMeta}>
+        {formatTrendValue(trend.min)}–{formatTrendValue(trend.max)}
+      </span>
+    </span>
+  );
+};
 
 const MonitorCard = ({ monitor, now }: { monitor: Monitor; now: number }) => {
   const monitorsService = useService(MonitorsService);
@@ -77,6 +134,7 @@ const MonitorCard = ({ monitor, now }: { monitor: Monitor; now: number }) => {
             ? `${monitor.lastValue} · ${monitor.lastRunAt ? relativeTime(monitor.lastRunAt * 1000, now) : ''}`
             : 'No reading yet'}
       </span>
+      <MonitorTrend monitor={monitor} />
       <span style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
         <Button onClick={() => void act(() => monitorsService.runNow(monitor.id), 'Checking now')}>
           Run now

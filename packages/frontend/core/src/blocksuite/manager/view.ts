@@ -18,6 +18,7 @@ import type { ReactToLit } from '@notesgraph/component';
 import { CloudViewExtension } from '@notesgraph/core/blocksuite/view-extensions/cloud';
 import { CodeBlockPreviewViewExtension } from '@notesgraph/core/blocksuite/view-extensions/code-block-preview';
 import { CommentViewExtension } from '@notesgraph/core/blocksuite/view-extensions/comment';
+import { DashboardViewExtension } from '@notesgraph/core/blocksuite/view-extensions/dashboard';
 import { NotesGraphDatabaseViewExtension } from '@notesgraph/core/blocksuite/view-extensions/database';
 import {
   EdgelessBlockHeaderConfigViewExtension,
@@ -72,6 +73,7 @@ type Configure = {
   ) => Configure;
   schedule: (framework?: FrameworkProvider) => Configure;
   agents: (framework?: FrameworkProvider) => Configure;
+  dashboard: (framework?: FrameworkProvider) => Configure;
 
   value: ViewExtensionManager;
 };
@@ -110,6 +112,7 @@ class ViewProvider {
       // AIViewExtension is added lazily by the editor host (see lit-adaper.tsx).
       ScheduleViewExtension,
       AgentsViewExtension,
+      DashboardViewExtension,
       ElectronViewExtension,
       NotesGraphLinkPreviewExtension,
       NotesGraphDatabaseViewExtension,
@@ -169,6 +172,7 @@ class ViewProvider {
       comment: this._configureComment,
       schedule: this._configureSchedule,
       agents: this._configureAgents,
+      dashboard: this._configureDashboard,
       value: this._manager,
     };
   }
@@ -413,6 +417,11 @@ class ViewProvider {
 
   private readonly _configureAgents = (framework?: FrameworkProvider) => {
     this._manager.configure(AgentsViewExtension, { framework });
+    return this.config;
+  };
+
+  private readonly _configureDashboard = (framework?: FrameworkProvider) => {
+    this._manager.configure(DashboardViewExtension, { framework });
     return this.config;
   };
 }

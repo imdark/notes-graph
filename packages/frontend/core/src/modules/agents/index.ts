@@ -40,6 +40,14 @@ export {
   type MonitorSpec,
 } from './services/monitors';
 export {
+  formatTrendValue,
+  monitorTrend,
+  readingNumber,
+  sparklinePath,
+  type Trend,
+  type TrendPoint,
+} from './services/monitor-trend';
+export {
   AgentFileToolError,
   AgentFileToolsService,
   FILE_TOOL_NAMES,

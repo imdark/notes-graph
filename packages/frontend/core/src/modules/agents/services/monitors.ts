@@ -3,6 +3,7 @@ import { LiveData, Service } from '@notesgraph/infra';
 import { FetchService, type WorkspaceServerService } from '../../cloud';
 import type { FetchInit } from '../../cloud/services/fetch';
 import type { WorkspaceService } from '../../workspace';
+import { monitorTrend, type Trend } from './monitor-trend';
 
 /**
  * Monitors: the server watches something on a schedule and keeps a block up
@@ -217,6 +218,30 @@ export class MonitorsService extends Service {
       `/${id}/readings`
     );
     return readings;
+  }
+
+  /** Trends by monitor, kept until its next reading lands. */
+  private readonly trends = new Map<
+    string,
+    { lastRunAt: number | null; trend: Promise<Trend | null> }
+  >();
+
+  /**
+   * Its numeric readings over time, for the sparkline on its chip and card.
+   * Fetched once per reading, however many places show it.
+   */
+  trend(monitor: Monitor): Promise<Trend | null> {
+    const cached = this.trends.get(monitor.id);
+    if (cached && cached.lastRunAt === monitor.lastRunAt) return cached.trend;
+    const trend = this.readings(monitor.id)
+      .then(monitorTrend)
+      .catch(() => {
+        // Try again next time rather than remembering the failure.
+        this.trends.delete(monitor.id);
+        return null;
+      });
+    this.trends.set(monitor.id, { lastRunAt: monitor.lastRunAt, trend });
+    return trend;
   }
 
   /** Fetch and extract once without saving: the editor's "Test". */
