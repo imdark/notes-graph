@@ -26,6 +26,10 @@ export const workbenchRoutes = [
     lazy: () => import('./pages/workspace/agents/index'),
   },
   {
+    path: '/deployments',
+    lazy: () => import('./pages/workspace/deployments/index'),
+  },
+  {
     path: '/collection',
     lazy: () => import('./pages/workspace/all-collection'),
   },

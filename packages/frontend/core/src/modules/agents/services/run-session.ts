@@ -1,6 +1,7 @@
 import { LiveData, Service } from '@notesgraph/infra';
 
 import { type Agent, type AgentKind, agentKind } from '../stores/agents';
+import type { AgentContext } from './context';
 import type { RemoteQuestion } from './remote-runner';
 import {
   AgentAlreadyRunningError,
@@ -22,6 +23,8 @@ export interface QueuedAgentRun {
   targetLabel: string;
   /** Which run over the target's task list this is; see `continueList`. */
   pass: number;
+  /** What the agent reads instead of the target's text; see `start`. */
+  brief?: AgentContext;
 }
 
 /**
@@ -158,20 +161,28 @@ export class AgentRunSessionService extends Service {
    * The tasks it is on are marked queued straight away, before any work, so
    * another agent working the same list leaves them alone, and go to in
    * progress once the agent picks the run up.
+   *
+   * With a `brief`, the agent reads that instead of the target's text, and
+   * the target only places the run's record (see AgentExecutorService.run).
    */
-  async start(agent: Agent, target: AgentTarget): Promise<void> {
-    await this.schedule(agent, target, 1);
+  async start(
+    agent: Agent,
+    target: AgentTarget,
+    brief?: AgentContext
+  ): Promise<void> {
+    await this.schedule(agent, target, 1, brief);
   }
 
   /** {@link start}, for the `pass`th run over the target's task list. */
   private async schedule(
     agent: Agent,
     target: AgentTarget,
-    pass: number
+    pass: number,
+    brief?: AgentContext
   ): Promise<void> {
     if (this.isPending(agent, target)) return;
     this.claim(target);
-    this.name(agent, target);
+    this.name(agent, target, brief);
     if (this.queues(agent) && this.onDeviceBusy) {
       this.queue$.setValue([
         ...this.queue$.value,
@@ -179,13 +190,20 @@ export class AgentRunSessionService extends Service {
           id: `q${++this.nextId}`,
           agent,
           target,
-          targetLabel: targetLabel(target),
+          targetLabel: brief?.label ?? targetLabel(target),
           pass,
+          brief,
         },
       ]);
       return;
     }
-    await this.runNow(agent, target, targetLabel(target), pass);
+    await this.runNow(
+      agent,
+      target,
+      brief?.label ?? targetLabel(target),
+      pass,
+      brief
+    );
   }
 
   /** Take a run out of the queue before it starts. */
@@ -205,8 +223,9 @@ export class AgentRunSessionService extends Service {
    * Label the run — queued or going — by the task it is on, once its text is
    * read, so a list of runs down a task list reads as the tasks themselves.
    */
-  private name(agent: Agent, target: AgentTarget): void {
-    if (target.kind === 'doc') return;
+  private name(agent: Agent, target: AgentTarget, brief?: AgentContext): void {
+    // A brief names its own run.
+    if (target.kind === 'doc' || brief) return;
     const key = runKey(agent.id, target);
     this.taskClaim
       .titleOf(target)
@@ -257,14 +276,21 @@ export class AgentRunSessionService extends Service {
     const [next, ...rest] = this.queue$.value;
     if (!next) return;
     this.queue$.setValue(rest);
-    void this.runNow(next.agent, next.target, next.targetLabel, next.pass);
+    void this.runNow(
+      next.agent,
+      next.target,
+      next.targetLabel,
+      next.pass,
+      next.brief
+    );
   }
 
   private async runNow(
     agent: Agent,
     target: AgentTarget,
     label: string,
-    pass: number
+    pass: number,
+    brief?: AgentContext
   ): Promise<void> {
     const id = `s${++this.nextId}`;
     const controller = new AbortController();
@@ -321,7 +347,8 @@ export class AgentRunSessionService extends Service {
       for await (const event of this.executor.run(
         agent,
         target,
-        controller.signal
+        controller.signal,
+        brief
       )) {
         if (event.type === 'started') {
           patch(prev => ({ ...prev, runId: event.runId }));
@@ -376,7 +403,8 @@ export class AgentRunSessionService extends Service {
           target,
           before,
           pass,
-          started
+          started,
+          brief
         );
       } else {
         this.controllers.delete(id);
@@ -401,7 +429,8 @@ export class AgentRunSessionService extends Service {
     target: AgentTarget,
     before: Promise<string[]>,
     pass: number,
-    started?: Promise<string[]>
+    started?: Promise<string[]>,
+    brief?: AgentContext
   ): Promise<void> {
     let again = false;
     try {
@@ -422,7 +451,7 @@ export class AgentRunSessionService extends Service {
     }
     if (again) {
       await this.taskClaim.handBack(target, started).catch(() => {});
-      await this.schedule(agent, target, pass + 1);
+      await this.schedule(agent, target, pass + 1, brief);
     } else {
       this.unclaim(target, started);
     }
