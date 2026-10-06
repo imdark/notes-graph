@@ -106,6 +106,53 @@ export type Chunk = {
   content: string;
 };
 
+/**
+ * Most characters of text in one chunk. Embedding models read a bounded
+ * number of tokens (mxbai-embed-large: 512) and silently drop the rest, and a
+ * doc chunk also carries a title/date header; 1,000 characters stays inside
+ * that even for URL-heavy text, which runs at ~3 characters a token.
+ */
+export const MAX_CHUNK_CHARS = 1_000;
+
+/**
+ * Split text into pieces of at most `max` characters, at line breaks where it
+ * can, else at sentence ends, else at spaces, else anywhere.
+ */
+export function splitChunkText(text: string, max = MAX_CHUNK_CHARS): string[] {
+  if (text.length <= max) return [text];
+  const pieces: string[] = [];
+  let current = '';
+  const flush = () => {
+    if (current.trim()) pieces.push(current.trim());
+    current = '';
+  };
+  const add = (part: string, separator: string) => {
+    if (current && current.length + separator.length + part.length > max) {
+      flush();
+    }
+    current = current ? current + separator + part : part;
+  };
+  for (const line of text.split('\n')) {
+    if (line.length <= max) {
+      add(line, '\n');
+      continue;
+    }
+    for (const sentence of line.split(/(?<=[.!?])\s+/)) {
+      if (sentence.length <= max) {
+        add(sentence, ' ');
+        continue;
+      }
+      for (const word of sentence.split(/\s+/)) {
+        for (let i = 0; i < word.length; i += max) {
+          add(word.slice(i, i + max), ' ');
+        }
+      }
+    }
+  }
+  flush();
+  return pieces;
+}
+
 export type EmbeddingCallOptions = {
   signal?: AbortSignal;
   userId?: string;
@@ -173,7 +220,13 @@ export abstract class EmbeddingClient {
           message: 'no content found',
         });
       }
-      const input = doc.chunks.toSorted((a, b) => a.index - b.index);
+      // A parsed chunk can run to tens of thousands of characters (a long
+      // list of links has no paragraph breaks); split those so the model
+      // reads all of it, and number the pieces in order.
+      const input = doc.chunks
+        .toSorted((a, b) => a.index - b.index)
+        .flatMap(chunk => splitChunkText(chunk.content))
+        .map((content, index) => ({ index, content }));
       // chunk input into 128 every array
       const chunks: Chunk[][] = [];
       for (let i = 0; i < input.length; i += 128) {
