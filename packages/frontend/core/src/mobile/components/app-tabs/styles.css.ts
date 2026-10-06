@@ -52,3 +52,16 @@ export const tabItem = style({
     },
   },
 });
+export const agentsIcon = style({
+  position: 'relative',
+  display: 'inline-flex',
+});
+export const agentsDot = style({
+  position: 'absolute',
+  top: 0,
+  right: 0,
+  width: 8,
+  height: 8,
+  borderRadius: '50%',
+  backgroundColor: cssVarV2.button.primary,
+});

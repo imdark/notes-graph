@@ -23,13 +23,12 @@ import { AgentQuestionCard } from '../detail-page/tabs/agent-question';
 import { AgentRunLogDialog } from '../detail-page/tabs/agent-run-log';
 import {
   relativeTime,
-  type RunDisplayStatus,
   RunRow,
   RunStatusBadge,
   useMinuteTick,
 } from '../detail-page/tabs/agent-run-row';
 import {
-  type RemoteRunState,
+  displayStatus,
   useRemoteRunStates,
 } from '../detail-page/tabs/use-run-questions';
 import { useRunActions } from '../detail-page/tabs/use-run-actions';
@@ -48,31 +47,6 @@ const FILTERS: { id: RunFilter; label: string }[] = [
 
 /** Runs listed before "Show more". */
 const PAGE_SIZE = 30;
-
-/**
- * What a run should read as. A remote run's row is written by the tab that
- * started it, so if that tab closed mid-run the row still says running; the
- * device job is the truth then.
- */
-const displayStatus = (
-  run: AgentRun,
-  remote: RemoteRunState | undefined
-): RunDisplayStatus => {
-  if (run.status !== 'running' || !remote) return run.status;
-  if (remote.questions.length > 0) return 'waiting';
-  switch (remote.jobStatus) {
-    case 'done':
-      return 'done';
-    case 'error':
-      return 'error';
-    case 'cancelled':
-      return 'cancelled';
-    case 'queued':
-      return 'queued';
-    default:
-      return 'running';
-  }
-};
 
 const whereItRuns = (agent: Agent) => {
   const engine =
