@@ -31,6 +31,27 @@ import {
 
 export const NOTESGRAPH_KEYBOARD_TOOLBAR = 'notesgraph-keyboard-toolbar';
 
+/**
+ * Client rect of the caret (focus end of the native selection) when it sits
+ * inside `block`, or null if there is no usable caret there.
+ */
+function getCaretRect(block: Element): DOMRect | null {
+  const selection = document.getSelection();
+  if (!selection || selection.rangeCount === 0 || !selection.focusNode)
+    return null;
+  if (!block.contains(selection.focusNode)) return null;
+
+  const range = document.createRange();
+  range.setStart(selection.focusNode, selection.focusOffset);
+  range.collapse(true);
+
+  // A collapsed range has no box in some engines (e.g. at the start of an
+  // empty text node); its line rect is still in getClientRects().
+  const rect = range.getClientRects()[0] ?? range.getBoundingClientRect();
+  if (rect.height === 0) return null;
+  return rect;
+}
+
 @requiredProperties({
   config: PropTypes.object,
   rootComponent: PropTypes.instanceOf(BlockComponent),
@@ -128,13 +149,26 @@ export class NotesGraphKeyboardToolbar extends SignalWatcher(
         if (!block) return;
 
         const { y: y1 } = this.getBoundingClientRect();
-        const { bottom: y2 } = block.getBoundingClientRect();
         const gap = 8;
 
-        if (y2 < y1 + gap) return;
+        // Reveal the caret, not the whole block. Aligning the block's
+        // bottom above the toolbar made every tap into a tall block (a long
+        // wrapped paragraph, or a list item with nested children — whose
+        // component contains them) jump the page so the tapped line ended
+        // up far above the viewport.
+        const blockRect = block.getBoundingClientRect();
+        const caretRect = getCaretRect(block);
+        const y2 = caretRect?.bottom ?? blockRect.bottom;
+
+        if (y2 < y1 - gap) return;
+
+        // Never scroll the target's top out of view.
+        const top = caretRect?.top ?? blockRect.top;
+        const delta = Math.min(y2 - y1 + gap, top - gap);
+        if (delta <= 0) return;
 
         scrollTo({
-          top: window.scrollY + y2 - y1 + gap,
+          top: window.scrollY + delta,
           behavior: 'instant',
         });
       })
