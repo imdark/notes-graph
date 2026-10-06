@@ -10,6 +10,7 @@ import type { AgentRunLogsStore } from '../stores/agent-run-logs';
 import type { AgentRunsStore } from '../stores/agent-runs';
 import type { ChatModel, CloudAgentRunnerService } from './cloud-runner';
 import type { AgentContext, AgentContextService } from './context';
+import { type DeepSeekRunnerService, isDeepSeekModel } from './deepseek-runner';
 import {
   type AgentFileToolsService,
   type AgentToolSpec,
@@ -116,16 +117,17 @@ const onDeviceModel = (agent: Agent) =>
 
 /**
  * The model a run asks, for its details. A cloud run takes whatever the
- * server's copilot is set to, which this tab doesn't know.
+ * server's copilot is set to, which this tab doesn't know, unless the agent
+ * picked DeepSeek.
  */
-const modelLabel = (agent: Agent, harness: AgentHarness) =>
-  harness === 'on-device'
-    ? (onDeviceModel(agent) ?? DEFAULT_LOCAL_MODEL)
-    : harness === 'cloud'
-      ? 'server default'
-      : harness === 'research'
-        ? 'server default + OmniSeek'
-        : agent.model || 'device default';
+const modelLabel = (agent: Agent, harness: AgentHarness) => {
+  if (harness === 'on-device') {
+    return onDeviceModel(agent) ?? DEFAULT_LOCAL_MODEL;
+  }
+  if (harness === 'remote') return agent.model || 'device default';
+  const model = isDeepSeekModel(agent.model) ? agent.model : 'server default';
+  return harness === 'research' ? `${model} + OmniSeek` : model;
+};
 
 const clip = (text: string, limit: number) =>
   text.length > limit ? `${text.slice(0, limit - 1)}…` : text;
@@ -171,14 +173,16 @@ export class AgentExecutorService extends Service implements AgentExecutor {
     private readonly remoteRunner: RemoteAgentRunnerService,
     private readonly cloudRunner: CloudAgentRunnerService,
     private readonly researchTools: ResearchToolsService,
-    private readonly workspaceService: WorkspaceService
+    private readonly workspaceService: WorkspaceService,
+    private readonly deepseekRunner: DeepSeekRunnerService
   ) {
     super();
   }
 
   /**
    * The model an in-tab run asks each step: the browser's, or the server's
-   * (for cloud and research alike).
+   * (for cloud and research alike) — its copilot, or DeepSeek when the agent
+   * picked a DeepSeek model.
    */
   private async modelFor(
     agent: Agent,
@@ -194,6 +198,9 @@ export class AgentExecutorService extends Service implements AgentExecutor {
     const workspaceId = this.workspaceId;
     if (!workspaceId) {
       throw new Error('No workspace is open, so there is no server to ask.');
+    }
+    if (isDeepSeekModel(agent.model)) {
+      return this.deepseekRunner.open(workspaceId, agent.model);
     }
     return this.cloudRunner.open(workspaceId);
   }

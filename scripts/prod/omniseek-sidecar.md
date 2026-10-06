@@ -69,3 +69,21 @@ docker compose -f /opt/notesgraph/compose.yml --env-file /opt/notesgraph/.env up
 
 Check from the app's side: `GET /api/workspaces/<ws>/research/tools` (signed
 in) lists the allowlisted `omniseek_*` tools.
+
+## DeepSeek as the research model
+
+A Cloud or Research (server) agent can run on DeepSeek instead of the
+server's copilot: pick **DeepSeek V3** (`deepseek-chat`) or **DeepSeek R1**
+(`deepseek-reasoner`) under Harness in Settings → Agents. The tab sends each
+step to `/api/workspaces/:id/research/deepseek/chat` (`plugins/research`), and
+the server calls DeepSeek with its own key, so the key never reaches a browser.
+Add to `/opt/notesgraph/.env` and recreate `notesgraph`:
+
+```
+NOTESGRAPH_DEEPSEEK_API_KEY=<key from platform.deepseek.com>
+# NOTESGRAPH_DEEPSEEK_URL=https://api.deepseek.com   (the default)
+```
+
+Without the key those endpoints 404 and a DeepSeek run fails with "DeepSeek
+isn't set up on this server". `GET /api/workspaces/<ws>/research/deepseek`
+lists the models once it is set.

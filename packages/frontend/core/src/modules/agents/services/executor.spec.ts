@@ -10,6 +10,7 @@ import { AgentRunLogsStore } from '../stores/agent-run-logs';
 import { type AgentRun, AgentRunsStore } from '../stores/agent-runs';
 import { CloudAgentRunnerService } from './cloud-runner';
 import { AgentContextService } from './context';
+import { DeepSeekRunnerService } from './deepseek-runner';
 import { AgentExecutorService } from './executor';
 import { AgentFileToolsService } from './file-tools';
 import { RemoteAgentRunnerService, type RemoteJob } from './remote-runner';
@@ -54,6 +55,7 @@ const setup = (
     cloudRunner?: object;
     researchTools?: object;
     remoteRunner?: object;
+    deepseekRunner?: object;
   } = {}
 ) => {
   const finished: { runId: string; outcome: any; endedAt?: number }[] = [];
@@ -87,6 +89,7 @@ const setup = (
     .service(CloudAgentRunnerService, (fakes.cloudRunner ?? {}) as any)
     .service(ResearchToolsService, (fakes.researchTools ?? {}) as any)
     .service(WorkspaceService, { workspace: { id: 'ws' } } as any)
+    .service(DeepSeekRunnerService, (fakes.deepseekRunner ?? {}) as any)
     .service(AgentExecutorService, [
       AgentContextService,
       AgentRunsStore,
@@ -97,6 +100,7 @@ const setup = (
       CloudAgentRunnerService,
       ResearchToolsService,
       WorkspaceService,
+      DeepSeekRunnerService,
     ]);
   const executor = framework.provider().get(AgentExecutorService);
   return { executor, finished, titles, described };
@@ -212,6 +216,50 @@ describe('AgentExecutorService research runs', () => {
       if (event.type === 'log') logs.push(event.text);
     }
     expect(logs.join('')).toContain('There is no tool called omniseek_curator_act');
+  });
+
+  test('an agent set to DeepSeek researches on DeepSeek, not the server copilot', async () => {
+    const replies = [
+      '```tool\n{"tool": "omniseek_search", "args": {"query": "graph RAG"}}\n```',
+      'GraphRAG [https://arxiv.org/abs/2404.16130].',
+    ];
+    const opened: unknown[] = [];
+    const calls: string[] = [];
+    const { executor, finished, described } = setup([], {}, {
+      context: { build: async () => ({ text: 'Survey graph RAG', label: 'a block', title: 'x' }) },
+      fileTools: { available: false },
+      cloudRunner: {
+        open: async () => {
+          throw new Error('must not use the copilot');
+        },
+      },
+      deepseekRunner: {
+        open: (workspaceId: string, model: string) => {
+          opened.push({ workspaceId, model });
+          return async function* () {
+            yield replies.shift() ?? '';
+          };
+        },
+      },
+      researchTools: {
+        specs: async () => [{ name: 'omniseek_search', desc: 's', args: {}, mutates: false }],
+        call: async (_ws: string, name: string) => {
+          calls.push(name);
+          return 'From Local to Global — arxiv.org/abs/2404.16130';
+        },
+      },
+    });
+    for await (const _ of executor.run(
+      { id: 'a1', name: 'R', harness: 'research', model: 'deepseek-reasoner', tools: [], instructions: '', maxSteps: 4 } as any,
+      { kind: 'block', docId: 'doc', blockId: 'b1' },
+      new AbortController().signal
+    )) {
+      // drain
+    }
+    expect(opened).toEqual([{ workspaceId: 'ws', model: 'deepseek-reasoner' }]);
+    expect(calls).toEqual(['omniseek_search']);
+    expect(described[0]).toMatchObject({ model: 'deepseek-reasoner + OmniSeek' });
+    expect(finished[0].outcome).toMatchObject({ status: 'done' });
   });
 });
 

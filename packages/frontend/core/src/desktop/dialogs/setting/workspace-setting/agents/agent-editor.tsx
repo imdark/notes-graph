@@ -23,8 +23,10 @@ import {
   type AgentScope,
   type AgentTargetKind,
   CLAUDE_CODE_MODEL,
+  DEEPSEEK_MODELS,
   DEFAULT_MAX_STEPS,
   FILE_TOOLS,
+  isDeepSeekModel,
   isDeviceClaudeModel,
   RemoteAgentRunnerService,
   RESEARCH_MODEL,
@@ -126,7 +128,7 @@ const ENVIRONMENTS: {
   {
     value: 'cloud',
     label: 'Cloud (server copilot)',
-    note: 'Requires the server to advertise Copilot',
+    note: 'Requires the server to advertise Copilot, or a DeepSeek key for DeepSeek models',
   },
   {
     value: 'remote',
@@ -136,7 +138,7 @@ const ENVIRONMENTS: {
   {
     value: 'research',
     label: 'Research (server)',
-    note: 'Server copilot with OmniSeek search and reading tools; needs OmniSeek on the server',
+    note: 'Server copilot or DeepSeek with OmniSeek search and reading tools (papers, citations); needs OmniSeek on the server',
   },
 ];
 
@@ -240,12 +242,13 @@ export const AgentEditor = ({
   // picking "on-device" should offer on-device models even when the workspace
   // is pointed at the cloud.
   // The default harness runs on-device (see `harnessFor`), so it gets the
-  // on-device models too.
+  // on-device models too. A server runtime can also run on DeepSeek, which
+  // the server reaches with its own key.
   const availableHarnesses =
     harness === 'remote'
       ? REMOTE_HARNESSES
       : harness === 'cloud' || harness === 'research'
-        ? backendModels
+        ? [...DEEPSEEK_MODELS, ...backendModels]
         : LOCAL_MODELS;
 
   // Tools not yet picked, so the menu only ever offers something new.
@@ -607,10 +610,15 @@ export const AgentEditor = ({
                           'answers with sources. Needs OmniSeek running on that device.'
                         : "Default runs the device's configured AI provider."
                   : harness === 'research'
-                    ? 'The server’s model researches with OmniSeek: searches across ' +
+                    ? `${isDeepSeekModel(model) ? 'DeepSeek' : 'The server’s model'} researches with OmniSeek: searches across ` +
                       'languages, reads pages and papers, follows citations, and ' +
                       'answers with sources.'
-                    : 'A different on-device model is downloaded the first time it runs.'}
+                    : isDeepSeekModel(model)
+                      ? 'Runs on DeepSeek through the server; needs a DeepSeek key ' +
+                        'set there (NOTESGRAPH_DEEPSEEK_API_KEY), not Copilot.'
+                      : harness === 'cloud'
+                        ? 'Default runs the server’s copilot model.'
+                        : 'A different on-device model is downloaded the first time it runs.'}
               </span>
             </div>
 

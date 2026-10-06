@@ -20,6 +20,11 @@ export {
   CloudAgentRunnerService,
 } from './services/cloud-runner';
 export {
+  DEEPSEEK_MODELS,
+  DeepSeekRunnerService,
+  isDeepSeekModel,
+} from './services/deepseek-runner';
+export {
   forkMessages,
   forkTranscript,
   splitSuggestion,
@@ -129,6 +134,7 @@ import { Agents } from './entities/agents';
 import { AgentsService } from './services/agents';
 import { CloudAgentRunnerService } from './services/cloud-runner';
 import { AgentContextService } from './services/context';
+import { DeepSeekRunnerService } from './services/deepseek-runner';
 import { DeploymentsService } from './services/deployments';
 import { AgentFileToolsService } from './services/file-tools';
 import { AgentExecutorService } from './services/executor';
@@ -150,6 +156,7 @@ export function configureAgentsModule(framework: Framework) {
     .service(RemoteAgentRunnerService, [WorkspaceServerService])
     .service(CloudAgentRunnerService, [WorkspaceServerService])
     .service(ResearchToolsService, [WorkspaceServerService])
+    .service(DeepSeekRunnerService, [WorkspaceServerService])
     .service(MonitorsService, [WorkspaceServerService, WorkspaceService])
     .service(AgentExecutorService, [
       AgentContextService,
@@ -161,6 +168,7 @@ export function configureAgentsModule(framework: Framework) {
       CloudAgentRunnerService,
       ResearchToolsService,
       WorkspaceService,
+      DeepSeekRunnerService,
     ])
     .service(AgentTaskClaimService, [DocsService])
     .service(AgentRunSessionService, [
