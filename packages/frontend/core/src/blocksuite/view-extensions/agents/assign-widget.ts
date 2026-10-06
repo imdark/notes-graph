@@ -1,4 +1,4 @@
-import { PlusIcon, ToolIcon } from '@blocksuite/icons/lit';
+import { AiIcon, PlusIcon } from '@blocksuite/icons/lit';
 import {
   menu,
   popMenu,
@@ -29,11 +29,11 @@ import { AgentsFrameworkIdentifier } from './framework';
 
 const WIDGET_TAG = 'notesgraph-agent-assign-widget';
 
-/** Gap between the end of the line's text and the button. */
-const GAP_PX = 4;
+/** Gap between the bottom of the line's text and the button. */
+const GAP_PX = 2;
 
 /**
- * A small button floating at the end of a to-do line that no agent is on yet,
+ * A small button floating under a to-do line that no agent is on yet,
  * offering to hand the task to one: pick an existing agent, or make a new one
  * and hand it to that.
  *
@@ -166,7 +166,10 @@ export class AgentAssignWidget extends WidgetComponent {
     requestAnimationFrame(() => this._place());
   }
 
-  /** Sit just after the last character of the line's own text. */
+  /**
+   * Float just under the line's own text, at its start — the spot the runs
+   * chip drops to — so it never covers the text or the chips after it.
+   */
   private _place() {
     const button =
       this.renderRoot.querySelector<HTMLElement>('.ng-agent-assign');
@@ -181,15 +184,12 @@ export class AgentAssignWidget extends WidgetComponent {
     const range = document.createRange();
     range.selectNodeContents(editor);
     const rects = range.getClientRects();
-    const end = rects[rects.length - 1] ?? editor.getBoundingClientRect();
+    const line = editor.getBoundingClientRect();
+    const end = rects[rects.length - 1] ?? line;
     const box = parent.getBoundingClientRect();
-    const width = button.offsetWidth;
-    const height = button.offsetHeight;
 
-    // A line that runs to the edge has no room after it; tuck the button
-    // against the edge instead of letting it hang off the page.
-    const left = Math.min(end.right - box.left + GAP_PX, box.width - width);
-    const top = end.top - box.top + (end.height - height) / 2;
+    const left = line.left - box.left;
+    const top = Math.max(end.bottom, line.bottom) - box.top + GAP_PX;
     this.style.transform = `translate(${Math.max(0, left)}px, ${top}px)`;
   }
 
@@ -214,7 +214,7 @@ export class AgentAssignWidget extends WidgetComponent {
                 name: agent.name,
                 prefix: agent.emoji
                   ? html`<span>${agent.emoji}</span>`
-                  : ToolIcon(),
+                  : AiIcon(),
                 select: () => this._assign(agent),
               })
             ),
@@ -267,7 +267,7 @@ export class AgentAssignWidget extends WidgetComponent {
       ?data-open=${this._menuOpen}
       @pointerdown=${(e: PointerEvent) => e.preventDefault()}
       @click=${this._openMenu}
-      >${ToolIcon()}${PlusIcon()}</span
+      >${AiIcon()}${PlusIcon()}</span
     >`;
   }
 }
