@@ -156,7 +156,8 @@ export class AgentRunSessionService extends Service {
    * the promise. Asking again for a run already going or queued does nothing.
    *
    * The tasks it is on are marked queued straight away, before any work, so
-   * another agent working the same list leaves them alone.
+   * another agent working the same list leaves them alone, and go to in
+   * progress once the agent picks the run up.
    */
   async start(agent: Agent, target: AgentTarget): Promise<void> {
     await this.schedule(agent, target, 1);
@@ -242,9 +243,14 @@ export class AgentRunSessionService extends Service {
     );
   }
 
-  /** Hand back tasks the run never moved on from queued. */
-  private unclaim(target: AgentTarget): void {
-    this.taskClaim.release(target, () => this.isBusyOn(target)).catch(() => {});
+  /**
+   * Hand back tasks the run never moved on from queued, or from the in
+   * progress `started` put them in.
+   */
+  private unclaim(target: AgentTarget, started?: Promise<string[]>): void {
+    this.taskClaim
+      .release(target, () => this.isBusyOn(target), started)
+      .catch(() => {});
   }
 
   private runNext(): void {
@@ -306,6 +312,11 @@ export class AgentRunSessionService extends Service {
       this.sessions$.setValue(next);
     };
 
+    // Set at the first step: the agent has picked the run up — a device run
+    // only once the device takes its job — so its tasks go from queued to in
+    // progress. Resolves to the tasks moved, to hand back when the run ends.
+    let started: Promise<string[]> | undefined;
+
     try {
       for await (const event of this.executor.run(
         agent,
@@ -314,6 +325,11 @@ export class AgentRunSessionService extends Service {
       )) {
         if (event.type === 'started') {
           patch(prev => ({ ...prev, runId: event.runId }));
+        } else if (event.type === 'step') {
+          started ??= this.taskClaim.markStarted(target).catch(() => {
+            // A run must not fail because its task couldn't be marked.
+            return [];
+          });
         } else if (event.type === 'waiting') {
           patch(prev => ({
             ...prev,
@@ -353,10 +369,18 @@ export class AgentRunSessionService extends Service {
       if (answered && !controller.signal.aborted) {
         // The controller stays registered until the list is settled, so
         // stopping or dismissing the run also stops the next pass.
-        void this.continueList(id, controller, agent, target, before, pass);
+        void this.continueList(
+          id,
+          controller,
+          agent,
+          target,
+          before,
+          pass,
+          started
+        );
       } else {
         this.controllers.delete(id);
-        this.unclaim(target);
+        this.unclaim(target, started);
       }
     }
   }
@@ -366,6 +390,9 @@ export class AgentRunSessionService extends Service {
    * while tasks are still open and the run just ended finished some. A run
    * that finished none ends the loop, since another would only repeat it;
    * so does stopping or dismissing the run.
+   *
+   * Tasks the run moved to in progress but didn't finish go back to to-do
+   * before the next pass, so it claims them again like the rest.
    */
   private async continueList(
     sessionId: string,
@@ -373,7 +400,8 @@ export class AgentRunSessionService extends Service {
     agent: Agent,
     target: AgentTarget,
     before: Promise<string[]>,
-    pass: number
+    pass: number,
+    started?: Promise<string[]>
   ): Promise<void> {
     let again = false;
     try {
@@ -393,9 +421,10 @@ export class AgentRunSessionService extends Service {
       this.controllers.delete(sessionId);
     }
     if (again) {
+      await this.taskClaim.handBack(target, started).catch(() => {});
       await this.schedule(agent, target, pass + 1);
     } else {
-      this.unclaim(target);
+      this.unclaim(target, started);
     }
   }
 

@@ -11,6 +11,9 @@ import { type AgentTarget, agentTargetBlockIds } from './target';
 /** The org keyword a task carries while a run for it waits or starts. */
 export const QUEUED_STATUS = 'QUEUED';
 
+/** The org status a queued task moves to once an agent starts on it. */
+const IN_PROGRESS_STATUS = '[-]';
+
 /** How long a finished run waits before handing back a task it left queued. */
 const RELEASE_SETTLE_MS = 5_000;
 
@@ -169,15 +172,42 @@ export function markTasksQueued(store: Store, blockIds: string[]): string[] {
 }
 
 /**
- * Put tasks still marked queued back to to-do. One the agent moved on — to in
- * progress, done, anything — keeps what the agent wrote.
+ * Move each task among `blockIds` still marked queued to in progress, once
+ * the agent has picked its run up. One the agent already moved on keeps what
+ * the agent wrote. Returns the blocks it moved.
  */
-export function releaseQueuedTasks(store: Store, blockIds: string[]): void {
+export function markTasksStarted(store: Store, blockIds: string[]): string[] {
+  const started: string[] = [];
   for (const id of blockIds) {
     const model = store.getBlock(id)?.model;
     if (!model) continue;
     const status = readTaskStatus(model);
     if (status?.text !== QUEUED_STATUS) continue;
+    writeStatus(model, status, IN_PROGRESS_STATUS);
+    started.push(id);
+  }
+  return started;
+}
+
+/**
+ * Put tasks still marked queued back to to-do, and so too those in `started`
+ * — moved to in progress by {@link markTasksStarted}, not by the agent — that
+ * are still in progress. One the agent moved on — to done, anything — keeps
+ * what the agent wrote.
+ */
+export function releaseQueuedTasks(
+  store: Store,
+  blockIds: string[],
+  started: string[] = []
+): void {
+  for (const id of blockIds) {
+    const model = store.getBlock(id)?.model;
+    if (!model) continue;
+    const status = readTaskStatus(model);
+    const ours =
+      status?.text === QUEUED_STATUS ||
+      (status?.text === IN_PROGRESS_STATUS && started.includes(id));
+    if (!status || !ours) continue;
     writeStatus(model, status, '[ ]');
   }
 }
@@ -214,20 +244,43 @@ export class AgentTaskClaimService extends Service {
   }
 
   /**
-   * Hand back tasks still marked queued, unless `claimedAgain` says another
-   * run has been asked for on them in the meantime.
+   * The agent has picked the run up: its tasks still marked queued go to in
+   * progress. Returns the blocks moved, to hand back with {@link release}.
+   */
+  async markStarted(target: AgentTarget): Promise<string[]> {
+    return (
+      (await this.withStore(target, store =>
+        markTasksStarted(store, targetTaskIds(store, target))
+      )) ?? []
+    );
+  }
+
+  /**
+   * Hand back tasks still marked queued — or still in progress, among those
+   * `started` moved there — unless `claimedAgain` says another run has been
+   * asked for on them in the meantime.
    */
   async release(
     target: AgentTarget,
-    claimedAgain: () => boolean = () => false
+    claimedAgain: () => boolean = () => false,
+    started: Promise<string[]> = Promise.resolve([])
   ): Promise<void> {
     // A device or MCP agent writes its own status on the server; give that
     // edit time to sync here, so a task it just finished isn't read as still
     // queued and reopened.
     await settled();
     if (claimedAgain()) return;
+    await this.handBack(target, started);
+  }
+
+  /** {@link release} at once: the caller has already let edits sync. */
+  async handBack(
+    target: AgentTarget,
+    started: Promise<string[]> = Promise.resolve([])
+  ): Promise<void> {
+    const startedIds = await started.catch(() => []);
     await this.withStore(target, store =>
-      releaseQueuedTasks(store, targetTaskIds(store, target))
+      releaseQueuedTasks(store, targetTaskIds(store, target), startedIds)
     );
   }
 

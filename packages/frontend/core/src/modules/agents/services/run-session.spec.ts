@@ -79,22 +79,40 @@ const fakeExecutor = () => {
  * is the target's unfinished tasks, which a test sets as a run "does" them.
  */
 const fakeClaim = () => {
-  const calls: { op: 'claim' | 'release'; target: AgentTarget }[] = [];
+  const calls: { op: 'claim' | 'start' | 'release'; target: AgentTarget }[] =
+    [];
   const claimedAgain: (() => boolean)[] = [];
   const open = { ids: [] as string[] };
+  const started: Promise<string[]>[] = [];
+  const handedBack: string[][] = [];
   const claim = {
     unfinished: async () => [...open.ids],
     markQueued: async (target: AgentTarget) => {
       calls.push({ op: 'claim', target });
     },
-    release: async (target: AgentTarget, again: () => boolean) => {
+    markStarted: async (target: AgentTarget) => {
+      calls.push({ op: 'start', target });
+      return target.kind === 'block' ? [target.blockId] : [];
+    },
+    release: async (
+      target: AgentTarget,
+      again: () => boolean,
+      moved: Promise<string[]> = Promise.resolve([])
+    ) => {
       calls.push({ op: 'release', target });
       claimedAgain.push(again);
+      started.push(moved);
+    },
+    handBack: async (
+      _target: AgentTarget,
+      moved: Promise<string[]> = Promise.resolve([])
+    ) => {
+      handedBack.push(await moved);
     },
     titleOf: async (target: AgentTarget) =>
       target.kind === 'block' ? `Task ${target.blockId}` : null,
   };
-  return { calls, claimedAgain, claim, open };
+  return { calls, claimedAgain, started, handedBack, claim, open };
 };
 
 const tick = () => new Promise(resolve => setTimeout(resolve, 0));
@@ -344,6 +362,45 @@ describe('AgentRunSessionService', () => {
     );
   });
 
+  test('a queued task goes in progress once the agent picks the run up', async () => {
+    let pickUp!: () => void;
+    let finish!: () => void;
+    const executor = {
+      harnessFor: (a: Agent) => a.harness ?? 'on-device',
+      async *run(): AsyncIterable<AgentEvent> {
+        yield { type: 'started', runId: 'run-1' };
+        // A device run waits for the device to take its job.
+        await new Promise<void>(resolve => (pickUp = resolve));
+        yield { type: 'step', index: 0 };
+        yield { type: 'step', index: 1 };
+        await new Promise<void>(resolve => (finish = resolve));
+      },
+    };
+    const { calls, started, claim } = fakeClaim();
+    const framework = new Framework();
+    framework.service(AgentExecutorService, executor as any);
+    framework.service(AgentTaskClaimService, claim as any);
+    framework.service(AgentRunSessionService, [
+      AgentExecutorService,
+      AgentTaskClaimService,
+    ]);
+    const sessions = framework.provider().get(AgentRunSessionService);
+
+    void sessions.start(remote, block('b1'));
+    await tick();
+    expect(calls.map(c => c.op)).toEqual(['claim']);
+
+    pickUp();
+    await tick();
+    // Once, however many steps follow.
+    expect(calls.map(c => c.op)).toEqual(['claim', 'start']);
+
+    finish();
+    await tick();
+    expect(calls.at(-1)).toEqual({ op: 'release', target: block('b1') });
+    expect(await started.at(-1)).toEqual(['b1']);
+  });
+
   test('a run that ends hands back its task unless asked for again', async () => {
     const { runs, calls, claimedAgain, sessions } = fakeExecutor();
 
@@ -382,6 +439,38 @@ describe('AgentRunSessionService', () => {
 
     expect(runs).toHaveLength(2);
     expect(calls.at(-1)).toEqual({ op: 'release', target: block('list') });
+  });
+
+  test('a task a pass left in progress is handed back before the next pass', async () => {
+    const executor = {
+      harnessFor: (a: Agent) => a.harness ?? 'on-device',
+      async *run(): AsyncIterable<AgentEvent> {
+        yield { type: 'started', runId: 'run-1' };
+        yield { type: 'step', index: 0 };
+        yield { type: 'done', output: 'ok' };
+      },
+    };
+    const { calls, handedBack, claim, open } = fakeClaim();
+    const framework = new Framework();
+    framework.service(AgentExecutorService, executor as any);
+    framework.service(AgentTaskClaimService, claim as any);
+    framework.service(AgentRunSessionService, [
+      AgentExecutorService,
+      AgentTaskClaimService,
+    ]);
+    const sessions = framework.provider().get(AgentRunSessionService);
+    open.ids = ['t1', 't2'];
+    const unfinished = claim.unfinished;
+    let reads = 0;
+    // Before the first pass, then after it: one task done, one left.
+    claim.unfinished = async () =>
+      ++reads === 2 ? ['t2'] : reads > 2 ? [] : unfinished();
+
+    await sessions.start(remote, block('list'));
+    for (let i = 0; i < 10; i++) await tick();
+
+    expect(handedBack[0]).toEqual(['list']);
+    expect(calls.filter(c => c.op === 'claim')).toHaveLength(2);
   });
 
   test('a pass that finishes no task ends the loop', async () => {
