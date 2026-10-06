@@ -6,15 +6,19 @@ import android.content.res.Configuration
 import android.graphics.Color
 import android.os.Build
 import android.os.Bundle
+import android.os.SystemClock
 import android.util.Log
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
+import android.webkit.RenderProcessGoneDetail
 import android.webkit.WebSettings
+import android.webkit.WebView
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.activity.OnBackPressedCallback
+import androidx.annotation.RequiresApi
 import androidx.coordinatorlayout.widget.CoordinatorLayout
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.drawable.DrawableCompat
@@ -39,10 +43,12 @@ import app.notesgraph.pro.service.WebService
 import app.notesgraph.pro.utils.px2dp
 import app.notesgraph.pro.utils.dp2px
 import com.getcapacitor.BridgeActivity
+import com.getcapacitor.WebViewListener
 import com.google.android.material.floatingactionbutton.FloatingActionButton
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 import org.json.JSONObject
+import timber.log.Timber
 import javax.inject.Inject
 
 
@@ -227,6 +233,7 @@ class MainActivity : BridgeActivity(), AIButtonPlugin.Callback, NotesGraphThemeP
         super.load()
         AuthInitializer.initialize(bridge)
         configureEditorWebView()
+        bridge.addWebViewListener(renderProcessGoneListener)
         handleShareIntent(intent)
     }
 
@@ -284,6 +291,38 @@ class MainActivity : BridgeActivity(), AIButtonPlugin.Callback, NotesGraphThemeP
         }
     }
 
+    /**
+     * When the WebView's renderer dies (most often killed for memory while
+     * typing in a big note), Capacitor reports it unhandled and Android then
+     * kills the whole app. Handle it instead: drop the dead WebView and
+     * recreate the activity, which reloads the notes. Edits are already saved
+     * to local storage as they are typed, so at most the last keystrokes go.
+     * A second death right after a recovery closes the activity rather than
+     * looping.
+     */
+    private val renderProcessGoneListener = object : WebViewListener() {
+        // only ever called on API 26+, where WebView reports renderer death
+        @RequiresApi(Build.VERSION_CODES.O)
+        override fun onRenderProcessGone(
+            webView: WebView,
+            detail: RenderProcessGoneDetail?
+        ): Boolean {
+            val crashed = detail?.didCrash()
+            val priority = detail?.rendererPriorityAtExit()
+            Timber.e("[webview] renderer gone (crashed=$crashed, priority=$priority)")
+            (webView.parent as? ViewGroup)?.removeView(webView)
+            webView.destroy()
+            val now = SystemClock.elapsedRealtime()
+            if (now - lastRendererRecovery < RENDERER_RECOVERY_WINDOW_MS) {
+                finish()
+            } else {
+                lastRendererRecovery = now
+                recreate()
+            }
+            return true
+        }
+    }
+
     private fun configureEditorWebView() {
         bridge.webView.apply {
             overScrollMode = View.OVER_SCROLL_NEVER
@@ -335,6 +374,13 @@ class MainActivity : BridgeActivity(), AIButtonPlugin.Callback, NotesGraphThemeP
 
     override fun getSystemNavBarHeight(): Int {
         return navHeight
+    }
+
+    private companion object {
+        const val RENDERER_RECOVERY_WINDOW_MS = 10_000L
+
+        // Outlives recreate(), so a renderer that dies again at once is seen.
+        var lastRendererRecovery = 0L
     }
 
     override fun onClick(v: View) {

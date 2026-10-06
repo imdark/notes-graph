@@ -15,8 +15,15 @@ object AuthInitializer {
 
     fun initialize(bridge: Bridge) {
         bridge.addWebViewListener(object : WebViewListener() {
+            private var done = false
+
             override fun onPageLoaded(webView: WebView?) {
-                bridge.removeWebViewListener(this)
+                if (done) return
+                done = true
+                // Capacitor is iterating its listener list right now; removing
+                // in place skips or crashes the next listener, so remove after.
+                val listener = this
+                MainScope().launch { bridge.removeWebViewListener(listener) }
                 MainScope().launch(Dispatchers.IO) {
                     try {
                         FileTree.get()?.checkAndUploadOldLogs(
