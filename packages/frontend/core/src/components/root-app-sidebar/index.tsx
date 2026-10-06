@@ -7,6 +7,7 @@ import {
   ImportIcon,
   JournalIcon,
   PlanetPanelIcon,
+  PublishIcon,
   SettingsIcon,
   ToolIcon,
 } from '@blocksuite/icons/rc';
@@ -275,6 +276,21 @@ const AgentsButton = () => {
   );
 };
 
+/** Features ready to merge and deploy; see DeploymentsView. */
+const DeploymentsButton = () => {
+  const workbench = useService(WorkbenchService).workbench;
+  const active = useLiveData(
+    workbench.location$.selector(
+      location => location.pathname === '/deployments'
+    )
+  );
+  return (
+    <MenuLinkItem icon={<PublishIcon />} active={active} to={'/deployments'}>
+      <span data-testid="deployments">Deployments</span>
+    </MenuLinkItem>
+  );
+};
+
 const AIChatButton = () => {
   const t = useI18n();
   const featureFlagService = useService(FeatureFlagService);
@@ -422,6 +438,7 @@ export const RootAppSidebar = memo((): ReactElement => {
         <DiscoverButton />
         <AppSidebarJournalButton />
         <AgentsButton />
+        <DeploymentsButton />
         <DuplicatesButton />
         <MenuItem
           data-testid="slider-bar-workspace-setting-button"

@@ -1,4 +1,8 @@
-import { NotificationIcon, SettingsIcon } from '@blocksuite/icons/rc';
+import {
+  NotificationIcon,
+  PublishIcon,
+  SettingsIcon,
+} from '@blocksuite/icons/rc';
 import {
   IconButton,
   Menu,
@@ -61,6 +65,10 @@ export const HomeHeader = () => {
     });
   }, [workspaceDialogService]);
 
+  const openDeployments = useCallback(() => {
+    workbench.open('/deployments');
+  }, [workbench]);
+
   return (
     <>
       <SafeArea top className={styles.root}>
@@ -97,6 +105,14 @@ export const HomeHeader = () => {
             )}
           </div>
         </Menu>
+        <IconButton
+          style={{ transition: 'none' }}
+          onClick={openDeployments}
+          size={28}
+          icon={<PublishIcon />}
+          aria-label="Deployments"
+          data-testid="deployments-button"
+        />
         <IconButton
           style={{ transition: 'none' }}
           onClick={openSetting}

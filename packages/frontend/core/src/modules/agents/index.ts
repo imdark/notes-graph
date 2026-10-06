@@ -26,6 +26,16 @@ export {
 } from './services/question-fork';
 export { AgentContextService } from './services/context';
 export {
+  DeploymentsService,
+  SHIP_STAGES,
+  type ShipAction,
+  shipAgents,
+  type ShipStage,
+  type ShipTask,
+  type ShipTaskDetails,
+  shipTargets,
+} from './services/deployments';
+export {
   type ConditionType,
   type ExtractType,
   MIN_INTERVAL_MINUTES,
@@ -112,12 +122,14 @@ import { LocalLLMService } from '../ai-local';
 import { WorkspaceServerService } from '../cloud';
 import { WorkspaceDBService } from '../db';
 import { DocsService } from '../doc';
+import { DocsSearchService } from '../docs-search';
 import { FolderSyncService } from '../folder-sync';
 import { WorkspaceScope, WorkspaceService } from '../workspace';
 import { Agents } from './entities/agents';
 import { AgentsService } from './services/agents';
 import { CloudAgentRunnerService } from './services/cloud-runner';
 import { AgentContextService } from './services/context';
+import { DeploymentsService } from './services/deployments';
 import { AgentFileToolsService } from './services/file-tools';
 import { AgentExecutorService } from './services/executor';
 import { RemoteAgentRunnerService } from './services/remote-runner';
@@ -154,6 +166,11 @@ export function configureAgentsModule(framework: Framework) {
     .service(AgentRunSessionService, [
       AgentExecutorService,
       AgentTaskClaimService,
+    ])
+    .service(DeploymentsService, [
+      DocsSearchService,
+      DocsService,
+      AgentRunSessionService,
     ])
     .store(AgentsStore, [WorkspaceDBService])
     .store(AgentRunLogsStore)

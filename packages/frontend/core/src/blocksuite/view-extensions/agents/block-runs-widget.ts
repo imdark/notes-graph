@@ -66,6 +66,10 @@ export class BlockAgentRunsWidget extends WidgetComponent {
       white-space: nowrap;
       pointer-events: auto;
     }
+    .ng-agent-runs-chip[data-single] {
+      padding: 0 4px;
+      border-radius: 999px;
+    }
     .ng-agent-runs-chip:hover {
       color: var(--notesgraph-primary-color);
     }
@@ -321,21 +325,26 @@ export class BlockAgentRunsWidget extends WidgetComponent {
     const monitors = this.monitors;
     if (runs.length === 0 && monitors.length === 0) return nothing;
     const running = runs.some(run => run.status === 'running');
-    const label =
-      runs.length === 1 ? runs[0].agentName : `${runs.length} agent runs`;
+    // One run needs no words: the robot in a round bullet, named on hover.
+    const single = runs.length === 1;
+    const title = single
+      ? `Show the run by ${runs[0].agentName} on this block`
+      : 'Show the agent runs on this block';
     // One widget for both chips, so they sit side by side at the line's end
     // rather than two floating widgets landing on top of each other.
     return html`<span class="ng-agent-runs-chips"
       >${monitors.map(monitor => this.renderMonitor(monitor))}${runs.length
         ? html`<span
             class="ng-agent-runs-chip"
-            title="Show the agent runs on this block"
+            title=${title}
+            aria-label=${title}
             data-testid="block-agent-runs"
+            ?data-single=${single}
             @click=${(e: Event) => this._open(e, runs)}
             @mousedown=${(e: Event) => e.stopPropagation()}
             >${running
               ? html`<span class="ng-agent-runs-dot"></span>`
-              : nothing}🤖 ${label}</span
+              : nothing}🤖${single ? nothing : ` ${runs.length} agent runs`}</span
           >`
         : nothing}</span
     >`;
