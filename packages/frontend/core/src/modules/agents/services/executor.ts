@@ -417,10 +417,16 @@ export class AgentExecutorService extends Service implements AgentExecutor {
     return agent.harness ?? 'on-device';
   }
 
+  /**
+   * `brief`, when given, is what the agent reads in place of the target's
+   * text: a run asked for from outside a note (the Deployments screen) about
+   * tasks in several notes, whose target only says where its record sits.
+   */
   async *run(
     agent: Agent,
     target: AgentTarget,
-    signal: AbortSignal
+    signal: AbortSignal,
+    brief?: AgentContext
   ): AsyncIterable<AgentEvent> {
     const key = `${agent.id}:${agentTargetKey(target)}`;
     if (this.inFlight.has(key)) {
@@ -479,7 +485,7 @@ export class AgentExecutorService extends Service implements AgentExecutor {
     };
     yield { type: 'started', runId };
     try {
-      const context = await this.contextService.build(target);
+      const context = brief ?? (await this.contextService.build(target));
       this.runsStore.describe(runId, { input: context.text });
       this.runsStore.setTitle(runId, context.title);
 

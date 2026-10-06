@@ -48,6 +48,10 @@ export const workbenchRoutes = [
     Component: Journals,
   },
   {
+    path: '/deployments',
+    lazy: () => import('./pages/workspace/deployments'),
+  },
+  {
     path: '/trash',
     lazy: () => import('./pages/workspace/trash'),
   },

@@ -7,6 +7,7 @@ import {
   ExportToPdfIcon,
   MindmapIcon,
   PageIcon,
+  PublishIcon,
   TagIcon,
   TodayIcon,
   ViewLayersIcon,
@@ -26,6 +27,7 @@ export const iconNameToIcon = {
   attachment: <AttachmentIcon />,
   pdf: <ExportToPdfIcon />,
   ai: <AiIcon />,
+  deploy: <PublishIcon />,
 } satisfies Record<string, ReactNode>;
 
 export type ViewIconName = keyof typeof iconNameToIcon;
