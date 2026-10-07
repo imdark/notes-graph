@@ -24,6 +24,7 @@ export {
   forkTranscript,
   splitSuggestion,
 } from './services/question-fork';
+export { runChatMessages } from './services/run-chat';
 export { AgentContextService } from './services/context';
 export {
   DeploymentsService,

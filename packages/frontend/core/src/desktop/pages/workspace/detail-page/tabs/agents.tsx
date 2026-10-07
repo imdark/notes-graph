@@ -29,12 +29,15 @@ export const SessionCard = ({
   session,
   queued,
   onViewLog,
+  onAsk,
   onShowTarget,
 }: {
   session: AgentRunSession;
   /** How many on-device runs wait for this one, when it is on-device. */
   queued: number;
   onViewLog: (runId: string) => void;
+  /** Open a chat about the run once it has ended (see AgentRunChat). */
+  onAsk?: (runId: string) => void;
   onShowTarget: (target: AgentRunSession['target']) => void;
 }) => {
   const sessionService = useService(AgentRunSessionService);
@@ -162,6 +165,16 @@ export const SessionCard = ({
             View log
           </Button>
         ) : null}
+        {!running && session.runId && onAsk ? (
+          <Button
+            variant="plain"
+            onClick={() => onAsk(session.runId as string)}
+            title="Ask what it did, why it stopped, or what is left"
+            data-testid="ask-agent-run"
+          >
+            Ask about it
+          </Button>
+        ) : null}
       </div>
 
       {!running && answers && session.output ? (
@@ -208,6 +221,15 @@ export const EditorAgentsPanel = () => {
   );
   const runActions = useRunActions({ openDoc: false });
   const [logRunId, setLogRunId] = useState<string | null>(null);
+  const [askRun, setAskRun] = useState(false);
+  const openLog = useCallback((runId: string) => {
+    setAskRun(false);
+    setLogRunId(runId);
+  }, []);
+  const askAbout = useCallback((runId: string) => {
+    setAskRun(true);
+    setLogRunId(runId);
+  }, []);
   const closeLog = useCallback(() => setLogRunId(null), []);
 
   // The panel is where someone realises they want an agent, so it has to be
@@ -289,7 +311,8 @@ export const EditorAgentsPanel = () => {
               key={session.id}
               session={session}
               queued={session.onDevice ? queue.length : 0}
-              onViewLog={setLogRunId}
+              onViewLog={openLog}
+              onAsk={askAbout}
               onShowTarget={runActions.showTarget}
             />
           ))}
@@ -343,7 +366,7 @@ export const EditorAgentsPanel = () => {
                     key={run.id}
                     run={run}
                     now={now}
-                    onOpen={setLogRunId}
+                    onOpen={openLog}
                     onShowTarget={runActions.showRunTarget}
                     onRetry={runActions.retry}
                     onDelete={runActions.remove}
@@ -355,7 +378,7 @@ export const EditorAgentsPanel = () => {
         </div>
       </Scrollable.Viewport>
       <Scrollable.Scrollbar />
-      <AgentRunLogDialog runId={logRunId} onClose={closeLog} />
+      <AgentRunLogDialog runId={logRunId} ask={askRun} onClose={closeLog} />
     </Scrollable.Root>
   );
 };
