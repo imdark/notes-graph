@@ -307,7 +307,12 @@ export class RangeService<TextAttributes extends BaseTextAttributes> {
           if (newRange) {
             selection.removeAllRanges();
             selection.addRange(newRange);
-            this.editor.rootElement.focus();
+            // `preventScroll`: a plain focus() makes the browser scroll the
+            // block into view whenever it isn't fully visible — Chrome
+            // centers it — so tapping a block partly off-screen (common on
+            // mobile, where wrapped blocks are tall) jumped the page. The
+            // caret is revealed by rich-text's minimal auto-scroll instead.
+            this.editor.rootElement.focus({ preventScroll: true });
 
             this.editor.slots.inlineRangeSync.next(newRange);
           } else {
