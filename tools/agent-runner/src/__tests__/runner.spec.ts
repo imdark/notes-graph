@@ -231,6 +231,7 @@ describe('running a job', () => {
       headers: { Authorization: 'Bearer pat' },
     });
     expect(options.env!.ANTHROPIC_API_KEY).toBe('sk-test');
+    expect(options.env!.CLAUDE_CODE_OAUTH_TOKEN).toBeUndefined();
     expect(options.settingSources).toEqual([]);
     expect(lines.some(l => /^⚙ setup · prepare ✓/.test(l))).toBe(true);
     expect(lines.at(-2)).toMatch(/^✓ finished in 3 turns/);
@@ -370,5 +371,21 @@ describe('skills', () => {
     expect(seen.options!.plugins).toEqual([{ type: 'local', path: plugin }]);
     expect(lines).toContain('⚙ skill · good ✓');
     expect(lines.some(l => /skill · gone ✗ couldn't fetch it/.test(l))).toBe(true);
+  });
+});
+
+describe('signing in to Claude', () => {
+  test('a subscription token is passed instead of an API key', async () => {
+    const seen: { options?: Options } = {};
+    await runJob(job(), {
+      api: api(),
+      workspaceId: 'ws-1',
+      settings: { workRoot: root, claudeOauthToken: 'oauth-tok' },
+      query: fakeQuery([success('done')], seen),
+      say: () => {},
+      signal: new AbortController().signal,
+    });
+    expect(seen.options!.env!.CLAUDE_CODE_OAUTH_TOKEN).toBe('oauth-tok');
+    expect(seen.options!.env!.ANTHROPIC_API_KEY).toBeUndefined();
   });
 });

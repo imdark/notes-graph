@@ -19,6 +19,18 @@ function required(name: string): string {
   return value;
 }
 
+/** A Claude subscription token, or else an API key; one is required. */
+function claudeLogin() {
+  const oauth = process.env.CLAUDE_CODE_OAUTH_TOKEN?.trim();
+  if (oauth) return { claudeOauthToken: oauth };
+  const key = process.env.ANTHROPIC_API_KEY?.trim();
+  if (key) return { anthropicApiKey: key };
+  console.error(
+    'agent-runner: CLAUDE_CODE_OAUTH_TOKEN (from `claude setup-token`) or ANTHROPIC_API_KEY is required'
+  );
+  process.exit(2);
+}
+
 const api = new NotesGraphApi(required('RUNNER_NG_URL'), required('RUNNER_NG_TOKEN'));
 const workspaces = required('RUNNER_WORKSPACES').split(',').map(w => w.trim()).filter(Boolean);
 const deviceKey = process.env.RUNNER_DEVICE_KEY?.trim() || 'cloud';
@@ -61,7 +73,7 @@ await serve({
     repoBranch: process.env.RUNNER_REPO_BRANCH?.trim() || 'main',
     omniseekUrl: process.env.OMNISEEK_URL?.trim() || undefined,
     omniseekToken: process.env.OMNISEEK_TOKEN?.trim() || undefined,
-    anthropicApiKey: required('ANTHROPIC_API_KEY'),
+    ...claudeLogin(),
     ghToken: process.env.GH_TOKEN?.trim() || undefined,
   },
   log,

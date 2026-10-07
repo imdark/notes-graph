@@ -41,8 +41,13 @@ export interface RunnerSettings {
   repoBranch?: string;
   omniseekUrl?: string;
   omniseekToken?: string;
-  /** Passed to Claude Code; nothing else from the runner's environment is. */
-  anthropicApiKey: string;
+  /**
+   * How Claude Code signs in, passed to it and nothing else: a Claude
+   * subscription token (`claude setup-token`, CLAUDE_CODE_OAUTH_TOKEN) or
+   * an Anthropic API key. One of them is set.
+   */
+  claudeOauthToken?: string;
+  anthropicApiKey?: string;
   ghToken?: string;
 }
 
@@ -181,7 +186,9 @@ export async function runJob(job: Job, deps: RunDeps): Promise<RunOutcome> {
         : {}),
       env: {
         ...shell.env,
-        ANTHROPIC_API_KEY: settings.anthropicApiKey,
+        ...(settings.claudeOauthToken
+          ? { CLAUDE_CODE_OAUTH_TOKEN: settings.claudeOauthToken }
+          : { ANTHROPIC_API_KEY: settings.anthropicApiKey }),
         MCP_TOOL_TIMEOUT: String(profile.toolTimeoutMs),
       },
     };

@@ -6,8 +6,8 @@ device, **Cloud (server)** (key `cloud`): pick it in an agent's settings, and
 its runs queue, log, ask, push to the phone and stop like a Mac's.
 
 - **Code:** `tools/agent-runner`, which claims jobs over the same HTTP API wf
-  uses. It runs Claude Code through the Claude Agent SDK, on an Anthropic API
-  key.
+  uses. It runs Claude Code through the Claude Agent SDK, signed in with your
+  Claude subscription (a `claude setup-token` token) or an Anthropic API key.
 - **The agent:** the prompt, the pre-approved tools, the MCP servers and the
   **automation** (setup steps, tools, teardown) all come from the server with
   each job (`plugins/inventory/agent-profiles.ts`). The Mac follows the same
@@ -37,11 +37,12 @@ container, holding none of the server's secrets.
   them.
 - **User:** it runs as the non-root `node` user (uid 1000), with memory and process limits.
 - **Its secrets are only:**
-  - the Anthropic key
+  - the Claude subscription token (or API key)
   - a NotesGraph token for the user it acts for
   - a GitHub token scoped to the one repo
 - **How Claude sees them:** Claude sees the GitHub token, so it can push its
-  branch and open a PR. Setup steps and automation tools never see the API key.
+  branch and open a PR. Setup steps and automation tools never see the Claude
+  token or key.
 
 ## 1. `/opt/notesgraph/compose.yml`
 
@@ -81,7 +82,11 @@ Make it mode 600.
 RUNNER_NG_URL=http://notesgraph:3010
 RUNNER_NG_TOKEN=<NotesGraph access token of the user agents run as>
 RUNNER_WORKSPACES=<workspace id>[,<workspace id>…]
-ANTHROPIC_API_KEY=<key from console.anthropic.com>
+# Claude: your subscription (run `claude setup-token` on your Mac; runs share
+# its session limits) …
+CLAUDE_CODE_OAUTH_TOKEN=<token from claude setup-token>
+# … or, instead, an API key billed per use:
+# ANTHROPIC_API_KEY=<key from console.anthropic.com>
 RUNNER_REPO=https://github.com/imdark/notes-graph
 GH_TOKEN=<fine-grained token: that repo only, contents + pull requests read/write>
 OMNISEEK_URL=http://omniseek:8765
