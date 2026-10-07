@@ -90,7 +90,7 @@ export class AgentContextService extends Service {
       const blockIds =
         target.kind === 'block' ? [target.blockId] : target.blockIds;
       const parts = blockIds
-        .map(id => this.describeBlock(store, id))
+        .map(id => this.describeBlock(store, target.docId, id))
         .filter((part): part is string => !!part);
 
       const label =
@@ -141,9 +141,10 @@ export class AgentContextService extends Service {
       ...lines,
       '',
       'Work through every task above that is not done, one after another,',
-      'until all of them are. For each: do it, then mark it done in the note',
-      '(update_task with its docId and blockId, if you have it) before moving',
-      "on. If one can't be done, give it a status that says why (e.g. BLOCKED)",
+      'until all of them are. For each: do it, then move it on in the note',
+      '(update_task with its docId and blockId: committed once it is on a',
+      'branch with a PR, done if there is nothing to ship) before moving on.',
+      "If one can't be done, give it a status that says why (e.g. BLOCKED)",
       'with a note, and go on to the next rather than stopping.',
     ].join('\n');
   }
@@ -164,7 +165,11 @@ export class AgentContextService extends Service {
   }
 
   /** The block's own text plus what makes it legible out of context. */
-  private describeBlock(store: Store, blockId: string): string | null {
+  private describeBlock(
+    store: Store,
+    docId: string,
+    blockId: string
+  ): string | null {
     const model = store.getBlock(blockId)?.model;
     if (!model) return null;
     const text = model.text?.toString().trim();
@@ -181,6 +186,17 @@ export class AgentContextService extends Service {
       lines.push(`Status: ${QUEUED_STATUS} (queued for you; not done yet)`);
     } else if (status) {
       lines.push(`Status: ${status.text}`);
+    }
+    if (status) {
+      // The page that asked for the run may be closed by the time it ends,
+      // so only the agent can be counted on to move the task off queued.
+      lines.push(
+        `Task: docId ${docId}, blockId ${blockId}. Keep its status current`,
+        'with update_task: in-progress as you start, then where your work',
+        'ended (committed once it is on a branch with a PR, done if there is',
+        'nothing to ship, BLOCKED with a note if it cannot be done). Left as',
+        'it is, it reads as never picked up.'
+      );
     }
 
     const { tags, properties } = this.collectTokens(text);
