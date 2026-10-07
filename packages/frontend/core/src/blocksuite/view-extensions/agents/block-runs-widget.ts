@@ -243,7 +243,16 @@ export class BlockAgentRunsWidget extends WidgetComponent {
     this.style.transform = `translateY(${end.bottom - box.top}px)`;
   }
 
-  private readonly _openMonitor = (e: Event, monitor: Monitor) => {
+  /**
+   * Keep a tap on a chip out of the editor: on a phone it would otherwise put
+   * the caret in the line and raise the keyboard, and the click is lost.
+   */
+  private readonly _holdFocus = (e: PointerEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  private readonly _openMonitor =(e: Event, monitor: Monitor) => {
     e.preventDefault();
     e.stopPropagation();
     this._framework?.get(WorkspaceDialogService).open('monitor-editor', {
@@ -265,6 +274,7 @@ export class BlockAgentRunsWidget extends WidgetComponent {
       title=${title}
       data-testid="block-monitor"
       @click=${(e: Event) => this._openMonitor(e, monitor)}
+      @pointerdown=${this._holdFocus}
       @mousedown=${(e: Event) => e.stopPropagation()}
       ><span class="ng-monitor-dot" data-state=${state}></span>📡${this.renderTrend(
         monitor
@@ -341,6 +351,7 @@ export class BlockAgentRunsWidget extends WidgetComponent {
             data-testid="block-agent-runs"
             ?data-single=${single}
             @click=${(e: Event) => this._open(e, runs)}
+            @pointerdown=${this._holdFocus}
             @mousedown=${(e: Event) => e.stopPropagation()}
             >${running
               ? html`<span class="ng-agent-runs-dot"></span>`
