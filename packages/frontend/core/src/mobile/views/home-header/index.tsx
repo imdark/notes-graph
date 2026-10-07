@@ -1,4 +1,5 @@
 import {
+  ComputerPanelIcon,
   NotificationIcon,
   PublishIcon,
   SettingsIcon,
@@ -69,6 +70,10 @@ export const HomeHeader = () => {
     workbench.open('/deployments');
   }, [workbench]);
 
+  const openMonitoring = useCallback(() => {
+    workbench.open('/monitoring');
+  }, [workbench]);
+
   return (
     <>
       <SafeArea top className={styles.root}>
@@ -112,6 +117,14 @@ export const HomeHeader = () => {
           icon={<PublishIcon />}
           aria-label="Deployments"
           data-testid="deployments-button"
+        />
+        <IconButton
+          style={{ transition: 'none' }}
+          onClick={openMonitoring}
+          size={28}
+          icon={<ComputerPanelIcon />}
+          aria-label="Monitoring"
+          data-testid="monitoring-button"
         />
         <IconButton
           style={{ transition: 'none' }}
