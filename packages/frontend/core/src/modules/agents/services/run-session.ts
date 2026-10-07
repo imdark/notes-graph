@@ -135,6 +135,17 @@ export class AgentRunSessionService extends Service {
     return this.executor.harnessFor(agent) === 'on-device';
   }
 
+  /**
+   * Whether this tab claims and hands back the tasks of this agent's runs. A
+   * device run's job does that on the server — queued when it is asked for,
+   * in progress once a device claims it, handed back when it ends however it
+   * ends — so a tab that closes, or a run that fails or times out on its
+   * device, can't leave tasks stuck; and two writers would race on them.
+   */
+  private claimsHere(agent: Agent): boolean {
+    return this.executor.harnessFor(agent) !== 'remote';
+  }
+
   /** Whether an on-device run is going, so another would queue. */
   get onDeviceBusy(): boolean {
     return this.sessions$.value.some(
@@ -160,7 +171,8 @@ export class AgentRunSessionService extends Service {
    *
    * The tasks it is on are marked queued straight away, before any work, so
    * another agent working the same list leaves them alone, and go to in
-   * progress once the agent picks the run up.
+   * progress once the agent picks the run up. A device run's are claimed by
+   * the server around its job instead (see {@link claimsHere}).
    *
    * With a `brief`, the agent reads that instead of the target's text, and
    * the target only places the run's record (see AgentExecutorService.run).
@@ -181,7 +193,7 @@ export class AgentRunSessionService extends Service {
     brief?: AgentContext
   ): Promise<void> {
     if (this.isPending(agent, target)) return;
-    this.claim(target);
+    if (this.claimsHere(agent)) this.claim(target);
     this.name(agent, target, brief);
     if (this.queues(agent) && this.onDeviceBusy) {
       this.queue$.setValue([
@@ -296,6 +308,7 @@ export class AgentRunSessionService extends Service {
     const controller = new AbortController();
     this.controllers.set(id, controller);
     const onDevice = this.queues(agent);
+    const claims = this.claimsHere(agent);
     // What was left to do as the run started, to tell whether it got any of
     // it done.
     const before = this.taskClaim.unfinished(target).catch((): string[] => []);
@@ -352,7 +365,7 @@ export class AgentRunSessionService extends Service {
       )) {
         if (event.type === 'started') {
           patch(prev => ({ ...prev, runId: event.runId }));
-        } else if (event.type === 'step') {
+        } else if (event.type === 'step' && claims) {
           started ??= this.taskClaim.markStarted(target).catch(() => {
             // A run must not fail because its task couldn't be marked.
             return [];
@@ -408,7 +421,7 @@ export class AgentRunSessionService extends Service {
         );
       } else {
         this.controllers.delete(id);
-        this.unclaim(target, started);
+        if (claims) this.unclaim(target, started);
       }
     }
   }
@@ -449,10 +462,11 @@ export class AgentRunSessionService extends Service {
     } finally {
       this.controllers.delete(sessionId);
     }
+    const claims = this.claimsHere(agent);
     if (again) {
-      await this.taskClaim.handBack(target, started).catch(() => {});
+      if (claims) await this.taskClaim.handBack(target, started).catch(() => {});
       await this.schedule(agent, target, pass + 1, brief);
-    } else {
+    } else if (claims) {
       this.unclaim(target, started);
     }
   }

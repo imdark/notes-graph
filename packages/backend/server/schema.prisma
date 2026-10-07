@@ -1755,6 +1755,11 @@ model InventoryJob {
   /// What the run is about: taken from its block when queued, then renamed
   /// by the agent once it knows.
   title          String?   @db.VarChar
+  /// Task blocks in `docId` the run is on: queued while the job waits, in
+  /// progress once a runner claims it, handed back when it ends.
+  taskIds        String[]  @default([]) @map("task_ids") @db.VarChar
+  /// Of `taskIds`, those the claim moved to in progress (not the agent).
+  startedTaskIds String[]  @default([]) @map("started_task_ids") @db.VarChar
   status         String    @default("queued") @db.VarChar
   result         String?   @db.Text
   error          String?   @db.Text

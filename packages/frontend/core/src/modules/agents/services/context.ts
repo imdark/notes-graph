@@ -42,6 +42,12 @@ export interface AgentContext {
   label: string;
   /** What the run starts out called in run lists: the gist of its target. */
   title: string;
+  /**
+   * The task blocks the run is on, in the target's note, for a device run's
+   * server to claim and hand back (see the inventory's task-claims.ts).
+   * Absent for a whole note, which isn't one task.
+   */
+  taskIds?: string[];
 }
 
 const clipTitle = (text: string) =>
@@ -106,6 +112,7 @@ export class AgentContextService extends Service {
       return {
         label,
         title: first ? `${clipTitle(first)}${more}` : clipTitle(title),
+        taskIds: targetTaskIds(store, target),
         text: [
           `Note: ${title}`,
           '',

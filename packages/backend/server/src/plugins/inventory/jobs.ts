@@ -13,6 +13,7 @@ import {
 import { type AgentProfile, profileFor } from './agent-profiles';
 import { AgentPushService } from './push';
 import { isSessionLimit, sessionLimitRunAfter } from './session-limit';
+import { JobTaskClaims } from './task-claims';
 
 declare global {
   interface Events {
@@ -43,6 +44,8 @@ export interface JobDto {
   blockId: string | null;
   /** What the run is about; null when neither the starter nor the agent named it. */
   title: string | null;
+  /** Task blocks in `docId` the run is on; see task-claims.ts. */
+  taskIds: string[];
   status: string;
   result: string | null;
   error: string | null;
@@ -119,6 +122,7 @@ export function toJobDto(job: InventoryJob, options: JobDtoOptions = {}): JobDto
     docId: job.docId,
     blockId: job.blockId,
     title: job.title,
+    taskIds: job.taskIds ?? [],
     status: job.status,
     result: job.result,
     error: job.error,
@@ -180,6 +184,19 @@ function parseOptions(value: unknown): string[] {
 }
 const MAX_CONTEXT = 200_000;
 const MAX_TITLE = 200;
+const MAX_TASKS = 200;
+
+/** The task block ids a job is on: strings, de-duplicated and capped. */
+function parseTaskIds(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  const ids = value
+    .filter((id): id is string => typeof id === 'string')
+    .map(id => id.trim().slice(0, 200))
+    .filter(Boolean);
+  return [...new Set(ids)].slice(0, MAX_TASKS);
+}
 
 /** A run title on one line, or null when there is nothing left of it. */
 function parseTitle(value: unknown): string | null {
@@ -204,7 +221,8 @@ export class InventoryJobService {
   constructor(
     private readonly models: Models,
     @Optional() private readonly push?: AgentPushService,
-    @Optional() private readonly event?: EventBus
+    @Optional() private readonly event?: EventBus,
+    @Optional() private readonly tasks?: JobTaskClaims
   ) {}
 
   /** Push without holding up the request it rides on, or failing it. */
@@ -250,6 +268,7 @@ export class InventoryJobService {
     // resets, so a job asked for meanwhile waits with the others.
     const runAfter = await this.models.inventoryJob.heldUntil(workspaceId, deviceKey);
 
+    const docId = body.docId ? String(body.docId) : null;
     const job = await this.models.inventoryJob.create({
       workspaceId,
       deviceKey,
@@ -261,9 +280,12 @@ export class InventoryJobService {
       tools: (Array.isArray(body.tools) ? body.tools : []) as never,
       maxSteps: Number(body.maxSteps ?? 8),
       targetKind: body.targetKind ? String(body.targetKind) : null,
-      docId: body.docId ? String(body.docId) : null,
+      docId,
       blockId: body.blockId ? String(body.blockId) : null,
       title: parseTitle(body.title),
+      // Tasks are blocks of the job's note; without one there is nowhere to
+      // find them.
+      taskIds: docId ? parseTaskIds(body.taskIds) : [],
       createdBy: userId,
       runAfter,
     });
@@ -272,6 +294,7 @@ export class InventoryJobService {
       `queued job ${job.id} for ${workspaceId}/${deviceKey}` +
         (runAfter ? ` (held until ${runAfter.toISOString()})` : '')
     );
+    await this.tasks?.queued(job);
     return toJobDto(job);
   }
 
@@ -305,7 +328,9 @@ export class InventoryJobService {
     const job = await this.models.inventoryJob.claim(
       workspaceId, deviceKey, runnerId || 'runner', leaseSeconds
     );
-    return job ? { ...toJobDto(job), profile: profileFor(job.model) } : null;
+    if (!job) return null;
+    await this.tasks?.claimed(job);
+    return { ...toJobDto(job), profile: profileFor(job.model) };
   }
 
   async report(
@@ -363,6 +388,7 @@ export class InventoryJobService {
     });
     // Whoever queued the job may be waiting on its end (a monitor, say).
     if (job && (JOB_TERMINAL as readonly string[]).includes(job.status)) {
+      await this.tasks?.finished(job);
       this.event?.emit('inventory.job.finished', {
         workspaceId,
         jobId: job.id,
@@ -521,6 +547,7 @@ export class InventoryJobService {
 
   async cancel(workspaceId: string, id: string): Promise<JobDto | null> {
     const job = await this.models.inventoryJob.cancel(workspaceId, id);
+    if (job?.status === 'cancelled') await this.tasks?.finished(job);
     return job ? toJobDto(job) : null;
   }
 }
