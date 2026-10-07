@@ -31,6 +31,7 @@ import {
 } from './automation';
 import { Narrator } from './narrate';
 import { permissionPrompt, runServer } from './run-tools';
+import { skillsPlugin } from './skills';
 import { jobDir } from './workdir';
 
 export interface RunnerSettings {
@@ -129,6 +130,8 @@ export async function runJob(job: Job, deps: RunDeps): Promise<RunOutcome> {
   try {
     await runSteps('setup', automation.setup, values, shell, say);
     const handed = await handedOver(workdir.path);
+    const skills = await skillsPlugin(profile.skills ?? [], workdir.path, fetchImpl, say);
+    const plugins = [...(handed.plugins ?? []), ...(skills ? [skills] : [])];
     const cwd = handed.cwd ?? render(automation.cwd ?? '{job_dir}', values);
     // Tools and teardown work where the agent does.
     shell.env.AGENT_CWD = cwd;
@@ -173,8 +176,8 @@ export async function runJob(job: Job, deps: RunDeps): Promise<RunOutcome> {
       // Nothing from the runner's own settings or CLAUDE.md files; the profile is the agent.
       settingSources: [],
       abortController,
-      ...(handed.plugins?.length
-        ? { plugins: handed.plugins.map(path => ({ type: 'local' as const, path })) }
+      ...(plugins.length
+        ? { plugins: plugins.map(path => ({ type: 'local' as const, path })) }
         : {}),
       env: {
         ...shell.env,

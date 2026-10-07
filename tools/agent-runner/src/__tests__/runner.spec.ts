@@ -344,3 +344,31 @@ describe('serving', () => {
     expect(ng.reports.at(-1)!.fields.error).toMatch(/Mac device only/);
   });
 });
+
+describe('skills', () => {
+  test("the profile's skills are fetched and loaded as one plugin; a missing one is skipped", async () => {
+    const seen: { options?: Options } = {};
+    const lines: string[] = [];
+    const fetchImpl = (async (url: string) =>
+      url.endsWith('/good/SKILL.md')
+        ? new Response('---\nname: good\n---\nDo it well.')
+        : new Response('nope', { status: 404 })) as unknown as typeof fetch;
+    const skills = [
+      { name: 'good', url: 'https://example.com/good/SKILL.md' },
+      { name: 'gone', url: 'https://example.com/gone/SKILL.md' },
+    ];
+    await runJob(job({ profile: profile({ skills }) }), {
+      api: api(),
+      workspaceId: 'ws-1',
+      settings: settings(),
+      query: fakeQuery([success('done')], seen),
+      say: line => lines.push(line),
+      signal: new AbortController().signal,
+      fetchImpl,
+    });
+    const plugin = join(root, 'jobs', 'job-1234abcd-ffff', '.skills-plugin');
+    expect(seen.options!.plugins).toEqual([{ type: 'local', path: plugin }]);
+    expect(lines).toContain('⚙ skill · good ✓');
+    expect(lines.some(l => /skill · gone ✗ couldn't fetch it/.test(l))).toBe(true);
+  });
+});

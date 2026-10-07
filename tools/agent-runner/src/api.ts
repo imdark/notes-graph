@@ -33,6 +33,8 @@ export interface AgentProfile {
   toolTimeoutMs: number;
   /** Absent from a server that predates automations. */
   automation?: Automation;
+  /** Claude Code skills to load, each a SKILL.md at a URL. */
+  skills?: Array<{ name: string; url: string }>;
 }
 
 export interface Job {

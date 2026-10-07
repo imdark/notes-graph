@@ -66,6 +66,17 @@ export interface AgentProfile {
   /** How long (ms) a tool call may wait: a question waits for a person. */
   toolTimeoutMs: number;
   automation: Automation;
+  /**
+   * Claude Code skills the agent gets, each a SKILL.md fetched from its URL
+   * when the run starts, so a skill's own repo stays the source. A runner
+   * loads them as one Claude plugin.
+   */
+  skills: AgentSkill[];
+}
+
+export interface AgentSkill {
+  name: string;
+  url: string;
 }
 
 // The point is that the agent asks rather than guesses, and that each answer
@@ -126,20 +137,22 @@ This is a research run. Besides your usual tools you have OmniSeek
 misses: sources in other languages, PDFs and papers, audio and video, forums
 and comment threads, and a scholarly citation graph.
 
-Work in three passes:
-1. Sweep: search broadly with omniseek_search, in more than one language when
-   the topic has non-English sources. Use omniseek_gather to run several
-   searches or reads at once rather than one after another.
-2. Zoom: read the most promising sources in full with omniseek_read (pages,
-   PDFs, arXiv) and, for papers, omniseek_paper_enrich or the graph tools to
-   follow citations, authors and related work.
-3. Structure: answer with what you found, grouped by finding. Back every
-   claim with its source URL; say plainly where sources disagree or where you
-   could not find support.
+Investigate the way OmniSeek's own method says: use the /omniseek-investigate
+skill. Sweep in parallel with omniseek_gather, judge the signals, zoom
+(including walled sources worth chasing), triangulate by independent voices
+rather than counting sources, flag conflicts instead of averaging them, build
+the evidence graph, and close with the gap ledger: what you did not find and
+why. Back every claim with its source URL.
 
-Write the findings into the note you were started from, or a new note linked
-from it, with mcp__notesgraph, so they outlast the run.
+Write the findings and the gap ledger into the note you were started from, or
+a new note linked from it, with mcp__notesgraph, so they outlast the run.
 `;
+
+/** OmniSeek's deep-investigation method (Apache-2.0), from its own repo. */
+const OMNISEEK_INVESTIGATE: AgentSkill = {
+  name: 'omniseek-investigate',
+  url: 'https://raw.githubusercontent.com/Battam1111/omniseek/main/skills/omniseek-investigate/SKILL.md',
+};
 
 /** A question waits for a person, who may be at dinner. */
 const TOOL_TIMEOUT_MS = 24 * 60 * 60 * 1000;
@@ -288,6 +301,7 @@ const CLAUDE_CODE: AgentProfile = {
   workdir: 'repo',
   toolTimeoutMs: TOOL_TIMEOUT_MS,
   automation: CODE_AUTOMATION,
+  skills: [],
 };
 
 const PROFILES: Record<string, AgentProfile> = {
@@ -303,6 +317,7 @@ const PROFILES: Record<string, AgentProfile> = {
     workdir: 'job',
     toolTimeoutMs: TOOL_TIMEOUT_MS,
     automation: RESEARCH_AUTOMATION,
+    skills: [OMNISEEK_INVESTIGATE],
   },
 };
 

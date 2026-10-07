@@ -561,7 +561,10 @@ test('a claimed job carries how to run it, the same for every runner', async t =
   t.deepEqual(research?.profile?.mcpServers, ['notesgraph', 'run', 'omniseek']);
   t.true(research?.profile?.allowedTools.includes('mcp__omniseek'));
   t.is(research?.profile?.workdir, 'job');
-  t.regex(research?.profile?.systemPrompt ?? '', /mcp__run__ask_user[\s\S]*research run/);
+  t.regex(research?.profile?.systemPrompt ?? '', /mcp__run__ask_user[\s\S]*research run[\s\S]*gap ledger/);
+  // OmniSeek's own method, from its repo, not a paraphrase of it.
+  t.deepEqual(research?.profile?.skills.map(s => s.name), ['omniseek-investigate']);
+  t.regex(research!.profile!.skills[0].url, /^https:\/\/raw\.githubusercontent\.com\/Battam1111\/omniseek\/.*\/SKILL\.md$/);
 
   const code = await claimWith('claude-code');
   t.deepEqual(code?.profile?.mcpServers, ['notesgraph', 'run']);
