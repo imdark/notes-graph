@@ -52,6 +52,8 @@ export interface JobDto {
   claimedBy: string | null;
   /** A queued job waits until this (the session limit's reset), if set. */
   runAfter: number | null;
+  /** "Allow all": every permission the run asks is allowed without asking. */
+  allowAllTools: boolean;
   /**
    * Transcript text from absolute offset `logFrom` to `logEnd`. Omitted from
    * listings, which would otherwise ship every job's transcript at once.
@@ -126,6 +128,7 @@ export function toJobDto(job: InventoryJob, options: JobDtoOptions = {}): JobDto
     tmuxSession: job.tmuxSession,
     claimedBy: job.claimedBy,
     runAfter: job.runAfter ? job.runAfter.getTime() / 1000 : null,
+    allowAllTools: job.allowAllTools,
     ...(options.logFrom === undefined ? {} : sliceLog(job, options.logFrom)),
     ...(options.questions ? { questions: options.questions.map(toQuestionDto) } : {}),
     createdAt: job.createdAt.getTime() / 1000,
@@ -517,6 +520,37 @@ export class InventoryJobService {
     }
     this.notify(push => push.questionsClosed(job, closed));
     return toQuestionDto(answered);
+  }
+
+  /**
+   * "Allow all" up front, before the run has asked anything: from the moment
+   * it is queued, every permission it asks is allowed. Only the job's starter
+   * may, as with answering one.
+   */
+  async allowAll(
+    workspaceId: string,
+    jobId: string,
+    userId: string
+  ): Promise<JobDto> {
+    const job = await this.runningJob(workspaceId, jobId);
+    if (job.createdBy && job.createdBy !== userId) {
+      throw new ActionForbidden('Only the person who started this run can allow its tools.');
+    }
+    if ((JOB_TERMINAL as readonly string[]).includes(job.status)) {
+      throw new BadRequest(`Job '${jobId}' is ${job.status}; there is nothing left to allow.`);
+    }
+    // Any permission already waiting is allowed with it, so its notification goes.
+    const open = this.push
+      ? (await this.models.inventoryJob.listQuestions(jobId))
+          .filter(q => q.kind === 'permission' && !q.answeredAt)
+          .map(q => q.id)
+      : [];
+    await this.models.inventoryJob.allowAllTools(jobId, userId);
+    this.logger.log(`job ${jobId}: allow all tools (up front)`);
+    if (open.length) {
+      this.notify(push => push.questionsClosed(job, open));
+    }
+    return toJobDto({ ...job, allowAllTools: true });
   }
 
   async cancel(workspaceId: string, id: string): Promise<JobDto | null> {

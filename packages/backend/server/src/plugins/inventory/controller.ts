@@ -318,6 +318,21 @@ export class InventoryController {
   }
 
   /**
+   * "Allow all" before the run asks anything. Workspace.Read, like answering:
+   * the service only lets the job's starter.
+   */
+  @Post('/workspaces/:workspaceId/jobs/:jobId/allow-all')
+  async allowAllTools(
+    @CurrentUser() user: CurrentUserType,
+    @Param('workspaceId') workspaceId: string,
+    @Param('jobId') jobId: string
+  ) {
+    this.assertEnabled();
+    await this.ac.user(user.id).workspace(workspaceId).assert('Workspace.Read');
+    return { job: await this.jobs.allowAll(workspaceId, jobId, user.id) };
+  }
+
+  /**
    * A running job asks its starter something and then polls for the answer.
    * Workspace.Read, like claim and report: it is the runner's own side of a
    * job it was already given.

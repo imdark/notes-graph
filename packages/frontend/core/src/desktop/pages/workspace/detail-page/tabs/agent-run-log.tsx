@@ -32,6 +32,8 @@ interface RunLogState {
   tmuxSession: string | null;
   /** What a remote run is waiting for the reader to answer. */
   questions: RemoteQuestion[];
+  /** A remote run whose every tool is allowed without asking. */
+  allowAllTools: boolean;
   /** Why there is no log to show, when there isn't. */
   note: string | null;
   loading: boolean;
@@ -41,6 +43,7 @@ const EMPTY: RunLogState = {
   log: '',
   tmuxSession: null,
   questions: [],
+  allowAllTools: false,
   note: null,
   loading: true,
 };
@@ -96,6 +99,7 @@ const useRunLog = (run: AgentRun | undefined): RunLogState => {
             log: prev.log + logDelta,
             tmuxSession: job.tmuxSession,
             questions: openQuestions(job),
+            allowAllTools: !!job.allowAllTools,
             note:
               job.status === 'queued'
                 ? 'Waiting for the device to pick this up…'
@@ -123,6 +127,7 @@ const useRunLog = (run: AgentRun | undefined): RunLogState => {
             log: text ?? '',
             tmuxSession: null,
             questions: [],
+            allowAllTools: false,
             note:
               text !== undefined
                 ? null
@@ -157,6 +162,7 @@ const useRunLog = (run: AgentRun | undefined): RunLogState => {
       log: live.log,
       tmuxSession: null,
       questions: [],
+      allowAllTools: false,
       note: null,
       loading: false,
     };
@@ -273,9 +279,8 @@ export const AgentRunLogDialog = ({
       [runsStore, runId]
     )
   );
-  const { log, tmuxSession, questions, note, loading } = useRunLog(
-    run ?? undefined
-  );
+  const { log, tmuxSession, questions, allowAllTools, note, loading } =
+    useRunLog(run ?? undefined);
 
   // A run can be stopped from here when this tab is driving it, or when it
   // is a device job (the server cancels it for whoever asks). An on-device
@@ -305,6 +310,29 @@ export const AgentRunLogDialog = ({
       )
       .finally(() => setStopping(false));
   }, [remoteRunner, run, session, sessionService, workspaceService]);
+
+  // "Allow all" up front, for a device run that hasn't finished — before it
+  // asks anything, even while it waits to be picked up. Set here at once on
+  // success rather than waiting for the next poll to say so.
+  const [allowingAll, setAllowingAll] = useState(false);
+  const [allowedAll, setAllowedAll] = useState(false);
+  useEffect(() => setAllowedAll(false), [runId]);
+  const allAllowed = allowAllTools || allowedAll;
+  const canAllowAll = run?.status === 'running' && !!run.remoteJobId;
+  const allowAll = useCallback(() => {
+    if (!run?.remoteJobId) return;
+    setAllowingAll(true);
+    remoteRunner
+      .allowAll(workspaceService.workspace.id, run.remoteJobId)
+      .then(() => setAllowedAll(true))
+      .catch(err =>
+        notify.error({
+          title: "Couldn't allow all tools",
+          message: err instanceof Error ? err.message : String(err),
+        })
+      )
+      .finally(() => setAllowingAll(false));
+  }, [remoteRunner, run, workspaceService]);
 
   // Each run opens on its log, unless it was opened to ask about it.
   const [tab, setTab] = useState(LOG_TAB);
@@ -403,16 +431,37 @@ export const AgentRunLogDialog = ({
               }
             />
 
-            {canStop ? (
+            {canStop || canAllowAll ? (
               <div className={styles.sessionActions}>
-                <Button
-                  variant="error"
-                  disabled={stopping}
-                  onClick={stop}
-                  data-testid="agent-run-log-stop"
-                >
-                  Stop run
-                </Button>
+                {canAllowAll ? (
+                  allAllowed ? (
+                    <span
+                      className={styles.hint}
+                      data-testid="agent-run-log-all-allowed"
+                    >
+                      Every tool is allowed for this run.
+                    </span>
+                  ) : (
+                    <Button
+                      disabled={allowingAll || loading}
+                      onClick={allowAll}
+                      tooltip="Allow every tool this run asks for, without asking — including ones it hasn't asked for yet"
+                      data-testid="agent-run-log-allow-all"
+                    >
+                      Allow all tools
+                    </Button>
+                  )
+                ) : null}
+                {canStop ? (
+                  <Button
+                    variant="error"
+                    disabled={stopping}
+                    onClick={stop}
+                    data-testid="agent-run-log-stop"
+                  >
+                    Stop run
+                  </Button>
+                ) : null}
               </div>
             ) : null}
           </div>
