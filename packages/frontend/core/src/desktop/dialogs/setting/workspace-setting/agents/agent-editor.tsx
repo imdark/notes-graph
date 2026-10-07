@@ -28,6 +28,7 @@ import {
   isDeviceClaudeModel,
   RemoteAgentRunnerService,
   RESEARCH_MODEL,
+  CLOUD_DEVICE_KEY,
   WORKFLOW_MODEL,
 } from '@notesgraph/core/modules/agents';
 import {
@@ -202,6 +203,8 @@ export const AgentEditor = ({
   const [deviceKey, setDeviceKey] = useState<string | undefined>(
     agent?.deviceKey
   );
+  // The server's own runner (tools/agent-runner), registered as `cloud`.
+  const onCloud = harness === 'remote' && deviceKey === CLOUD_DEVICE_KEY;
   const modelService = useService(AIModelService);
   const remoteRunner = useService(RemoteAgentRunnerService);
   const workspaceService = useService(WorkspaceService);
@@ -592,7 +595,18 @@ export const AgentEditor = ({
                 ))}
               </select>
               <span className={styles.hint}>
-                {harness === 'remote'
+                {onCloud && !model
+                  ? '⚠ The Cloud runner needs a harness: pick Claude Code, ' +
+                    'Workflow or Research. A default run there fails.'
+                  : onCloud && model === WORKFLOW_MODEL
+                    ? 'Runs on the server as a wf task in its own CLOUD project: ' +
+                      'a CLOUD-n ticket, its own branch and worktree, wf ai’s ' +
+                      'prompt and skills; it can install, test and push.'
+                    : onCloud && model === CLAUDE_CODE_MODEL
+                    ? 'Runs on the server with your notes as tools, in a fresh ' +
+                      'worktree of the repo on its own branch; it can install, ' +
+                      'test and push, and asks you here when it needs something.'
+                    : harness === 'remote'
                   ? model === CLAUDE_CODE_MODEL
                     ? 'Runs the claude CLI on the device with your notes as tools. ' +
                       'When it needs a fact or a permission it asks you here, then ' +

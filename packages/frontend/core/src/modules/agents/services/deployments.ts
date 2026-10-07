@@ -13,12 +13,26 @@ import {
 
 import type { DocsService } from '../../doc';
 import type { DocsSearchService } from '../../docs-search';
+import type { WorkspaceService } from '../../workspace';
 import type { Agent } from '../stores/agents';
 import type { AgentContext } from './context';
-import { isDeviceClaudeModel, RESEARCH_MODEL } from './remote-runner';
+import {
+  COMMAND_MODEL,
+  isDeviceClaudeModel,
+  type RemoteAgentRunnerService,
+  type RemoteJob,
+  RESEARCH_MODEL,
+} from './remote-runner';
 import type { AgentRunSessionService } from './run-session';
 import type { AgentTarget } from './target';
-import { readTaskStatus, taskTitle } from './task-claim';
+import { readTaskStatus, setTaskStatus, taskTitle } from './task-claim';
+
+/**
+ * How long to wait for a wf command job (listing or merging pull requests):
+ * the device's own limit on one is a minute, and it may first wait for a
+ * free slot behind longer runs.
+ */
+const COMMAND_WAIT_MS = 3 * 60_000;
 
 /**
  * Where a task that ships code is on its way out, by the org keyword it
@@ -56,6 +70,184 @@ const PULL_REQUEST_RE = /https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/pull\/\d+/;
 
 export const findPullRequest = (text: string): string | null =>
   PULL_REQUEST_RE.exec(text)?.[0] ?? null;
+
+/** `owner/repo` of a GitHub pull request URL. */
+export const repoOf = (url: string): string | null =>
+  /github\.com\/([\w.-]+\/[\w.-]+)\/pull\/\d+/.exec(url)?.[1] ?? null;
+
+/** What GitHub's checks on a pull request add up to. */
+export type ChecksState = 'pass' | 'fail' | 'pending' | 'none';
+
+/** A pull request as GitHub has it, read through `gh` on the device. */
+export interface PullRequest {
+  repo: string;
+  number: number;
+  title: string;
+  url: string;
+  branch: string;
+  author: string;
+  state: 'open' | 'merged';
+  draft: boolean;
+  /** Whether it merges cleanly; UNKNOWN while GitHub works it out. */
+  mergeable: 'MERGEABLE' | 'CONFLICTING' | 'UNKNOWN';
+  checks: ChecksState;
+  /** Epoch ms. */
+  mergedAt: number | null;
+}
+
+/**
+ * Where an open pull request stands on its way to main. Only conflicts stop
+ * a plain `gh pr merge` (one that turns out not to merge fails safely); a
+ * draft isn't meant to go yet. Failing checks are shown, not enforced: this
+ * repo's CI fails on things a change didn't touch, and its pull requests are
+ * merged regardless, so fixing them with Claude Code is offered, not forced.
+ */
+export type MergeReadiness =
+  | 'ready'
+  | 'unknown'
+  | 'conflicts'
+  | 'failing'
+  | 'pending'
+  | 'draft';
+
+export const mergeReadiness = (pr: PullRequest): MergeReadiness =>
+  pr.draft
+    ? 'draft'
+    : pr.mergeable === 'CONFLICTING'
+      ? 'conflicts'
+      : pr.checks === 'fail'
+        ? 'failing'
+        : pr.checks === 'pending'
+          ? 'pending'
+          : pr.mergeable === 'MERGEABLE'
+            ? 'ready'
+            : 'unknown';
+
+/** Whether {@link mergeReadiness} lets wf merge it without help. */
+export const mergesDirectly = (readiness: MergeReadiness) =>
+  readiness !== 'conflicts' && readiness !== 'draft';
+
+/** Whether it can't merge until Claude Code (or someone) fixes it. */
+export const needsHelpToMerge = (readiness: MergeReadiness) =>
+  readiness === 'conflicts';
+
+/** Whether to offer Claude Code to fix it: conflicts, or failing checks. */
+export const canFixToMerge = (readiness: MergeReadiness) =>
+  readiness === 'conflicts' || readiness === 'failing';
+
+const shellQuote = (value: string) => `'${value.replace(/'/g, `'\\''`)}'`;
+
+const OPEN_FIELDS =
+  'number,title,url,headRefName,author,state,isDraft,mergeable,statusCheckRollup';
+const MERGED_FIELDS = 'number,title,url,headRefName,author,state,mergedAt';
+/** How many recently merged pull requests to list per repo. */
+const MERGED_LIMIT = 15;
+
+/**
+ * The shell command a device runs to list pull requests: each repo's open
+ * ones and its latest merged, one JSON object a line (`--jq '.[]'`). With no
+ * repo known, `cwd` — the device's folder — tells `gh` which repo it is.
+ */
+export function pullRequestsCommand(repos: string[], cwd?: string): string {
+  const lists = (repo?: string) => {
+    const flag = repo ? ` -R ${shellQuote(repo)}` : '';
+    return [
+      // A pull request can carry dozens of checks; their distinct outcomes
+      // are all that's read.
+      `gh pr list${flag} --state open --limit 50 --json ${OPEN_FIELDS} --jq '.[] | .statusCheckRollup |= (map({status, conclusion, state}) | unique) | .author |= {login}'`,
+      `gh pr list${flag} --state merged --limit ${MERGED_LIMIT} --json ${MERGED_FIELDS} --jq '.[] | .author |= {login}'`,
+    ];
+  };
+  const commands = repos.length > 0 ? repos.flatMap(lists) : lists();
+  const run = commands.join(' && ');
+  return repos.length === 0 && cwd ? `cd ${shellQuote(cwd)} && ${run}` : run;
+}
+
+/** The command that merges one pull request, with a merge commit as this repo does. */
+export const mergeCommand = (pr: Pick<PullRequest, 'repo' | 'number'>) =>
+  `gh pr merge ${pr.number} -R ${shellQuote(pr.repo)} --merge`;
+
+type CheckRollup = {
+  status?: string;
+  conclusion?: string;
+  state?: string;
+}[];
+
+const FAILED = new Set([
+  'FAILURE',
+  'ERROR',
+  'CANCELLED',
+  'TIMED_OUT',
+  'ACTION_REQUIRED',
+  'STARTUP_FAILURE',
+]);
+
+/** A check run has a status and conclusion; a commit status only a state. */
+export function checksState(rollup: CheckRollup | undefined): ChecksState {
+  if (!rollup?.length) return 'none';
+  let pending = false;
+  for (const check of rollup) {
+    const outcome = check.conclusion || check.state || '';
+    if (FAILED.has(outcome)) return 'fail';
+    if (
+      (check.status && check.status !== 'COMPLETED') ||
+      outcome === 'PENDING' ||
+      outcome === 'EXPECTED'
+    ) {
+      pending = true;
+    }
+  }
+  return pending ? 'pending' : 'pass';
+}
+
+/** {@link pullRequestsCommand}'s output, one pull request per JSON line. */
+export function parsePullRequests(output: string): PullRequest[] {
+  const byUrl = new Map<string, PullRequest>();
+  for (const line of output.split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed.startsWith('{')) continue;
+    let raw: Record<string, unknown>;
+    try {
+      raw = JSON.parse(trimmed);
+    } catch {
+      continue;
+    }
+    const url = typeof raw.url === 'string' ? raw.url : '';
+    const repo = repoOf(url);
+    if (!repo || typeof raw.number !== 'number') continue;
+    const merged = raw.state === 'MERGED';
+    const mergedAt =
+      typeof raw.mergedAt === 'string' ? Date.parse(raw.mergedAt) : NaN;
+    byUrl.set(url, {
+      repo,
+      number: raw.number,
+      title: String(raw.title ?? ''),
+      url,
+      branch: String(raw.headRefName ?? ''),
+      author: String((raw.author as { login?: string } | null)?.login ?? ''),
+      state: merged ? 'merged' : 'open',
+      draft: raw.isDraft === true,
+      mergeable:
+        raw.mergeable === 'MERGEABLE' || raw.mergeable === 'CONFLICTING'
+          ? raw.mergeable
+          : 'UNKNOWN',
+      checks: merged
+        ? 'none'
+        : checksState(raw.statusCheckRollup as CheckRollup | undefined),
+      mergedAt: Number.isFinite(mergedAt) ? mergedAt : null,
+    });
+  }
+  return [...byUrl.values()];
+}
+
+/** What the screen knows about pull requests, as wf on the device last said. */
+export interface PullRequestsState {
+  pulls: PullRequest[];
+  loading: boolean;
+  error: string | null;
+  /** Epoch ms of the last answer. */
+  at: number | null;
+}
 
 /** The text of a block and everything nested under it, one block a line. */
 const subtreeText = (model: BlockModel): string =>
@@ -100,15 +292,42 @@ export const shipTargets = <T extends { stage: ShipStage }>(
 const plural = (n: number, one: string, many = `${one}s`) =>
   `${n} ${n === 1 ? one : many}`;
 
-/** What the agent of a ship run reads: the tasks, and what to do with them. */
+const READINESS_TEXT: Record<MergeReadiness, string> = {
+  ready: 'merges cleanly, checks pass',
+  unknown: 'GitHub has not said whether it merges cleanly',
+  conflicts: 'conflicts with main',
+  failing: 'checks failing',
+  pending: 'checks still running',
+  draft: 'draft',
+};
+
+/** What GitHub says of a pull request, for a brief. */
+const githubLine = (pr: PullRequest | undefined) =>
+  pr
+    ? `   - on GitHub: ${pr.state === 'merged' ? 'already merged' : READINESS_TEXT[mergeReadiness(pr)]} (branch ${pr.branch})`
+    : null;
+
+/** What to do about a pull request that conflicts or fails its checks. */
+const FIX_STEP =
+  'For one that conflicts with main: check out its branch, merge main into it, resolve the conflicts keeping both sides’ intent, typecheck and run the tests it touches, push, then merge. For failing checks, fix those the change caused; checks that fail on main too don’t hold a merge up.';
+
+/**
+ * What the agent of a ship run reads: the tasks, and what to do with them.
+ * `github` adds what GitHub says of their pull requests, and `untracked`
+ * open pull requests no task names, for a merge to take on too.
+ */
 export function shipBrief(
   tasks: (ShipTask & ShipTaskDetails)[],
-  action: ShipAction
+  action: ShipAction,
+  github: { pulls?: PullRequest[]; untracked?: PullRequest[] } = {}
 ): AgentContext {
+  const pullsByUrl = new Map((github.pulls ?? []).map(pr => [pr.url, pr]));
+  const untracked = github.untracked ?? [];
   const toMerge = tasks.filter(task => task.stage === 'committed');
+  const mergeCount = toMerge.length + untracked.length;
   const title =
     action === 'merge'
-      ? `Merge ${plural(toMerge.length, 'feature')}`
+      ? `Merge ${plural(mergeCount, 'pull request')}`
       : toMerge.length > 0
         ? `Merge and deploy ${plural(tasks.length, 'feature')}`
         : `Deploy ${plural(tasks.length, 'feature')}`;
@@ -117,20 +336,35 @@ export function shipBrief(
       `${i + 1}. ${task.title || task.text}`,
       `   - status: ${task.stage.toUpperCase()}`,
       `   - pull request: ${task.pullRequest ?? 'none named; find it from the task’s notes or the branch'}`,
+      githubLine(
+        task.pullRequest ? pullsByUrl.get(task.pullRequest) : undefined
+      ),
       `   - task: block ${task.blockId} in note "${task.docTitle}" (doc ${task.docId})`,
+    ]
+      .filter(line => line !== null)
+      .join('\n')
+  );
+  const untrackedLines = untracked.map((pr, i) =>
+    [
+      `${i + 1}. ${pr.title}`,
+      `   - pull request: ${pr.url}`,
+      githubLine(pr),
     ].join('\n')
   );
   const steps =
     action === 'merge'
       ? [
-          'Merge each pull request above into main (`gh pr merge`), oldest first. Fetch main again between merges.',
-          'If one does not merge cleanly or its checks fail, leave it, say why in a note on its task, and go on with the rest.',
+          'Merge each pull request above into main (`gh pr merge --merge`), oldest first. Fetch main again between merges.',
+          FIX_STEP,
+          'If you cannot make one merge safely, leave it, say why in a note on its task, and go on with the rest.',
           "Move each task you merged to `merged` with update_task, with a note naming the merge commit. Don't deploy.",
         ]
       : [
           ...(toMerge.length > 0
             ? [
-                'First merge the pull request of each COMMITTED task into main (`gh pr merge`), oldest first. If one does not merge cleanly or its checks fail, leave it out of this deploy and say why in a note on its task.',
+                'First merge the pull request of each COMMITTED task into main (`gh pr merge --merge`), oldest first.',
+                FIX_STEP,
+                'If you cannot make one merge safely, leave it out of this deploy and say why in a note on its task.',
                 'Move each task you merged to `merged` with update_task, with a note naming the merge commit.',
               ]
             : []),
@@ -140,20 +374,23 @@ export function shipBrief(
         ];
   return {
     title,
-    label: plural(tasks.length, 'feature'),
+    label:
+      action === 'merge'
+        ? plural(mergeCount, 'pull request')
+        : plural(tasks.length, 'feature'),
     text: [
       `# ${title}`,
       '',
       `Asked for from the Deployments screen in NotesGraph. ${
         action === 'merge'
-          ? 'Merge these features.'
+          ? 'Merge these pull requests; the screen merged the ones that merged cleanly already.'
           : 'Ship these features to production.'
       }`,
       '',
-      '## Features',
-      '',
-      ...lines,
-      '',
+      ...(lines.length > 0 ? ['## Features', '', ...lines, ''] : []),
+      ...(untrackedLines.length > 0
+        ? ['## Pull requests no task names', '', ...untrackedLines, '']
+        : []),
       '## What to do',
       '',
       ...steps.map(step => `- ${step}`),
@@ -192,9 +429,156 @@ export class DeploymentsService extends Service {
   constructor(
     private readonly docsSearchService: DocsSearchService,
     private readonly docsService: DocsService,
-    private readonly runSessions: AgentRunSessionService
+    private readonly runSessions: AgentRunSessionService,
+    private readonly remote: RemoteAgentRunnerService,
+    private readonly workspaceService: WorkspaceService
   ) {
     super();
+  }
+
+  /**
+   * Pull requests as GitHub has them, read by wf on the ship agent's device
+   * (`gh` there is signed in; nothing here is). Empty until the screen asks.
+   */
+  readonly pullRequests$ = new LiveData<PullRequestsState>({
+    pulls: [],
+    loading: false,
+    error: null,
+    at: null,
+  });
+
+  private get workspaceId(): string {
+    const id = this.workspaceService.workspace?.id;
+    if (!id) throw new Error('No workspace is open');
+    return id;
+  }
+
+  /**
+   * Run `command` on the agent's device as a wf command job and return its
+   * output. A job not finished in time is cancelled, so a device that is off
+   * doesn't run a stale merge whenever it comes back.
+   */
+  private async runCommand(
+    agent: Agent,
+    command: string,
+    title: string
+  ): Promise<string> {
+    if (!agent.deviceKey) throw new Error(`${agent.name} has no device`);
+    const workspaceId = this.workspaceId;
+    const job = await this.remote.enqueue(workspaceId, {
+      deviceKey: agent.deviceKey,
+      agentId: agent.id,
+      agentName: agent.name,
+      instructions: command,
+      context: '',
+      model: COMMAND_MODEL,
+      title,
+    });
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), COMMAND_WAIT_MS);
+    let last: RemoteJob = job;
+    try {
+      for await (const { job: update } of this.remote.watch(
+        workspaceId,
+        job.id,
+        controller.signal
+      )) {
+        last = update;
+      }
+    } finally {
+      clearTimeout(timer);
+    }
+    if (last.status === 'done') return last.result ?? '';
+    if (controller.signal.aborted) {
+      throw new Error(
+        `${agent.deviceKey} didn't pick it up in time. Is wf agent serve running there?`
+      );
+    }
+    throw new Error(
+      last.error || `It ended ${last.status} on ${agent.deviceKey}`
+    );
+  }
+
+  /**
+   * Ask wf on the agent's device for the open and recently merged pull
+   * requests of `repos` (those the tasks name), or, with none, of the repo
+   * the device works in.
+   */
+  async refreshPullRequests(agent: Agent, repos: string[]): Promise<void> {
+    const prev = this.pullRequests$.value;
+    this.pullRequests$.setValue({ ...prev, loading: true });
+    try {
+      let cwd: string | undefined;
+      if (repos.length === 0) {
+        const devices = await this.remote.agentTargets(this.workspaceId);
+        cwd =
+          devices.find(device => device.key === agent.deviceKey)?.path ??
+          undefined;
+        if (!cwd) {
+          throw new Error(
+            'No task names a pull request yet, and the device has no folder to read its repo from.'
+          );
+        }
+      }
+      const output = await this.runCommand(
+        agent,
+        pullRequestsCommand(repos, cwd),
+        'List pull requests'
+      );
+      this.pullRequests$.setValue({
+        pulls: parsePullRequests(output),
+        loading: false,
+        error: null,
+        at: Date.now(),
+      });
+    } catch (err) {
+      this.pullRequests$.setValue({
+        ...prev,
+        loading: false,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
+  /**
+   * Merge a pull request through wf on the agent's device, with no AI: for
+   * those GitHub says merge cleanly. Throws with what `gh` said when it
+   * doesn't, which is the cue to hand it to Claude Code. The task it ships,
+   * if any, goes to MERGED.
+   */
+  async merge(
+    agent: Agent,
+    pr: Pick<PullRequest, 'repo' | 'number' | 'url'>,
+    task?: Pick<ShipTask, 'docId' | 'blockId'>
+  ): Promise<void> {
+    await this.runCommand(
+      agent,
+      mergeCommand(pr),
+      `Merge ${pr.repo}#${pr.number}`
+    );
+    this.pullRequests$.setValue({
+      ...this.pullRequests$.value,
+      pulls: this.pullRequests$.value.pulls.map(p =>
+        p.url === pr.url
+          ? { ...p, state: 'merged', checks: 'none', mergedAt: Date.now() }
+          : p
+      ),
+    });
+    if (task) await this.markMerged(task).catch(() => {});
+  }
+
+  /** Move a task to MERGED, as an agent that merged it would. */
+  private async markMerged(task: Pick<ShipTask, 'docId' | 'blockId'>) {
+    const { doc, release } = this.docsService.open(task.docId);
+    try {
+      await doc.waitForSyncReady();
+      const model = doc.blockSuiteDoc.getBlock(task.blockId)?.model;
+      if (model && readStage(model) === 'committed') {
+        setTaskStatus(model, 'MERGED');
+      }
+    } finally {
+      release();
+    }
   }
 
   /**
@@ -294,25 +678,37 @@ export class DeploymentsService extends Service {
    * Send the tasks to `agent` to merge, or merge and deploy. The run's record
    * sits on the first task's note, on the tasks in that note, so its Show
    * link lands on one of them; the agent reads the brief, which names all.
+   * With only `github.untracked` pull requests to merge, the record goes on
+   * `placeAt`, any task on the screen: a run needs a note to be filed under,
+   * and a task in a ship stage is not one a run claims.
    */
   async ship(
     agent: Agent,
     tasks: (ShipTask & ShipTaskDetails)[],
-    action: ShipAction
+    action: ShipAction,
+    github: { pulls?: PullRequest[]; untracked?: PullRequest[] } = {},
+    placeAt?: Pick<ShipTask, 'docId' | 'blockId'>
   ): Promise<AgentTarget | null> {
     const chosen = shipTargets(tasks, action);
-    const first = chosen[0];
+    const untracked = action === 'merge' ? (github.untracked ?? []) : [];
+    const first = chosen[0] ?? (untracked.length > 0 ? placeAt : undefined);
     if (!first) return null;
     const target: AgentTarget = {
       kind: 'selection',
       docId: first.docId,
-      blockIds: chosen
-        .filter(task => task.docId === first.docId)
-        .map(task => task.blockId),
+      blockIds: chosen.length
+        ? chosen
+            .filter(task => task.docId === first.docId)
+            .map(task => task.blockId)
+        : [first.blockId],
     };
     // Resolves when the run ends; the caller only needs it under way.
     this.runSessions
-      .start(agent, target, shipBrief(chosen, action))
+      .start(
+        agent,
+        target,
+        shipBrief(chosen, action, { pulls: github.pulls, untracked })
+      )
       .catch(() => {
         // The run's own record carries any failure.
       });

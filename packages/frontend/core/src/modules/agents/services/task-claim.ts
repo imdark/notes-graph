@@ -154,6 +154,17 @@ const writeStatus = (
 };
 
 /**
+ * Give a task a new org status (e.g. `MERGED`), whatever it had. False when
+ * the block is not a task.
+ */
+export function setTaskStatus(model: BlockModel, statusText: string): boolean {
+  const status = readTaskStatus(model);
+  if (!status) return false;
+  writeStatus(model, status, statusText);
+  return true;
+}
+
+/**
  * Mark each to-do task among `blockIds` as queued. Tasks already in progress,
  * done or in some other state are left alone, as are blocks that aren't tasks.
  * Returns the blocks it marked.

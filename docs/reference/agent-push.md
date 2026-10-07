@@ -36,6 +36,11 @@ send notifications; if that is refused (System Settings → Notifications),
 or there is no `swiftc`, the run falls back to a plain notification that
 can't be answered. `NG_NOTIFY=0` turns both off.
 
+A permission the server allows as it is asked (after **Allow all**, or one of
+the run's own tools such as `mcp__run__set_title`) shows nothing on the Mac,
+just as it sends no phone push; showing it would only flash a notification
+that the first poll then takes away.
+
 ## Pieces
 
 | Where | What |

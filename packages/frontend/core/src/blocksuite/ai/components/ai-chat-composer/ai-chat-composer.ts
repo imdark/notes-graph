@@ -332,9 +332,36 @@ export class AIChatComposer extends SignalWatcher(
     this.embeddingCompleted = context.embeddingCompleted;
     const selectedChips = this.chips.filter(isSelectedContextChip);
     this.updateChips([
-      ...context.items.map(this.runtimeItemToChip),
+      ...context.items.map(item =>
+        this.mergeWithExistingChip(this.runtimeItemToChip(item))
+      ),
       ...selectedChips,
     ]);
+  };
+
+  // The runtime snapshot changes on every poll tick and streamed token, and
+  // it doesn't carry a doc chip's extracted markdown. Keep the existing chip
+  // (and its markdown) so the doc isn't re-extracted on each snapshot, which
+  // froze the page for long docs and dropped the content before sending.
+  private readonly mergeWithExistingChip = (chip: ChatChip): ChatChip => {
+    const index = findChipIndex(this.chips, chip);
+    if (index === -1) return chip;
+    const existing = this.chips[index];
+    if (
+      existing.state === chip.state &&
+      existing.tooltip === chip.tooltip &&
+      existing.createdAt === chip.createdAt
+    ) {
+      return existing;
+    }
+    if (isDocChip(existing) && isDocChip(chip)) {
+      return {
+        ...chip,
+        markdown: existing.markdown,
+        tokenCount: existing.tokenCount,
+      };
+    }
+    return chip;
   };
 
   private readonly syncChipsFromRuntime = () => {
@@ -395,8 +422,9 @@ export class AIChatComposer extends SignalWatcher(
     if (index === -1) {
       return;
     }
+    // Spread the current chip, not the caller's copy, which may be stale.
     const nextChip: ChatChip = {
-      ...chip,
+      ...this.chips[index],
       ...options,
     };
     this.updateChips([

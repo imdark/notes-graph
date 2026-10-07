@@ -5,6 +5,7 @@ export {
   CLAUDE_CODE_MODEL,
   deviceHarnessName,
   type EnqueueRemoteJob,
+  CLOUD_DEVICE_KEY,
   isDeviceClaudeModel,
   openQuestions,
   RESEARCH_MODEL,
@@ -24,9 +25,18 @@ export {
   forkTranscript,
   splitSuggestion,
 } from './services/question-fork';
+export { runChatMessages } from './services/run-chat';
 export { AgentContextService } from './services/context';
 export {
+  canFixToMerge,
   DeploymentsService,
+  type MergeReadiness,
+  mergeReadiness,
+  mergesDirectly,
+  needsHelpToMerge,
+  type PullRequest,
+  type PullRequestsState,
+  repoOf,
   SHIP_STAGES,
   type ShipAction,
   shipAgents,
@@ -171,6 +181,8 @@ export function configureAgentsModule(framework: Framework) {
       DocsSearchService,
       DocsService,
       AgentRunSessionService,
+      RemoteAgentRunnerService,
+      WorkspaceService,
     ])
     .store(AgentsStore, [WorkspaceDBService])
     .store(AgentRunLogsStore)

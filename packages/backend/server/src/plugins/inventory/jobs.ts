@@ -10,6 +10,7 @@ import {
   QUESTION_KINDS,
   type QuestionKind,
 } from '../../models/inventory-job';
+import { type AgentProfile, profileFor } from './agent-profiles';
 import { AgentPushService } from './push';
 import { isSessionLimit, sessionLimitRunAfter } from './session-limit';
 
@@ -60,6 +61,11 @@ export interface JobDto {
   logEnd?: number;
   /** Everything the run has asked, open ones last. Single-job reads only. */
   questions?: QuestionDto[];
+  /**
+   * How to run it, for the runner that claimed it (see agent-profiles.ts);
+   * null for a model that isn't a Claude agent. Claims only.
+   */
+  profile?: AgentProfile | null;
   createdAt: number;
   startedAt: number | null;
   finishedAt: number | null;
@@ -299,7 +305,7 @@ export class InventoryJobService {
     const job = await this.models.inventoryJob.claim(
       workspaceId, deviceKey, runnerId || 'runner', leaseSeconds
     );
-    return job ? toJobDto(job) : null;
+    return job ? { ...toJobDto(job), profile: profileFor(job.model) } : null;
   }
 
   async report(
