@@ -536,3 +536,38 @@ test('an ordinary failure is still a failure', async t => {
   t.is(dto?.status, 'error');
   t.is(calls.requeue.length, 0);
 });
+
+test('a claimed job carries how to run it, the same for every runner', async t => {
+  const job = (model: string | null) => ({
+    id: 'job-1',
+    workspaceId,
+    deviceKey: 'cloud',
+    agentId: 'a1',
+    agentName: 'research',
+    instructions: 'Find RTX 5090 deals',
+    context: '',
+    model,
+    tools: [],
+    maxSteps: 8,
+    status: 'running',
+    createdAt: new Date(0),
+  });
+  const claimWith = (model: string | null) =>
+    new InventoryJobService({
+      inventoryJob: { claim: async () => job(model) },
+    } as any).claim(workspaceId, 'cloud', 'runner');
+
+  const research = await claimWith('research');
+  t.deepEqual(research?.profile?.mcpServers, ['notesgraph', 'run', 'omniseek']);
+  t.true(research?.profile?.allowedTools.includes('mcp__omniseek'));
+  t.is(research?.profile?.workdir, 'job');
+  t.regex(research?.profile?.systemPrompt ?? '', /mcp__run__ask_user[\s\S]*research run/);
+
+  const code = await claimWith('claude-code');
+  t.deepEqual(code?.profile?.mcpServers, ['notesgraph', 'run']);
+  t.is(code?.profile?.workdir, 'repo');
+  t.false(code?.profile?.allowedTools.includes('mcp__omniseek'));
+
+  t.is((await claimWith('command'))?.profile, null, 'not a Claude agent');
+  t.is((await claimWith(null))?.profile, null);
+});
