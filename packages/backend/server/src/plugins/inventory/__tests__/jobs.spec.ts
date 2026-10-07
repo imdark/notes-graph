@@ -352,6 +352,30 @@ test('after "Allow all" a permission is recorded as allowed, not asked', async t
   t.false('allowedBy' in asked[1]);
 });
 
+test('"Allow all" can be set up front, while the run is still queued', async t => {
+  const { service, allowedAll } = questionService(
+    storedJob({ createdBy: userId, status: 'queued' })
+  );
+  const job = await service.allowAll(workspaceId, 'job-1', userId);
+  t.true(job.allowAllTools);
+  t.deepEqual(allowedAll, [userId]);
+});
+
+test('only the starter can allow all up front, and only before it ends', async t => {
+  const { service, allowedAll } = questionService(
+    storedJob({ createdBy: userId })
+  );
+  await t.throwsAsync(service.allowAll(workspaceId, 'job-1', 'someone-else'), {
+    message: /Only the person who started this run/,
+  });
+  const ended = questionService(storedJob({ createdBy: userId, status: 'done' }));
+  await t.throwsAsync(ended.service.allowAll(workspaceId, 'job-1', userId), {
+    message: /nothing left to allow/,
+  });
+  t.deepEqual(allowedAll, []);
+  t.deepEqual(ended.allowedAll, []);
+});
+
 test("the run's own tools are allowed without asking", async t => {
   const { service, asked } = questionService(storedJob({ createdBy: userId }));
   await service.ask(workspaceId, 'job-1', {

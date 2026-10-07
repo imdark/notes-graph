@@ -94,6 +94,11 @@ export interface RemoteJob {
    * session limit and the job runs again once it resets.
    */
   runAfter?: number | null;
+  /**
+   * "Allow all": every tool the run asks for is allowed without asking.
+   * Absent from older servers.
+   */
+  allowAllTools?: boolean;
   /** Transcript from absolute offset `logFrom` to `logEnd`. */
   log?: string;
   logFrom?: number;
@@ -248,6 +253,18 @@ export class RemoteAgentRunnerService extends Service {
     return data.question;
   }
 
+  /**
+   * "Allow all" before the run has asked anything — even while it is still
+   * queued; only its starter is allowed to.
+   */
+  async allowAll(workspaceId: string, jobId: string): Promise<RemoteJob> {
+    const data = await this.json<{ job: RemoteJob }>(
+      `${this.base(workspaceId)}/jobs/${encodeURIComponent(jobId)}/allow-all`,
+      { method: 'POST' }
+    );
+    return data.job;
+  }
+
   async cancel(workspaceId: string, jobId: string): Promise<void> {
     await this.json(
       `${this.base(workspaceId)}/jobs/${encodeURIComponent(jobId)}/cancel`,
@@ -277,6 +294,7 @@ export class RemoteAgentRunnerService extends Service {
     let lastStatus = '';
     let lastOpen = '';
     let lastTitle: string | null | undefined;
+    let lastAllowAll: boolean | undefined;
     let logFrom = 0;
     try {
       while (!signal.aborted) {
@@ -290,11 +308,13 @@ export class RemoteAgentRunnerService extends Service {
           job.status !== lastStatus ||
           logDelta ||
           open !== lastOpen ||
-          job.title !== lastTitle
+          job.title !== lastTitle ||
+          job.allowAllTools !== lastAllowAll
         ) {
           lastStatus = job.status;
           lastOpen = open;
           lastTitle = job.title;
+          lastAllowAll = job.allowAllTools;
           yield { job, logDelta };
         }
         if (['done', 'error', 'cancelled'].includes(job.status)) {
