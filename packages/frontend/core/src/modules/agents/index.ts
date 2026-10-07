@@ -5,6 +5,7 @@ export {
   CLAUDE_CODE_MODEL,
   deviceHarnessName,
   type EnqueueRemoteJob,
+  CLOUD_DEVICE_KEY,
   isDeviceClaudeModel,
   openQuestions,
   RESEARCH_MODEL,

@@ -12,6 +12,49 @@
 
 export type AgentMcpServer = 'notesgraph' | 'run' | 'omniseek';
 
+/**
+ * One shell step, in wf's recipe shape (workflow/deploy/recipes.py Step):
+ * `{placeholder}`s in `run` are filled in by the runner, unknown ones are left
+ * for the shell, and a failing step stops the automation unless `optional`.
+ *
+ * Placeholders: {job_id}, {job_short} (its first 8 characters), {job_dir}
+ * (the job's own directory), {prompt_file} (what the job asks), {branch}
+ * (cloud/{job_short}), {repo} and {base_branch} (the runner's repo), {cache}
+ * (kept between jobs). Tools and teardown also get $AGENT_CWD, where the
+ * agent works.
+ */
+export interface AutomationStep {
+  name: string;
+  run: string;
+  /** Seconds; default 600. */
+  timeout?: number;
+  optional?: boolean;
+}
+
+/**
+ * A command the agent may call as a tool, `mcp__automation__<name>`. Its
+ * params reach the command as environment variables ($ARG_<NAME>), never
+ * spliced into it, so what the agent passes can't change what runs.
+ */
+export interface AutomationTool extends AutomationStep {
+  description: string;
+  params?: Record<string, { description: string; required?: boolean }>;
+}
+
+/**
+ * What a runner does around the agent: prepares the ground before the model
+ * starts (clone, install, fetch sources), gives it tools of its own beyond
+ * Claude Code's, and cleans up after. Runs where the job runs; a Mac runner
+ * that does its own preparation (wf's worktree) may skip `setup`.
+ */
+export interface Automation {
+  setup: AutomationStep[];
+  tools: AutomationTool[];
+  teardown: AutomationStep[];
+  /** Where the agent starts, e.g. "{job_dir}/repo"; default {job_dir}. */
+  cwd?: string;
+}
+
 export interface AgentProfile {
   /** Appended to Claude Code's own system prompt. */
   systemPrompt: string;
@@ -22,6 +65,7 @@ export interface AgentProfile {
   workdir: 'repo' | 'job';
   /** How long (ms) a tool call may wait: a question waits for a person. */
   toolTimeoutMs: number;
+  automation: Automation;
 }
 
 // The point is that the agent asks rather than guesses, and that each answer
@@ -100,18 +144,156 @@ from it, with mcp__notesgraph, so they outlast the run.
 /** A question waits for a person, who may be at dinner. */
 const TOOL_TIMEOUT_MS = 24 * 60 * 60 * 1000;
 
+const MIRROR = '{cache}/repo.git';
+
+/**
+ * A code task works in its own worktree of the repo on a fresh branch, the
+ * way wf gives a claude-code job a worktree of the runner's checkout. One
+ * blobless mirror is kept in {cache} and fetched first, so a job costs a
+ * worktree rather than a clone. Installing and testing are tools the agent
+ * calls when it needs them: a full install is minutes and gigabytes.
+ */
+const CODE_AUTOMATION: Automation = {
+  setup: [
+    {
+      name: 'mirror',
+      run:
+        `git --git-dir ${MIRROR} fetch --prune origin 2>/dev/null || ` +
+        `(rm -rf ${MIRROR} && git clone --bare --filter=blob:none {repo} ${MIRROR} && ` +
+        `git --git-dir ${MIRROR} config remote.origin.fetch '+refs/heads/*:refs/remotes/origin/*' && ` +
+        `git --git-dir ${MIRROR} fetch origin)`,
+      timeout: 1800,
+    },
+    {
+      name: 'worktree',
+      run:
+        `git --git-dir ${MIRROR} worktree prune && ` +
+        `git --git-dir ${MIRROR} worktree add -B {branch} {job_dir}/repo origin/{base_branch}`,
+    },
+  ],
+  tools: [
+    {
+      name: 'install_deps',
+      description:
+        'Install the repo\'s dependencies (corepack + yarn install). Needed once ' +
+        'before run_tests or typecheck; takes several minutes.',
+      run: 'cd "$AGENT_CWD" && corepack enable && yarn install --mode=skip-build',
+      timeout: 2400,
+    },
+    {
+      name: 'run_tests',
+      description:
+        'Run the vitest tests at a path in the repo (e.g. packages/frontend/core/src/modules/agents) ' +
+        'and return the output. Run install_deps first.',
+      run: 'cd "$AGENT_CWD" && yarn vitest run "$ARG_PATH"',
+      params: { path: { description: 'File or directory to test, relative to the repo root.', required: true } },
+      timeout: 1200,
+    },
+    {
+      name: 'typecheck',
+      description:
+        'Typecheck a package of the repo (e.g. packages/frontend/core) with scripts/typecheck.sh. ' +
+        'Run install_deps first.',
+      run: 'cd "$AGENT_CWD" && scripts/typecheck.sh "$ARG_PACKAGE"',
+      params: { package: { description: 'Package directory, relative to the repo root.', required: true } },
+      timeout: 1200,
+    },
+  ],
+  teardown: [
+    {
+      name: 'worktree',
+      run: `git --git-dir ${MIRROR} worktree remove --force {job_dir}/repo`,
+      optional: true,
+    },
+  ],
+  cwd: '{job_dir}/repo',
+};
+
+const CHECKOUT = '{cache}/checkout';
+
+/**
+ * A Workflow job is a wf task, as on a Mac (`wf agent prepare-task`, which is
+ * jobs.py start_job_task): a ticket in the runner's own wf project, CLOUD,
+ * on the markdown backend, so its tickets and branches (cloud-1-…) never
+ * collide with a Mac's; its branch in a worktree beside a real checkout of
+ * the repo (wf branches from one, which a bare mirror isn't); `wf ai`'s
+ * prompt and the task's skills, handed to the agent. wf's home is on the
+ * runner's volume, so the tickets last.
+ */
+const WORKFLOW_AUTOMATION: Automation = {
+  setup: [
+    {
+      name: 'checkout',
+      run:
+        `(test -d ${CHECKOUT}/.git || git clone --filter=blob:none {repo} ${CHECKOUT}) && ` +
+        `git -C ${CHECKOUT} fetch --prune origin && ` +
+        `git -C ${CHECKOUT} checkout -q --detach origin/{base_branch} && ` +
+        `git -C ${CHECKOUT} branch -f {base_branch} origin/{base_branch}`,
+      timeout: 1800,
+    },
+    {
+      name: 'wf project',
+      run:
+        'mkdir -p "$HOME/.wf" && ' +
+        '(test -f "$HOME/.wf/config.yaml" || printf \'%s\\n\' ' +
+        "'backend: markdown' 'git_enabled: true' 'github_enabled: true' 'projects:' " +
+        "'  cloud:' '    name: CLOUD' '    task_backend: markdown' " +
+        "'    git_enabled: true' '    github_enabled: true' '    repositories:' " +
+        `'      ${CHECKOUT}:' '        base_branch: {base_branch}' ` +
+        '> "$HOME/.wf/config.yaml") && ' +
+        '(test -f "$HOME/.wf/state.yaml" || echo \'current_project: cloud\' > "$HOME/.wf/state.yaml")',
+    },
+    {
+      name: 'task',
+      run:
+        `wf agent prepare-task --job-dir {job_dir} --repo ${CHECKOUT} ` +
+        '--prompt-file {prompt_file} --out {job_dir}/automation.json',
+      timeout: 300,
+    },
+  ],
+  tools: CODE_AUTOMATION.tools,
+  teardown: [
+    {
+      name: 'worktree',
+      run: `git -C ${CHECKOUT} worktree remove --force "$AGENT_CWD"`,
+      optional: true,
+    },
+  ],
+};
+
+/** Research keeps what it reads in the job directory, like OmniSeek's own downloads. */
+const RESEARCH_AUTOMATION: Automation = {
+  setup: [{ name: 'sources', run: 'mkdir -p {job_dir}/sources' }],
+  tools: [
+    {
+      name: 'fetch_source',
+      description:
+        'Download a URL (a PDF, a dataset, a page) into this run\'s sources folder and ' +
+        'return where it was saved, so you can Read it.',
+      run:
+        'cd {job_dir}/sources && name="$(basename "${ARG_URL%%\\?*}")" && ' +
+        'curl -fsSL --max-time 120 --max-filesize 52428800 -o "${name:-source}" "$ARG_URL" && ' +
+        'echo "saved {job_dir}/sources/${name:-source} ($(wc -c < "${name:-source}") bytes)"',
+      params: { url: { description: 'The http(s) URL to download.', required: true } },
+      timeout: 180,
+    },
+  ],
+  teardown: [],
+};
+
 const CLAUDE_CODE: AgentProfile = {
   systemPrompt: CLAUDE_CODE_SYSTEM_PROMPT,
   allowedTools: CLAUDE_CODE_ALLOWED_TOOLS,
   mcpServers: ['notesgraph', 'run'],
   workdir: 'repo',
   toolTimeoutMs: TOOL_TIMEOUT_MS,
+  automation: CODE_AUTOMATION,
 };
 
 const PROFILES: Record<string, AgentProfile> = {
   'claude-code': CLAUDE_CODE,
   // Claude Code started as a wf task (ticket, branch, skills): the same agent.
-  workflow: CLAUDE_CODE,
+  workflow: { ...CLAUDE_CODE, automation: WORKFLOW_AUTOMATION },
   research: {
     systemPrompt: `${CLAUDE_CODE_SYSTEM_PROMPT}\n${RESEARCH_SYSTEM_PROMPT}`,
     // OmniSeek's tools read and search; none of them act on the user's behalf.
@@ -120,6 +302,7 @@ const PROFILES: Record<string, AgentProfile> = {
     // Research reads the world, not a repo.
     workdir: 'job',
     toolTimeoutMs: TOOL_TIMEOUT_MS,
+    automation: RESEARCH_AUTOMATION,
   },
 };
 
