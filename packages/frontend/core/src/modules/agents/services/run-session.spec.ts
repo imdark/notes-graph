@@ -326,11 +326,23 @@ describe('AgentRunSessionService', () => {
     ]);
   });
 
+  test('a device run leaves its tasks to the server', async () => {
+    const { runs, calls, sessions } = fakeExecutor();
+
+    void sessions.start(remote, block('b1'));
+    await tick();
+    runs[0].finish();
+    await tick();
+
+    // Its job claims and hands them back, whatever becomes of this tab.
+    expect(calls).toEqual([]);
+  });
+
   test('asking again for a pending run does not claim twice', async () => {
     const { calls, sessions } = fakeExecutor();
 
-    void sessions.start(remote, block('b1'));
-    void sessions.start(remote, block('b1'));
+    void sessions.start(cloud, block('b1'));
+    void sessions.start(cloud, block('b1'));
     await tick();
 
     expect(calls.filter(c => c.op === 'claim')).toHaveLength(1);
@@ -369,7 +381,7 @@ describe('AgentRunSessionService', () => {
       harnessFor: (a: Agent) => a.harness ?? 'on-device',
       async *run(): AsyncIterable<AgentEvent> {
         yield { type: 'started', runId: 'run-1' };
-        // A device run waits for the device to take its job.
+        // A run's first step can come late, as a device's waits for its job.
         await new Promise<void>(resolve => (pickUp = resolve));
         yield { type: 'step', index: 0 };
         yield { type: 'step', index: 1 };
@@ -386,7 +398,7 @@ describe('AgentRunSessionService', () => {
     ]);
     const sessions = framework.provider().get(AgentRunSessionService);
 
-    void sessions.start(remote, block('b1'));
+    void sessions.start(cloud, block('b1'));
     await tick();
     expect(calls.map(c => c.op)).toEqual(['claim']);
 
@@ -404,7 +416,7 @@ describe('AgentRunSessionService', () => {
   test('a run that ends hands back its task unless asked for again', async () => {
     const { runs, calls, claimedAgain, sessions } = fakeExecutor();
 
-    void sessions.start(remote, block('b1'));
+    void sessions.start(cloud, block('b1'));
     await tick();
     runs[0].finish();
     await tick();
@@ -412,7 +424,7 @@ describe('AgentRunSessionService', () => {
     expect(calls.at(-1)).toEqual({ op: 'release', target: block('b1') });
     expect(claimedAgain.at(-1)?.()).toBe(false);
 
-    void sessions.start(remote, block('b1'));
+    void sessions.start(cloud, block('b1'));
     await tick();
     expect(claimedAgain.at(-1)?.()).toBe(true);
   });
@@ -421,7 +433,7 @@ describe('AgentRunSessionService', () => {
     const { runs, open, calls, sessions } = fakeExecutor();
     open.ids = ['t1', 't2', 't3'];
 
-    void sessions.start(remote, block('list'));
+    void sessions.start(cloud, block('list'));
     await tick();
     open.ids = ['t3'];
     runs[0].finish(true);
@@ -466,7 +478,7 @@ describe('AgentRunSessionService', () => {
     claim.unfinished = async () =>
       ++reads === 2 ? ['t2'] : reads > 2 ? [] : unfinished();
 
-    await sessions.start(remote, block('list'));
+    await sessions.start(cloud, block('list'));
     for (let i = 0; i < 10; i++) await tick();
 
     expect(handedBack[0]).toEqual(['list']);
@@ -477,7 +489,7 @@ describe('AgentRunSessionService', () => {
     const { runs, open, sessions } = fakeExecutor();
     open.ids = ['t1', 't2'];
 
-    void sessions.start(remote, block('list'));
+    void sessions.start(cloud, block('list'));
     await tick();
     runs[0].finish(true);
     await tick();
@@ -490,8 +502,8 @@ describe('AgentRunSessionService', () => {
     const { runs, open, sessions } = fakeExecutor();
     open.ids = ['t1', 't2'];
 
-    void sessions.start(remote, block('a'));
-    void sessions.start(remote, block('b'));
+    void sessions.start(cloud, block('a'));
+    void sessions.start(cloud, block('b'));
     await tick();
     open.ids = ['t2'];
     // Ended with no answer, as an error or cancel does.
@@ -515,7 +527,7 @@ describe('AgentRunSessionService', () => {
       return read(target);
     };
 
-    void sessions.start(remote, block('list'));
+    void sessions.start(cloud, block('list'));
     await tick();
     open.ids = ['t2'];
     runs[0].finish(true);

@@ -2,6 +2,7 @@ import {
   AiIcon,
   AllDocsIcon,
   AttachmentIcon,
+  ComputerPanelIcon,
   DeleteIcon,
   EdgelessIcon,
   ExportToPdfIcon,
@@ -28,6 +29,7 @@ export const iconNameToIcon = {
   pdf: <ExportToPdfIcon />,
   ai: <AiIcon />,
   deploy: <PublishIcon />,
+  monitoring: <ComputerPanelIcon />,
 } satisfies Record<string, ReactNode>;
 
 export type ViewIconName = keyof typeof iconNameToIcon;

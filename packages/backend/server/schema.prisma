@@ -178,6 +178,9 @@ model Workspace {
   inventoryDevices           InventoryDevice[]
   inventoryJobs              InventoryJob[]
   monitors                   Monitor[]
+  monitoringAgent            MonitoringAgent?
+  monitoringBaselines        MonitoringBaseline[]
+  monitoringDecisions        MonitoringDecision[]
   projectDocs                ProjectDoc[]
   directoryAccounts          DirectoryAccount[]
 
@@ -1755,6 +1758,11 @@ model InventoryJob {
   /// What the run is about: taken from its block when queued, then renamed
   /// by the agent once it knows.
   title          String?   @db.VarChar
+  /// Task blocks in `docId` the run is on: queued while the job waits, in
+  /// progress once a runner claims it, handed back when it ends.
+  taskIds        String[]  @default([]) @map("task_ids") @db.VarChar
+  /// Of `taskIds`, those the claim moved to in progress (not the agent).
+  startedTaskIds String[]  @default([]) @map("started_task_ids") @db.VarChar
   status         String    @default("queued") @db.VarChar
   result         String?   @db.Text
   error          String?   @db.Text
@@ -1888,4 +1896,84 @@ model MonitorReading {
 
   @@index([monitorId, at])
   @@map("monitor_readings")
+}
+
+/// A workspace's monitoring agent: it learns what normal looks like on each
+/// inventory machine, flags what's new, and escalates what matters. One per
+/// workspace; absent until someone turns it on.
+model MonitoringAgent {
+  workspaceId     String    @id @map("workspace_id") @db.VarChar
+  /// 'training' (learn only), 'shadow' (decide, tell nobody) or 'detect'.
+  mode            String    @default("training") @db.VarChar
+  /// How far from normal, in standard deviations, a reading must be.
+  sensitivity     Float     @default(3)
+  /// How often the agent health-checks every machine itself; 0 is never.
+  intervalMinutes Int       @default(60) @map("interval_minutes")
+  /// On escalation, send a read-only Claude run to the machine to triage.
+  autoTriage      Boolean   @default(false) @map("auto_triage")
+  /// {push}
+  alerts          Json      @default("{}") @db.JsonB
+  /// Who it acts as: the person who last changed it.
+  updatedBy       String    @map("updated_by") @db.VarChar
+  nextRunAt       DateTime  @default(now()) @map("next_run_at") @db.Timestamptz(3)
+  lastRunAt       DateTime? @map("last_run_at") @db.Timestamptz(3)
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([nextRunAt])
+  @@map("monitoring_agents")
+}
+
+/// What normal is for one reading on one machine: an EWMA of its value and
+/// variance, or for a `seen:` signal, how often it has been seen.
+model MonitoringBaseline {
+  id          String   @id @default(uuid()) @db.VarChar
+  workspaceId String   @map("workspace_id") @db.VarChar
+  deviceKey   String   @map("device_key") @db.VarChar
+  /// A check's name as a slug ('disk', 'memory', 'load'), or
+  /// 'seen:<check>:<status>' / 'seen:health' for counts.
+  metric      String   @db.VarChar
+  mean        Float    @default(0)
+  variance    Float    @default(0)
+  samples     Int      @default(0)
+  lastValue   Float?   @map("last_value")
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, deviceKey, metric])
+  @@map("monitoring_baselines")
+}
+
+/// Something the agent noticed, and what it did about it.
+model MonitoringDecision {
+  id          String    @id @default(uuid()) @db.VarChar
+  workspaceId String    @map("workspace_id") @db.VarChar
+  deviceKey   String    @map("device_key") @db.VarChar
+  metric      String    @db.VarChar
+  /// 'anomaly' (far from normal) or 'new' (a warn/fail state never seen).
+  kind        String    @db.VarChar
+  /// 'warn' or 'critical'.
+  severity    String    @db.VarChar
+  value       Float?
+  baseline    Float?
+  score       Float?
+  summary     String    @db.Text
+  /// 'shadow' (would have escalated) or 'escalated'. Repeats aren't kept.
+  action      String    @db.VarChar
+  /// The person's word on it: 'expected' (teach it this is normal) or 'resolved'.
+  verdict     String?   @db.VarChar
+  triageJobId String?   @map("triage_job_id") @db.VarChar
+  triage      String?   @db.Text
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, createdAt])
+  @@index([workspaceId, deviceKey, metric, createdAt])
+  @@index([triageJobId])
+  @@map("monitoring_decisions")
 }

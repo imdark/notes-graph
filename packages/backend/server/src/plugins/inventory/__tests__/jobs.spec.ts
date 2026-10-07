@@ -352,6 +352,30 @@ test('after "Allow all" a permission is recorded as allowed, not asked', async t
   t.false('allowedBy' in asked[1]);
 });
 
+test('"Allow all" can be set up front, while the run is still queued', async t => {
+  const { service, allowedAll } = questionService(
+    storedJob({ createdBy: userId, status: 'queued' })
+  );
+  const job = await service.allowAll(workspaceId, 'job-1', userId);
+  t.true(job.allowAllTools);
+  t.deepEqual(allowedAll, [userId]);
+});
+
+test('only the starter can allow all up front, and only before it ends', async t => {
+  const { service, allowedAll } = questionService(
+    storedJob({ createdBy: userId })
+  );
+  await t.throwsAsync(service.allowAll(workspaceId, 'job-1', 'someone-else'), {
+    message: /Only the person who started this run/,
+  });
+  const ended = questionService(storedJob({ createdBy: userId, status: 'done' }));
+  await t.throwsAsync(ended.service.allowAll(workspaceId, 'job-1', userId), {
+    message: /nothing left to allow/,
+  });
+  t.deepEqual(allowedAll, []);
+  t.deepEqual(ended.allowedAll, []);
+});
+
 test("the run's own tools are allowed without asking", async t => {
   const { service, asked } = questionService(storedJob({ createdBy: userId }));
   await service.ask(workspaceId, 'job-1', {
@@ -598,4 +622,97 @@ test('a claimed job carries how to run it, the same for every runner', async t =
 
   t.is((await claimWith('command'))?.profile, null, 'not a Claude agent');
   t.is((await claimWith(null))?.profile, null);
+});
+
+/** Records which of the job's task claims ran, and on what. */
+function fakeTasks() {
+  const calls: { op: string; job: any }[] = [];
+  const tasks: any = {
+    queued: async (job: any) => calls.push({ op: 'queued', job }),
+    claimed: async (job: any) => calls.push({ op: 'claimed', job }),
+    finished: async (job: any) => calls.push({ op: 'finished', job }),
+  };
+  return { tasks, calls };
+}
+
+test('a job on tasks marks them queued when it is asked for', async t => {
+  const { service } = makeService({ device: agentTarget });
+  const { tasks, calls } = fakeTasks();
+  const withTasks = new InventoryJobService(
+    (service as any).models, undefined, undefined, tasks
+  );
+  const job = await withTasks.enqueue(workspaceId, userId, 'laptop', {
+    instructions: 'work the list',
+    docId: 'doc-1',
+    taskIds: ['t1', 't2', 't1', 7, ''],
+  });
+
+  t.deepEqual(job.taskIds, ['t1', 't2']);
+  t.deepEqual(calls.map(c => c.op), ['queued']);
+  t.deepEqual(calls[0].job.taskIds, ['t1', 't2']);
+});
+
+test('tasks without a note to find them in are dropped', async t => {
+  const { service, created } = makeService({ device: agentTarget });
+  await service.enqueue(workspaceId, userId, 'laptop', {
+    instructions: 'go',
+    taskIds: ['t1'],
+  });
+  t.deepEqual(created[0].taskIds, []);
+});
+
+test('claiming a job starts its tasks', async t => {
+  const { tasks, calls } = fakeTasks();
+  const job = { id: 'job-1', workspaceId, model: null, tools: [], createdAt: new Date(0) };
+  const service = new InventoryJobService(
+    { inventoryJob: { claim: async () => job } } as any,
+    undefined,
+    undefined,
+    tasks
+  );
+  await service.claim(workspaceId, 'laptop', 'runner');
+  t.deepEqual(calls.map(c => c.op), ['claimed']);
+
+  const none = new InventoryJobService(
+    { inventoryJob: { claim: async () => null } } as any,
+    undefined,
+    undefined,
+    tasks
+  );
+  t.is(await none.claim(workspaceId, 'laptop', 'runner'), null);
+  t.is(calls.length, 1);
+});
+
+test('a job that ends, however it ends, hands its tasks back', async t => {
+  for (const status of ['done', 'error']) {
+    const { service: base } = makeReportService();
+    const { tasks, calls } = fakeTasks();
+    const service = new InventoryJobService(
+      (base as any).models, undefined, undefined, tasks
+    );
+    await service.report(workspaceId, 'job-1', { status, error: 'boom' });
+    t.deepEqual(calls.map(c => c.op), ['finished'], status);
+  }
+
+  // Still going: nothing to hand back yet.
+  const { service: base } = makeReportService();
+  const { tasks, calls } = fakeTasks();
+  const service = new InventoryJobService(
+    (base as any).models, undefined, undefined, tasks
+  );
+  await service.report(workspaceId, 'job-1', { status: 'running', steps: 2 });
+  t.deepEqual(calls, []);
+});
+
+test('a cancelled job hands its tasks back', async t => {
+  const { tasks, calls } = fakeTasks();
+  const job = { id: 'job-1', status: 'cancelled', tools: [], createdAt: new Date(0) };
+  const service = new InventoryJobService(
+    { inventoryJob: { cancel: async () => job } } as any,
+    undefined,
+    undefined,
+    tasks
+  );
+  await service.cancel(workspaceId, 'job-1');
+  t.deepEqual(calls.map(c => c.op), ['finished']);
 });

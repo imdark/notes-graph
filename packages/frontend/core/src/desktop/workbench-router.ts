@@ -30,6 +30,10 @@ export const workbenchRoutes = [
     lazy: () => import('./pages/workspace/deployments/index'),
   },
   {
+    path: '/monitoring',
+    lazy: () => import('./pages/workspace/monitoring/index'),
+  },
+  {
     path: '/collection',
     lazy: () => import('./pages/workspace/all-collection'),
   },
