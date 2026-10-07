@@ -56,6 +56,10 @@ export const workbenchRoutes = [
     lazy: () => import('./pages/workspace/deployments'),
   },
   {
+    path: '/monitoring',
+    lazy: () => import('./pages/workspace/monitoring'),
+  },
+  {
     path: '/trash',
     lazy: () => import('./pages/workspace/trash'),
   },

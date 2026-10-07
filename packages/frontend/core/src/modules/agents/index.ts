@@ -50,6 +50,18 @@ export {
   type MonitorSpec,
 } from './services/monitors';
 export {
+  type CheckStatus,
+  DEVICE_STATES,
+  type DeviceCheck,
+  deviceChecks,
+  type DeviceState,
+  deviceState,
+  FleetService,
+  fleetSummary,
+  type InventoryDevice,
+  STALE_AFTER_SECONDS,
+} from './services/fleet';
+export {
   formatTrendValue,
   monitorTrend,
   readingNumber,
@@ -132,6 +144,7 @@ import { AgentContextService } from './services/context';
 import { DeploymentsService } from './services/deployments';
 import { AgentFileToolsService } from './services/file-tools';
 import { AgentExecutorService } from './services/executor';
+import { FleetService } from './services/fleet';
 import { RemoteAgentRunnerService } from './services/remote-runner';
 import { MonitorsService } from './services/monitors';
 import { ResearchToolsService } from './services/research-tools';
@@ -151,6 +164,7 @@ export function configureAgentsModule(framework: Framework) {
     .service(CloudAgentRunnerService, [WorkspaceServerService])
     .service(ResearchToolsService, [WorkspaceServerService])
     .service(MonitorsService, [WorkspaceServerService, WorkspaceService])
+    .service(FleetService, [WorkspaceServerService, WorkspaceService])
     .service(AgentExecutorService, [
       AgentContextService,
       AgentRunsStore,

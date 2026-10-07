@@ -14,6 +14,7 @@ import type { CurrentUser as CurrentUserType } from '../../core/auth';
 import { CurrentUser } from '../../core/auth';
 import { PermissionAccess } from '../../core/permission';
 import { Models } from '../../models';
+import { InventoryHealthService } from './health';
 import { InventoryJobService } from './jobs';
 import { InventoryService } from './service';
 import type { DeviceStatusBody, RegisterDeviceBody } from './types';
@@ -33,6 +34,7 @@ export class InventoryController {
     private readonly models: Models,
     private readonly service: InventoryService,
     private readonly jobs: InventoryJobService,
+    private readonly health: InventoryHealthService,
     private readonly config: Config
   ) {}
 
@@ -171,6 +173,38 @@ export class InventoryController {
       throw new NotFoundException(`No device '${key}' in this workspace`);
     }
     return { device };
+  }
+
+  // ── health checks ──────────────────────────────────────────────────────
+  //
+  // A check runs a fixed script on the machine, so it needs what enqueueing
+  // any job does. Its result lands as the device's status.
+
+  @Post('/workspaces/:workspaceId/devices/:key/check')
+  async checkDevice(
+    @CurrentUser() user: CurrentUserType,
+    @Param('workspaceId') workspaceId: string,
+    @Param('key') key: string
+  ) {
+    this.assertEnabled();
+    await this.ac
+      .user(user.id)
+      .workspace(workspaceId)
+      .assert('Workspace.Settings.Update');
+    return { job: await this.health.check(workspaceId, user.id, key) };
+  }
+
+  @Post('/workspaces/:workspaceId/check')
+  async checkAll(
+    @CurrentUser() user: CurrentUserType,
+    @Param('workspaceId') workspaceId: string
+  ) {
+    this.assertEnabled();
+    await this.ac
+      .user(user.id)
+      .workspace(workspaceId)
+      .assert('Workspace.Settings.Update');
+    return await this.health.checkAll(workspaceId, user.id);
   }
 
   // ── agent jobs ─────────────────────────────────────────────────────────
