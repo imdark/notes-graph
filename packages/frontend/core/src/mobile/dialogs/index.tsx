@@ -8,6 +8,7 @@ import {
 import type { WORKSPACE_DIALOG_SCHEMA } from '@notesgraph/core/modules/dialogs/constant';
 import { useLiveData, useService } from '@notesgraph/infra';
 
+import { AgentBlockRunsDialog } from './agent-block-runs';
 import { CollectionSelectorDialog } from './selectors/collection-selector';
 import { DateSelectorDialog } from './selectors/date-selector';
 import { DocSelectorDialog } from './selectors/doc-selector';
@@ -34,6 +35,7 @@ const WORKSPACE_DIALOGS = {
   'doc-selector': DocSelectorDialog,
   'collection-selector': CollectionSelectorDialog,
   'date-selector': DateSelectorDialog,
+  'agent-block-runs': AgentBlockRunsDialog,
   'agent-editor': AgentEditorDialog,
   setting: SettingDialog,
 } satisfies {
