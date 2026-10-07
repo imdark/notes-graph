@@ -108,7 +108,18 @@ export class ChatPanelDocChip extends SignalWatcher(
     }
   };
 
-  private readonly processDocChip = async () => {
+  private extracting: Promise<void> | null = null;
+
+  // One extraction at a time: connectedCallback and the first updated() both
+  // ask for one, and extracting a long doc blocks the main thread.
+  private readonly processDocChip = () => {
+    this.extracting ??= this.extractDocChip().finally(() => {
+      this.extracting = null;
+    });
+    return this.extracting;
+  };
+
+  private readonly extractDocChip = async () => {
     try {
       const doc = this.docDisplayConfig.getDoc(this.chip.docId);
       if (!doc) {
