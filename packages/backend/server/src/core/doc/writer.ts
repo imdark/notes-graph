@@ -325,6 +325,41 @@ export class DocWriter {
   }
 
   /**
+   * Applies an edit computed from the doc's current binary — `edit` returns
+   * the update to push, or null when there is nothing to change — as one
+   * delta, like the other targeted writes here.
+   */
+  async editDoc<T extends { update: Uint8Array | null }>(
+    workspaceId: string,
+    docId: string,
+    edit: (binary: Buffer) => T,
+    editorId?: string
+  ): Promise<T> {
+    const result = edit(await this.docBinary(workspaceId, docId));
+    if (!result.update) return result;
+    const timestamp = await this.storage.pushDocUpdates(
+      workspaceId,
+      docId,
+      [result.update],
+      editorId
+    );
+    this.emitDocUpdatesPushed({
+      spaceId: workspaceId,
+      docId,
+      updates: [result.update],
+      timestamp,
+      editor: editorId,
+    });
+    await this.updateDocProperties(
+      workspaceId,
+      docId,
+      { updatedBy: editorId },
+      editorId
+    );
+    return result;
+  }
+
+  /**
    * Replaces one block's text in place (plain text; the block's inline
    * formatting is dropped) as a surgical CRDT delta, with the standard
    * "Edited via MCP" attribution stamp appended/refreshed at the doc end.

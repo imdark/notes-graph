@@ -28,7 +28,11 @@ import {
   RESEARCH_TOOL_RULES,
   type ResearchToolsService,
 } from './research-tools';
-import { type AgentTarget, agentTargetKey } from './target';
+import {
+  type AgentTarget,
+  agentTargetBlockIds,
+  agentTargetKey,
+} from './target';
 import {
   buildToolPrompt,
   FILE_TOOL_RULES,
@@ -493,6 +497,7 @@ export class AgentExecutorService extends Service implements AgentExecutor {
         for await (const event of this.runRemote(
           runId,
           agent,
+          target,
           context,
           controller.signal
         )) {
@@ -650,6 +655,7 @@ export class AgentExecutorService extends Service implements AgentExecutor {
   private async *runRemote(
     runId: string,
     agent: Agent,
+    target: AgentTarget,
     context: AgentContext,
     signal: AbortSignal
   ): AsyncIterable<AgentEvent> {
@@ -675,6 +681,12 @@ export class AgentExecutorService extends Service implements AgentExecutor {
       model: agent.model,
       tools: agent.tools,
       maxSteps: agent.maxSteps,
+      // Where the run is, and the tasks there it is on: the server claims
+      // and hands them back around the job, whatever becomes of this tab.
+      targetKind: target.kind,
+      docId: target.docId,
+      blockId: agentTargetBlockIds(target)[0],
+      taskIds: context.taskIds,
     });
     this.runsStore.attachRemote(runId, job.id, agent.deviceKey);
     // The folder the device works in, from its inventory entry. Only for the

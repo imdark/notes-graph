@@ -28,6 +28,7 @@ export interface CreateInventoryJobInput {
   docId?: string | null;
   blockId?: string | null;
   title?: string | null;
+  taskIds?: string[];
   createdBy?: string | null;
   runAfter?: Date | null;
 }
@@ -94,6 +95,7 @@ export class InventoryJobModel extends BaseModel {
         docId: input.docId ?? null,
         blockId: input.blockId ?? null,
         title: input.title ?? null,
+        taskIds: input.taskIds ?? [],
         createdBy: input.createdBy ?? null,
         runAfter: input.runAfter ?? null,
       },
@@ -287,6 +289,40 @@ export class InventoryJobModel extends BaseModel {
       return null;
     }
     return this.db.inventoryJob.update({ where: { id }, data: { title } });
+  }
+
+  /** Record tasks the claim moved to in progress, beside any it moved before. */
+  async addStartedTasks(id: string, taskIds: string[]): Promise<void> {
+    if (!taskIds.length) return;
+    await this.db.inventoryJob.update({
+      where: { id },
+      data: { startedTaskIds: { push: taskIds } },
+    });
+  }
+
+  /**
+   * Of `taskIds` in a doc, those another job still queued or running is on,
+   * so a job that ends doesn't hand back tasks a newer run has claimed.
+   */
+  async tasksClaimedElsewhere(
+    workspaceId: string,
+    docId: string,
+    exceptJobId: string,
+    taskIds: string[]
+  ): Promise<string[]> {
+    if (!taskIds.length) return [];
+    const others = await this.db.inventoryJob.findMany({
+      where: {
+        workspaceId,
+        docId,
+        id: { not: exceptJobId },
+        status: { in: ['queued', 'running'] },
+        taskIds: { hasSome: taskIds },
+      },
+      select: { taskIds: true },
+    });
+    const claimed = new Set(others.flatMap(job => job.taskIds));
+    return taskIds.filter(id => claimed.has(id));
   }
 
   /**

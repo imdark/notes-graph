@@ -133,6 +133,11 @@ export interface EnqueueRemoteJob {
   targetKind?: string;
   docId?: string;
   blockId?: string;
+  /**
+   * Task blocks in `docId` the run is on. The server marks them queued, in
+   * progress once a device claims the job, and hands them back when it ends.
+   */
+  taskIds?: string[];
 }
 
 /** How often to ask the server whether a remote run has moved on. */
