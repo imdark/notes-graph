@@ -5,8 +5,17 @@ import { describe, expect, test } from 'vitest';
 
 import type { Agent } from '../stores/agents';
 import {
+  canFixToMerge,
+  checksState,
   findPullRequest,
   isShipStage,
+  mergeCommand,
+  mergeReadiness,
+  mergesDirectly,
+  needsHelpToMerge,
+  parsePullRequests,
+  type PullRequest,
+  pullRequestsCommand,
   shipAgents,
   shipBrief,
   type ShipStage,
@@ -125,8 +134,141 @@ describe('shipBrief', () => {
 
   test("a merge doesn't deploy", () => {
     const brief = shipBrief([task('a', 'committed')], 'merge');
-    expect(brief.title).toBe('Merge 1 feature');
+    expect(brief.title).toBe('Merge 1 pull request');
     expect(brief.text).toContain("Don't deploy.");
     expect(brief.text).not.toContain('deploy-prod');
+  });
+
+  test('says what GitHub says, and takes pull requests no task names', () => {
+    const url = 'https://github.com/o/r/pull/1';
+    const brief = shipBrief([task('a', 'committed', url)], 'merge', {
+      pulls: [pull({ url, number: 1, mergeable: 'CONFLICTING' })],
+      untracked: [pull({ url: 'https://github.com/o/r/pull/2', number: 2 })],
+    });
+    expect(brief.title).toBe('Merge 2 pull requests');
+    expect(brief.text).toContain('on GitHub: conflicts with main');
+    expect(brief.text).toContain('## Pull requests no task names');
+    expect(brief.text).toContain('https://github.com/o/r/pull/2');
+    expect(brief.text).toContain('merge main into it');
+  });
+});
+
+const pull = (patch: Partial<PullRequest>): PullRequest => ({
+  repo: 'o/r',
+  number: 1,
+  title: 'A change',
+  url: 'https://github.com/o/r/pull/1',
+  branch: 'feature',
+  author: 'me',
+  state: 'open',
+  draft: false,
+  mergeable: 'MERGEABLE',
+  checks: 'pass',
+  mergedAt: null,
+  ...patch,
+});
+
+describe('pullRequestsCommand', () => {
+  test('lists open and merged pull requests of each repo, one per line', () => {
+    const command = pullRequestsCommand(['o/r']);
+    expect(command).toContain("gh pr list -R 'o/r' --state open");
+    expect(command).toContain("gh pr list -R 'o/r' --state merged");
+    expect(command).toContain("--jq '.[] |");
+  });
+
+  test('with no repo, reads it from the device folder', () => {
+    expect(pullRequestsCommand([], "/Users/me/it's here")).toMatch(
+      /^cd '\/Users\/me\/it'\\''s here' && gh pr list --state open/
+    );
+  });
+
+  test('merges with a merge commit', () => {
+    expect(mergeCommand({ repo: 'o/r', number: 7 })).toBe(
+      "gh pr merge 7 -R 'o/r' --merge"
+    );
+  });
+});
+
+describe('parsePullRequests', () => {
+  test('reads gh output, skipping anything else', () => {
+    const output = [
+      'some warning',
+      JSON.stringify({
+        number: 5,
+        title: 'Open one',
+        url: 'https://github.com/o/r/pull/5',
+        headRefName: 'b5',
+        author: { login: 'me' },
+        state: 'OPEN',
+        isDraft: false,
+        mergeable: 'CONFLICTING',
+        statusCheckRollup: [{ status: 'COMPLETED', conclusion: 'SUCCESS' }],
+      }),
+      JSON.stringify({
+        number: 4,
+        title: 'Merged one',
+        url: 'https://github.com/o/r/pull/4',
+        headRefName: 'b4',
+        author: { login: 'me' },
+        state: 'MERGED',
+        mergedAt: '2026-10-06T10:00:00Z',
+      }),
+    ].join('\n');
+    const [open, merged] = parsePullRequests(output);
+    expect(open).toMatchObject({
+      repo: 'o/r',
+      number: 5,
+      state: 'open',
+      mergeable: 'CONFLICTING',
+      checks: 'pass',
+    });
+    expect(merged).toMatchObject({
+      number: 4,
+      state: 'merged',
+      mergedAt: Date.parse('2026-10-06T10:00:00Z'),
+    });
+  });
+});
+
+describe('checksState', () => {
+  test('any failure fails; anything unfinished is pending', () => {
+    expect(checksState([])).toBe('none');
+    expect(checksState([{ status: 'COMPLETED', conclusion: 'SUCCESS' }])).toBe(
+      'pass'
+    );
+    expect(
+      checksState([
+        { status: 'IN_PROGRESS' },
+        { status: 'COMPLETED', conclusion: 'FAILURE' },
+      ])
+    ).toBe('fail');
+    expect(checksState([{ status: 'QUEUED' }, { state: 'SUCCESS' }])).toBe(
+      'pending'
+    );
+    expect(checksState([{ state: 'PENDING' }])).toBe('pending');
+  });
+});
+
+describe('mergeReadiness', () => {
+  test('wf merges all but conflicts and drafts; Claude is offered for failures', () => {
+    expect(mergeReadiness(pull({}))).toBe('ready');
+    expect(mergeReadiness(pull({ mergeable: 'UNKNOWN' }))).toBe('unknown');
+    expect(mergeReadiness(pull({ mergeable: 'CONFLICTING' }))).toBe(
+      'conflicts'
+    );
+    expect(mergeReadiness(pull({ checks: 'fail' }))).toBe('failing');
+    expect(mergeReadiness(pull({ checks: 'pending' }))).toBe('pending');
+    expect(mergeReadiness(pull({ draft: true, checks: 'fail' }))).toBe('draft');
+    expect(mergesDirectly('ready')).toBe(true);
+    expect(mergesDirectly('unknown')).toBe(true);
+    expect(mergesDirectly('failing')).toBe(true);
+    expect(mergesDirectly('pending')).toBe(true);
+    expect(mergesDirectly('conflicts')).toBe(false);
+    expect(mergesDirectly('draft')).toBe(false);
+    expect(needsHelpToMerge('conflicts')).toBe(true);
+    expect(needsHelpToMerge('failing')).toBe(false);
+    expect(canFixToMerge('failing')).toBe(true);
+    expect(canFixToMerge('conflicts')).toBe(true);
+    expect(canFixToMerge('pending')).toBe(false);
   });
 });

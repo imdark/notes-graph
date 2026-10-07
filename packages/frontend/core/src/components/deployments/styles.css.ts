@@ -135,3 +135,32 @@ export const runStatus = style({
 export const runError = style({
   color: cssVarV2('status/error'),
 });
+
+export const rowActions = style({
+  display: 'flex',
+  flexWrap: 'wrap',
+  gap: 6,
+  flexShrink: 0,
+});
+
+export const badge = style({
+  padding: '1px 6px',
+  borderRadius: 4,
+  fontSize: 11,
+  fontWeight: 500,
+  background: cssVarV2('layer/background/tertiary'),
+  color: cssVarV2('text/secondary'),
+});
+
+export const badgeGood = style([badge, { color: cssVarV2('status/success') }]);
+
+export const badgeBad = style([badge, { color: cssVarV2('status/error') }]);
+
+export const githubBar = style({
+  display: 'flex',
+  flexWrap: 'wrap',
+  alignItems: 'center',
+  gap: 8,
+  fontSize: 12,
+  color: cssVarV2('text/tertiary'),
+});

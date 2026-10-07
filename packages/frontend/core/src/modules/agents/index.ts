@@ -26,7 +26,15 @@ export {
 } from './services/question-fork';
 export { AgentContextService } from './services/context';
 export {
+  canFixToMerge,
   DeploymentsService,
+  type MergeReadiness,
+  mergeReadiness,
+  mergesDirectly,
+  needsHelpToMerge,
+  type PullRequest,
+  type PullRequestsState,
+  repoOf,
   SHIP_STAGES,
   type ShipAction,
   shipAgents,
@@ -171,6 +179,8 @@ export function configureAgentsModule(framework: Framework) {
       DocsSearchService,
       DocsService,
       AgentRunSessionService,
+      RemoteAgentRunnerService,
+      WorkspaceService,
     ])
     .store(AgentsStore, [WorkspaceDBService])
     .store(AgentRunLogsStore)

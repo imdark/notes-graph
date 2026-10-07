@@ -32,6 +32,14 @@ export const WORKFLOW_MODEL = 'workflow';
  */
 export const RESEARCH_MODEL = 'research';
 
+/**
+ * No model at all: the device runs `instructions` as a shell command and its
+ * output is the result. Only on devices whose owner turned it on
+ * (`agent.allow_commands` in the wf config); monitors and the Deployments
+ * screen use it to read things only that machine can.
+ */
+export const COMMAND_MODEL = 'command';
+
 /** Models that run Claude Code on the device; they exist only remotely. */
 export const isDeviceClaudeModel = (model: string | undefined) =>
   model === CLAUDE_CODE_MODEL ||
