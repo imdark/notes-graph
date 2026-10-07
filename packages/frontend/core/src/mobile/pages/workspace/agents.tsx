@@ -55,6 +55,15 @@ const AgentRuns = () => {
 
   const [limit, setLimit] = useState(PAGE_SIZE);
   const [logRunId, setLogRunId] = useState<string | null>(null);
+  const [askRun, setAskRun] = useState(false);
+  const openLog = useCallback((runId: string) => {
+    setAskRun(false);
+    setLogRunId(runId);
+  }, []);
+  const askAbout = useCallback((runId: string) => {
+    setAskRun(true);
+    setLogRunId(runId);
+  }, []);
   const closeLog = useCallback(() => setLogRunId(null), []);
 
   const openDoc = useCallback(
@@ -123,7 +132,7 @@ const AgentRuns = () => {
                     run={run}
                     status="waiting"
                     now={now}
-                    onOpen={setLogRunId}
+                    onOpen={openLog}
                     onOpenDoc={openDoc}
                     onShowTarget={showRunTarget}
                   />
@@ -162,7 +171,8 @@ const AgentRuns = () => {
                   key={session.id}
                   session={session}
                   queued={session.onDevice ? queue.length : 0}
-                  onViewLog={setLogRunId}
+                  onViewLog={openLog}
+                  onAsk={askAbout}
                   onShowTarget={showTarget}
                 />
               ))}
@@ -211,7 +221,7 @@ const AgentRuns = () => {
                   run={run}
                   status={displayStatus(run, remote.get(run.id))}
                   now={now}
-                  onOpen={setLogRunId}
+                  onOpen={openLog}
                   onOpenDoc={openDoc}
                   onShowTarget={showRunTarget}
                   onRetry={retry}
@@ -230,7 +240,7 @@ const AgentRuns = () => {
           ) : null}
         </section>
       </div>
-      <AgentRunLogDialog runId={logRunId} onClose={closeLog} />
+      <AgentRunLogDialog runId={logRunId} ask={askRun} onClose={closeLog} />
     </div>
   );
 };

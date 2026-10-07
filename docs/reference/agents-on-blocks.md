@@ -135,6 +135,11 @@ accept — which is what makes read-only phase 1 genuinely safe rather than nomi
 - One run per target at a time, keyed on `docId:blockId`.
 - Cancel is a visible control wired to the `AbortSignal` the executor already takes.
 - Every terminal state writes a run record — including cancels and errors.
+- A run that has ended can be asked about: **Ask about it** on its card, or the **Ask**
+  tab of its log, opens a chat with the server's model seeded with the run's input,
+  transcript, answer and how it ended (`services/run-chat.ts`). It explains rather than
+  acts: the agent never sees it and nothing changes in the note. To have more done, run
+  the agent again.
 
 ## 8. Phase 1 implementation plan (file level)
 

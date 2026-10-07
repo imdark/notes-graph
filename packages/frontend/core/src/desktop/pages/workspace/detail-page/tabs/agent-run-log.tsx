@@ -22,6 +22,7 @@ import {
 
 import { AgentLogView } from './agent-log-view';
 import { AgentQuestionCard } from './agent-question';
+import { AgentRunChat } from './agent-run-chat';
 import { formatDuration } from './agent-run-row';
 import * as styles from './agents.css';
 
@@ -196,10 +197,13 @@ const targetLabel = (run: AgentRun) => {
 
 const LOG_TAB = 'log';
 const DETAILS_TAB = 'details';
+const ASK_TAB = 'ask';
 const TABS = [
   { value: LOG_TAB, label: 'Log' },
   { value: DETAILS_TAB, label: 'Details' },
 ];
+/** A run that has ended can be asked about; one going is still answering. */
+const ENDED_TABS = [...TABS, { value: ASK_TAB, label: 'Ask' }];
 
 /**
  * What a run was set up with: the blocks it read, where it ran and on what.
@@ -251,9 +255,12 @@ const RunDetails = ({ run }: { run: AgentRun }) => {
 export const AgentRunLogDialog = ({
   runId,
   onClose,
+  ask = false,
 }: {
   runId: string | null;
   onClose: () => void;
+  /** Open on the Ask tab, to ask an ended run about itself. */
+  ask?: boolean;
 }) => {
   const runsStore = useService(AgentRunsStore);
   const sessionService = useService(AgentRunSessionService);
@@ -299,9 +306,10 @@ export const AgentRunLogDialog = ({
       .finally(() => setStopping(false));
   }, [remoteRunner, run, session, sessionService, workspaceService]);
 
-  // Each run opens on its log.
+  // Each run opens on its log, unless it was opened to ask about it.
   const [tab, setTab] = useState(LOG_TAB);
-  useEffect(() => setTab(LOG_TAB), [runId]);
+  useEffect(() => setTab(ask ? ASK_TAB : LOG_TAB), [runId, ask]);
+  const ended = !!run && run.status !== 'running';
 
   const attachCommand = tmuxSession ? `tmux attach -t ${tmuxSession}` : null;
   const copyAttach = useCallback(() => {
@@ -341,12 +349,18 @@ export const AgentRunLogDialog = ({
             width="100%"
             value={tab}
             onChange={setTab}
-            items={TABS}
+            items={ended ? ENDED_TABS : TABS}
             data-testid="agent-run-log-tabs"
           />
         ) : null}
         {run && tab === DETAILS_TAB ? (
           <RunDetails run={run} />
+        ) : run && ended && tab === ASK_TAB ? (
+          <AgentRunChat
+            key={run.id}
+            run={run}
+            output={session?.runId === run.id ? session.output : undefined}
+          />
         ) : (
           <div className={styles.logDialogBody} data-testid="agent-run-log">
             {attachCommand && run?.status === 'running' ? (
