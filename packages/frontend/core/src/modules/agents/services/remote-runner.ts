@@ -32,6 +32,12 @@ export const WORKFLOW_MODEL = 'workflow';
  */
 export const RESEARCH_MODEL = 'research';
 
+/**
+ * The device key of the server's own runner (tools/agent-runner): Claude
+ * Code, Workflow and Research agents run there with no Mac on.
+ */
+export const CLOUD_DEVICE_KEY = 'cloud';
+
 /** Models that run Claude Code on the device; they exist only remotely. */
 export const isDeviceClaudeModel = (model: string | undefined) =>
   model === CLAUDE_CODE_MODEL ||

@@ -536,3 +536,66 @@ test('an ordinary failure is still a failure', async t => {
   t.is(dto?.status, 'error');
   t.is(calls.requeue.length, 0);
 });
+
+test('a claimed job carries how to run it, the same for every runner', async t => {
+  const job = (model: string | null) => ({
+    id: 'job-1',
+    workspaceId,
+    deviceKey: 'cloud',
+    agentId: 'a1',
+    agentName: 'research',
+    instructions: 'Find RTX 5090 deals',
+    context: '',
+    model,
+    tools: [],
+    maxSteps: 8,
+    status: 'running',
+    createdAt: new Date(0),
+  });
+  const claimWith = (model: string | null) =>
+    new InventoryJobService({
+      inventoryJob: { claim: async () => job(model) },
+    } as any).claim(workspaceId, 'cloud', 'runner');
+
+  const research = await claimWith('research');
+  t.deepEqual(research?.profile?.mcpServers, ['notesgraph', 'run', 'omniseek']);
+  t.true(research?.profile?.allowedTools.includes('mcp__omniseek'));
+  t.is(research?.profile?.workdir, 'job');
+  t.regex(research?.profile?.systemPrompt ?? '', /mcp__run__ask_user[\s\S]*research run[\s\S]*gap ledger/);
+  // OmniSeek's own method, from its repo, not a paraphrase of it.
+  t.deepEqual(research?.profile?.skills.map(s => s.name), ['omniseek-investigate']);
+  t.regex(research!.profile!.skills[0].url, /^https:\/\/raw\.githubusercontent\.com\/Battam1111\/omniseek\/.*\/SKILL\.md$/);
+
+  const code = await claimWith('claude-code');
+  t.deepEqual(code?.profile?.mcpServers, ['notesgraph', 'run']);
+  t.is(code?.profile?.workdir, 'repo');
+  t.false(code?.profile?.allowedTools.includes('mcp__omniseek'));
+  // A code task works in its own worktree; tests and typechecks are tools.
+  t.deepEqual(code?.profile?.automation.setup.map(s => s.name), ['mirror', 'worktree']);
+  t.is(code?.profile?.automation.cwd, '{job_dir}/repo');
+  t.deepEqual(
+    code?.profile?.automation.tools.map(tool => tool.name),
+    ['install_deps', 'run_tests', 'typecheck']
+  );
+  // Agent-supplied values reach a tool's command only as $ARG_*, never spliced in.
+  for (const tool of code?.profile?.automation.tools ?? []) {
+    for (const param of Object.keys(tool.params ?? {})) {
+      t.true(tool.run.includes(`"$ARG_${param.toUpperCase()}"`), `${tool.name} quotes $ARG_${param}`);
+      t.false(tool.run.includes(`{${param}}`));
+    }
+  }
+  t.deepEqual(research?.profile?.automation.tools.map(tool => tool.name), ['fetch_source']);
+
+  // A Workflow job is a wf task in the runner's own CLOUD project.
+  const workflow = await claimWith('workflow');
+  t.is(workflow?.profile?.systemPrompt, code?.profile?.systemPrompt);
+  t.deepEqual(workflow?.profile?.automation.setup.map(s => s.name), ['checkout', 'wf project', 'task']);
+  t.regex(workflow!.profile!.automation.setup[1].run, /name: CLOUD/);
+  t.regex(
+    workflow!.profile!.automation.setup[2].run,
+    /^wf agent prepare-task .*--prompt-file \{prompt_file\} --out \{job_dir\}\/automation\.json$/
+  );
+
+  t.is((await claimWith('command'))?.profile, null, 'not a Claude agent');
+  t.is((await claimWith(null))?.profile, null);
+});

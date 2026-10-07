@@ -166,6 +166,33 @@ else
     -t notesgraph-plugin-server:prod . || echo "WARN plugin marketplace image build failed"
 fi
 step_end
+
+step "agent runner image"
+# The cloud agent runner (scripts/prod/agent-runner.md); same rebuild-only-
+# when-source-changed trick. Its closure is just itself: it reaches the
+# server over HTTP and imports no workspace package.
+runner_src_hash() {
+  {
+    find tools/agent-runner \
+      -type f -not -path '*/node_modules/*' -not -path '*/dist/*' -print0 \
+      2>/dev/null | sort -z | xargs -0 sha256sum
+    sha256sum yarn.lock package.json .yarnrc.yml 2>/dev/null
+  } | sha256sum | cut -d' ' -f1
+}
+RUNNER_HASH="$(runner_src_hash || true)"
+RUNNER_PREV="$(docker image inspect notesgraph-agent-runner:prod \
+  --format '{{ index .Config.Labels "notesgraph.src-hash" }}' 2>/dev/null || true)"
+
+if [ "${NOTESGRAPH_FORCE_AGENT_RUNNER:-0}" != "1" ] \
+  && [ -n "$RUNNER_HASH" ] \
+  && [ "$RUNNER_HASH" = "$RUNNER_PREV" ]; then
+  echo "agent runner image already matches source (${RUNNER_HASH:0:12}), skipping rebuild"
+else
+  docker build -f tools/agent-runner/Dockerfile \
+    --label "notesgraph.src-hash=$RUNNER_HASH" \
+    -t notesgraph-agent-runner:prod . || echo "WARN agent runner image build failed"
+fi
+step_end
 echo "BUILD-ALL-DONE"
 
 cd /opt/notesgraph
