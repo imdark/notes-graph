@@ -18,6 +18,7 @@ import { useLiveData, useService } from '@notesgraph/infra';
 import { cssVar } from '@toeverything/theme';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
+import { MonitoringAgentPanel } from './agent';
 import * as styles from './styles.css';
 
 type Filter = 'all' | 'attention' | DeviceState;
@@ -420,6 +421,7 @@ export const MonitoringView = () => {
               Check all machines
             </Button>
           </div>
+          <MonitoringAgentPanel machines={machines} now={now} />
         </>
       ) : null}
 

@@ -281,6 +281,89 @@ export const monitorValue = style({
   whiteSpace: 'nowrap',
 });
 
+export const modes = style({
+  display: 'grid',
+  gridTemplateColumns: 'repeat(3, 1fr)',
+  gap: 8,
+});
+
+export const modeNote = style({
+  fontSize: 12,
+  lineHeight: 1.5,
+  color: cssVarV2('text/secondary'),
+});
+
+export const settings = style({
+  display: 'flex',
+  flexWrap: 'wrap',
+  alignItems: 'center',
+  gap: '8px 16px',
+  fontSize: 12,
+  color: cssVarV2('text/secondary'),
+});
+
+export const setting = style({
+  display: 'flex',
+  alignItems: 'center',
+  gap: 6,
+});
+
+export const select = style({
+  padding: '2px 6px',
+  borderRadius: 6,
+  border: `1px solid ${cssVarV2('layer/insideBorder/border')}`,
+  background: cssVarV2('layer/background/primary'),
+  color: cssVarV2('text/primary'),
+  font: 'inherit',
+});
+
+export const decisions = style({
+  display: 'flex',
+  flexDirection: 'column',
+  borderTop: `1px solid ${cssVarV2('layer/insideBorder/border')}`,
+});
+
+export const decision = style({
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 6,
+  padding: '10px 0',
+  borderBottom: `1px solid ${cssVarV2('layer/insideBorder/border')}`,
+  selectors: {
+    '&:last-child': { borderBottom: 'none' },
+    '&[data-closed]': { opacity: 0.6 },
+  },
+});
+
+export const decisionHead = style({
+  display: 'flex',
+  alignItems: 'center',
+  gap: 8,
+  minWidth: 0,
+  fontSize: 13,
+  color: cssVarV2('text/primary'),
+});
+
+export const decisionSummary = style({
+  flex: 1,
+  minWidth: 0,
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap',
+});
+
+export const triage = style({
+  margin: 0,
+  padding: '8px 10px',
+  borderRadius: 8,
+  background: cssVarV2('layer/background/secondary'),
+  fontSize: 12,
+  lineHeight: 1.5,
+  color: cssVarV2('text/primary'),
+  whiteSpace: 'pre-wrap',
+  wordBreak: 'break-word',
+});
+
 export const actions = style({
   display: 'flex',
   flexWrap: 'wrap',

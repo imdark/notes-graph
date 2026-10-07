@@ -118,6 +118,82 @@ export function fleetSummary(
   return counts;
 }
 
+// ── monitoring agent ────────────────────────────────────────────────────
+// It learns what's normal on each machine from its health checks, flags
+// what's new, and escalates what matters (plugins/inventory/monitoring-agent
+// on the server).
+
+export type AgentMode = 'training' | 'shadow' | 'detect';
+
+export const AGENT_MODES: { value: AgentMode; label: string; note: string }[] = [
+  {
+    value: 'training',
+    label: 'Training',
+    note: 'Learns what normal looks like on each machine. Flags nothing.',
+  },
+  {
+    value: 'shadow',
+    label: 'Shadow',
+    note: 'Decides what it would escalate and logs it below, but tells nobody. Use it to see whether it can be trusted.',
+  },
+  {
+    value: 'detect',
+    label: 'Detect',
+    note: 'Escalates what matters: a phone alert, and a read-only Claude triage on the machine if you turn it on.',
+  },
+];
+
+/** Health checks a machine needs before the agent judges it (WARMUP on the server). */
+export const AGENT_WARMUP = 10;
+
+export interface MonitoringAgent {
+  enabled: boolean;
+  mode: AgentMode;
+  sensitivity: number;
+  intervalMinutes: number;
+  autoTriage: boolean;
+  alerts: { push: boolean };
+  lastRunAt: number | null;
+  nextRunAt: number | null;
+  learning: {
+    deviceKey: string;
+    checks: number;
+    metrics: { metric: string; mean: number; std: number; samples: number }[];
+  }[];
+}
+
+export interface MonitoringDecision {
+  id: string;
+  deviceKey: string;
+  metric: string;
+  kind: 'anomaly' | 'new' | string;
+  severity: 'warn' | 'critical' | string;
+  value: number | null;
+  baseline: number | null;
+  score: number | null;
+  summary: string;
+  action: 'shadow' | 'escalated' | string;
+  verdict: 'expected' | 'resolved' | null;
+  triageJobId: string | null;
+  triage: string | null;
+  createdAt: number;
+}
+
+export type AgentSettings = Partial<
+  Pick<MonitoringAgent, 'mode' | 'sensitivity' | 'intervalMinutes' | 'autoTriage' | 'alerts'>
+>;
+
+/** How far along learning is: machines it can judge, of those it has seen. */
+export function agentReadiness(agent: Pick<MonitoringAgent, 'learning'>) {
+  const ready = agent.learning.filter(d => d.checks >= AGENT_WARMUP).length;
+  return { ready, seen: agent.learning.length };
+}
+
+/** Decisions nobody has answered yet: escalated or shadowed, no verdict. */
+export function openDecisions(decisions: MonitoringDecision[]) {
+  return decisions.filter(d => !d.verdict);
+}
+
 /** How often the list is refreshed while something shows it. */
 const REFRESH_MS = 30_000;
 /** While a check is out, look this often, for at most CHECK_WAIT_MS. */
@@ -139,6 +215,10 @@ export class FleetService extends Service {
   readonly error$ = new LiveData<string | null>(null);
   /** Machines with a check out, by key, and when it was asked for (ms). */
   readonly checking$ = new LiveData<Map<string, number>>(new Map());
+  /** The monitoring agent; null until loaded, or where the server has none. */
+  readonly agent$ = new LiveData<MonitoringAgent | null>(null);
+  /** What it noticed, newest first. */
+  readonly decisions$ = new LiveData<MonitoringDecision[]>([]);
 
   private timer: ReturnType<typeof setInterval> | null = null;
   private checkTimer: ReturnType<typeof setInterval> | null = null;
@@ -213,6 +293,8 @@ export class FleetService extends Service {
       this.devices$.setValue(devices);
       this.error$.setValue(null);
       this.settleChecks(devices);
+      // The machines stand on their own; a server without the agent is fine.
+      this.revalidateAgent().catch(() => {});
       return devices;
     } catch (err) {
       this.error$.setValue(err instanceof Error ? err.message : String(err));
@@ -262,6 +344,58 @@ export class FleetService extends Service {
       method: 'POST',
     });
     this.markChecking([key]);
+  }
+
+  async revalidateAgent(): Promise<void> {
+    const [{ agent }, { decisions }] = await Promise.all([
+      this.json<{ agent: MonitoringAgent }>('/monitoring-agent'),
+      this.json<{ decisions: MonitoringDecision[] }>('/monitoring-agent/decisions?limit=50'),
+    ]);
+    this.agent$.setValue(agent);
+    this.decisions$.setValue(decisions);
+  }
+
+  /** Turn the agent on, or change its mode or settings. */
+  async configureAgent(settings: AgentSettings): Promise<MonitoringAgent> {
+    const { agent } = await this.json<{ agent: MonitoringAgent }>('/monitoring-agent', {
+      method: 'POST',
+      body: JSON.stringify(settings),
+    });
+    this.agent$.setValue(agent);
+    return agent;
+  }
+
+  /** Forget what it learned; it goes back to training. */
+  async resetAgent(): Promise<void> {
+    const { agent } = await this.json<{ agent: MonitoringAgent }>('/monitoring-agent/reset', {
+      method: 'POST',
+      body: '{}',
+    });
+    this.agent$.setValue(agent);
+  }
+
+  private replaceDecision(decision: MonitoringDecision) {
+    this.decisions$.setValue(
+      this.decisions$.value.map(d => (d.id === decision.id ? decision : d))
+    );
+  }
+
+  /** Send a read-only Claude run to the machine to find out why. */
+  async triage(decisionId: string): Promise<void> {
+    const { decision } = await this.json<{ decision: MonitoringDecision }>(
+      `/monitoring-agent/decisions/${encodeURIComponent(decisionId)}/triage`,
+      { method: 'POST' }
+    );
+    this.replaceDecision(decision);
+  }
+
+  /** "expected" teaches it this is normal; "resolved" lets it alert again. */
+  async feedback(decisionId: string, verdict: 'expected' | 'resolved'): Promise<void> {
+    const { decision } = await this.json<{ decision: MonitoringDecision }>(
+      `/monitoring-agent/decisions/${encodeURIComponent(decisionId)}/feedback`,
+      { method: 'POST', body: JSON.stringify({ verdict }) }
+    );
+    this.replaceDecision(decision);
   }
 
   /** Check every machine that takes jobs; says which were skipped and why. */

@@ -7,11 +7,15 @@ import { Framework } from '@notesgraph/infra';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 
 import {
+  AGENT_WARMUP,
+  agentReadiness,
   deviceChecks,
   deviceState,
   FleetService,
   fleetSummary,
   type InventoryDevice,
+  type MonitoringDecision,
+  openDecisions,
   STALE_AFTER_SECONDS,
 } from './fleet';
 
@@ -109,6 +113,27 @@ describe('fleet helpers', () => {
   });
 });
 
+describe('monitoring agent helpers', () => {
+  test('a machine is known once it has had the warm-up checks', () => {
+    expect(
+      agentReadiness({
+        learning: [
+          { deviceKey: 'a', checks: AGENT_WARMUP, metrics: [] },
+          { deviceKey: 'b', checks: 3, metrics: [] },
+        ],
+      })
+    ).toEqual({ ready: 1, seen: 2 });
+  });
+
+  test('open decisions are the ones nobody has answered', () => {
+    const decisions = [
+      { id: '1', verdict: null },
+      { id: '2', verdict: 'expected' },
+    ] as MonitoringDecision[];
+    expect(openDecisions(decisions).map(d => d.id)).toEqual(['1']);
+  });
+});
+
 describe('FleetService', () => {
   test('lists the workspace’s devices', async () => {
     const { service, calls } = setup(() => ({ body: { devices: [device({})] } }));
@@ -146,6 +171,33 @@ describe('FleetService', () => {
     expect(result.skipped).toHaveLength(1);
     expect([...service.checking$.value.keys()]).toEqual(['a', 'b']);
     service.dispose();
+  });
+
+  test('loads the monitoring agent and its decisions', async () => {
+    const agent = { enabled: true, mode: 'shadow', learning: [] };
+    const decision = { id: 'd1', deviceKey: 'box', verdict: null, summary: 'Disk is 96%' };
+    const { service, calls } = setup(path =>
+      path.endsWith('/decisions?limit=50')
+        ? { body: { decisions: [decision] } }
+        : { body: { agent } }
+    );
+    await service.revalidateAgent();
+    expect(calls.map(c => c.path)).toEqual([
+      '/api/inventory/workspaces/ws/monitoring-agent',
+      '/api/inventory/workspaces/ws/monitoring-agent/decisions?limit=50',
+    ]);
+    expect(service.agent$.value?.mode).toBe('shadow');
+    expect(service.decisions$.value).toHaveLength(1);
+  });
+
+  test('feedback on a decision replaces it in the list', async () => {
+    const { service, calls } = setup((_path, init) => ({
+      body: { decision: { id: 'd1', verdict: JSON.parse(String(init.body)).verdict } },
+    }));
+    service.decisions$.setValue([{ id: 'd1', verdict: null } as MonitoringDecision]);
+    await service.feedback('d1', 'expected');
+    expect(calls[0].path).toBe('/api/inventory/workspaces/ws/monitoring-agent/decisions/d1/feedback');
+    expect(service.decisions$.value[0].verdict).toBe('expected');
   });
 
   test('a server without the inventory says so', async () => {

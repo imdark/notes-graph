@@ -8,13 +8,15 @@ import { WorkspaceModule } from '../../core/workspaces';
 import { InventoryController } from './controller';
 import { InventoryHealthService } from './health';
 import { InventoryJobService } from './jobs';
+import { MonitoringAgentService } from './monitoring-agent';
 import { AgentPushService } from './push';
 import { InventoryService } from './service';
 
 /**
  * Device inventory: machines and folders registered as deployment and
  * agent-execution targets, written by external tooling over a PAT-
- * authenticated REST API. Health checks run on them as device jobs.
+ * authenticated REST API. Health checks run on them as device jobs, and the
+ * monitoring agent learns from what they report.
  */
 @Module({
   imports: [AuthModule, PermissionModule, WorkspaceModule],
@@ -22,6 +24,7 @@ import { InventoryService } from './service';
     InventoryService,
     InventoryJobService,
     InventoryHealthService,
+    MonitoringAgentService,
     AgentPushService,
   ],
   controllers: [InventoryController],

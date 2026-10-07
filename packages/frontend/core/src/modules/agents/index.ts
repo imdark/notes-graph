@@ -60,6 +60,11 @@ export {
   type MonitorSpec,
 } from './services/monitors';
 export {
+  AGENT_MODES,
+  AGENT_WARMUP,
+  type AgentMode,
+  agentReadiness,
+  type AgentSettings,
   type CheckStatus,
   DEVICE_STATES,
   type DeviceCheck,
@@ -69,6 +74,9 @@ export {
   FleetService,
   fleetSummary,
   type InventoryDevice,
+  type MonitoringAgent,
+  type MonitoringDecision,
+  openDecisions,
   STALE_AFTER_SECONDS,
 } from './services/fleet';
 export {

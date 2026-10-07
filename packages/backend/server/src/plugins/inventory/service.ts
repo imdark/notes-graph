@@ -1,11 +1,11 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 
 // `BadRequest`, not Nest's `BadRequestException`: the global filter's
 // `mapAnyError` passes through only UserFriendlyError, NotFoundException,
 // ZodError and HttpError. A plain HttpException falls to its else branch and
 // is reported as a 500, so a caller is told "an internal error occurred"
 // about input that is entirely their own to fix.
-import { BadRequest, Config } from '../../base';
+import { BadRequest, Config, EventBus } from '../../base';
 import { Models } from '../../models';
 import {
   DEVICE_KINDS,
@@ -15,6 +15,17 @@ import {
   type RegisterDeviceBody,
   toDeviceDto,
 } from './types';
+
+declare global {
+  interface Events {
+    /** A machine's status was recorded: a health check or the wf CLI. */
+    'inventory.device.status': {
+      workspaceId: string;
+      key: string;
+      checks: unknown[];
+    };
+  }
+}
 
 /**
  * Validation and persistence for inventory devices.
@@ -28,7 +39,8 @@ export class InventoryService {
 
   constructor(
     private readonly models: Models,
-    private readonly config: Config
+    private readonly config: Config,
+    @Optional() private readonly event?: EventBus
   ) {}
 
   private normalizeKey(raw: string | undefined): string {
@@ -142,6 +154,14 @@ export class InventoryService {
         checks: (Array.isArray(body.checks) ? body.checks : []) as never,
       }
     );
+    if (device) {
+      // The monitoring agent learns from every reading, whoever took it.
+      this.event?.emit('inventory.device.status', {
+        workspaceId,
+        key: device.key,
+        checks: (device.checks ?? []) as unknown[],
+      });
+    }
     return device ? toDeviceDto(device) : null;
   }
 }
