@@ -14,7 +14,9 @@ import type { CurrentUser as CurrentUserType } from '../../core/auth';
 import { CurrentUser } from '../../core/auth';
 import { PermissionAccess } from '../../core/permission';
 import { Models } from '../../models';
+import { InventoryHealthService } from './health';
 import { InventoryJobService } from './jobs';
+import { type AgentSettings, MonitoringAgentService } from './monitoring-agent';
 import { InventoryService } from './service';
 import type { DeviceStatusBody, RegisterDeviceBody } from './types';
 
@@ -33,6 +35,8 @@ export class InventoryController {
     private readonly models: Models,
     private readonly service: InventoryService,
     private readonly jobs: InventoryJobService,
+    private readonly health: InventoryHealthService,
+    private readonly monitoringAgent: MonitoringAgentService,
     private readonly config: Config
   ) {}
 
@@ -171,6 +175,128 @@ export class InventoryController {
       throw new NotFoundException(`No device '${key}' in this workspace`);
     }
     return { device };
+  }
+
+  // ── health checks ──────────────────────────────────────────────────────
+  //
+  // A check runs a fixed script on the machine, so it needs what enqueueing
+  // any job does. Its result lands as the device's status.
+
+  @Post('/workspaces/:workspaceId/devices/:key/check')
+  async checkDevice(
+    @CurrentUser() user: CurrentUserType,
+    @Param('workspaceId') workspaceId: string,
+    @Param('key') key: string
+  ) {
+    this.assertEnabled();
+    await this.ac
+      .user(user.id)
+      .workspace(workspaceId)
+      .assert('Workspace.Settings.Update');
+    return { job: await this.health.check(workspaceId, user.id, key) };
+  }
+
+  @Post('/workspaces/:workspaceId/check')
+  async checkAll(
+    @CurrentUser() user: CurrentUserType,
+    @Param('workspaceId') workspaceId: string
+  ) {
+    this.assertEnabled();
+    await this.ac
+      .user(user.id)
+      .workspace(workspaceId)
+      .assert('Workspace.Settings.Update');
+    return await this.health.checkAll(workspaceId, user.id);
+  }
+
+  // ── monitoring agent ───────────────────────────────────────────────────
+  //
+  // Reading what it learned and decided is workspace read. Changing it, and
+  // triaging (which runs Claude on a machine), need what enqueueing a job does.
+
+  @Get('/workspaces/:workspaceId/monitoring-agent')
+  async getMonitoringAgent(
+    @CurrentUser() user: CurrentUserType,
+    @Param('workspaceId') workspaceId: string
+  ) {
+    this.assertEnabled();
+    await this.ac.user(user.id).workspace(workspaceId).assert('Workspace.Read');
+    return { agent: await this.monitoringAgent.get(workspaceId) };
+  }
+
+  @Post('/workspaces/:workspaceId/monitoring-agent')
+  async configureMonitoringAgent(
+    @CurrentUser() user: CurrentUserType,
+    @Param('workspaceId') workspaceId: string,
+    @Body() body: AgentSettings
+  ) {
+    this.assertEnabled();
+    await this.ac
+      .user(user.id)
+      .workspace(workspaceId)
+      .assert('Workspace.Settings.Update');
+    return { agent: await this.monitoringAgent.configure(workspaceId, user.id, body ?? {}) };
+  }
+
+  /** Forget what was learned: all of it, or one machine's (`{ deviceKey }`). */
+  @Post('/workspaces/:workspaceId/monitoring-agent/reset')
+  async resetMonitoringAgent(
+    @CurrentUser() user: CurrentUserType,
+    @Param('workspaceId') workspaceId: string,
+    @Body() body: { deviceKey?: string }
+  ) {
+    this.assertEnabled();
+    await this.ac
+      .user(user.id)
+      .workspace(workspaceId)
+      .assert('Workspace.Settings.Update');
+    return await this.monitoringAgent.reset(workspaceId, user.id, body?.deviceKey || undefined);
+  }
+
+  @Get('/workspaces/:workspaceId/monitoring-agent/decisions')
+  async monitoringDecisions(
+    @CurrentUser() user: CurrentUserType,
+    @Param('workspaceId') workspaceId: string,
+    @Query('limit') limit?: string
+  ) {
+    this.assertEnabled();
+    await this.ac.user(user.id).workspace(workspaceId).assert('Workspace.Read');
+    const n = Number(limit);
+    return {
+      decisions: await this.monitoringAgent.decisions(workspaceId, Number.isFinite(n) && n > 0 ? n : 100),
+    };
+  }
+
+  @Post('/workspaces/:workspaceId/monitoring-agent/decisions/:decisionId/triage')
+  async triageDecision(
+    @CurrentUser() user: CurrentUserType,
+    @Param('workspaceId') workspaceId: string,
+    @Param('decisionId') decisionId: string
+  ) {
+    this.assertEnabled();
+    await this.ac
+      .user(user.id)
+      .workspace(workspaceId)
+      .assert('Workspace.Settings.Update');
+    return { decision: await this.monitoringAgent.triage(workspaceId, user.id, decisionId) };
+  }
+
+  /** `{ verdict: 'expected' | 'resolved' }`: teach it, or let it alert again. */
+  @Post('/workspaces/:workspaceId/monitoring-agent/decisions/:decisionId/feedback')
+  async decisionFeedback(
+    @CurrentUser() user: CurrentUserType,
+    @Param('workspaceId') workspaceId: string,
+    @Param('decisionId') decisionId: string,
+    @Body() body: { verdict?: string }
+  ) {
+    this.assertEnabled();
+    await this.ac
+      .user(user.id)
+      .workspace(workspaceId)
+      .assert('Workspace.Settings.Update');
+    return {
+      decision: await this.monitoringAgent.feedback(workspaceId, decisionId, String(body?.verdict ?? '')),
+    };
   }
 
   // ── agent jobs ─────────────────────────────────────────────────────────

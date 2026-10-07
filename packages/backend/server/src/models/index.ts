@@ -13,6 +13,7 @@ import { CalendarAccountModel } from './calendar-account';
 import { InventoryDeviceModel } from './inventory-device';
 import { InventoryJobModel } from './inventory-job';
 import { MonitorModel } from './monitor';
+import { MonitoringAgentModel } from './monitoring-agent';
 import { CalendarEventModel } from './calendar-event';
 import { CalendarEventInstanceModel } from './calendar-event-instance';
 import { CalendarSubscriptionModel } from './calendar-subscription';
@@ -102,6 +103,7 @@ const MODELS = {
   inventoryJob: InventoryJobModel,
   userPushToken: UserPushTokenModel,
   monitor: MonitorModel,
+  monitoringAgent: MonitoringAgentModel,
   calendarSubscription: CalendarSubscriptionModel,
   calendarEvent: CalendarEventModel,
   calendarEventInstance: CalendarEventInstanceModel,
@@ -186,6 +188,7 @@ export * from './history';
 export * from './inventory-job';
 export * from './magic-link-otp';
 export * from './monitor';
+export * from './monitoring-agent';
 export * from './notification';
 export * from './permission-projection';
 export * from './permission-write';

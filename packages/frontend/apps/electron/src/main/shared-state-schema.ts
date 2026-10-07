@@ -14,6 +14,7 @@ export const workbenchViewIconNameSchema = z.enum([
   'pdf',
   'ai',
   'deploy',
+  'monitoring',
 ]);
 
 export const workbenchViewMetaSchema = z.object({

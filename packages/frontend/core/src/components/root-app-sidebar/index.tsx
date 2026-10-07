@@ -2,6 +2,7 @@
 import {
   AiOutlineIcon,
   AllDocsIcon,
+  ComputerPanelIcon,
   DuplicateIcon,
   ExportIcon,
   ImportIcon,
@@ -291,6 +292,25 @@ const DeploymentsButton = () => {
   );
 };
 
+/** Inventory machines' health and monitors; see MonitoringView. */
+const MonitoringButton = () => {
+  const workbench = useService(WorkbenchService).workbench;
+  const active = useLiveData(
+    workbench.location$.selector(
+      location => location.pathname === '/monitoring'
+    )
+  );
+  return (
+    <MenuLinkItem
+      icon={<ComputerPanelIcon />}
+      active={active}
+      to={'/monitoring'}
+    >
+      <span data-testid="monitoring">Monitoring</span>
+    </MenuLinkItem>
+  );
+};
+
 const AIChatButton = () => {
   const t = useI18n();
   const featureFlagService = useService(FeatureFlagService);
@@ -439,6 +459,7 @@ export const RootAppSidebar = memo((): ReactElement => {
         <AppSidebarJournalButton />
         <AgentsButton />
         <DeploymentsButton />
+        <MonitoringButton />
         <DuplicatesButton />
         <MenuItem
           data-testid="slider-bar-workspace-setting-button"
