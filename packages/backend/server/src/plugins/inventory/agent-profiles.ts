@@ -154,6 +154,39 @@ const OMNISEEK_INVESTIGATE: AgentSkill = {
   url: 'https://raw.githubusercontent.com/Battam1111/omniseek/main/skills/omniseek-investigate/SKILL.md',
 };
 
+// antislop's own install wizard and mode question assume a person at a
+// terminal: here it is installed already, and a mode is settled up front so a
+// run doesn't stop to ask before it has started.
+const ANTISLOP_SYSTEM_PROMPT = `\
+antislop is installed for this run as skills (/antislop, the core filter,
+and /antislop-ui, /antislop-copywriting, /antislop-human,
+/antislop-layoutmobile, /antislop-code). For UI, copy, accessibility,
+responsive layout or code-comment work, read /antislop and the skill for the
+task, and follow them. Skip its First-Run Install Wizard: nothing needs
+installing and no entry file needs a pointer block. Its usage mode is set
+for this session: "during", unless the task asks you to review or audit
+existing work, which is "after". Its questions (direction, assets, which
+audit findings to fix) go through mcp__run__ask_user like any other.
+`;
+
+/**
+ * antislop (MIT), rules that keep agent-built UI, copy and code comments
+ * from reading as generated, from its own repo. Pinned to a release: a
+ * SKILL.md is instructions the agent obeys, so a new one is taken on purpose.
+ */
+const ANTISLOP_RELEASE = '91f12ec67e9de6043cfd93b846404986ba73c3f4'; // v3.2.20
+const ANTISLOP: AgentSkill[] = [
+  'antislop',
+  'antislop-ui',
+  'antislop-copywriting',
+  'antislop-human',
+  'antislop-layoutmobile',
+  'antislop-code',
+].map(name => ({
+  name,
+  url: `https://raw.githubusercontent.com/miqdadbadjuber/anti-slop/${ANTISLOP_RELEASE}/skills/${name}/SKILL.md`,
+}));
+
 /** A question waits for a person, who may be at dinner. */
 const TOOL_TIMEOUT_MS = 24 * 60 * 60 * 1000;
 
@@ -295,13 +328,13 @@ const RESEARCH_AUTOMATION: Automation = {
 };
 
 const CLAUDE_CODE: AgentProfile = {
-  systemPrompt: CLAUDE_CODE_SYSTEM_PROMPT,
+  systemPrompt: `${CLAUDE_CODE_SYSTEM_PROMPT}\n${ANTISLOP_SYSTEM_PROMPT}`,
   allowedTools: CLAUDE_CODE_ALLOWED_TOOLS,
   mcpServers: ['notesgraph', 'run'],
   workdir: 'repo',
   toolTimeoutMs: TOOL_TIMEOUT_MS,
   automation: CODE_AUTOMATION,
-  skills: [],
+  skills: ANTISLOP,
 };
 
 const PROFILES: Record<string, AgentProfile> = {
