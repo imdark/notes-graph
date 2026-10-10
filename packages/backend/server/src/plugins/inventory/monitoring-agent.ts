@@ -4,11 +4,31 @@ import type {
   MonitoringAgent,
   MonitoringBaseline,
   MonitoringDecision,
+  Prisma,
 } from '@prisma/client';
 
 import { BadRequest, NotFound, OnEvent } from '../../base';
 import { Models } from '../../models';
+import {
+  ALPHA,
+  type Baseline,
+  type Finding,
+  learn,
+  round,
+  type Severity,
+  WARMUP,
+} from './baseline';
 import { InventoryHealthService } from './health';
+import {
+  acceptPattern,
+  ingestLogs,
+  LOG_METRIC_PREFIX,
+  type LogCatalogDto,
+  type LogPattern,
+  type LogPatternDto,
+  readCatalog,
+  toLogPatternDto,
+} from './log-patterns';
 import { InventoryJobService } from './jobs';
 import { AgentPushService } from './push';
 
@@ -30,15 +50,11 @@ import { AgentPushService } from './push';
  * - "Expected" on a finding teaches the baseline that reading is normal.
  */
 
+export { ALPHA, type Baseline, type Finding, learn, type Severity, WARMUP };
+
 export const AGENT_MODES = ['training', 'shadow', 'detect'] as const;
 export type AgentMode = (typeof AGENT_MODES)[number];
 
-export type Severity = 'warn' | 'critical';
-
-/** How fast a baseline follows new readings. */
-export const ALPHA = 0.2;
-/** Readings a baseline needs before it judges; health checks a machine needs before a state counts as new. */
-export const WARMUP = 10;
 /** The same finding isn't escalated again inside this, unless it got worse. */
 export const COOLDOWN_MS = 6 * 60 * 60_000;
 /** Key of the per-machine counter of health checks seen. */
@@ -67,23 +83,6 @@ export interface Reading {
 export interface CheckState {
   name: string;
   status: 'ok' | 'warn' | 'fail';
-}
-
-export interface Baseline {
-  mean: number;
-  variance: number;
-  samples: number;
-  lastValue: number | null;
-}
-
-export interface Finding {
-  metric: string;
-  kind: 'anomaly' | 'new';
-  severity: Severity;
-  value: number | null;
-  baseline: number | null;
-  score: number | null;
-  summary: string;
 }
 
 const slug = (name: string) =>
@@ -120,21 +119,6 @@ export function readChecks(raw: unknown[]): { readings: Reading[]; states: Check
   return { readings, states };
 }
 
-/** The baseline after one more reading; `alpha` is how much that reading counts. */
-export function learn(baseline: Baseline | null, value: number, alpha = ALPHA): Baseline {
-  if (!baseline || baseline.samples === 0) {
-    return { mean: value, variance: 0, samples: 1, lastValue: value };
-  }
-  const diff = value - baseline.mean;
-  return {
-    mean: baseline.mean + alpha * diff,
-    // The EWM variance (West, 1979), so it follows the same window as the mean.
-    variance: (1 - alpha) * (baseline.variance + alpha * diff * diff),
-    samples: baseline.samples + 1,
-    lastValue: value,
-  };
-}
-
 /** The smallest standard deviation a baseline is given credit for. */
 export function minStd(metric: string, mean: number) {
   return KNOWN_METRICS[metric]?.minStd ?? Math.max(Math.abs(mean) * 0.05, 0.1);
@@ -145,8 +129,6 @@ export function score(baseline: Baseline, metric: string, value: number) {
   const std = Math.max(Math.sqrt(baseline.variance), minStd(metric, baseline.mean));
   return (value - baseline.mean) / std;
 }
-
-const round = (value: number) => Math.round(value * 100) / 100;
 
 /** A reading's finding, if it is far enough from what this machine does. */
 export function judge(
@@ -406,7 +388,9 @@ export class MonitoringAgentService {
 
   /** Forget what was learned; it starts over in training. */
   async reset(workspaceId: string, userId: string, deviceKey?: string) {
-    const cleared = await this.models.monitoringAgent.clearBaselines(workspaceId, deviceKey);
+    const cleared =
+      (await this.models.monitoringAgent.clearBaselines(workspaceId, deviceKey)) +
+      (await this.models.monitoringAgent.clearLogCatalogs(workspaceId, deviceKey));
     if (!deviceKey) {
       await this.models.monitoringAgent.upsert(workspaceId, { updatedBy: userId, mode: 'training' });
     }
@@ -444,6 +428,45 @@ export class MonitoringAgentService {
       await this.models.monitoringAgent.saveBaseline(workspaceId, deviceKey, metric, baseline);
     }
 
+    return await this.decide(agent, deviceKey, findings);
+  }
+
+  /** A machine's log lines arrived: fold them into its catalog of patterns. */
+  @OnEvent('inventory.device.logs')
+  async onDeviceLogs(event: Events['inventory.device.logs']) {
+    try {
+      await this.observeLogs(event.workspaceId, event.key, event.lines, event.until);
+    } catch (err) {
+      this.logger.warn(
+        `monitoring agent could not read logs of ${event.workspaceId}/${event.key}: ${(err as Error).message}`
+      );
+    }
+  }
+
+  /** `until` is epoch seconds: the end of the time the lines cover. */
+  async observeLogs(workspaceId: string, deviceKey: string, lines: string[], until: number) {
+    const agent = await this.models.monitoringAgent.get(workspaceId);
+    if (!agent) return [];
+
+    const row = await this.models.monitoringAgent.getLogCatalog(workspaceId, deviceKey);
+    const from = row?.scannedAt ? row.scannedAt.getTime() / 1000 : until - 3600;
+    const scan = ingestLogs(readCatalog(row?.patterns), lines, {
+      scans: row?.scans ?? 0,
+      hours: (until - from) / 3600,
+      now: until,
+      sensitivity: agent.sensitivity,
+    });
+    await this.models.monitoringAgent.saveLogCatalog(workspaceId, deviceKey, {
+      patterns: scan.patterns as unknown as Prisma.InputJsonValue,
+      scans: (row?.scans ?? 0) + 1,
+      scannedAt: new Date(until * 1000),
+    });
+    return await this.decide(agent, deviceKey, scan.findings);
+  }
+
+  /** Record what was found, in shadow or detect; escalate it in detect. */
+  private async decide(agent: MonitoringAgent, deviceKey: string, findings: Finding[]) {
+    const { workspaceId } = agent;
     const mode = asMode(agent.mode);
     if (mode === 'training') return [];
 
@@ -544,7 +567,15 @@ export class MonitoringAgentService {
     }
     const decision = await this.models.monitoringAgent.getDecision(workspaceId, decisionId);
     if (!decision) throw new NotFound('No such decision');
-    if (verdict === 'expected' && decision.kind === 'anomaly' && decision.value !== null) {
+    const logPattern = decision.metric.startsWith(LOG_METRIC_PREFIX)
+      ? decision.metric.slice(LOG_METRIC_PREFIX.length)
+      : null;
+    if (verdict === 'expected' && logPattern) {
+      // A new line, or one logged far more than usual: this pattern, at this rate, is normal.
+      await this.updatePattern(workspaceId, decision.deviceKey, logPattern, pattern =>
+        acceptPattern(pattern, decision.kind === 'anomaly' ? decision.value : null)
+      );
+    } else if (verdict === 'expected' && decision.kind === 'anomaly' && decision.value !== null) {
       const rows = await this.models.monitoringAgent.listBaselines(workspaceId, decision.deviceKey);
       const baseline = rows.find(row => row.metric === decision.metric) ?? null;
       // Half the way there, and a wider spread: normal now includes it.
@@ -554,6 +585,56 @@ export class MonitoringAgentService {
     }
     const updated = await this.models.monitoringAgent.updateDecision(decision.id, { verdict });
     return toDecisionDto(updated);
+  }
+
+  /** What each machine's logs are known to say: its catalog of patterns, most seen first. */
+  async logPatterns(workspaceId: string): Promise<LogCatalogDto[]> {
+    const rows = await this.models.monitoringAgent.listLogCatalogs(workspaceId);
+    return rows.map(row => ({
+      deviceKey: row.deviceKey,
+      scans: row.scans,
+      scannedAt: row.scannedAt ? row.scannedAt.getTime() / 1000 : null,
+      patterns: readCatalog(row.patterns)
+        .map(toLogPatternDto)
+        .sort((a, b) => b.count - a.count),
+    }));
+  }
+
+  /** A person's label on a pattern: 'known' (never news) or null (judge it again). */
+  async labelPattern(
+    workspaceId: string,
+    deviceKey: string,
+    patternId: string,
+    label: string | null
+  ): Promise<LogPatternDto> {
+    if (label !== null && label !== 'known') {
+      throw new BadRequest("label must be 'known' or null");
+    }
+    const pattern = await this.updatePattern(workspaceId, deviceKey, patternId, pattern => ({
+      ...pattern,
+      label,
+    }));
+    return toLogPatternDto(pattern);
+  }
+
+  private async updatePattern(
+    workspaceId: string,
+    deviceKey: string,
+    patternId: string,
+    change: (pattern: LogPattern) => LogPattern
+  ) {
+    const row = await this.models.monitoringAgent.getLogCatalog(workspaceId, deviceKey);
+    const patterns = readCatalog(row?.patterns);
+    const at = patterns.findIndex(pattern => pattern.id === patternId);
+    // The catalog drops patterns not seen for long; there is nothing left to teach then.
+    if (!row || at < 0) throw new NotFound('That log pattern is no longer in the catalog');
+    patterns[at] = change(patterns[at]);
+    await this.models.monitoringAgent.saveLogCatalog(workspaceId, deviceKey, {
+      patterns: patterns as unknown as Prisma.InputJsonValue,
+      scans: row.scans,
+      scannedAt: row.scannedAt,
+    });
+    return patterns[at];
   }
 
   /** Agents due to check their machines do so; the results come back as status events. */
