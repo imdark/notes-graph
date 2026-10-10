@@ -610,6 +610,25 @@ test('a claimed job carries how to run it, the same for every runner', async t =
   }
   t.deepEqual(research?.profile?.automation.tools.map(tool => tool.name), ['fetch_source']);
 
+  // antislop, pinned to a release, with its terminal-only steps settled up front.
+  t.deepEqual(code?.profile?.skills.map(s => s.name), [
+    'antislop',
+    'antislop-ui',
+    'antislop-copywriting',
+    'antislop-human',
+    'antislop-layoutmobile',
+    'antislop-code',
+  ]);
+  for (const skill of code?.profile?.skills ?? []) {
+    t.regex(
+      skill.url,
+      new RegExp(`^https://raw\\.githubusercontent\\.com/miqdadbadjuber/anti-slop/[0-9a-f]{40}/skills/${skill.name}/SKILL\\.md$`)
+    );
+  }
+  t.regex(code?.profile?.systemPrompt ?? '', /Skip its First-Run Install Wizard[\s\S]*"during"/);
+  // Research reads the world; it doesn't build UI.
+  t.false(research?.profile?.systemPrompt.includes('antislop'));
+
   // A Workflow job is a wf task in the runner's own CLOUD project.
   const workflow = await claimWith('workflow');
   t.is(workflow?.profile?.systemPrompt, code?.profile?.systemPrompt);
