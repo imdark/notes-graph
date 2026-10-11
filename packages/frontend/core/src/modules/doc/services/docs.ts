@@ -333,24 +333,30 @@ export class DocsService extends Service {
           parentId
         );
 
-      for (const section of sections) {
-        const headingId = addHeading(section.name);
+      // One transaction for the whole scaffold. Added block by block, each
+      // addBlock is its own update, so the open editor re-rendered and every
+      // new query database re-ran its query once per block — with many
+      // projects that is what froze the UI after creating a journal.
+      bsDoc.transact(() => {
+        for (const section of sections) {
+          const headingId = addHeading(section.name);
+          addProjectTaskListBlock(bsDoc, note.id, {
+            projectId: section.id,
+            name: 'todos:',
+          });
+          addEmptyChecklistItem(headingId);
+        }
+
+        // Everything not owned by a project. Nested for the same reason, so
+        // the Inbox board can tell "written under Inbox" from "written under a
+        // project" in the same journal.
+        const inboxHeadingId = addHeading('Inbox');
         addProjectTaskListBlock(bsDoc, note.id, {
-          projectId: section.id,
+          noProject: true,
           name: 'todos:',
         });
-        addEmptyChecklistItem(headingId);
-      }
-
-      // Everything not owned by a project. Nested for the same reason, so the
-      // Inbox board can tell "written under Inbox" from "written under a
-      // project" in the same journal.
-      const inboxHeadingId = addHeading('Inbox');
-      addProjectTaskListBlock(bsDoc, note.id, {
-        noProject: true,
-        name: 'todos:',
+        addEmptyChecklistItem(inboxHeadingId);
       });
-      addEmptyChecklistItem(inboxHeadingId);
     } finally {
       release();
     }
