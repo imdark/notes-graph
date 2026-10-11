@@ -331,7 +331,12 @@ export class InventoryJobModel extends BaseModel {
    * heartbeat landing alongside a log report cannot lose text; every SET
    * expression sees the pre-update row, so `log_dropped` and `log` agree.
    */
-  private async appendLog(id: string, raw: string): Promise<void> {
+  private async appendLog(
+    id: string,
+    raw: string,
+    /** Extra WHERE condition; the append is skipped when it doesn't hold. */
+    guard: Prisma.Sql = Prisma.empty
+  ): Promise<number> {
     const stamp = logStamp(new Date());
     const text = stampInnerLines(raw, stamp);
     // The chunk's first character starts a line when the log is empty or
@@ -342,12 +347,35 @@ export class InventoryJobModel extends BaseModel {
       WHEN "log" = '' OR RIGHT("log", 1) = E'\n' THEN ${stamp}::text
       ELSE ''
     END`;
-    await this.db.$executeRaw`
+    return this.db.$executeRaw`
       UPDATE "inventory_jobs"
       SET "log" = RIGHT("log" || ${lead} || ${text}::text, ${JOB_LOG_CAP}::int),
           "log_dropped" = "log_dropped"
             + GREATEST(0, LENGTH("log") + LENGTH(${lead} || ${text}::text) - ${JOB_LOG_CAP}::int)
-      WHERE "id" = ${id}`;
+      WHERE "id" = ${id} ${guard}`;
+  }
+
+  /**
+   * Say in a running job's transcript that its runner has gone quiet: the
+   * lease it renews with every report ran out. Written once per lapse — only
+   * while the row still holds that same lease and the transcript doesn't
+   * already carry `marker` — so every viewer polling the job can call this.
+   * Returns whether the note was written.
+   */
+  async noteLeaseLapsed(
+    id: string,
+    leaseExpiresAt: Date,
+    marker: string,
+    note: string
+  ): Promise<boolean> {
+    const written = await this.appendLog(
+      id,
+      note,
+      Prisma.sql`AND "status" = 'running'
+        AND "lease_expires_at" = ${leaseExpiresAt}
+        AND POSITION(${marker}::text IN "log") = 0`
+    );
+    return written > 0;
   }
 
   /**

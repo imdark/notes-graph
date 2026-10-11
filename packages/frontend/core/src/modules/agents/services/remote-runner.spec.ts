@@ -3,6 +3,7 @@
  */
 import { FetchService } from '@notesgraph/core/modules/cloud/services/fetch';
 import { WorkspaceServerService } from '@notesgraph/core/modules/cloud/services/workspace-server';
+import { UserFriendlyError } from '@notesgraph/error';
 import { Framework } from '@notesgraph/infra';
 import { describe, expect, test } from 'vitest';
 
@@ -170,6 +171,45 @@ describe('RemoteAgentRunnerService.watch', () => {
       url: '/api/inventory/workspaces/ws-1/jobs/job-1/cancel',
       method: 'POST',
     });
+  });
+});
+
+describe('RemoteAgentRunnerService.watch through a server outage', () => {
+  const serverError = (status: number, message: string) => () => {
+    throw new UserFriendlyError({
+      status,
+      code: 'ERROR',
+      type: 'ERROR',
+      name: 'ERROR',
+      message,
+    } as any);
+  };
+
+  test('a restart mid-run is waited out, not reported as the run failing', async () => {
+    // What a deploy looks like: Caddy answers 502 with an empty body.
+    const { runner } = createRunner([
+      () => job({ log: 'working\n', logFrom: 0, logEnd: 8 }),
+      serverError(500, ''),
+      () => job({ status: 'done', result: 'ok', log: '', logFrom: 8, logEnd: 8 }),
+    ]);
+
+    const statuses = [];
+    for await (const { job: update } of runner.watch('ws-1', 'job-1', new AbortController().signal)) {
+      statuses.push(update.status);
+    }
+    expect(statuses).toEqual(['running', 'done']);
+  });
+
+  test('a job that is gone is reported at once', async () => {
+    const { runner } = createRunner([serverError(404, 'No job job-1')]);
+    const watching = (async () => {
+      for await (const _ of runner.watch('ws-1', 'job-1', new AbortController().signal, {
+        cancelOnAbort: false,
+      })) {
+        // nothing arrives
+      }
+    })();
+    await expect(watching).rejects.toThrow('No job job-1');
   });
 });
 

@@ -1,3 +1,4 @@
+import { UserFriendlyError } from '@notesgraph/error';
 import { Service } from '@notesgraph/infra';
 
 import { FetchService, type WorkspaceServerService } from '../../cloud';
@@ -132,6 +133,11 @@ export interface RemoteJob {
    */
   runAfter?: number | null;
   /**
+   * Epoch seconds the runner holding a running job must next report by;
+   * past it the runner has gone quiet. Absent from older servers.
+   */
+  leaseExpiresAt?: number | null;
+  /**
    * "Allow all": every tool the run asks for is allowed without asking.
    * Absent from older servers.
    */
@@ -179,6 +185,23 @@ export interface EnqueueRemoteJob {
 
 /** How often to ask the server whether a remote run has moved on. */
 const POLL_MS = 1500;
+/**
+ * How long following a run rides out the server being unreachable before
+ * giving up on it. A deploy restarts the server for about half a minute; the
+ * run carries on on its device meanwhile and must not be recorded as failed.
+ */
+const WATCH_OUTAGE_MS = 3 * 60_000;
+
+/**
+ * Whether a failed read is the server being briefly away (a restart's 502,
+ * no network) rather than an answer: a 4xx says the job is gone or not ours,
+ * and asking again won't change that.
+ */
+const isTransient = (err: unknown) =>
+  !(err instanceof UserFriendlyError) ||
+  err.status === 429 ||
+  err.status < 400 ||
+  err.status >= 500;
 
 export class RemoteAgentRunnerService extends Service {
   constructor(private readonly workspaceServerService: WorkspaceServerService) {
@@ -339,8 +362,27 @@ export class RemoteAgentRunnerService extends Service {
     let lastAllowAll: boolean | undefined;
     let logFrom = 0;
     try {
+      let failingSince: number | null = null;
       while (!signal.aborted) {
-        const job = await this.get(workspaceId, jobId, logFrom);
+        let job: RemoteJob;
+        try {
+          job = await this.get(workspaceId, jobId, logFrom);
+          failingSince = null;
+        } catch (err) {
+          if (signal.aborted) return;
+          if (!isTransient(err)) throw err;
+          failingSince ??= Date.now();
+          if (Date.now() - failingSince > WATCH_OUTAGE_MS) {
+            const detail =
+              err instanceof Error && err.message ? err.message : 'no answer';
+            throw new Error(
+              `Lost touch with the server while following this run (${detail}). ` +
+                'It may still be going on its device; reopen its log to check.'
+            );
+          }
+          await new Promise(resolve => setTimeout(resolve, POLL_MS * 2));
+          continue;
+        }
         const logDelta = job.log ?? '';
         logFrom = job.logEnd ?? logFrom;
         const open = openQuestions(job)

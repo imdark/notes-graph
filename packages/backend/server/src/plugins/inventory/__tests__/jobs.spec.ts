@@ -735,3 +735,65 @@ test('a cancelled job hands its tasks back', async t => {
   await service.cancel(workspaceId, 'job-1');
   t.deepEqual(calls.map(c => c.op), ['finished']);
 });
+
+/** A service over one stored job, recording lost-runner notes it writes. */
+function lostRunnerService(job: any) {
+  const notes: { lease: Date; marker: string; note: string }[] = [];
+  let row = job;
+  const models: any = {
+    inventoryJob: {
+      get: async () => row,
+      listQuestions: async () => [],
+      noteLeaseLapsed: async (_id: string, lease: Date, marker: string, note: string) => {
+        // Once per lapse, as the model's guarded update does it.
+        if (row.log.includes(marker)) return false;
+        notes.push({ lease, marker, note });
+        row = { ...row, log: row.log + note };
+        return true;
+      },
+    },
+  };
+  return { service: new InventoryJobService(models), notes };
+}
+
+test('a run whose runner stopped reporting says so in its log', async t => {
+  const lease = new Date(Date.now() - 10 * 60_000);
+  const { service, notes } = lostRunnerService(
+    storedJob({ claimedBy: 'mac-1', leaseExpiresAt: lease })
+  );
+
+  const job = await service.get(workspaceId, 'job-1', 0);
+
+  t.is(notes.length, 1);
+  t.regex(job!.log!, /Lost contact with laptop/);
+  t.regex(job!.log!, /mac-1/);
+  t.true(job!.log!.includes(lease.toISOString()));
+  t.is(job!.status, 'running');
+  t.is(job!.leaseExpiresAt, lease.getTime() / 1000);
+
+  // Polling again doesn't repeat it.
+  await service.get(workspaceId, 'job-1', 0);
+  t.is(notes.length, 1);
+});
+
+test('the lost-runner note goes on its own line', async t => {
+  const { service, notes } = lostRunnerService(
+    storedJob({ log: 'cloning…', leaseExpiresAt: new Date(Date.now() - 10 * 60_000) })
+  );
+  await service.get(workspaceId, 'job-1', 0);
+  t.true(notes[0].note.startsWith('\n⚠'));
+  t.true(notes[0].note.endsWith('\n'));
+});
+
+test('a runner only just late, or a job not running, gets no note', async t => {
+  for (const job of [
+    storedJob({ leaseExpiresAt: new Date(Date.now() - 5_000) }),
+    storedJob({ leaseExpiresAt: new Date(Date.now() + 60_000) }),
+    storedJob({ status: 'done', leaseExpiresAt: null }),
+    storedJob({ status: 'queued', leaseExpiresAt: null }),
+  ]) {
+    const { service, notes } = lostRunnerService(job);
+    await service.get(workspaceId, 'job-1', 0);
+    t.is(notes.length, 0);
+  }
+});
