@@ -107,6 +107,10 @@ class MainActivity : BridgeActivity(), AIButtonPlugin.Callback, NotesGraphThemeP
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        Timber.i(
+            "[lifecycle] onCreate (restored=${savedInstanceState != null}, " +
+                "recoveredRenderer=${lastRendererRecovery != 0L})"
+        )
         ViewCompat.setOnApplyWindowInsetsListener(window.decorView) { v, insets ->
             navHeight = px2dp(insets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom)
             ViewCompat.onApplyWindowInsets(v, insets)
@@ -205,8 +209,27 @@ class MainActivity : BridgeActivity(), AIButtonPlugin.Callback, NotesGraphThemeP
         }
     }
 
+    // Lifecycle trace for the "app keeps refreshing to home" report: a
+    // recreate or process restart shows up here as onDestroy/onCreate pairs,
+    // and onTrimMemory explains OS-driven kills.
+    override fun onStart() {
+        super.onStart()
+        Timber.i("[lifecycle] onStart")
+    }
+
+    override fun onDestroy() {
+        Timber.i("[lifecycle] onDestroy (changingConfig=$isChangingConfigurations, finishing=$isFinishing)")
+        super.onDestroy()
+    }
+
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        Timber.w("[lifecycle] onTrimMemory level=$level")
+    }
+
     override fun onResume() {
         super.onResume()
+        Timber.i("[lifecycle] onResume")
         if (!AppLock.needsUnlock(this)) {
             hideLockCover()
             return
@@ -220,6 +243,7 @@ class MainActivity : BridgeActivity(), AIButtonPlugin.Callback, NotesGraphThemeP
 
     override fun onStop() {
         super.onStop()
+        Timber.i("[lifecycle] onStop")
         // Cover on the way out, so the notes are not the first frame shown on
         // return before onResume decides whether to lock; a return within the
         // grace period lifts it again at once.
@@ -234,7 +258,19 @@ class MainActivity : BridgeActivity(), AIButtonPlugin.Callback, NotesGraphThemeP
         AuthInitializer.initialize(bridge)
         configureEditorWebView()
         bridge.addWebViewListener(renderProcessGoneListener)
+        bridge.addWebViewListener(pageLoadListener)
         handleShareIntent(intent)
+    }
+
+    /** Logs every page load, so a web-side reload to home is visible in the logs. */
+    private val pageLoadListener = object : WebViewListener() {
+        override fun onPageStarted(webView: WebView) {
+            Timber.i("[webview] page started url=${webView.url}")
+        }
+
+        override fun onPageLoaded(webView: WebView) {
+            Timber.i("[webview] page loaded url=${webView.url}")
+        }
     }
 
     override fun onNewIntent(intent: Intent) {
