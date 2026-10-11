@@ -3,12 +3,13 @@ import type {
   MonitoringAgent,
   MonitoringBaseline,
   MonitoringDecision,
+  MonitoringLogCatalog,
   Prisma,
 } from '@prisma/client';
 
 import { BaseModel } from './base';
 
-export type { MonitoringAgent, MonitoringBaseline, MonitoringDecision };
+export type { MonitoringAgent, MonitoringBaseline, MonitoringDecision, MonitoringLogCatalog };
 
 /** Decisions kept per workspace; older ones are dropped as new ones land. */
 const DECISIONS_KEPT = 500;
@@ -130,6 +131,39 @@ export class MonitoringAgentModel extends BaseModel {
       where: { workspaceId, deviceKey, metric },
       orderBy: { createdAt: 'desc' },
     });
+  }
+
+  async getLogCatalog(workspaceId: string, deviceKey: string) {
+    return await this.db.monitoringLogCatalog.findUnique({
+      where: { workspaceId_deviceKey: { workspaceId, deviceKey } },
+    });
+  }
+
+  async listLogCatalogs(workspaceId: string) {
+    return await this.db.monitoringLogCatalog.findMany({
+      where: { workspaceId },
+      orderBy: { deviceKey: 'asc' },
+    });
+  }
+
+  async saveLogCatalog(
+    workspaceId: string,
+    deviceKey: string,
+    data: { patterns: Prisma.InputJsonValue; scans: number; scannedAt: Date | null }
+  ) {
+    return await this.db.monitoringLogCatalog.upsert({
+      where: { workspaceId_deviceKey: { workspaceId, deviceKey } },
+      create: { workspaceId, deviceKey, ...data },
+      update: data,
+    });
+  }
+
+  /** Forget the log patterns learned: everything, or one machine's. */
+  async clearLogCatalogs(workspaceId: string, deviceKey?: string) {
+    const { count } = await this.db.monitoringLogCatalog.deleteMany({
+      where: { workspaceId, ...(deviceKey ? { deviceKey } : {}) },
+    });
+    return count;
   }
 
   async findByTriageJob(jobId: string) {

@@ -1,6 +1,6 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 
-import { BadRequest, OnEvent } from '../../base';
+import { BadRequest, EventBus, OnEvent } from '../../base';
 import { Models } from '../../models';
 import { InventoryJobService, type JobDto } from './jobs';
 import { InventoryService } from './service';
@@ -27,6 +27,57 @@ export const HEALTH_SCRIPT = [
   '[ -n "$up" ] && echo "uptime=$up"',
   'exit 0',
 ].join('\n');
+
+/** Where the health output ends and the log lines begin. */
+export const LOGS_MARKER = '---logs---';
+/** Most a first scan reads back, when there is no last scan to start from. */
+const FIRST_SCAN_SECONDS = 60 * 60;
+
+/**
+ * The health check, and for the monitoring agent the machine's warnings and
+ * errors since `since` (epoch seconds) from the systemd journal. The worst
+ * secrets are scrubbed on the machine, before the lines leave it; the server
+ * redacts again (log-patterns.ts). A machine without journalctl sends none.
+ */
+export function healthScript(logsSince?: number | null) {
+  if (logsSince === undefined || logsSince === null) return HEALTH_SCRIPT;
+  const since = Math.floor(logsSince);
+  const scrub = [
+    String.raw`s#eyJ[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}#<jwt>#g`,
+    String.raw`s#([Bb]earer|[Bb]asic) [A-Za-z0-9._~+/=-]+#\1 <token>#g`,
+    String.raw`s#([Pp]ass(word|wd)?|PASS(WORD)?|[Ss]ecret|SECRET|[Tt]oken|TOKEN|[Aa]pi_?[Kk]ey|API_?KEY)([:=] ?)[^ ,;&]+#\1\4<redacted>#g`,
+  ]
+    .map(expression => `-e '${expression}'`)
+    .join(' ');
+  return [
+    ...HEALTH_SCRIPT.split('\n').filter(line => line !== 'exit 0'),
+    'if command -v journalctl >/dev/null 2>&1; then',
+    '  until=$(date +%s)',
+    `  echo "${LOGS_MARKER} $until"`,
+    `  journalctl -q --no-pager -p warning -o short-iso --since "@${since}" --until "@$until" 2>/dev/null | tail -n 1000 | sed -E ${scrub}`,
+    'fi',
+    'exit 0',
+  ].join('\n');
+}
+
+/**
+ * The log lines a health check sent, and up to when they go; null when it
+ * sent none (no agent, or no journal on the machine).
+ */
+export function healthLogs(output: string): { lines: string[]; until: number | null } | null {
+  const at = output.indexOf(LOGS_MARKER);
+  if (at < 0) return null;
+  const [head, ...lines] = output.slice(at).split('\n');
+  const until = Number(head.slice(LOGS_MARKER.length).trim());
+  return {
+    lines: lines.filter(line => line.trim()),
+    until: Number.isFinite(until) && until > 0 ? until : null,
+  };
+}
+
+/** When the next log scan of a machine should start reading from. */
+export const logsSince = (scannedAt: Date | null | undefined, now = Date.now()) =>
+  Math.floor((scannedAt?.getTime() ?? now - FIRST_SCAN_SECONDS * 1000) / 1000);
 
 export type CheckStatus = 'ok' | 'warn' | 'fail';
 
@@ -65,7 +116,8 @@ export function parseHealthOutput(output: string): Record<string, string> {
  * machine degraded if any of them isn't ok.
  */
 export function healthStatus(output: string) {
-  const values = parseHealthOutput(output);
+  const at = output.indexOf(LOGS_MARKER);
+  const values = parseHealthOutput(at < 0 ? output : output.slice(0, at));
   const checks: HealthCheck[] = [];
   const number = (key: string) => {
     const value = Number(values[key]);
@@ -134,7 +186,8 @@ export class InventoryHealthService {
   constructor(
     private readonly models: Models,
     private readonly devices: InventoryService,
-    private readonly jobs: InventoryJobService
+    private readonly jobs: InventoryJobService,
+    @Optional() private readonly event?: EventBus
   ) {}
 
   /** Queue a check on `key`, unless one is already waiting to run there. */
@@ -150,9 +203,15 @@ export class InventoryHealthService {
     );
     if (waiting) return waiting;
 
+    // With the monitoring agent on, the check also reads the logs since the last one.
+    const agent = await this.models.monitoringAgent.get(workspaceId);
+    const since = agent
+      ? logsSince((await this.models.monitoringAgent.getLogCatalog(workspaceId, key))?.scannedAt)
+      : null;
+
     return await this.jobs.enqueue(workspaceId, userId, key, {
       model: 'command',
-      instructions: HEALTH_SCRIPT,
+      instructions: healthScript(since),
       agentId: HEALTH_AGENT_PREFIX + key,
       agentName: 'Health check',
       title: `Health check: ${device.name}`,
@@ -198,6 +257,15 @@ export class InventoryHealthService {
         version: device.version,
         checkedAt: Date.now() / 1000,
       });
+      const logs = event.status === 'done' ? healthLogs(event.result ?? '') : null;
+      if (logs) {
+        this.event?.emit('inventory.device.logs', {
+          workspaceId: event.workspaceId,
+          key: job.deviceKey,
+          lines: logs.lines,
+          until: logs.until ?? Date.now() / 1000,
+        });
+      }
     } catch (err) {
       this.logger.warn(`health check ${event.jobId} could not be recorded: ${(err as Error).message}`);
     }

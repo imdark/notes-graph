@@ -24,6 +24,13 @@ declare global {
       key: string;
       checks: unknown[];
     };
+    /** A machine's log lines up to `until` (epoch seconds): a health check or the wf CLI. */
+    'inventory.device.logs': {
+      workspaceId: string;
+      key: string;
+      lines: string[];
+      until: number;
+    };
   }
 }
 

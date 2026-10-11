@@ -179,6 +179,33 @@ export interface MonitoringDecision {
   createdAt: number;
 }
 
+/** A shape of line a machine's logs have shown, with values as `<*>`. */
+export interface LogPattern {
+  id: string;
+  template: string;
+  example: string;
+  count: number;
+  firstSeen: number;
+  lastSeen: number;
+  /** Labelled known, or seen often enough to be part of normal. */
+  known: boolean;
+  label: 'known' | null;
+  /** Usual lines an hour, and its spread. */
+  perHour: number;
+  std: number;
+}
+
+/** One machine's catalog of log patterns. */
+export interface LogCatalog {
+  deviceKey: string;
+  scans: number;
+  scannedAt: number | null;
+  patterns: LogPattern[];
+}
+
+/** A decision about a log pattern carries this before the pattern's id. */
+export const LOG_METRIC_PREFIX = 'log:';
+
 export type AgentSettings = Partial<
   Pick<MonitoringAgent, 'mode' | 'sensitivity' | 'intervalMinutes' | 'autoTriage' | 'alerts'>
 >;
@@ -219,6 +246,8 @@ export class FleetService extends Service {
   readonly agent$ = new LiveData<MonitoringAgent | null>(null);
   /** What it noticed, newest first. */
   readonly decisions$ = new LiveData<MonitoringDecision[]>([]);
+  /** What each machine's logs normally say. */
+  readonly logCatalogs$ = new LiveData<LogCatalog[]>([]);
 
   private timer: ReturnType<typeof setInterval> | null = null;
   private checkTimer: ReturnType<typeof setInterval> | null = null;
@@ -353,6 +382,28 @@ export class FleetService extends Service {
     ]);
     this.agent$.setValue(agent);
     this.decisions$.setValue(decisions);
+    // A server from before log patterns has no catalog; the rest still shows.
+    this.revalidateLogs().catch(() => {});
+  }
+
+  async revalidateLogs(): Promise<void> {
+    const { catalogs } = await this.json<{ catalogs: LogCatalog[] }>('/monitoring-agent/logs');
+    this.logCatalogs$.setValue(catalogs);
+  }
+
+  /** "known": this pattern is never news; null: judge it again. */
+  async labelPattern(deviceKey: string, patternId: string, label: 'known' | null): Promise<void> {
+    const { pattern } = await this.json<{ pattern: LogPattern }>(
+      `/monitoring-agent/logs/${encodeURIComponent(deviceKey)}/${encodeURIComponent(patternId)}/label`,
+      { method: 'POST', body: JSON.stringify({ label }) }
+    );
+    this.logCatalogs$.setValue(
+      this.logCatalogs$.value.map(catalog =>
+        catalog.deviceKey === deviceKey
+          ? { ...catalog, patterns: catalog.patterns.map(p => (p.id === pattern.id ? pattern : p)) }
+          : catalog
+      )
+    );
   }
 
   /** Turn the agent on, or change its mode or settings. */
@@ -396,6 +447,8 @@ export class FleetService extends Service {
       { method: 'POST', body: JSON.stringify({ verdict }) }
     );
     this.replaceDecision(decision);
+    // "expected" on a log finding labels its pattern known.
+    if (decision.metric.startsWith(LOG_METRIC_PREFIX)) this.revalidateLogs().catch(() => {});
   }
 
   /** Check every machine that takes jobs; says which were skipped and why. */

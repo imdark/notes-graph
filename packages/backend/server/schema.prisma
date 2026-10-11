@@ -181,6 +181,7 @@ model Workspace {
   monitoringAgent            MonitoringAgent?
   monitoringBaselines        MonitoringBaseline[]
   monitoringDecisions        MonitoringDecision[]
+  monitoringLogCatalogs      MonitoringLogCatalog[]
   projectDocs                ProjectDoc[]
   directoryAccounts          DirectoryAccount[]
 
@@ -1976,4 +1977,23 @@ model MonitoringDecision {
   @@index([workspaceId, deviceKey, metric, createdAt])
   @@index([triageJobId])
   @@map("monitoring_decisions")
+}
+
+/// The log patterns one machine is known to print: the agent's catalog of
+/// what normal looks like in its logs. One row a machine, the patterns as
+/// JSON (see plugins/inventory/log-patterns), like the guide's patterns.json.
+model MonitoringLogCatalog {
+  workspaceId String    @map("workspace_id") @db.VarChar
+  deviceKey   String    @map("device_key") @db.VarChar
+  patterns    Json      @default("[]") @db.JsonB
+  /// Log scans folded in so far; the catalog judges nothing before WARMUP.
+  scans       Int       @default(0)
+  /// Up to when the logs were read, so the next scan starts there.
+  scannedAt   DateTime? @map("scanned_at") @db.Timestamptz(3)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@id([workspaceId, deviceKey])
+  @@map("monitoring_log_catalogs")
 }

@@ -76,6 +76,8 @@ export {
   FleetService,
   fleetSummary,
   type InventoryDevice,
+  type LogCatalog,
+  type LogPattern,
   type MonitoringAgent,
   type MonitoringDecision,
   openDecisions,

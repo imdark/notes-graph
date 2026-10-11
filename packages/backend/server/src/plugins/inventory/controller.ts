@@ -299,6 +299,67 @@ export class InventoryController {
     };
   }
 
+  /** Each machine's catalog of log patterns: what its logs normally say. */
+  @Get('/workspaces/:workspaceId/monitoring-agent/logs')
+  async monitoringLogPatterns(
+    @CurrentUser() user: CurrentUserType,
+    @Param('workspaceId') workspaceId: string
+  ) {
+    this.assertEnabled();
+    await this.ac.user(user.id).workspace(workspaceId).assert('Workspace.Read');
+    return { catalogs: await this.monitoringAgent.logPatterns(workspaceId) };
+  }
+
+  /** `{ label: 'known' | null }`: a pattern that is never news, or judged again. */
+  @Post('/workspaces/:workspaceId/monitoring-agent/logs/:key/:patternId/label')
+  async labelLogPattern(
+    @CurrentUser() user: CurrentUserType,
+    @Param('workspaceId') workspaceId: string,
+    @Param('key') key: string,
+    @Param('patternId') patternId: string,
+    @Body() body: { label?: string | null }
+  ) {
+    this.assertEnabled();
+    await this.ac
+      .user(user.id)
+      .workspace(workspaceId)
+      .assert('Workspace.Settings.Update');
+    return {
+      pattern: await this.monitoringAgent.labelPattern(workspaceId, key, patternId, body?.label ?? null),
+    };
+  }
+
+  /**
+   * Log lines a machine sends itself (the wf CLI, or any shipper), for the
+   * agent to learn from: `{ lines: string[], until?: epoch seconds }`. The
+   * lines are redacted and mined; none is kept as sent.
+   */
+  @Post('/workspaces/:workspaceId/devices/:key/logs')
+  async deviceLogs(
+    @CurrentUser() user: CurrentUserType,
+    @Param('workspaceId') workspaceId: string,
+    @Param('key') key: string,
+    @Body() body: { lines?: unknown; until?: number }
+  ) {
+    this.assertEnabled();
+    await this.ac
+      .user(user.id)
+      .workspace(workspaceId)
+      .assert('Workspace.Settings.Update');
+    if (!Array.isArray(body?.lines)) throw new BadRequest('lines must be an array of strings');
+    const device = await this.service.get(workspaceId, key);
+    if (!device) throw new NotFoundException(`No device '${key}' in this workspace`);
+    const now = Date.now() / 1000;
+    const until = Number(body.until);
+    const decisions = await this.monitoringAgent.observeLogs(
+      workspaceId,
+      device.key,
+      body.lines.map(line => String(line)),
+      Number.isFinite(until) && until > 0 && until <= now + 60 ? until : now
+    );
+    return { decisions: decisions.length };
+  }
+
   // ── agent jobs ─────────────────────────────────────────────────────────
   //
   // Enqueue is privileged: it makes someone else's machine run something, so

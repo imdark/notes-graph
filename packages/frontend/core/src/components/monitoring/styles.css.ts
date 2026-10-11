@@ -370,3 +370,35 @@ export const actions = style({
   gap: 6,
   marginTop: 'auto',
 });
+
+export const logs = style({
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 6,
+  borderTop: `1px solid ${cssVarV2('layer/insideBorder/border')}`,
+  paddingTop: 8,
+});
+
+export const logsSummary = style({
+  cursor: 'pointer',
+  fontSize: 13,
+  color: cssVarV2('text/primary'),
+});
+
+export const logRow = style({
+  display: 'flex',
+  alignItems: 'center',
+  gap: 8,
+  minWidth: 0,
+  fontSize: 12,
+  color: cssVarV2('text/primary'),
+});
+
+export const logTemplate = style({
+  flex: 1,
+  minWidth: 0,
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap',
+  fontFamily: cssVar('fontMonoFamily'),
+});

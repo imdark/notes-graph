@@ -6,6 +6,7 @@ import {
   type AgentSettings,
   FleetService,
   type InventoryDevice,
+  type LogPattern,
   type MonitoringDecision,
   openDecisions,
 } from '@notesgraph/core/modules/agents';
@@ -124,6 +125,91 @@ const DecisionRow = ({
   );
 };
 
+/** Patterns shown a machine before "Show all". */
+const PATTERNS_SHOWN = 15;
+
+const PatternRow = ({ deviceKey, pattern }: { deviceKey: string; pattern: LogPattern }) => {
+  const fleet = useService(FleetService);
+  const [busy, setBusy] = useState(false);
+  const label = useCallback(
+    (next: 'known' | null) => {
+      setBusy(true);
+      fleet
+        .labelPattern(deviceKey, pattern.id, next)
+        .catch(err => notify.error({ title: "Couldn't label it", message: errorMessage(err) }))
+        .finally(() => setBusy(false));
+    },
+    [fleet, deviceKey, pattern.id]
+  );
+
+  return (
+    <div className={styles.logRow} data-testid="monitoring-log-pattern">
+      <span className={styles.dot} data-state={pattern.known ? 'ok' : 'warn'} />
+      <span className={styles.logTemplate} title={pattern.example}>
+        {pattern.template}
+      </span>
+      <span className={styles.meta}>
+        {pattern.count}× · ~{pattern.perHour}/h
+      </span>
+      {pattern.label === 'known' ? (
+        <Button variant="plain" disabled={busy} onClick={() => label(null)}>
+          Unmark
+        </Button>
+      ) : (
+        <Button
+          variant="plain"
+          disabled={busy}
+          onClick={() => label('known')}
+          tooltip="Normal for this machine: never flag it as new"
+        >
+          Known
+        </Button>
+      )}
+    </div>
+  );
+};
+
+/** What the machines' logs normally say: the agent's catalog of patterns. */
+const LogPatterns = ({ nameOf }: { nameOf: (key: string) => string }) => {
+  const fleet = useService(FleetService);
+  const catalogs = useLiveData(fleet.logCatalogs$);
+  const [all, setAll] = useState(false);
+  const total = catalogs.reduce((sum, catalog) => sum + catalog.patterns.length, 0);
+
+  return (
+    <details className={styles.logs} data-testid="monitoring-log-patterns">
+      <summary className={styles.logsSummary}>
+        Log patterns
+        <span className={styles.meta}>
+          {' · '}
+          {total === 0
+            ? 'none yet: the health check reads warnings and errors from the journal on Linux machines'
+            : `${total} on ${catalogs.length} ${catalogs.length === 1 ? 'machine' : 'machines'}`}
+        </span>
+      </summary>
+      {catalogs.map(catalog => (
+        <div key={catalog.deviceKey} className={styles.logs}>
+          <span className={styles.meta}>
+            <strong>{nameOf(catalog.deviceKey)}</strong> · {catalog.scans}{' '}
+            {catalog.scans === 1 ? 'scan' : 'scans'}
+            {catalog.scans < AGENT_WARMUP
+              ? ` (new lines count as news after ${AGENT_WARMUP})`
+              : ''}
+          </span>
+          {(all ? catalog.patterns : catalog.patterns.slice(0, PATTERNS_SHOWN)).map(pattern => (
+            <PatternRow key={pattern.id} deviceKey={catalog.deviceKey} pattern={pattern} />
+          ))}
+        </div>
+      ))}
+      {!all && catalogs.some(catalog => catalog.patterns.length > PATTERNS_SHOWN) ? (
+        <Button variant="plain" onClick={() => setAll(true)}>
+          Show all
+        </Button>
+      ) : null}
+    </details>
+  );
+};
+
 /**
  * The monitoring agent on the Monitoring page: its mode (training, shadow,
  * detect), how much it has learned, its settings, and what it noticed, with
@@ -188,8 +274,8 @@ export const MonitoringAgentPanel = ({
           <>
             <span className={styles.modeNote}>
               The agent learns what normal looks like on each machine from its
-              health checks, flags what&apos;s new, and escalates only what
-              matters. It needs no thresholds. It starts in training and tells
+              health checks and its logs, flags what&apos;s new, and escalates
+              only what matters. It needs no thresholds. It starts in training and tells
               nobody anything until you move it to shadow or detect.
             </span>
             <div className={styles.actions}>
@@ -294,6 +380,7 @@ export const MonitoringAgentPanel = ({
                 Relearn
               </Button>
             </div>
+            <LogPatterns nameOf={nameOf} />
             {decisions.length > 0 ? (
               <div className={styles.decisions}>
                 {decisions.map(decision => (
