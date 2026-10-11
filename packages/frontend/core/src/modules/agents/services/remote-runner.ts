@@ -52,6 +52,43 @@ export const isDeviceClaudeModel = (model: string | undefined) =>
   model === WORKFLOW_MODEL ||
   model === RESEARCH_MODEL;
 
+/**
+ * Where an agent set up in the editor is saved. Claude Code (or Workflow,
+ * Research) picked under "Cloud (server copilot)" runs on the server's own
+ * runner, so it is saved as that device: every run, monitor and deployment
+ * path then treats it like any other device run. Anything else is kept as
+ * picked, with a device only on a remote agent and no device-only model
+ * carried to a runtime that would read it as an unknown model name.
+ */
+export const savedPlacement = <H extends string>(
+  harness: H | undefined,
+  model: string | undefined,
+  deviceKey: string | undefined
+): { harness: H | 'remote' | undefined; model?: string; deviceKey?: string } =>
+  harness === 'cloud' && isDeviceClaudeModel(model)
+    ? { harness: 'remote', model, deviceKey: CLOUD_DEVICE_KEY }
+    : {
+        harness,
+        model:
+          isDeviceClaudeModel(model) && harness !== 'remote' ? undefined : model,
+        deviceKey: harness === 'remote' ? deviceKey : undefined,
+      };
+
+/**
+ * The editor's view of a saved agent: Claude Code on the server's runner
+ * reads back as "Cloud", where it was picked.
+ */
+export const editorHarness = <H extends string>(
+  harness: H | undefined,
+  model: string | undefined,
+  deviceKey: string | undefined
+): H | 'cloud' | undefined =>
+  harness === 'remote' &&
+  deviceKey === CLOUD_DEVICE_KEY &&
+  isDeviceClaudeModel(model)
+    ? 'cloud'
+    : harness;
+
 /** What a device Claude model is called in lists; null for any other model. */
 export const deviceHarnessName = (model: string | undefined) =>
   model === RESEARCH_MODEL

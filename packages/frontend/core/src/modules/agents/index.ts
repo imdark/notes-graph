@@ -6,6 +6,7 @@ export {
   deviceHarnessName,
   type EnqueueRemoteJob,
   CLOUD_DEVICE_KEY,
+  editorHarness,
   isDeviceClaudeModel,
   openQuestions,
   RESEARCH_MODEL,
@@ -13,6 +14,7 @@ export {
   type RemoteJobUpdate,
   type RemoteQuestion,
   RemoteAgentRunnerService,
+  savedPlacement,
   WORKFLOW_MODEL,
 } from './services/remote-runner';
 export {
