@@ -190,6 +190,30 @@ const ALWAYS_ALLOWED_PERMISSIONS = new Set([
 const LEASE_LAPSE_GRACE_MS = 30_000;
 
 /**
+ * How long a run may sit queued before its log asks whether anything on the
+ * device is listening, and how recently that device's runner must have asked
+ * for work to count as listening (runners poll every few seconds).
+ */
+const UNCLAIMED_AFTER_MS = 60_000;
+const RUNNER_QUIET_MS = 2 * 60_000;
+
+/**
+ * The transcript line for a queued run that no runner is picking up. `marker`
+ * is part of it so the note is written once per job.
+ */
+function unclaimedNote(job: InventoryJob, host: string, runnerSeenAt: Date | null) {
+  const marker = `Nothing on ${job.deviceKey} is picking up runs`;
+  const seen = runnerSeenAt
+    ? `its runner last asked for work at ${runnerSeenAt.toISOString()}`
+    : 'no runner there has asked for work since this was first tracked';
+  const where = host ? ` on ${host}` : '';
+  const note =
+    `⏳ ${marker}: ${seen}. Start one with \`wf agent serve\`${where} ` +
+    `(or restart it if it stopped); this run starts as soon as it does.`;
+  return { marker, note };
+}
+
+/**
  * The transcript line for a run whose runner stopped reporting. `marker` is
  * part of it so the note is written once per lapsed lease.
  */
@@ -339,6 +363,7 @@ export class InventoryJobService {
     let job = await this.models.inventoryJob.get(workspaceId, id);
     if (!job) return null;
     job = await this.noteLostRunner(job);
+    job = await this.noteUnclaimed(job);
     // Questions travel with the transcript: both are what a viewer of one
     // run needs, and neither belongs in a listing.
     const questions =
@@ -379,6 +404,33 @@ export class InventoryJobService {
     return (await this.models.inventoryJob.get(job.workspaceId, job.id)) ?? job;
   }
 
+  /**
+   * A queued run on a device whose runner isn't asking for work just waits,
+   * with an empty log. Say so, and how to start one, when someone looks.
+   * A run held back to a later time (a session limit) is waiting on purpose.
+   */
+  private async noteUnclaimed(job: InventoryJob): Promise<InventoryJob> {
+    const now = Date.now();
+    if (
+      job.status !== 'queued' ||
+      job.createdAt.getTime() + UNCLAIMED_AFTER_MS > now ||
+      (job.runAfter && job.runAfter.getTime() > now)
+    ) {
+      return job;
+    }
+    const device = await this.models.inventoryDevice.get(job.workspaceId, job.deviceKey);
+    // No device row: the server's own cloud runner, which isn't polled for.
+    if (!device) return job;
+    const seen = device.runnerSeenAt;
+    if (seen && seen.getTime() + RUNNER_QUIET_MS > now) return job;
+    const { marker, note } = unclaimedNote(job, device.host, seen);
+    const text = `${job.log && !job.log.endsWith('\n') ? '\n' : ''}${note}\n`;
+    if (!(await this.models.inventoryJob.noteUnclaimed(job.id, marker, text))) {
+      return job;
+    }
+    return (await this.models.inventoryJob.get(job.workspaceId, job.id)) ?? job;
+  }
+
   async list(workspaceId: string, deviceKey?: string, status?: string): Promise<JobDto[]> {
     const jobs = await this.models.inventoryJob.list(workspaceId, { deviceKey, status });
     return jobs.map(job => toJobDto(job));
@@ -390,6 +442,13 @@ export class InventoryJobService {
     runnerId: string,
     leaseSeconds?: number
   ): Promise<JobDto | null> {
+    // Asking is what "a runner is listening" means, whether or not there is
+    // work to hand out. Best effort: never fail a claim over it.
+    try {
+      await this.models.inventoryDevice.touchRunner(workspaceId, deviceKey);
+    } catch (err) {
+      this.logger.warn(`touchRunner failed: ${err}`);
+    }
     const job = await this.models.inventoryJob.claim(
       workspaceId, deviceKey, runnerId || 'runner', leaseSeconds
     );

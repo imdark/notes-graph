@@ -98,6 +98,21 @@ export class InventoryDeviceModel extends BaseModel {
     return count;
   }
 
+  /**
+   * Note that a runner on the device just asked for work, so a run waiting in
+   * its queue can tell "no runner is listening" from "busy". Written at most
+   * every 30s — runners poll every few seconds — and without bumping
+   * `updated_at`, which tracks registration and status, not polling.
+   */
+  async touchRunner(workspaceId: string, key: string): Promise<void> {
+    await this.db.$executeRaw`
+      UPDATE "inventory_devices"
+      SET "runner_seen_at" = NOW()
+      WHERE "workspace_id" = ${workspaceId} AND "key" = ${key}
+        AND ("runner_seen_at" IS NULL
+          OR "runner_seen_at" < NOW() - INTERVAL '30 seconds')`;
+  }
+
   async updateStatus(
     workspaceId: string,
     key: string,

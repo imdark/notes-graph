@@ -379,6 +379,21 @@ export class InventoryJobModel extends BaseModel {
   }
 
   /**
+   * Say in a queued job's transcript that nothing on its device is picking
+   * work up. Once per job (the transcript must not already carry `marker`),
+   * and only while it is still queued.
+   */
+  async noteUnclaimed(id: string, marker: string, note: string): Promise<boolean> {
+    const written = await this.appendLog(
+      id,
+      note,
+      Prisma.sql`AND "status" = 'queued'
+        AND POSITION(${marker}::text IN "log") = 0`
+    );
+    return written > 0;
+  }
+
+  /**
    * Record a question from a running job. The runner then polls for it.
    * `allowedBy` records a permission as already allowed on that person's
    * behalf (the run has "Allow all"), so the runner's first poll finds it
