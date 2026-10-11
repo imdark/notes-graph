@@ -40,12 +40,12 @@ export type AgentKind = 'answer' | 'worker';
 
 /**
  * An agent's kind, for rows saved before it was a setting: a Claude Code or
- * Workflow agent on a device works in the notes; anything else, research
- * included, answers.
+ * Workflow agent on a device (the server's runner, picked as Cloud, included)
+ * works in the notes; anything else, research included, answers.
  */
 export const agentKind = (agent: Pick<Agent, 'kind' | 'harness' | 'model'>) =>
   agent.kind ??
-  (agent.harness === 'remote' &&
+  ((agent.harness === 'remote' || agent.harness === 'cloud') &&
   (agent.model === 'claude-code' || agent.model === 'workflow')
     ? 'worker'
     : 'answer');

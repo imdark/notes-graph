@@ -24,11 +24,13 @@ import {
   type AgentTargetKind,
   CLAUDE_CODE_MODEL,
   DEFAULT_MAX_STEPS,
+  editorHarness,
   FILE_TOOLS,
   isDeviceClaudeModel,
   RemoteAgentRunnerService,
   RESEARCH_MODEL,
   CLOUD_DEVICE_KEY,
+  savedPlacement,
   WORKFLOW_MODEL,
 } from '@notesgraph/core/modules/agents';
 import {
@@ -127,7 +129,7 @@ const ENVIRONMENTS: {
   {
     value: 'cloud',
     label: 'Cloud (server copilot)',
-    note: 'Requires the server to advertise Copilot',
+    note: "The server's copilot model, or Claude Code on the server's runner",
   },
   {
     value: 'remote',
@@ -197,14 +199,20 @@ export const AgentEditor = ({
   );
   const [pickerOpen, setPickerOpen] = useState(false);
   const [harness, setHarness] = useState<AgentHarness | undefined>(
-    agent?.harness
+    editorHarness(agent?.harness, agent?.model, agent?.deviceKey)
   );
   const [model, setModel] = useState<string | undefined>(agent?.model);
   const [deviceKey, setDeviceKey] = useState<string | undefined>(
     agent?.deviceKey
   );
+  // Claude Code picked under Cloud runs on the server's runner (see
+  // `savedPlacement`), the same as picking that runner as the device.
+  const claudeOnCloud = harness === 'cloud' && isDeviceClaudeModel(model);
+  const claudeHarness =
+    isDeviceClaudeModel(model) && (harness === 'remote' || claudeOnCloud);
   // The server's own runner (tools/agent-runner), registered as `cloud`.
-  const onCloud = harness === 'remote' && deviceKey === CLOUD_DEVICE_KEY;
+  const onCloud =
+    (harness === 'remote' && deviceKey === CLOUD_DEVICE_KEY) || claudeOnCloud;
   const modelService = useService(AIModelService);
   const remoteRunner = useService(RemoteAgentRunnerService);
   const workspaceService = useService(WorkspaceService);
@@ -244,12 +252,15 @@ export const AgentEditor = ({
   // is pointed at the cloud.
   // The default harness runs on-device (see `harnessFor`), so it gets the
   // on-device models too.
+  // Cloud offers Claude Code on the server's runner next to its copilot models.
   const availableHarnesses =
     harness === 'remote'
       ? REMOTE_HARNESSES
-      : harness === 'cloud' || harness === 'research'
-        ? backendModels
-        : LOCAL_MODELS;
+      : harness === 'cloud'
+        ? [...REMOTE_HARNESSES, ...backendModels]
+        : harness === 'research'
+          ? backendModels
+          : LOCAL_MODELS;
 
   // Tools not yet picked, so the menu only ever offers something new.
   const unusedTools = ALL_TOOLS.filter(tool => !tools.includes(tool.name));
@@ -276,14 +287,7 @@ export const AgentEditor = ({
       icon,
       instructions: instructions.trim(),
       kind,
-      harness,
-      // Only meaningful for a remote agent; don't leave a stale key behind
-      // on one that has been switched back to running locally.
-      deviceKey: harness === 'remote' ? deviceKey : undefined,
-      // Claude Code and Workflow only exist on a device; don't carry them to
-      // a runtime that would read them as an unknown model name.
-      model:
-        isDeviceClaudeModel(model) && harness !== 'remote' ? undefined : model,
+      ...savedPlacement(harness, model, deviceKey),
       tools,
       targets,
       output: 'panel',
@@ -536,8 +540,8 @@ export const AgentEditor = ({
               </div>
               <span className={styles.hint}>
                 On-device runs in this browser. Remote runs on a machine you
-                have registered in the device inventory. Cloud needs the server
-                to offer Copilot, which this one doesn't yet.
+                have registered in the device inventory. Cloud runs on the
+                server: its copilot model, or Claude Code on its own runner.
               </span>
             </div>
 
@@ -606,6 +610,10 @@ export const AgentEditor = ({
                     ? 'Runs on the server with your notes as tools, in a fresh ' +
                       'worktree of the repo on its own branch; it can install, ' +
                       'test and push, and asks you here when it needs something.'
+                    : onCloud && model === RESEARCH_MODEL
+                    ? 'Claude Code with OmniSeek on the server: searches across ' +
+                      'languages, reads papers and PDFs, follows citations, and ' +
+                      'answers with sources.'
                     : harness === 'remote'
                   ? model === CLAUDE_CODE_MODEL
                     ? 'Runs the claude CLI on the device with your notes as tools. ' +
@@ -624,13 +632,16 @@ export const AgentEditor = ({
                     ? 'The server’s model researches with OmniSeek: searches across ' +
                       'languages, reads pages and papers, follows citations, and ' +
                       'answers with sources.'
+                  : harness === 'cloud'
+                    ? 'Claude Code, Workflow and Research run on the server’s own ' +
+                      'runner; any other choice is the server copilot’s model.'
                     : 'A different on-device model is downloaded the first time it runs.'}
               </span>
             </div>
 
             {/* Claude Code (and Workflow) have no step limit: they count every
               tool call as a turn, and the run's time limit bounds them. */}
-            {harness === 'remote' && isDeviceClaudeModel(model) ? null : (
+            {claudeHarness ? null : (
               <div className={styles.field}>
                 <span className={styles.label}>Step limit</span>
                 <Input

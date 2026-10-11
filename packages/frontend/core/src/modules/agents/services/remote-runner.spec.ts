@@ -7,12 +7,15 @@ import { Framework } from '@notesgraph/infra';
 import { describe, expect, test } from 'vitest';
 
 import {
+  CLOUD_DEVICE_KEY,
   deviceHarnessName,
+  editorHarness,
   isDeviceClaudeModel,
   openQuestions,
   RemoteAgentRunnerService,
   type RemoteJob,
   RESEARCH_MODEL,
+  savedPlacement,
 } from './remote-runner';
 
 describe('device harnesses', () => {
@@ -22,6 +25,52 @@ describe('device harnesses', () => {
     expect(deviceHarnessName('claude-code')).toBe('Claude Code');
     expect(deviceHarnessName('workflow')).toBe('Workflow');
     expect(deviceHarnessName('Llama-3.2-1B-Instruct-q4f16_1-MLC')).toBeNull();
+  });
+});
+
+describe('Claude Code under Cloud', () => {
+  test("is saved as the server's runner and reads back as Cloud", () => {
+    const saved = savedPlacement('cloud', 'claude-code', undefined);
+    expect(saved).toEqual({
+      harness: 'remote',
+      model: 'claude-code',
+      deviceKey: CLOUD_DEVICE_KEY,
+    });
+    expect(editorHarness(saved.harness, saved.model, saved.deviceKey)).toBe(
+      'cloud'
+    );
+  });
+
+  test('a copilot model on Cloud stays a copilot run', () => {
+    expect(savedPlacement('cloud', 'gpt-5', 'laptop')).toEqual({
+      harness: 'cloud',
+      model: 'gpt-5',
+      deviceKey: undefined,
+    });
+  });
+
+  test('device-only models are dropped off the browser runtime', () => {
+    expect(savedPlacement('on-device', 'workflow', undefined)).toEqual({
+      harness: 'on-device',
+      model: undefined,
+      deviceKey: undefined,
+    });
+  });
+
+  test('a real device keeps its key and reads back as Remote', () => {
+    const saved = savedPlacement('remote', 'claude-code', 'laptop');
+    expect(saved).toEqual({
+      harness: 'remote',
+      model: 'claude-code',
+      deviceKey: 'laptop',
+    });
+    expect(editorHarness(saved.harness, saved.model, saved.deviceKey)).toBe(
+      'remote'
+    );
+  });
+
+  test('the cloud runner with no harness picked stays Remote, so it warns', () => {
+    expect(editorHarness('remote', undefined, CLOUD_DEVICE_KEY)).toBe('remote');
   });
 });
 
