@@ -7,7 +7,7 @@
 # so edits here take effect on the next deploy.
 #
 # Before the migration runs it takes a DB + config backup into
-# /opt/notesgraph/backups (keeps the newest 10), so a bad migration/deploy is
+# /opt/notesgraph/backups (keeps the newest 5), so a bad migration/deploy is
 # recoverable. Set SKIP_DB_BACKUP=1 to bypass the backup (not recommended).
 set -euo pipefail
 cd /home/ubuntu/notes-graph
@@ -219,9 +219,12 @@ fi
 # Snapshot the config dir too — losing private.key would sign everyone out.
 tar czf "backups/config-${BK_TS}.tar.gz" -C /opt/notesgraph/data config 2>/dev/null \
   || echo "WARN config snapshot failed"
-# Retention: keep the newest 10 of each.
-ls -1t backups/db-*.sql.gz 2>/dev/null | tail -n +11 | xargs -r rm -f || true
-ls -1t backups/config-*.tar.gz 2>/dev/null | tail -n +11 | xargs -r rm -f || true
+# Retention: keep the newest BACKUPS_KEEP of each. A dump is ~150 MB and one
+# is taken every deploy, so 10 held ~1.5 GB on a 58 GB disk that is already
+# mostly images; 5 still reaches back a few days of deploys.
+BACKUPS_KEEP=${BACKUPS_KEEP:-5}
+ls -1t backups/db-*.sql.gz 2>/dev/null | tail -n +$((BACKUPS_KEEP + 1)) | xargs -r rm -f || true
+ls -1t backups/config-*.tar.gz 2>/dev/null | tail -n +$((BACKUPS_KEEP + 1)) | xargs -r rm -f || true
 # -----------------------------------------------------------------------------
 
 step "rolling stack (migration runs first)"
