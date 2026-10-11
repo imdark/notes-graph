@@ -65,15 +65,15 @@ const renderDevicesPage = (harness: PluginHarness) => {
 
 afterEach(cleanup);
 
-describe('inventory plugin — contributions', () => {
+describe('registry plugin — contributions', () => {
   test('contributes a devices settings page and a summary command', async () => {
     const harness = await harnessWith(async () =>
       jsonResponse(200, { devices: [] })
     );
 
     expect(harness.settingsPages.map(p => p.id)).toEqual(['devices']);
-    expect(harness.settingsPages[0].title).toBe('Machine Inventory');
-    expect(harness.commands.map(c => c.id)).toEqual(['inventory-summary']);
+    expect(harness.settingsPages[0].title).toBe('Machine Registry');
+    expect(harness.commands.map(c => c.id)).toEqual(['registry-summary']);
   });
 
   test('deactivating removes everything it registered', async () => {
@@ -101,7 +101,7 @@ describe('inventory plugin — contributions', () => {
   });
 });
 
-describe('inventory plugin — devices page', () => {
+describe('registry plugin — devices page', () => {
   test('lists machines and folders from the API', async () => {
     const harness = await harnessWith(async () =>
       jsonResponse(200, {
@@ -142,7 +142,7 @@ describe('inventory plugin — devices page', () => {
 
     await waitFor(() => expect(harness.requests).toHaveLength(1));
     expect(harness.requests[0].url).toBe(
-      '/api/inventory/workspaces/ws-42/devices'
+      '/api/registry/workspaces/ws-42/devices'
     );
   });
 
@@ -154,7 +154,7 @@ describe('inventory plugin — devices page', () => {
     renderDevicesPage(harness);
 
     await waitFor(() =>
-      expect(screen.getByText(/inventory API is not enabled/i)).toBeTruthy()
+      expect(screen.getByText(/registry API is not enabled/i)).toBeTruthy()
     );
   });
 
@@ -186,7 +186,7 @@ describe('inventory plugin — devices page', () => {
   });
 });
 
-describe('inventory plugin — summary command', () => {
+describe('registry plugin — summary command', () => {
   test('notifies with the online/offline split', async () => {
     const harness = await harnessWith(async () =>
       jsonResponse(200, {
@@ -198,7 +198,7 @@ describe('inventory plugin — summary command', () => {
       })
     );
 
-    await harness.runCommand('inventory-summary');
+    await harness.runCommand('registry-summary');
 
     expect(harness.notifications).toHaveLength(1);
     expect(harness.notifications[0].title).toBe('3 devices');
@@ -210,7 +210,7 @@ describe('inventory plugin — summary command', () => {
       jsonResponse(200, { devices: [device()] })
     );
 
-    await harness.runCommand('inventory-summary');
+    await harness.runCommand('registry-summary');
 
     expect(harness.notifications[0].title).toBe('1 device');
   });
@@ -218,14 +218,14 @@ describe('inventory plugin — summary command', () => {
   test('reports a disabled API rather than a bare status', async () => {
     const harness = await harnessWith(async () => jsonResponse(404, {}));
 
-    await harness.runCommand('inventory-summary');
+    await harness.runCommand('registry-summary');
 
     expect(harness.notifications[0].theme).toBe('error');
     expect(harness.notifications[0].message).toMatch(/not enabled/i);
   });
 });
 
-describe('inventory plugin — writes', () => {
+describe('registry plugin — writes', () => {
   test('registers a device as a JSON POST and reloads the list', async () => {
     const fetchImpl = vi.fn(async (url: string, init?: RequestInit) => {
       if (init?.method === 'POST') return jsonResponse(200, { device: device() });
@@ -249,7 +249,7 @@ describe('inventory plugin — writes', () => {
     await waitFor(() => {
       const post = harness.requests.find(r => r.init?.method === 'POST');
       expect(post).toBeTruthy();
-      expect(post!.url).toBe('/api/inventory/workspaces/test-workspace/devices');
+      expect(post!.url).toBe('/api/registry/workspaces/test-workspace/devices');
       expect(JSON.parse(post!.init!.body as string)).toMatchObject({
         key: 'new-box',
         kind: 'machine',
@@ -300,7 +300,7 @@ describe('inventory plugin — writes', () => {
       const del = harness.requests.find(r => r.init?.method === 'DELETE');
       expect(del).toBeTruthy();
       expect(del!.url).toBe(
-        '/api/inventory/workspaces/test-workspace/devices/build-box'
+        '/api/registry/workspaces/test-workspace/devices/build-box'
       );
     });
   });

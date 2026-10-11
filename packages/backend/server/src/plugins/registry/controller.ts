@@ -14,35 +14,35 @@ import type { CurrentUser as CurrentUserType } from '../../core/auth';
 import { CurrentUser } from '../../core/auth';
 import { PermissionAccess } from '../../core/permission';
 import { Models } from '../../models';
-import { InventoryHealthService } from './health';
-import { InventoryJobService } from './jobs';
+import { RegistryHealthService } from './health';
+import { RegistryJobService } from './jobs';
 import { type AgentSettings, MonitoringAgentService } from './monitoring-agent';
-import { InventoryService } from './service';
+import { RegistryService } from './service';
 import type { DeviceStatusBody, RegisterDeviceBody } from './types';
 
 /**
- * Device inventory API for deployment and agent-execution targets.
+ * Device registry API for deployment and agent-execution targets.
  *
  * Authenticated with a Personal Access Token, the same way the notes API is
  * (`/api/notes`), so external tooling such as the `wf` CLI can register a
  * machine without a browser session. Reads need workspace read; writes need
  * settings update, which keeps a viewer from rewriting the fleet.
  */
-@Controller('/api/inventory')
-export class InventoryController {
+@Controller('/api/registry')
+export class RegistryController {
   constructor(
     private readonly ac: PermissionAccess,
     private readonly models: Models,
-    private readonly service: InventoryService,
-    private readonly jobs: InventoryJobService,
-    private readonly health: InventoryHealthService,
+    private readonly service: RegistryService,
+    private readonly jobs: RegistryJobService,
+    private readonly health: RegistryHealthService,
     private readonly monitoringAgent: MonitoringAgentService,
     private readonly config: Config
   ) {}
 
   private assertEnabled() {
-    if (!this.config.inventory.enabled) {
-      throw new NotFoundException('Inventory API is not enabled on this server');
+    if (!this.config.registry.enabled) {
+      throw new NotFoundException('Registry API is not enabled on this server');
     }
   }
 
@@ -75,7 +75,7 @@ export class InventoryController {
     }
     const platform = body?.platform === 'ios' ? 'ios' : 'android';
     await this.models.userPushToken.register(user.id, token, platform);
-    return { ok: true, enabled: !!this.config.inventory.fcmServiceAccount };
+    return { ok: true, enabled: !!this.config.registry.fcmServiceAccount };
   }
 
   /** On sign-out: this phone should stop hearing about this user's runs. */

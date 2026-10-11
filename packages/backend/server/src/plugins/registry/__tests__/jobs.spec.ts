@@ -1,7 +1,7 @@
 import test from 'ava';
 
 import { logStamp, stampInnerLines } from '../../../models';
-import { InventoryJobService, toJobDto } from '../jobs';
+import { RegistryJobService, toJobDto } from '../jobs';
 import { questionPushData } from '../push';
 
 /**
@@ -19,10 +19,10 @@ const userId = 'user-1';
 function makeService(options: { device?: any; heldUntil?: Date } = {}) {
   const created: any[] = [];
   const models: any = {
-    inventoryDevice: {
+    registryDevice: {
       get: async () => options.device ?? null,
     },
-    inventoryJob: {
+    registryJob: {
       heldUntil: async () => options.heldUntil ?? null,
       create: async (input: any) => {
         const job = {
@@ -41,7 +41,7 @@ function makeService(options: { device?: any; heldUntil?: Date } = {}) {
       },
     },
   };
-  return { service: new InventoryJobService(models), created };
+  return { service: new RegistryJobService(models), created };
 }
 
 const agentTarget = { key: 'laptop', agentTarget: true };
@@ -173,14 +173,14 @@ test('listings leave the transcript out', t => {
 test('a report passes log text and the tmux session to the model', async t => {
   let received: any;
   const models: any = {
-    inventoryJob: {
+    registryJob: {
       report: async (_ws: string, _id: string, input: any) => {
         received = input;
         return storedJob({ tmuxSession: input.tmuxSession });
       },
     },
   };
-  const service = new InventoryJobService(models);
+  const service = new RegistryJobService(models);
   const job = await service.report(workspaceId, 'job-1', {
     status: 'running',
     logAppend: '→ read_file\n',
@@ -197,7 +197,7 @@ function questionService(job: any, question?: any) {
   const asked: any[] = [];
   const allowedAll: string[] = [];
   const models: any = {
-    inventoryJob: {
+    registryJob: {
       get: async () => job,
       allowAllTools: async (_jobId: string, by: string) => {
         allowedAll.push(by);
@@ -220,7 +220,7 @@ function questionService(job: any, question?: any) {
       },
     },
   };
-  return { service: new InventoryJobService(models), answered, asked, allowedAll };
+  return { service: new RegistryJobService(models), answered, asked, allowedAll };
 }
 
 const openQuestion = (overrides: Record<string, unknown> = {}) => ({
@@ -423,7 +423,7 @@ function pushStub() {
 test("a question pushes to the starter's phone", async t => {
   const { push, asked } = pushStub();
   const { service } = questionService(storedJob({ createdBy: userId }));
-  const withPush = new InventoryJobService((service as any).models, push);
+  const withPush = new RegistryJobService((service as any).models, push);
   await withPush.ask(workspaceId, 'job-1', { text: 'Who is Cosmo?' });
   t.deepEqual(asked, ['q1']);
 });
@@ -433,7 +433,7 @@ test('a permission already allowed by "Allow all" pushes nothing', async t => {
   const { service } = questionService(
     storedJob({ createdBy: userId, allowAllTools: true })
   );
-  const withPush = new InventoryJobService((service as any).models, push);
+  const withPush = new RegistryJobService((service as any).models, push);
   await withPush.ask(workspaceId, 'job-1', { kind: 'permission', text: 'Allow Edit?' });
   t.deepEqual(asked, []);
 });
@@ -444,7 +444,7 @@ test('answering takes the question off the other phones', async t => {
     storedJob({ createdBy: userId }),
     openQuestion({ kind: 'permission', text: 'Allow Bash?' })
   );
-  const withPush = new InventoryJobService((service as any).models, push);
+  const withPush = new RegistryJobService((service as any).models, push);
   await withPush.answer(workspaceId, 'job-1', 'q1', userId, {
     allowed: false,
     answer: 'use rg, not grep',
@@ -459,7 +459,7 @@ test('a push that fails does not fail the ask', async t => {
     },
   };
   const { service } = questionService(storedJob({ createdBy: userId }));
-  const withPush = new InventoryJobService((service as any).models, push);
+  const withPush = new RegistryJobService((service as any).models, push);
   const question = await withPush.ask(workspaceId, 'job-1', { text: 'still?' });
   t.is(question.id, 'q1');
 });
@@ -514,7 +514,7 @@ function makeReportService() {
     createdAt: new Date(0),
   };
   const models: any = {
-    inventoryJob: {
+    registryJob: {
       requeue: async (...args: any[]) => {
         calls.requeue.push(args);
         return { ...job, status: 'queued', runAfter: args[2] };
@@ -529,7 +529,7 @@ function makeReportService() {
       },
     },
   };
-  return { service: new InventoryJobService(models), calls };
+  return { service: new RegistryJobService(models), calls };
 }
 
 test('a run stopped by the session limit goes back in the queue', async t => {
@@ -577,8 +577,8 @@ test('a claimed job carries how to run it, the same for every runner', async t =
     createdAt: new Date(0),
   });
   const claimWith = (model: string | null) =>
-    new InventoryJobService({
-      inventoryJob: { claim: async () => job(model) },
+    new RegistryJobService({
+      registryJob: { claim: async () => job(model) },
     } as any).claim(workspaceId, 'cloud', 'runner');
 
   const research = await claimWith('research');
@@ -657,7 +657,7 @@ function fakeTasks() {
 test('a job on tasks marks them queued when it is asked for', async t => {
   const { service } = makeService({ device: agentTarget });
   const { tasks, calls } = fakeTasks();
-  const withTasks = new InventoryJobService(
+  const withTasks = new RegistryJobService(
     (service as any).models, undefined, undefined, tasks
   );
   const job = await withTasks.enqueue(workspaceId, userId, 'laptop', {
@@ -683,8 +683,8 @@ test('tasks without a note to find them in are dropped', async t => {
 test('claiming a job starts its tasks', async t => {
   const { tasks, calls } = fakeTasks();
   const job = { id: 'job-1', workspaceId, model: null, tools: [], createdAt: new Date(0) };
-  const service = new InventoryJobService(
-    { inventoryJob: { claim: async () => job } } as any,
+  const service = new RegistryJobService(
+    { registryJob: { claim: async () => job } } as any,
     undefined,
     undefined,
     tasks
@@ -692,8 +692,8 @@ test('claiming a job starts its tasks', async t => {
   await service.claim(workspaceId, 'laptop', 'runner');
   t.deepEqual(calls.map(c => c.op), ['claimed']);
 
-  const none = new InventoryJobService(
-    { inventoryJob: { claim: async () => null } } as any,
+  const none = new RegistryJobService(
+    { registryJob: { claim: async () => null } } as any,
     undefined,
     undefined,
     tasks
@@ -706,7 +706,7 @@ test('a job that ends, however it ends, hands its tasks back', async t => {
   for (const status of ['done', 'error']) {
     const { service: base } = makeReportService();
     const { tasks, calls } = fakeTasks();
-    const service = new InventoryJobService(
+    const service = new RegistryJobService(
       (base as any).models, undefined, undefined, tasks
     );
     await service.report(workspaceId, 'job-1', { status, error: 'boom' });
@@ -716,7 +716,7 @@ test('a job that ends, however it ends, hands its tasks back', async t => {
   // Still going: nothing to hand back yet.
   const { service: base } = makeReportService();
   const { tasks, calls } = fakeTasks();
-  const service = new InventoryJobService(
+  const service = new RegistryJobService(
     (base as any).models, undefined, undefined, tasks
   );
   await service.report(workspaceId, 'job-1', { status: 'running', steps: 2 });
@@ -726,8 +726,8 @@ test('a job that ends, however it ends, hands its tasks back', async t => {
 test('a cancelled job hands its tasks back', async t => {
   const { tasks, calls } = fakeTasks();
   const job = { id: 'job-1', status: 'cancelled', tools: [], createdAt: new Date(0) };
-  const service = new InventoryJobService(
-    { inventoryJob: { cancel: async () => job } } as any,
+  const service = new RegistryJobService(
+    { registryJob: { cancel: async () => job } } as any,
     undefined,
     undefined,
     tasks
@@ -741,8 +741,8 @@ function lostRunnerService(job: any) {
   const notes: { lease: Date; marker: string; note: string }[] = [];
   let row = job;
   const models: any = {
-    inventoryDevice: { get: async () => null },
-    inventoryJob: {
+    registryDevice: { get: async () => null },
+    registryJob: {
       get: async () => row,
       listQuestions: async () => [],
       noteLeaseLapsed: async (_id: string, lease: Date, marker: string, note: string) => {
@@ -754,7 +754,7 @@ function lostRunnerService(job: any) {
       },
     },
   };
-  return { service: new InventoryJobService(models), notes };
+  return { service: new RegistryJobService(models), notes };
 }
 
 test('a run whose runner stopped reporting says so in its log', async t => {
@@ -804,8 +804,8 @@ function unclaimedService(job: any, device: any) {
   const notes: string[] = [];
   let row = job;
   const models: any = {
-    inventoryDevice: { get: async () => device },
-    inventoryJob: {
+    registryDevice: { get: async () => device },
+    registryJob: {
       get: async () => row,
       listQuestions: async () => [],
       noteUnclaimed: async (_id: string, marker: string, note: string) => {
@@ -816,7 +816,7 @@ function unclaimedService(job: any, device: any) {
       },
     },
   };
-  return { service: new InventoryJobService(models), notes };
+  return { service: new RegistryJobService(models), notes };
 }
 
 const minutesAgo = (n: number) => new Date(Date.now() - n * 60_000);
@@ -862,10 +862,10 @@ test('a queued run is not flagged while its runner is listening or it is held', 
 test('asking for work marks the device as having a runner', async t => {
   const touched: string[] = [];
   const models: any = {
-    inventoryDevice: { touchRunner: async (_ws: string, key: string) => void touched.push(key) },
-    inventoryJob: { claim: async () => null },
+    registryDevice: { touchRunner: async (_ws: string, key: string) => void touched.push(key) },
+    registryJob: { claim: async () => null },
   };
-  const service = new InventoryJobService(models);
+  const service = new RegistryJobService(models);
   t.is(await service.claim(workspaceId, 'laptop', 'mac-1'), null);
   t.deepEqual(touched, ['laptop']);
 });

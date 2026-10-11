@@ -12,7 +12,7 @@ import { z } from 'zod';
 
 import { type NotesGraphApi, NotesGraphError, type Question } from './api';
 
-/** Matches the server's cap on a question's detail (inventory jobs.ts MAX_DETAIL). */
+/** Matches the server's cap on a question's detail (registry jobs.ts MAX_DETAIL). */
 const MAX_DETAIL = 200_000;
 
 export class JobCancelled extends Error {}

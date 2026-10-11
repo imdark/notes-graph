@@ -1,11 +1,11 @@
 # Monitoring agent
 
-A smart monitoring agent on top of the Monitoring page and the inventory
+A smart monitoring agent on top of the Monitoring page and the registry
 health checks. The idea comes from VersusControl's
 [AI agent for monitoring](https://github.com/VersusControl/devops-ai-guidelines/blob/main/04-ai-agent-for-monitoring/00-contents.md):
 **learn what normal looks like, flag what's new, escalate only what matters.**
 
-Code: `packages/backend/server/src/plugins/inventory/monitoring-agent.ts`
+Code: `packages/backend/server/src/plugins/registry/monitoring-agent.ts`
 (server) and `packages/frontend/core/src/components/monitoring/agent.tsx`
 (panel on the Monitoring page).
 
@@ -34,7 +34,7 @@ Code: `packages/backend/server/src/plugins/inventory/monitoring-agent.ts`
 ## Log patterns
 
 The guide's main source is logs, so the agent reads them too. Code:
-`packages/backend/server/src/plugins/inventory/log-patterns.ts`.
+`packages/backend/server/src/plugins/registry/log-patterns.ts`.
 
 - **Where the lines come from.** With the agent on, the health check
   also runs `journalctl -p warning -o short-iso` since the last scan
@@ -93,7 +93,7 @@ changed its settings.
 
 ## API
 
-All under `/api/inventory/workspaces/:workspaceId`, PAT or session auth.
+All under `/api/registry/workspaces/:workspaceId`, PAT or session auth.
 Reads need `Workspace.Read`. Everything else needs `Workspace.Settings.Update`.
 
 | Method | Path | Body / query |

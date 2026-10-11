@@ -16,7 +16,7 @@ declare global {
  * (github.com/Battam1111/omniseek): a sidecar on the same compose network,
  * never exposed on its own. An empty URL turns the research API off.
  *
- * As with the inventory settings, a row in `app_configs` wins over the env.
+ * As with the registry settings, a row in `app_configs` wins over the env.
  */
 defineModuleConfig('research', {
   omniseekUrl: {

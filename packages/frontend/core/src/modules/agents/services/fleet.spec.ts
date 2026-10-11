@@ -13,7 +13,7 @@ import {
   deviceState,
   FleetService,
   fleetSummary,
-  type InventoryDevice,
+  type RegistryDevice,
   type MonitoringDecision,
   openDecisions,
   STALE_AFTER_SECONDS,
@@ -21,7 +21,7 @@ import {
 
 const NOW = 1_800_000_000;
 
-const device = (over: Partial<InventoryDevice>): InventoryDevice => ({
+const device = (over: Partial<RegistryDevice>): RegistryDevice => ({
   key: 'box',
   name: 'Box',
   kind: 'machine',
@@ -138,7 +138,7 @@ describe('FleetService', () => {
   test('lists the workspace’s devices', async () => {
     const { service, calls } = setup(() => ({ body: { devices: [device({})] } }));
     await service.revalidate();
-    expect(calls[0].path).toBe('/api/inventory/workspaces/ws/devices');
+    expect(calls[0].path).toBe('/api/registry/workspaces/ws/devices');
     expect(service.devices$.value.map(d => d.key)).toEqual(['box']);
     expect(service.loaded$.value).toBe(true);
   });
@@ -151,7 +151,7 @@ describe('FleetService', () => {
       init.method === 'POST' ? { body: { job: { id: 'j1' } } } : { body: { devices: [device({ checkedAt })] } }
     );
     await service.check('box');
-    expect(calls[0].path).toBe('/api/inventory/workspaces/ws/devices/box/check');
+    expect(calls[0].path).toBe('/api/registry/workspaces/ws/devices/box/check');
     expect(service.checking$.value.has('box')).toBe(true);
 
     await service.revalidate();
@@ -183,8 +183,8 @@ describe('FleetService', () => {
     );
     await service.revalidateAgent();
     expect(calls.map(c => c.path)).toEqual([
-      '/api/inventory/workspaces/ws/monitoring-agent',
-      '/api/inventory/workspaces/ws/monitoring-agent/decisions?limit=50',
+      '/api/registry/workspaces/ws/monitoring-agent',
+      '/api/registry/workspaces/ws/monitoring-agent/decisions?limit=50',
     ]);
     expect(service.agent$.value?.mode).toBe('shadow');
     expect(service.decisions$.value).toHaveLength(1);
@@ -196,13 +196,13 @@ describe('FleetService', () => {
     }));
     service.decisions$.setValue([{ id: 'd1', verdict: null } as MonitoringDecision]);
     await service.feedback('d1', 'expected');
-    expect(calls[0].path).toBe('/api/inventory/workspaces/ws/monitoring-agent/decisions/d1/feedback');
+    expect(calls[0].path).toBe('/api/registry/workspaces/ws/monitoring-agent/decisions/d1/feedback');
     expect(service.decisions$.value[0].verdict).toBe('expected');
   });
 
-  test('a server without the inventory says so', async () => {
+  test('a server without the registry says so', async () => {
     const { service } = setup(() => ({ status: 404, body: '<!doctype html>' }));
-    await expect(service.revalidate()).rejects.toThrow('This server has no machine inventory.');
+    await expect(service.revalidate()).rejects.toThrow('This server has no machine registry.');
     expect(service.loaded$.value).toBe(true);
   });
 });

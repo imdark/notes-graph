@@ -19,13 +19,13 @@ import {
 declare global {
   interface Events {
     /** A machine's status was recorded: a health check or the wf CLI. */
-    'inventory.device.status': {
+    'registry.device.status': {
       workspaceId: string;
       key: string;
       checks: unknown[];
     };
     /** A machine's log lines up to `until` (epoch seconds): a health check or the wf CLI. */
-    'inventory.device.logs': {
+    'registry.device.logs': {
       workspaceId: string;
       key: string;
       lines: string[];
@@ -35,14 +35,14 @@ declare global {
 }
 
 /**
- * Validation and persistence for inventory devices.
+ * Validation and persistence for registry devices.
  *
  * Kept separate from the controller so the rules are testable without an
  * HTTP layer, and so a future GraphQL resolver or MCP tool can reuse them.
  */
 @Injectable()
-export class InventoryService {
-  private readonly logger = new Logger(InventoryService.name);
+export class RegistryService {
+  private readonly logger = new Logger(RegistryService.name);
 
   constructor(
     private readonly models: Models,
@@ -87,18 +87,18 @@ export class InventoryService {
 
     // Only count against the cap when this is a new device, so re-registering
     // an existing one keeps working at the limit.
-    const existing = await this.models.inventoryDevice.get(workspaceId, key);
+    const existing = await this.models.registryDevice.get(workspaceId, key);
     if (!existing) {
-      const max = this.config.inventory.maxDevicesPerWorkspace;
-      const count = (await this.models.inventoryDevice.list(workspaceId)).length;
+      const max = this.config.registry.maxDevicesPerWorkspace;
+      const count = (await this.models.registryDevice.list(workspaceId)).length;
       if (count >= max) {
         throw new BadRequest(
-          `Workspace already holds ${count} inventory devices (max ${max})`
+          `Workspace already holds ${count} registry devices (max ${max})`
         );
       }
     }
 
-    const device = await this.models.inventoryDevice.upsert({
+    const device = await this.models.registryDevice.upsert({
       workspaceId,
       key,
       name: (body.name ?? key).slice(0, 200),
@@ -118,7 +118,7 @@ export class InventoryService {
       registeredBy: userId,
     });
 
-    this.logger.log(`registered inventory device ${workspaceId}/${key} (${kind})`);
+    this.logger.log(`registered registry device ${workspaceId}/${key} (${kind})`);
     return toDeviceDto(device);
   }
 
@@ -126,17 +126,17 @@ export class InventoryService {
     workspaceId: string,
     filter: { kind?: string; agentTarget?: boolean } = {}
   ): Promise<DeviceDto[]> {
-    const devices = await this.models.inventoryDevice.list(workspaceId, filter);
+    const devices = await this.models.registryDevice.list(workspaceId, filter);
     return devices.map(toDeviceDto);
   }
 
   async get(workspaceId: string, key: string): Promise<DeviceDto | null> {
-    const device = await this.models.inventoryDevice.get(workspaceId, this.normalizeKey(key));
+    const device = await this.models.registryDevice.get(workspaceId, this.normalizeKey(key));
     return device ? toDeviceDto(device) : null;
   }
 
   async remove(workspaceId: string, key: string): Promise<number> {
-    return this.models.inventoryDevice.delete(workspaceId, this.normalizeKey(key));
+    return this.models.registryDevice.delete(workspaceId, this.normalizeKey(key));
   }
 
   async recordStatus(
@@ -149,7 +149,7 @@ export class InventoryService {
       throw new BadRequest(`state must be one of ${DEVICE_STATES.join(', ')}`);
     }
 
-    const device = await this.models.inventoryDevice.updateStatus(
+    const device = await this.models.registryDevice.updateStatus(
       workspaceId,
       this.normalizeKey(key),
       {
@@ -163,7 +163,7 @@ export class InventoryService {
     );
     if (device) {
       // The monitoring agent learns from every reading, whoever took it.
-      this.event?.emit('inventory.device.status', {
+      this.event?.emit('registry.device.status', {
         workspaceId,
         key: device.key,
         checks: (device.checks ?? []) as unknown[],

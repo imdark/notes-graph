@@ -33,11 +33,11 @@ internal object AgentApi {
     private val json = "application/json".toMediaType()
 
     suspend fun registerToken(server: String, token: String) {
-        post(server, "/api/inventory/push-tokens", JSONObject().put("token", token).put("platform", "android"))
+        post(server, "/api/registry/push-tokens", JSONObject().put("token", token).put("platform", "android"))
     }
 
     suspend fun unregisterToken(server: String, token: String) {
-        post(server, "/api/inventory/push-tokens/remove", JSONObject().put("token", token))
+        post(server, "/api/registry/push-tokens/remove", JSONObject().put("token", token))
     }
 
     /** `{ question, jobStatus }` - the full question, tool input and all. */
@@ -55,7 +55,7 @@ internal object AgentApi {
     private fun enc(value: String) = Uri.encode(value)
 
     private fun jobPath(workspaceId: String, jobId: String) =
-        "/api/inventory/workspaces/${enc(workspaceId)}/jobs/${enc(jobId)}"
+        "/api/registry/workspaces/${enc(workspaceId)}/jobs/${enc(jobId)}"
 
     private suspend fun get(server: String, path: String) =
         send(server) { Request.Builder().url(server.trimEnd('/') + path).get() }

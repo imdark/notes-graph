@@ -142,7 +142,7 @@ build a "read-only" preset without a hand-maintained list.
 - **Device agents** (Claude Code via `wf agent serve`): each job carries the
   agent's `tools` list to the runner. Every other permission becomes a
   question to the person who started the run; "Allow all" sets
-  `allowAllTools` on that job only (`plugins/inventory/jobs.ts`). There's no
+  `allowAllTools` on that job only (`plugins/registry/jobs.ts`). There's no
   named read-only mode and no path/argument scoping on the NotesGraph side.
 - **NotesGraph MCP**: write tools are switched on server-wide by an env flag
   (`mcpWriteToolsEnabled`, `plugins/copilot/mcp/provider.ts`), not per agent,

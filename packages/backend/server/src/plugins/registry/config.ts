@@ -2,8 +2,8 @@ import { z } from 'zod';
 
 import { defineModuleConfig } from '../../base';
 
-export interface InventoryConfig {
-  /** Turns the /api/inventory endpoints on. Off by default. */
+export interface RegistryConfig {
+  /** Turns the /api/registry endpoints on. Off by default. */
   enabled: boolean;
   /** Upper bound on devices per workspace, to keep a looping CLI honest. */
   maxDevicesPerWorkspace: number;
@@ -17,7 +17,7 @@ export interface InventoryConfig {
 
 declare global {
   interface AppConfigSchema {
-    inventory: {
+    registry: {
       enabled: ConfigItem<boolean>;
       maxDevicesPerWorkspace: ConfigItem<number>;
       fcmServiceAccount: ConfigItem<string>;
@@ -34,18 +34,18 @@ declare global {
  * variable. If a row exists for one of these keys, the env var below is
  * ignored - delete the row rather than fighting it.
  */
-defineModuleConfig('inventory', {
+defineModuleConfig('registry', {
   enabled: {
-    desc: 'Enable the device inventory API for deployment and agent targets.',
+    desc: 'Enable the device registry API for deployment and agent targets.',
     default: false,
     schema: z.boolean(),
-    env: ['NOTESGRAPH_INVENTORY_ENABLED', 'boolean'],
+    env: ['NOTESGRAPH_REGISTRY_ENABLED', 'boolean'],
   },
   maxDevicesPerWorkspace: {
-    desc: 'Maximum number of inventory devices a single workspace may hold.',
+    desc: 'Maximum number of registry devices a single workspace may hold.',
     default: 500,
     schema: z.number().int().positive(),
-    env: ['NOTESGRAPH_INVENTORY_MAX_DEVICES', 'integer'],
+    env: ['NOTESGRAPH_REGISTRY_MAX_DEVICES', 'integer'],
   },
   fcmServiceAccount: {
     desc: 'Firebase service-account JSON for pushing agent questions to phones. Empty disables push.',

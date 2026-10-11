@@ -175,8 +175,8 @@ model Workspace {
   docAccessPolicies          DocAccessPolicy[]
   docGrants                  DocGrant[]
   projects                   Project[]
-  inventoryDevices           InventoryDevice[]
-  inventoryJobs              InventoryJob[]
+  registryDevices           RegistryDevice[]
+  registryJobs              RegistryJob[]
   monitors                   Monitor[]
   monitoringAgent            MonitoringAgent?
   monitoringBaselines        MonitoringBaseline[]
@@ -1698,10 +1698,10 @@ model DirectorySyncedUser {
 
 // A machine, or a folder on one, registered as a deployment and agent
 // execution target. Written by external tooling (the `wf` CLI) through the
-// inventory API; the workspace is the tenancy boundary, and `key` is the
+// registry API; the workspace is the tenancy boundary, and `key` is the
 // caller's own stable identifier so re-registering a device updates it
 // rather than creating a second row.
-model InventoryDevice {
+model RegistryDevice {
   id            String    @id @default(uuid()) @db.VarChar
   workspaceId   String    @map("workspace_id") @db.VarChar
   key           String    @db.VarChar
@@ -1735,7 +1735,7 @@ model InventoryDevice {
   @@unique([workspaceId, key])
   @@index([workspaceId, kind])
   @@index([workspaceId, agentTarget])
-  @@map("inventory_devices")
+  @@map("registry_devices")
 }
 
 // A unit of agent work dispatched to a registered device.
@@ -1744,7 +1744,7 @@ model InventoryDevice {
 // field sits behind NAT, and having it initiate every connection means the
 // server never needs a route in. A claim takes a lease so two runners on
 // the same device cannot pick up the same job.
-model InventoryJob {
+model RegistryJob {
   id             String    @id @default(uuid()) @db.VarChar
   workspaceId    String    @map("workspace_id") @db.VarChar
   deviceKey      String    @map("device_key") @db.VarChar
@@ -1791,17 +1791,17 @@ model InventoryJob {
   updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   workspace Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  questions InventoryJobQuestion[]
+  questions RegistryJobQuestion[]
 
   @@index([workspaceId, deviceKey, status])
   @@index([workspaceId, status, createdAt])
-  @@map("inventory_jobs")
+  @@map("registry_jobs")
 }
 
 /// Something a running agent asked the person who started it: a question it
 /// needs answered, or permission for a tool. The runner blocks until it is
 /// answered, so a run can pause for a person without losing its place.
-model InventoryJobQuestion {
+model RegistryJobQuestion {
   id         String    @id @default(uuid()) @db.VarChar
   jobId      String    @map("job_id") @db.VarChar
   /// 'question' (free-text answer) or 'permission' (allow / deny).
@@ -1817,10 +1817,10 @@ model InventoryJobQuestion {
   createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   answeredAt DateTime? @map("answered_at") @db.Timestamptz(3)
 
-  job InventoryJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  job RegistryJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
 
   @@index([jobId, createdAt])
-  @@map("inventory_job_questions")
+  @@map("registry_job_questions")
 }
 
 /// A phone that wants a push when an agent run is waiting on its owner. The
@@ -1902,7 +1902,7 @@ model MonitorReading {
 }
 
 /// A workspace's monitoring agent: it learns what normal looks like on each
-/// inventory machine, flags what's new, and escalates what matters. One per
+/// registry machine, flags what's new, and escalates what matters. One per
 /// workspace; absent until someone turns it on.
 model MonitoringAgent {
   workspaceId     String    @id @map("workspace_id") @db.VarChar
@@ -1983,7 +1983,7 @@ model MonitoringDecision {
 
 /// The log patterns one machine is known to print: the agent's catalog of
 /// what normal looks like in its logs. One row a machine, the patterns as
-/// JSON (see plugins/inventory/log-patterns), like the guide's patterns.json.
+/// JSON (see plugins/registry/log-patterns), like the guide's patterns.json.
 model MonitoringLogCatalog {
   workspaceId String    @map("workspace_id") @db.VarChar
   deviceKey   String    @map("device_key") @db.VarChar

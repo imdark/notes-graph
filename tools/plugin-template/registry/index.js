@@ -1,5 +1,5 @@
 /**
- * Machine Inventory — the /api/inventory device list as a settings page.
+ * Machine Registry — the /api/registry device list as a settings page.
  *
  * Plain ESM with no build step, like the other bundled plugins. It imports
  * React by bare specifier: the host's import map resolves that to
@@ -117,7 +117,7 @@ const styles = {
   },
 };
 
-/** The server's key alphabet (InventoryService.normalizeKey). */
+/** The server's key alphabet (RegistryService.normalizeKey). */
 const KEY_PATTERN = /^[A-Za-z0-9._:-]{1,128}$/;
 
 function AddDeviceForm({ onCancel, onSubmit, machines }) {
@@ -348,17 +348,17 @@ function createDevicesPage(ctx) {
             throw new Error('Open a workspace to see its devices.');
           }
           return ctx.net.fetch(
-            `/api/inventory/workspaces/${encodeURIComponent(workspace.id)}/devices`,
+            `/api/registry/workspaces/${encodeURIComponent(workspace.id)}/devices`,
             { cache: 'no-store' }
           );
         })
         .then(async res => {
-          // The API 404s on every route when the server has the inventory
+          // The API 404s on every route when the server has the registry
           // plugin switched off, which is a configuration state rather than a
           // failure — worth saying plainly instead of "request failed".
           if (res.status === 404) {
             throw new Error(
-              'The inventory API is not enabled on this server (inventory.enabled).'
+              'The registry API is not enabled on this server (registry.enabled).'
             );
           }
           if (!res.ok) {
@@ -381,7 +381,7 @@ function createDevicesPage(ctx) {
     const writeUrl = async suffix => {
       const workspace = await ctx.workspace.getCurrent();
       if (!workspace) throw new Error('Open a workspace first.');
-      return `/api/inventory/workspaces/${encodeURIComponent(workspace.id)}/devices${suffix}`;
+      return `/api/registry/workspaces/${encodeURIComponent(workspace.id)}/devices${suffix}`;
     };
 
     const register = useCallback(async input => {
@@ -489,13 +489,13 @@ export default {
   activate(ctx) {
     ctx.ui.addSettingsPage({
       id: 'devices',
-      title: 'Machine Inventory',
+      title: 'Machine Registry',
       component: createDevicesPage(ctx),
     });
 
     ctx.ui.addCommand({
-      id: 'inventory-summary',
-      label: 'Inventory: summarise devices',
+      id: 'registry-summary',
+      label: 'Registry: summarise devices',
       run: async () => {
         try {
           const workspace = await ctx.workspace.getCurrent();
@@ -504,15 +504,15 @@ export default {
             return;
           }
           const res = await ctx.net.fetch(
-            `/api/inventory/workspaces/${encodeURIComponent(workspace.id)}/devices`,
+            `/api/registry/workspaces/${encodeURIComponent(workspace.id)}/devices`,
             { cache: 'no-store' }
           );
           if (!res.ok) {
             ctx.ui.notify({
-              title: 'Inventory unavailable',
+              title: 'Registry unavailable',
               message:
                 res.status === 404
-                  ? 'The inventory API is not enabled on this server.'
+                  ? 'The registry API is not enabled on this server.'
                   : `Request failed (${res.status}).`,
               theme: 'error',
             });
@@ -527,7 +527,7 @@ export default {
           });
         } catch (err) {
           ctx.ui.notify({
-            title: 'Inventory lookup failed',
+            title: 'Registry lookup failed',
             message: String(err),
             theme: 'error',
           });

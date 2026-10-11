@@ -13,7 +13,7 @@ import { DocWriter } from '../../core/doc';
 import { NotificationService } from '../../core/notification/service';
 import { PermissionAccess } from '../../core/permission';
 import { DocMode, Models } from '../../models';
-import { AgentPushService, InventoryJobService } from '../inventory';
+import { AgentPushService, RegistryJobService } from '../registry';
 import {
   blockLine,
   type Condition,
@@ -67,7 +67,7 @@ const editorName = (monitor: Pick<Monitor, 'name'>) => `Monitor: ${monitor.name}
  *
  * A url check runs here. A command check and an agent run are device jobs:
  * this queues them and picks the result up when the device reports
- * (`inventory.job.finished`), so nothing waits on a device in between.
+ * (`registry.job.finished`), so nothing waits on a device in between.
  */
 @Injectable()
 export class MonitorService {
@@ -78,7 +78,7 @@ export class MonitorService {
     private readonly writer: DocWriter,
     private readonly notifications: NotificationService,
     private readonly ac: PermissionAccess,
-    private readonly jobs: InventoryJobService,
+    private readonly jobs: RegistryJobService,
     private readonly queue: JobQueue,
     @Optional() private readonly push?: AgentPushService
   ) {}
@@ -179,8 +179,8 @@ export class MonitorService {
   }
 
   /** A device job ended: if a monitor was waiting on it, take its result. */
-  @OnEvent('inventory.job.finished')
-  async onJobFinished(event: Events['inventory.job.finished']) {
+  @OnEvent('registry.job.finished')
+  async onJobFinished(event: Events['registry.job.finished']) {
     const monitor = await this.models.monitor.findByPendingJob(event.jobId);
     if (!monitor) return;
     await this.models.monitor.update(monitor.id, { pendingJobId: null });
