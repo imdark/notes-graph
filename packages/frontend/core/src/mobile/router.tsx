@@ -46,6 +46,10 @@ export const topLevelRoutes = [
         },
       },
       {
+        path: '/debug/logs',
+        lazy: () => import('./pages/logs'),
+      },
+      {
         path: '/404',
         lazy: () => import('./pages/404'),
       },
