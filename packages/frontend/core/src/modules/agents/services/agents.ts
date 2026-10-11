@@ -82,6 +82,7 @@ export class AgentsService extends Service {
       deviceKey: agent.deviceKey,
       model: agent.model,
       tools: agent.tools,
+      skills: agent.skills,
       targets: agent.targets,
       output: agent.output,
       maxSteps: agent.maxSteps,

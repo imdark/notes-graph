@@ -187,6 +187,9 @@ const ANTISLOP: AgentSkill[] = [
   url: `https://raw.githubusercontent.com/miqdadbadjuber/anti-slop/${ANTISLOP_RELEASE}/skills/${name}/SKILL.md`,
 }));
 
+/** Every skill an agent can be given, by name; what the agent editor offers. */
+export const SKILL_CATALOG: AgentSkill[] = [...ANTISLOP, OMNISEEK_INVESTIGATE];
+
 /** A question waits for a person, who may be at dinner. */
 const TOOL_TIMEOUT_MS = 24 * 60 * 60 * 1000;
 
@@ -354,7 +357,19 @@ const PROFILES: Record<string, AgentProfile> = {
   },
 };
 
-/** The profile for a job's model; null for one that isn't a Claude agent. */
-export function profileFor(model: string | null | undefined): AgentProfile | null {
-  return (model && PROFILES[model]) || null;
+/**
+ * The profile for a job's model; null for one that isn't a Claude agent. A
+ * list of skill names replaces the model's default skills; names outside the
+ * catalog are dropped, so a job can't point a runner at an arbitrary URL.
+ */
+export function profileFor(
+  model: string | null | undefined,
+  skills?: unknown
+): AgentProfile | null {
+  const profile = (model && PROFILES[model]) || null;
+  if (!profile || !Array.isArray(skills)) return profile;
+  return {
+    ...profile,
+    skills: SKILL_CATALOG.filter(skill => skills.includes(skill.name)),
+  };
 }

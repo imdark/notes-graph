@@ -13,6 +13,26 @@ import { FetchService, type WorkspaceServerService } from '../../cloud';
  */
 
 /**
+ * The skills the editor offers a Claude agent, by the names the server's
+ * catalog knows (agent-profiles.ts SKILL_CATALOG); it drops any other.
+ */
+export const AGENT_SKILLS: { name: string; desc: string }[] = [
+  { name: 'antislop', desc: 'Core filter against generic AI output' },
+  { name: 'antislop-ui', desc: 'Color, layout, components, motion' },
+  { name: 'antislop-copywriting', desc: 'Headlines, tone, prose' },
+  { name: 'antislop-human', desc: 'Contrast, keyboard, focus, states' },
+  { name: 'antislop-layoutmobile', desc: 'Layouts that reflow phone to desktop' },
+  { name: 'antislop-code', desc: 'Code comment hygiene' },
+  { name: 'omniseek-investigate', desc: 'Deep multi-source research method' },
+];
+
+/** The skills a Claude model gets when the agent doesn't choose. */
+export const defaultSkillsFor = (model: string | undefined): string[] =>
+  model === RESEARCH_MODEL
+    ? ['omniseek-investigate']
+    : AGENT_SKILLS.map(s => s.name).filter(n => n.startsWith('antislop'));
+
+/**
  * The model a remote agent names to run as Claude Code on the device, with
  * NotesGraph's tools and a way to ask the reader things (`wf agent serve`
  * keys on this exact string).
@@ -170,6 +190,8 @@ export interface EnqueueRemoteJob {
   context: string;
   model?: string;
   tools?: string[];
+  /** Skills the run gets, by name; unset for the model's default set. */
+  skills?: string[];
   maxSteps?: number;
   /** What the run starts out called; the agent may rename it. */
   title?: string;

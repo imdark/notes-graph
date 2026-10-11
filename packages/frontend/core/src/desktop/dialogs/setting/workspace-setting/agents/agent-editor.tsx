@@ -15,6 +15,7 @@ import {
 import { AiIconGenerator } from '@notesgraph/core/blocksuite/block-suite-editor/doc-banner';
 import {
   type Agent,
+  AGENT_SKILLS,
   agentIconData,
   type AgentDraft,
   type AgentHarness,
@@ -24,6 +25,7 @@ import {
   type AgentTargetKind,
   CLAUDE_CODE_MODEL,
   DEFAULT_MAX_STEPS,
+  defaultSkillsFor,
   editorHarness,
   FILE_TOOLS,
   isDeviceClaudeModel,
@@ -202,6 +204,8 @@ export const AgentEditor = ({
     editorHarness(agent?.harness, agent?.model, agent?.deviceKey)
   );
   const [model, setModel] = useState<string | undefined>(agent?.model);
+  // Unset follows the model's default set; ticking one pins an explicit list.
+  const [skills, setSkills] = useState<string[] | undefined>(agent?.skills);
   const [deviceKey, setDeviceKey] = useState<string | undefined>(
     agent?.deviceKey
   );
@@ -289,6 +293,7 @@ export const AgentEditor = ({
       kind,
       ...savedPlacement(harness, model, deviceKey),
       tools,
+      skills: claudeHarness ? skills : undefined,
       targets,
       output: 'panel',
       maxSteps,
@@ -298,6 +303,7 @@ export const AgentEditor = ({
   }, [
     agent,
     canSave,
+    claudeHarness,
     deviceKey,
     harness,
     icon,
@@ -307,6 +313,7 @@ export const AgentEditor = ({
     name,
     onOpenChange,
     onSubmit,
+    skills,
     targets,
     tools,
   ]);
@@ -638,6 +645,32 @@ export const AgentEditor = ({
                     : 'A different on-device model is downloaded the first time it runs.'}
               </span>
             </div>
+
+            {claudeHarness ? (
+              <div className={styles.field}>
+                <span className={styles.label}>Skills</span>
+                <div className={styles.checkGrid}>
+                  {AGENT_SKILLS.map(({ name: skill, desc }) => {
+                    const current = skills ?? defaultSkillsFor(model);
+                    return (
+                      <label key={skill} className={styles.check} title={desc}>
+                        <Checkbox
+                          checked={current.includes(skill)}
+                          onChange={() => setSkills(toggle(current, skill))}
+                          data-testid={`agent-editor-skill-${skill}`}
+                        />
+                        {skill}
+                      </label>
+                    );
+                  })}
+                </div>
+                <span className={styles.hint}>
+                  {skills
+                    ? 'Only these skills are loaded for the run.'
+                    : 'Following the default set for this model; tick or untick to choose your own.'}
+                </span>
+              </div>
+            ) : null}
 
             {/* Claude Code (and Workflow) have no step limit: they count every
               tool call as a turn, and the run's time limit bounds them. */}

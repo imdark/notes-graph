@@ -1782,6 +1782,8 @@ model InventoryJob {
   /// Set by "Allow all" on a permission: every later tool in this run is
   /// allowed without asking.
   allowAllTools  Boolean   @default(false) @map("allow_all_tools")
+  /// Names of the skills the agent chose; null means the model's default set.
+  skills         Json?
   /// A queued job is not handed out before this: set when a run hit the
   /// device's Claude session limit, to when that limit resets.
   runAfter       DateTime? @map("run_after") @db.Timestamptz(3)

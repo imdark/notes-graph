@@ -2,6 +2,8 @@ export { Agents } from './entities/agents';
 export { AgentIcon, agentIconData } from './views/agent-icon';
 export { AgentsService, DEFAULT_AGENT_TOOLS } from './services/agents';
 export {
+  AGENT_SKILLS,
+  defaultSkillsFor,
   CLAUDE_CODE_MODEL,
   deviceHarnessName,
   type EnqueueRemoteJob,

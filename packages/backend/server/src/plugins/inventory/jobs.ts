@@ -343,6 +343,7 @@ export class InventoryJobService {
       // Tasks are blocks of the job's note; without one there is nowhere to
       // find them.
       taskIds: docId ? parseTaskIds(body.taskIds) : [],
+      skills: Array.isArray(body.skills) ? body.skills.map(String) : null,
       createdBy: userId,
       runAfter,
     });
@@ -454,7 +455,7 @@ export class InventoryJobService {
     );
     if (!job) return null;
     await this.tasks?.claimed(job);
-    return { ...toJobDto(job), profile: profileFor(job.model) };
+    return { ...toJobDto(job), profile: profileFor(job.model, job.skills) };
   }
 
   async report(
