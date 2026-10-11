@@ -21,7 +21,7 @@ import { InventoryService } from './service';
 import type { DeviceStatusBody, RegisterDeviceBody } from './types';
 
 /**
- * Device inventory API for deployment and agent-execution targets.
+ * Device registry API for deployment and agent-execution targets.
  *
  * Authenticated with a Personal Access Token, the same way the notes API is
  * (`/api/notes`), so external tooling such as the `wf` CLI can register a

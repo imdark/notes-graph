@@ -36,7 +36,7 @@ declare global {
  */
 defineModuleConfig('inventory', {
   enabled: {
-    desc: 'Enable the device inventory API for deployment and agent targets.',
+    desc: 'Enable the device registry API for deployment and agent targets.',
     default: false,
     schema: z.boolean(),
     env: ['NOTESGRAPH_INVENTORY_ENABLED', 'boolean'],

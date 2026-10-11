@@ -15,7 +15,7 @@ import { InventoryService } from './service';
 import { JobTaskClaims } from './task-claims';
 
 /**
- * Device inventory: machines and folders registered as deployment and
+ * Device registry: machines and folders registered as deployment and
  * agent-execution targets, written by external tooling over a PAT-
  * authenticated REST API. Health checks run on them as device jobs, and the
  * monitoring agent learns from what they report.

@@ -645,7 +645,7 @@ export class AgentExecutorService extends Service implements AgentExecutor {
   }
 
   /**
-   * Run on a machine from the device inventory.
+   * Run on a machine from the device registry.
    *
    * The job is queued and the device claims it; this never connects to the
    * machine. Progress arrives by polling the job, which is why the event
