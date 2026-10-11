@@ -18,6 +18,8 @@ export const file = style({
   borderRadius: 6,
   border: `1px solid ${cssVarV2('layer/insideBorder/border')}`,
   overflow: 'hidden',
+  background: cssVarV2('layer/background/primary'),
+  color: cssVarV2('text/primary'),
 });
 
 export const fileHeader = style({
