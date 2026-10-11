@@ -22,6 +22,7 @@ import {
   useSearchParams,
 } from 'react-router-dom';
 
+import { saveLastMobileLocation } from '../last-location';
 import { WorkspaceLayout } from './layout';
 import { MobileWorkbenchRoot } from './workbench-root';
 
@@ -98,6 +99,10 @@ export const Component = () => {
       return null;
     }
   }, [location.pathname]);
+
+  useEffect(() => {
+    saveLastMobileLocation(location.pathname + location.search);
+  }, [location.pathname, location.search]);
 
   const [workspaceNotFound, setWorkspaceNotFound] = useState(false);
   const listLoading = useLiveData(workspacesService.list.isRevalidating$);
