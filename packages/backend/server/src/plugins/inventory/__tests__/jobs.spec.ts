@@ -741,6 +741,7 @@ function lostRunnerService(job: any) {
   const notes: { lease: Date; marker: string; note: string }[] = [];
   let row = job;
   const models: any = {
+    inventoryDevice: { get: async () => null },
     inventoryJob: {
       get: async () => row,
       listQuestions: async () => [],
@@ -796,4 +797,75 @@ test('a runner only just late, or a job not running, gets no note', async t => {
     await service.get(workspaceId, 'job-1', 0);
     t.is(notes.length, 0);
   }
+});
+
+/** A service over one queued job and its device, recording unclaimed notes. */
+function unclaimedService(job: any, device: any) {
+  const notes: string[] = [];
+  let row = job;
+  const models: any = {
+    inventoryDevice: { get: async () => device },
+    inventoryJob: {
+      get: async () => row,
+      listQuestions: async () => [],
+      noteUnclaimed: async (_id: string, marker: string, note: string) => {
+        if (row.log.includes(marker)) return false;
+        notes.push(note);
+        row = { ...row, log: row.log + note };
+        return true;
+      },
+    },
+  };
+  return { service: new InventoryJobService(models), notes };
+}
+
+const minutesAgo = (n: number) => new Date(Date.now() - n * 60_000);
+
+test('a queued run no runner is picking up says how to start one', async t => {
+  const { service, notes } = unclaimedService(
+    storedJob({ status: 'queued', createdAt: minutesAgo(5) }),
+    { key: 'laptop', host: 'my-mac', runnerSeenAt: minutesAgo(30) }
+  );
+
+  const job = await service.get(workspaceId, 'job-1', 0);
+
+  t.is(notes.length, 1);
+  t.regex(job!.log!, /Nothing on laptop is picking up runs/);
+  t.regex(job!.log!, /wf agent serve` on my-mac/);
+  t.true(job!.log!.includes(minutesAgo(30).toISOString().slice(0, 13)));
+
+  await service.get(workspaceId, 'job-1', 0);
+  t.is(notes.length, 1);
+});
+
+test('a queued run is not flagged while its runner is listening or it is held', async t => {
+  const cases: [any, any][] = [
+    // Just queued: give a runner a moment.
+    [storedJob({ status: 'queued', createdAt: minutesAgo(0.2) }), { runnerSeenAt: null }],
+    // Runner asked for work a moment ago (it's busy, not gone).
+    [storedJob({ status: 'queued', createdAt: minutesAgo(5) }), { runnerSeenAt: minutesAgo(0.5) }],
+    // Held back to after a session limit on purpose.
+    [
+      storedJob({ status: 'queued', createdAt: minutesAgo(5), runAfter: new Date(Date.now() + 3_600_000) }),
+      { runnerSeenAt: null },
+    ],
+    // The server's own cloud runner has no device row.
+    [storedJob({ status: 'queued', createdAt: minutesAgo(5) }), null],
+  ];
+  for (const [job, device] of cases) {
+    const { service, notes } = unclaimedService(job, device);
+    await service.get(workspaceId, 'job-1', 0);
+    t.is(notes.length, 0);
+  }
+});
+
+test('asking for work marks the device as having a runner', async t => {
+  const touched: string[] = [];
+  const models: any = {
+    inventoryDevice: { touchRunner: async (_ws: string, key: string) => void touched.push(key) },
+    inventoryJob: { claim: async () => null },
+  };
+  const service = new InventoryJobService(models);
+  t.is(await service.claim(workspaceId, 'laptop', 'mac-1'), null);
+  t.deepEqual(touched, ['laptop']);
 });
