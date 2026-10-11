@@ -55,6 +55,12 @@ export interface JobDto {
   claimedBy: string | null;
   /** A queued job waits until this (the session limit's reset), if set. */
   runAfter: number | null;
+  /**
+   * When the runner holding a running job must next report by. Past it, the
+   * runner has gone quiet (crashed, asleep, offline) and the job is waiting
+   * to be claimed again.
+   */
+  leaseExpiresAt: number | null;
   /** "Allow all": every permission the run asks is allowed without asking. */
   allowAllTools: boolean;
   /**
@@ -132,6 +138,7 @@ export function toJobDto(job: InventoryJob, options: JobDtoOptions = {}): JobDto
     tmuxSession: job.tmuxSession,
     claimedBy: job.claimedBy,
     runAfter: job.runAfter ? job.runAfter.getTime() / 1000 : null,
+    leaseExpiresAt: job.leaseExpiresAt ? job.leaseExpiresAt.getTime() / 1000 : null,
     allowAllTools: job.allowAllTools,
     ...(options.logFrom === undefined ? {} : sliceLog(job, options.logFrom)),
     ...(options.questions ? { questions: options.questions.map(toQuestionDto) } : {}),
@@ -174,6 +181,29 @@ const ALWAYS_ALLOWED_PERMISSIONS = new Set([
   'Allow mcp__run__set_title?',
   'Allow mcp__run__ask_user?',
 ]);
+
+/**
+ * How long past its lease a running job's runner may be before the run's log
+ * says it was lost. A little slack, so a runner renewing a moment late (or a
+ * clock a second off) isn't reported as gone.
+ */
+const LEASE_LAPSE_GRACE_MS = 30_000;
+
+/**
+ * The transcript line for a run whose runner stopped reporting. `marker` is
+ * part of it so the note is written once per lapsed lease.
+ */
+function leaseLapsedNote(job: InventoryJob, lease: Date) {
+  const marker = `lease ran out at ${lease.toISOString()}`;
+  const runner = job.claimedBy ? `The runner (${job.claimedBy})` : 'The runner';
+  const note =
+    `⚠ Lost contact with ${job.deviceKey}. ${runner} stopped reporting ` +
+    `and its ${marker}, so it most likely crashed, was stopped, or the ` +
+    `machine went to sleep or offline. Nothing is working on this run now. ` +
+    `If a runner on ${job.deviceKey} comes back it starts the run again ` +
+    `from the beginning; otherwise stop the run.`;
+  return { marker, note };
+}
 
 /** A question's choices: trimmed, non-empty, de-duplicated and capped. */
 function parseOptions(value: unknown): string[] {
@@ -306,8 +336,9 @@ export class InventoryJobService {
     id: string,
     logFrom?: number
   ): Promise<JobDto | null> {
-    const job = await this.models.inventoryJob.get(workspaceId, id);
+    let job = await this.models.inventoryJob.get(workspaceId, id);
     if (!job) return null;
+    job = await this.noteLostRunner(job);
     // Questions travel with the transcript: both are what a viewer of one
     // run needs, and neither belongs in a listing.
     const questions =
@@ -315,6 +346,37 @@ export class InventoryJobService {
         ? undefined
         : await this.models.inventoryJob.listQuestions(id);
     return toJobDto(job, { logFrom, questions });
+  }
+
+  /**
+   * A running job whose runner stopped renewing its lease would otherwise
+   * sit silent until a runner claims it again — possibly never, with nothing
+   * in its log to say why. Write that into the log when someone looks.
+   */
+  private async noteLostRunner(job: InventoryJob): Promise<InventoryJob> {
+    const lease = job.leaseExpiresAt;
+    if (
+      job.status !== 'running' ||
+      !lease ||
+      lease.getTime() + LEASE_LAPSE_GRACE_MS > Date.now()
+    ) {
+      return job;
+    }
+    const { marker, note } = leaseLapsedNote(job, lease);
+    // Its own line, even when the last report ended mid-line.
+    const text = `${job.log && !job.log.endsWith('\n') ? '\n' : ''}${note}\n`;
+    const written = await this.models.inventoryJob.noteLeaseLapsed(
+      job.id,
+      lease,
+      marker,
+      text
+    );
+    if (!written) return job;
+    this.logger.warn(
+      `job ${job.id} on ${job.workspaceId}/${job.deviceKey}: runner ` +
+        `${job.claimedBy ?? '?'} lost (lease ran out ${lease.toISOString()})`
+    );
+    return (await this.models.inventoryJob.get(job.workspaceId, job.id)) ?? job;
   }
 
   async list(workspaceId: string, deviceKey?: string, status?: string): Promise<JobDto[]> {
