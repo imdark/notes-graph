@@ -1,7 +1,7 @@
 /**
  * Run transcripts are plain text where each line starts with the time it was
  * written, as `[<ISO time>] `. The server stamps remote runs' lines as the
- * device reports them (models/inventory-job.ts in the server); on-device runs
+ * device reports them (models/registry-job.ts in the server); on-device runs
  * are stamped here as the executor logs. Lines from before stamping existed,
  * or continuation lines, simply have no time.
  */

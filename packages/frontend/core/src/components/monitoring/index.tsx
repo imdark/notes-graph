@@ -7,7 +7,7 @@ import {
   FleetService,
   fleetSummary,
   formatTrendValue,
-  type InventoryDevice,
+  type RegistryDevice,
   type Monitor,
   MonitorsService,
   sparklinePath,
@@ -162,8 +162,8 @@ const MachineCard = ({
   now,
   onOpenMonitor,
 }: {
-  device: InventoryDevice;
-  folders: InventoryDevice[];
+  device: RegistryDevice;
+  folders: RegistryDevice[];
   monitors: Monitor[];
   checking: boolean;
   now: number;
@@ -264,7 +264,7 @@ const MachineCard = ({
 };
 
 /**
- * Monitoring: the workspace's inventory machines at a glance — their health
+ * Monitoring: the workspace's registered machines at a glance — their health
  * from the last check, the monitors that run on each, and a way to check one
  * machine or all of them now. Monitors not on a machine (website checks,
  * which the server runs) are listed after.
@@ -316,7 +316,7 @@ export const MonitoringView = () => {
   }, [devices, monitors]);
 
   // Website checks run on the server; a monitor on a machine no longer in
-  // the inventory would otherwise show nowhere.
+  // the registry would otherwise show nowhere.
   const otherMonitors = useMemo(() => {
     const onMachines = new Set(
       machines.flatMap(machine => byMachine.get(machine.key) ?? [])
@@ -436,7 +436,7 @@ export const MonitoringView = () => {
           <div className={styles.empty}>
             {error
               ? `Machines aren't available here: ${error}`
-              : 'No machines yet. Register one with the wf CLI (it records machines in this workspace’s inventory), and allow agent execution on it to check it from here.'}
+              : 'No machines yet. Register one with the wf CLI (it records machines in this workspace’s registry), and allow agent execution on it to check it from here.'}
           </div>
         ) : shown.length === 0 ? (
           <div className={styles.empty}>No machine matches.</div>

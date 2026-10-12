@@ -6,7 +6,7 @@ import { FetchService, type WorkspaceServerService } from '../../cloud';
 /**
  * Runs an agent on a registered device instead of in this browser.
  *
- * The job is queued against the device inventory and the device claims it;
+ * The job is queued against the device registry and the device claims it;
  * nothing here connects to the machine. That direction matters: a device in
  * the field sits behind NAT, and having it initiate every connection means
  * the server never needs a route in, and no credential for it lives here.
@@ -223,7 +223,7 @@ export class RemoteAgentRunnerService extends Service {
   }
 
   private base(workspaceId: string) {
-    return `/api/inventory/workspaces/${encodeURIComponent(workspaceId)}`;
+    return `/api/registry/workspaces/${encodeURIComponent(workspaceId)}`;
   }
 
   private async json<T>(url: string, init?: RequestInit): Promise<T> {

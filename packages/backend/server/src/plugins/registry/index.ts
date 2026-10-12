@@ -6,16 +6,16 @@ import { AuthModule } from '../../core/auth';
 import { DocStorageModule } from '../../core/doc';
 import { PermissionModule } from '../../core/permission';
 import { WorkspaceModule } from '../../core/workspaces';
-import { InventoryController } from './controller';
-import { InventoryHealthService } from './health';
-import { InventoryJobService } from './jobs';
+import { RegistryController } from './controller';
+import { RegistryHealthService } from './health';
+import { RegistryJobService } from './jobs';
 import { MonitoringAgentService } from './monitoring-agent';
 import { AgentPushService } from './push';
-import { InventoryService } from './service';
+import { RegistryService } from './service';
 import { JobTaskClaims } from './task-claims';
 
 /**
- * Device inventory: machines and folders registered as deployment and
+ * Device registry: machines and folders registered as deployment and
  * agent-execution targets, written by external tooling over a PAT-
  * authenticated REST API. Health checks run on them as device jobs, and the
  * monitoring agent learns from what they report.
@@ -23,21 +23,21 @@ import { JobTaskClaims } from './task-claims';
 @Module({
   imports: [AuthModule, DocStorageModule, PermissionModule, WorkspaceModule],
   providers: [
-    InventoryService,
-    InventoryJobService,
-    InventoryHealthService,
+    RegistryService,
+    RegistryJobService,
+    RegistryHealthService,
     MonitoringAgentService,
     AgentPushService,
     JobTaskClaims,
   ],
-  controllers: [InventoryController],
+  controllers: [RegistryController],
   // Monitors queue device jobs and push alerts through these.
-  exports: [InventoryJobService, AgentPushService],
+  exports: [RegistryJobService, AgentPushService],
 })
-export class InventoryModule {}
+export class RegistryModule {}
 
-export { InventoryJobService } from './jobs';
+export { RegistryJobService } from './jobs';
 export { AgentPushService } from './push';
-export { InventoryService } from './service';
+export { RegistryService } from './service';
 export * from './jobs';
 export * from './types';

@@ -1,8 +1,8 @@
 import { Transactional } from '@nestjs-cls/transactional';
 import { Injectable } from '@nestjs/common';
 import {
-  type InventoryJob,
-  type InventoryJobQuestion,
+  type RegistryJob,
+  type RegistryJobQuestion,
   Prisma,
 } from '@prisma/client';
 
@@ -14,7 +14,7 @@ export const JOB_STATUSES = ['queued', 'running', ...JOB_TERMINAL] as const;
 export const QUESTION_KINDS = ['question', 'permission'] as const;
 export type QuestionKind = (typeof QUESTION_KINDS)[number];
 
-export interface CreateInventoryJobInput {
+export interface CreateRegistryJobInput {
   workspaceId: string;
   deviceKey: string;
   agentId: string;
@@ -56,7 +56,7 @@ export const logStamp = (at: Date) => `[${at.toISOString()}] `;
 export const stampInnerLines = (text: string, stamp: string) =>
   text.replace(/\n(?=[^\n])/g, `\n${stamp}`);
 
-export interface ReportInventoryJobInput {
+export interface ReportRegistryJobInput {
   status?: string;
   result?: string | null;
   error?: string | null;
@@ -72,15 +72,15 @@ export interface ReportInventoryJobInput {
  * A job that can be handed to a runner: queued and not held back to a later
  * time, or running on a lease that has lapsed.
  */
-const claimable = (now: Date): Prisma.InventoryJobWhereInput[] => [
+const claimable = (now: Date): Prisma.RegistryJobWhereInput[] => [
   { status: 'queued', OR: [{ runAfter: null }, { runAfter: { lte: now } }] },
   { status: 'running', leaseExpiresAt: { lt: now } },
 ];
 
 @Injectable()
-export class InventoryJobModel extends BaseModel {
-  async create(input: CreateInventoryJobInput): Promise<InventoryJob> {
-    return this.db.inventoryJob.create({
+export class RegistryJobModel extends BaseModel {
+  async create(input: CreateRegistryJobInput): Promise<RegistryJob> {
+    return this.db.registryJob.create({
       data: {
         workspaceId: input.workspaceId,
         deviceKey: input.deviceKey,
@@ -102,8 +102,8 @@ export class InventoryJobModel extends BaseModel {
     });
   }
 
-  async get(workspaceId: string, id: string): Promise<InventoryJob | null> {
-    const job = await this.db.inventoryJob.findUnique({ where: { id } });
+  async get(workspaceId: string, id: string): Promise<RegistryJob | null> {
+    const job = await this.db.registryJob.findUnique({ where: { id } });
     // Scope by workspace here rather than trusting the id alone: a uuid from
     // another workspace must read as absent, not as someone else's job.
     return job && job.workspaceId === workspaceId ? job : null;
@@ -112,8 +112,8 @@ export class InventoryJobModel extends BaseModel {
   async list(
     workspaceId: string,
     filter: { deviceKey?: string; status?: string; limit?: number } = {}
-  ): Promise<InventoryJob[]> {
-    return this.db.inventoryJob.findMany({
+  ): Promise<RegistryJob[]> {
+    return this.db.registryJob.findMany({
       where: {
         workspaceId,
         ...(filter.deviceKey ? { deviceKey: filter.deviceKey } : {}),
@@ -138,9 +138,9 @@ export class InventoryJobModel extends BaseModel {
     deviceKey: string,
     runnerId: string,
     leaseSeconds = 300
-  ): Promise<InventoryJob | null> {
+  ): Promise<RegistryJob | null> {
     const now = new Date();
-    const candidate = await this.db.inventoryJob.findFirst({
+    const candidate = await this.db.registryJob.findFirst({
       where: {
         workspaceId,
         deviceKey,
@@ -153,7 +153,7 @@ export class InventoryJobModel extends BaseModel {
     }
 
     const lease = new Date(now.getTime() + leaseSeconds * 1000);
-    const { count } = await this.db.inventoryJob.updateMany({
+    const { count } = await this.db.registryJob.updateMany({
       where: {
         id: candidate.id,
         // Re-assert the claimable condition; if another runner took it
@@ -170,14 +170,14 @@ export class InventoryJobModel extends BaseModel {
     if (count === 0) {
       return null;
     }
-    return this.db.inventoryJob.findUnique({ where: { id: candidate.id } });
+    return this.db.registryJob.findUnique({ where: { id: candidate.id } });
   }
 
   async report(
     workspaceId: string,
     id: string,
-    input: ReportInventoryJobInput
-  ): Promise<InventoryJob | null> {
+    input: ReportRegistryJobInput
+  ): Promise<RegistryJob | null> {
     const job = await this.get(workspaceId, id);
     if (!job) {
       return null;
@@ -194,7 +194,7 @@ export class InventoryJobModel extends BaseModel {
 
     const status = input.status ?? job.status;
     const terminal = (JOB_TERMINAL as readonly string[]).includes(status);
-    return this.db.inventoryJob.update({
+    return this.db.registryJob.update({
       where: { id },
       data: {
         status,
@@ -219,7 +219,7 @@ export class InventoryJobModel extends BaseModel {
     id: string,
     runAfter: Date,
     logAppend?: string
-  ): Promise<InventoryJob | null> {
+  ): Promise<RegistryJob | null> {
     const job = await this.get(workspaceId, id);
     if (!job || job.status === 'cancelled') {
       return job;
@@ -227,7 +227,7 @@ export class InventoryJobModel extends BaseModel {
     if (logAppend) {
       await this.appendLog(id, logAppend);
     }
-    return this.db.inventoryJob.update({
+    return this.db.registryJob.update({
       where: { id },
       data: {
         status: 'queued',
@@ -247,7 +247,7 @@ export class InventoryJobModel extends BaseModel {
     deviceKey: string,
     runAfter: Date
   ): Promise<number> {
-    const { count } = await this.db.inventoryJob.updateMany({
+    const { count } = await this.db.registryJob.updateMany({
       where: {
         workspaceId,
         deviceKey,
@@ -261,7 +261,7 @@ export class InventoryJobModel extends BaseModel {
 
   /** The latest time a device's queued jobs are held to, if still ahead. */
   async heldUntil(workspaceId: string, deviceKey: string): Promise<Date | null> {
-    const held = await this.db.inventoryJob.findFirst({
+    const held = await this.db.registryJob.findFirst({
       where: {
         workspaceId,
         deviceKey,
@@ -283,18 +283,18 @@ export class InventoryJobModel extends BaseModel {
     workspaceId: string,
     id: string,
     title: string
-  ): Promise<InventoryJob | null> {
+  ): Promise<RegistryJob | null> {
     const job = await this.get(workspaceId, id);
     if (!job) {
       return null;
     }
-    return this.db.inventoryJob.update({ where: { id }, data: { title } });
+    return this.db.registryJob.update({ where: { id }, data: { title } });
   }
 
   /** Record tasks the claim moved to in progress, beside any it moved before. */
   async addStartedTasks(id: string, taskIds: string[]): Promise<void> {
     if (!taskIds.length) return;
-    await this.db.inventoryJob.update({
+    await this.db.registryJob.update({
       where: { id },
       data: { startedTaskIds: { push: taskIds } },
     });
@@ -311,7 +311,7 @@ export class InventoryJobModel extends BaseModel {
     taskIds: string[]
   ): Promise<string[]> {
     if (!taskIds.length) return [];
-    const others = await this.db.inventoryJob.findMany({
+    const others = await this.db.registryJob.findMany({
       where: {
         workspaceId,
         docId,
@@ -408,9 +408,9 @@ export class InventoryJobModel extends BaseModel {
       options?: string[];
       allowedBy?: string | null;
     }
-  ): Promise<InventoryJobQuestion> {
+  ): Promise<RegistryJobQuestion> {
     const allowed = input.allowedBy !== undefined;
-    return this.db.inventoryJobQuestion.create({
+    return this.db.registryJobQuestion.create({
       data: {
         jobId,
         kind: input.kind,
@@ -430,11 +430,11 @@ export class InventoryJobModel extends BaseModel {
    */
   @Transactional()
   async allowAllTools(jobId: string, userId: string): Promise<void> {
-    await this.db.inventoryJob.update({
+    await this.db.registryJob.update({
       where: { id: jobId },
       data: { allowAllTools: true },
     });
-    await this.db.inventoryJobQuestion.updateMany({
+    await this.db.registryJobQuestion.updateMany({
       where: { jobId, kind: 'permission', answeredAt: null },
       data: { allowed: true, answeredBy: userId, answeredAt: new Date() },
     });
@@ -443,16 +443,16 @@ export class InventoryJobModel extends BaseModel {
   async getQuestion(
     jobId: string,
     questionId: string
-  ): Promise<InventoryJobQuestion | null> {
-    const question = await this.db.inventoryJobQuestion.findUnique({
+  ): Promise<RegistryJobQuestion | null> {
+    const question = await this.db.registryJobQuestion.findUnique({
       where: { id: questionId },
     });
     // Same scoping as `get`: a question id under the wrong job is absent.
     return question && question.jobId === jobId ? question : null;
   }
 
-  async listQuestions(jobId: string): Promise<InventoryJobQuestion[]> {
-    return this.db.inventoryJobQuestion.findMany({
+  async listQuestions(jobId: string): Promise<RegistryJobQuestion[]> {
+    return this.db.registryJobQuestion.findMany({
       where: { jobId },
       orderBy: { createdAt: 'asc' },
     });
@@ -468,8 +468,8 @@ export class InventoryJobModel extends BaseModel {
     questionId: string,
     input: { answer?: string | null; allowed?: boolean | null },
     userId: string
-  ): Promise<InventoryJobQuestion | null> {
-    const { count } = await this.db.inventoryJobQuestion.updateMany({
+  ): Promise<RegistryJobQuestion | null> {
+    const { count } = await this.db.registryJobQuestion.updateMany({
       where: { id: questionId, jobId, answeredAt: null },
       data: {
         answer: input.answer ?? null,
@@ -481,10 +481,10 @@ export class InventoryJobModel extends BaseModel {
     if (count === 0) {
       return null;
     }
-    return this.db.inventoryJobQuestion.findUnique({ where: { id: questionId } });
+    return this.db.registryJobQuestion.findUnique({ where: { id: questionId } });
   }
 
-  async cancel(workspaceId: string, id: string): Promise<InventoryJob | null> {
+  async cancel(workspaceId: string, id: string): Promise<RegistryJob | null> {
     const job = await this.get(workspaceId, id);
     if (!job) {
       return null;
@@ -492,7 +492,7 @@ export class InventoryJobModel extends BaseModel {
     if ((JOB_TERMINAL as readonly string[]).includes(job.status)) {
       return job;   // already finished; nothing to cancel
     }
-    return this.db.inventoryJob.update({
+    return this.db.registryJob.update({
       where: { id },
       data: { status: 'cancelled', finishedAt: new Date(), leaseExpiresAt: null },
     });

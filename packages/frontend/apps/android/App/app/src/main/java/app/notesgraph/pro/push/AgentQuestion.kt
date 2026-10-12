@@ -5,7 +5,7 @@ import org.json.JSONArray
 
 /**
  * What an agent run is waiting on, as pushed by the server
- * (plugins/inventory/push.ts `questionPushData`). `text` and `detail` may be
+ * (plugins/registry/push.ts `questionPushData`). `text` and `detail` may be
  * clipped to fit a push; [AgentQuestionActivity] reads the whole question
  * back before anything is allowed from it.
  */

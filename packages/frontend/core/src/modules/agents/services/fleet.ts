@@ -5,8 +5,8 @@ import type { FetchInit } from '../../cloud/services/fetch';
 import type { WorkspaceService } from '../../workspace';
 
 /**
- * The workspace's inventory machines and their health, for the Monitoring
- * page (see plugins/inventory on the server). A health check is a fixed
+ * The workspace's registered machines and their health, for the Monitoring
+ * page (see plugins/registry on the server). A health check is a fixed
  * script the machine runs as a device job; its result becomes the device's
  * state and checks.
  */
@@ -31,7 +31,7 @@ export interface DeviceCheck {
   detail?: string;
 }
 
-export interface InventoryDevice {
+export interface RegistryDevice {
   key: string;
   name: string;
   kind: string;
@@ -62,7 +62,7 @@ const asState = (state: string): DeviceState =>
 
 /** A device's state, unknown once its last check is too old to trust. */
 export function deviceState(
-  device: Pick<InventoryDevice, 'state' | 'checkedAt'>,
+  device: Pick<RegistryDevice, 'state' | 'checkedAt'>,
   nowSeconds: number
 ): DeviceState {
   if (!device.checkedAt) return 'unknown';
@@ -74,7 +74,7 @@ export function deviceState(
  * The checks as a list the page can show. The `wf` CLI writes its own shape,
  * so anything with a name is taken, and its status read loosely.
  */
-export function deviceChecks(device: Pick<InventoryDevice, 'checks'>) {
+export function deviceChecks(device: Pick<RegistryDevice, 'checks'>) {
   return device.checks.flatMap((raw): DeviceCheck[] => {
     if (!raw || typeof raw !== 'object') return [];
     const check = raw as Record<string, unknown>;
@@ -105,7 +105,7 @@ export function deviceChecks(device: Pick<InventoryDevice, 'checks'>) {
 
 /** How many machines are in each state. */
 export function fleetSummary(
-  devices: Pick<InventoryDevice, 'state' | 'checkedAt'>[],
+  devices: Pick<RegistryDevice, 'state' | 'checkedAt'>[],
   nowSeconds: number
 ): Record<DeviceState, number> {
   const counts: Record<DeviceState, number> = {
@@ -120,7 +120,7 @@ export function fleetSummary(
 
 // ── monitoring agent ────────────────────────────────────────────────────
 // It learns what's normal on each machine from its health checks, flags
-// what's new, and escalates what matters (plugins/inventory/monitoring-agent
+// what's new, and escalates what matters (plugins/registry/monitoring-agent
 // on the server).
 
 export type AgentMode = 'training' | 'shadow' | 'detect';
@@ -236,7 +236,7 @@ export class FleetService extends Service {
   }
 
   /** Every device in the workspace, machines and the folders on them. */
-  readonly devices$ = new LiveData<InventoryDevice[]>([]);
+  readonly devices$ = new LiveData<RegistryDevice[]>([]);
   /** False until the first answer, or the first failure. */
   readonly loaded$ = new LiveData<boolean>(false);
   readonly error$ = new LiveData<string | null>(null);
@@ -293,7 +293,7 @@ export class FleetService extends Service {
 
   private async json<T>(path: string, init: FetchInit = {}): Promise<T> {
     const response = await this.fetchService().fetchRaw(
-      `/api/inventory/workspaces/${encodeURIComponent(this.workspaceId)}${path}`,
+      `/api/registry/workspaces/${encodeURIComponent(this.workspaceId)}${path}`,
       {
         ...init,
         headers: { 'Content-Type': 'application/json', ...init.headers },
@@ -306,7 +306,7 @@ export class FleetService extends Service {
         message = JSON.parse(text).message ?? message;
       } catch {
         if (response.status === 404) {
-          message = 'This server has no machine inventory.';
+          message = 'This server has no device registry.';
         }
       }
       throw new Error(message);
@@ -314,9 +314,9 @@ export class FleetService extends Service {
     return JSON.parse(text) as T;
   }
 
-  async revalidate(): Promise<InventoryDevice[]> {
+  async revalidate(): Promise<RegistryDevice[]> {
     try {
-      const { devices } = await this.json<{ devices: InventoryDevice[] }>(
+      const { devices } = await this.json<{ devices: RegistryDevice[] }>(
         '/devices'
       );
       this.devices$.setValue(devices);
@@ -334,7 +334,7 @@ export class FleetService extends Service {
   }
 
   /** A check is settled once its machine reports after it was asked for. */
-  private settleChecks(devices: InventoryDevice[]) {
+  private settleChecks(devices: RegistryDevice[]) {
     const checking = this.checking$.value;
     if (checking.size === 0) return;
     const now = Date.now();

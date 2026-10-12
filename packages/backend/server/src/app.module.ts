@@ -62,7 +62,7 @@ import { CopilotModule, CopilotRealtimeModule } from './plugins/copilot';
 import { DirectoryModule } from './plugins/directory';
 import { GCloudModule } from './plugins/gcloud';
 import { IndexerModule } from './plugins/indexer';
-import { InventoryModule } from './plugins/inventory';
+import { RegistryModule } from './plugins/registry';
 import { BlockMonitorModule } from './plugins/monitor';
 import { OAuthModule } from './plugins/oauth';
 import { PaymentModule } from './plugins/payment';
@@ -212,7 +212,7 @@ export function buildAppModule(env: Env) {
       CaptchaModule,
       OAuthModule,
       CalendarModule,
-      InventoryModule,
+      RegistryModule,
       ResearchModule,
       BlockMonitorModule,
       DirectoryModule,

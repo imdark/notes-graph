@@ -292,7 +292,7 @@ const DeploymentsButton = () => {
   );
 };
 
-/** Inventory machines' health and monitors; see MonitoringView. */
+/** Registered machines' health and monitors; see MonitoringView. */
 const MonitoringButton = () => {
   const workbench = useService(WorkbenchService).workbench;
   const active = useLiveData(

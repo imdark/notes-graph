@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import type { InventoryJob, InventoryJobQuestion } from '@prisma/client';
+import type { RegistryJob, RegistryJobQuestion } from '@prisma/client';
 import { GoogleAuth } from 'google-auth-library';
 
 import { Config, URLHelper } from '../../base';
@@ -25,8 +25,8 @@ const bytes = (data: Record<string, string>) =>
  */
 export function questionPushData(
   serverBaseUrl: string,
-  job: Pick<InventoryJob, 'id' | 'workspaceId' | 'agentName' | 'docId'>,
-  question: Pick<InventoryJobQuestion, 'id' | 'kind' | 'text' | 'detail' | 'options'>
+  job: Pick<RegistryJob, 'id' | 'workspaceId' | 'agentName' | 'docId'>,
+  question: Pick<RegistryJobQuestion, 'id' | 'kind' | 'text' | 'detail' | 'options'>
 ): Record<string, string> {
   const data: Record<string, string> = {
     type: 'agent-question',
@@ -95,8 +95,8 @@ export class AgentPushService {
 
   /** A run asked something: tell its starter's phones. */
   async questionAsked(
-    job: InventoryJob,
-    question: InventoryJobQuestion
+    job: RegistryJob,
+    question: RegistryJobQuestion
   ): Promise<void> {
     if (!job.createdBy) return;
     await this.send(
@@ -109,7 +109,7 @@ export class AgentPushService {
    * Questions were answered (on any device): take them off the other phones,
    * so nobody is left holding an Allow button for something already decided.
    */
-  async questionsClosed(job: InventoryJob, questionIds: string[]): Promise<void> {
+  async questionsClosed(job: RegistryJob, questionIds: string[]): Promise<void> {
     if (!job.createdBy || questionIds.length === 0) return;
     await this.send(job.createdBy, {
       type: 'agent-question-closed',

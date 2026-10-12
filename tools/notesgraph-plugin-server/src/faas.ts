@@ -26,10 +26,10 @@ import type {
  *
  * Today a plugin's server code gets fs-backed KV/blob/secrets and nothing
  * else, which is why anything with real data still has to be a *server*
- * plugin compiled into the app — machine inventory is the worked example:
- * `packages/backend/server/src/plugins/inventory` owns an `InventoryDevice`
+ * plugin compiled into the app — device registry is the worked example:
+ * `packages/backend/server/src/plugins/registry` owns an `RegistryDevice`
  * table and its permission checks, while the marketplace plugin
- * `com.notesgraph.inventory` is only a UI that calls `/api/inventory`. That
+ * `com.notesgraph.inventory` is only a UI that calls `/api/registry`. That
  * split means a plugin author who needs to store more than a blob cannot
  * ship it through the marketplace at all.
  *

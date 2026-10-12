@@ -10,7 +10,7 @@ its runs queue, log, ask, push to the phone and stop like a Mac's.
   Claude subscription (a `claude setup-token` token) or an Anthropic API key.
 - **The agent:** the prompt, the pre-approved tools, the MCP servers and the
   **automation** (setup steps, tools, teardown) all come from the server with
-  each job (`plugins/inventory/agent-profiles.ts`). The Mac follows the same
+  each job (`plugins/registry/agent-profiles.ts`). The Mac follows the same
   profile.
 - **Runs here:**
   - Claude Code agents: notes, web, and code tasks. A code task gets a git

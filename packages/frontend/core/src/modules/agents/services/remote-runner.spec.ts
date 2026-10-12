@@ -137,8 +137,8 @@ describe('RemoteAgentRunnerService.watch', () => {
     expect(updates.at(-1)?.job.status).toBe('done');
     expect(updates[0].job.tmuxSession).toBe('wf-job-job-1');
     expect(requests.map(r => r.url)).toEqual([
-      '/api/inventory/workspaces/ws-1/jobs/job-1?logFrom=0',
-      '/api/inventory/workspaces/ws-1/jobs/job-1?logFrom=7',
+      '/api/registry/workspaces/ws-1/jobs/job-1?logFrom=0',
+      '/api/registry/workspaces/ws-1/jobs/job-1?logFrom=7',
     ]);
   });
 
@@ -168,7 +168,7 @@ describe('RemoteAgentRunnerService.watch', () => {
     }
 
     expect(requests.at(-1)).toEqual({
-      url: '/api/inventory/workspaces/ws-1/jobs/job-1/cancel',
+      url: '/api/registry/workspaces/ws-1/jobs/job-1/cancel',
       method: 'POST',
     });
   });
@@ -246,7 +246,7 @@ describe('RemoteAgentRunnerService questions', () => {
     const { runner, requests } = createRunner([() => job({})]);
     await runner.answer('ws-1', 'job-1', 'q1', { answer: 'My son, 7' });
     expect(requests).toEqual([
-      { url: '/api/inventory/workspaces/ws-1/jobs/job-1/questions/q1/answer', method: 'POST' },
+      { url: '/api/registry/workspaces/ws-1/jobs/job-1/questions/q1/answer', method: 'POST' },
     ]);
   });
 });

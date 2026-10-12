@@ -2,8 +2,8 @@ import { z } from 'zod';
 
 import { defineModuleConfig } from '../../base';
 
-export interface InventoryConfig {
-  /** Turns the /api/inventory endpoints on. Off by default. */
+export interface RegistryConfig {
+  /** Turns the /api/registry endpoints on. Off by default. */
   enabled: boolean;
   /** Upper bound on devices per workspace, to keep a looping CLI honest. */
   maxDevicesPerWorkspace: number;
@@ -15,6 +15,8 @@ export interface InventoryConfig {
   fcmServiceAccount: string;
 }
 
+// The config key and env vars keep the module's old name, `inventory`:
+// prod turns the registry on with an `inventory.enabled` row in `app_configs`.
 declare global {
   interface AppConfigSchema {
     inventory: {
@@ -36,13 +38,13 @@ declare global {
  */
 defineModuleConfig('inventory', {
   enabled: {
-    desc: 'Enable the device inventory API for deployment and agent targets.',
+    desc: 'Enable the device registry API for deployment and agent targets.',
     default: false,
     schema: z.boolean(),
     env: ['NOTESGRAPH_INVENTORY_ENABLED', 'boolean'],
   },
   maxDevicesPerWorkspace: {
-    desc: 'Maximum number of inventory devices a single workspace may hold.',
+    desc: 'Maximum number of registered devices a single workspace may hold.',
     default: 500,
     schema: z.number().int().positive(),
     env: ['NOTESGRAPH_INVENTORY_MAX_DEVICES', 'integer'],

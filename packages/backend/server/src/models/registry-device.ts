@@ -1,9 +1,9 @@
 import { Injectable } from '@nestjs/common';
-import type { InventoryDevice, Prisma } from '@prisma/client';
+import type { RegistryDevice, Prisma } from '@prisma/client';
 
 import { BaseModel } from './base';
 
-export interface UpsertInventoryDeviceInput {
+export interface UpsertRegistryDeviceInput {
   workspaceId: string;
   key: string;
   name: string;
@@ -23,7 +23,7 @@ export interface UpsertInventoryDeviceInput {
   registeredBy?: string | null;
 }
 
-export interface UpdateInventoryDeviceStatusInput {
+export interface UpdateRegistryDeviceStatusInput {
   state?: string;
   statusDetail?: string | null;
   version?: string | null;
@@ -41,8 +41,8 @@ export interface UpdateInventoryDeviceStatusInput {
  * whole record.
  */
 @Injectable()
-export class InventoryDeviceModel extends BaseModel {
-  async upsert(input: UpsertInventoryDeviceInput): Promise<InventoryDevice> {
+export class RegistryDeviceModel extends BaseModel {
+  async upsert(input: UpsertRegistryDeviceInput): Promise<RegistryDevice> {
     const { workspaceId, key, ...rest } = input;
     const data = {
       name: rest.name,
@@ -61,7 +61,7 @@ export class InventoryDeviceModel extends BaseModel {
       labels: rest.labels ?? {},
     };
 
-    return this.db.inventoryDevice.upsert({
+    return this.db.registryDevice.upsert({
       where: { workspaceId_key: { workspaceId, key } },
       // Registration never clears a status the device already reported.
       create: { workspaceId, key, registeredBy: rest.registeredBy ?? null, ...data },
@@ -69,8 +69,8 @@ export class InventoryDeviceModel extends BaseModel {
     });
   }
 
-  async get(workspaceId: string, key: string): Promise<InventoryDevice | null> {
-    return this.db.inventoryDevice.findUnique({
+  async get(workspaceId: string, key: string): Promise<RegistryDevice | null> {
+    return this.db.registryDevice.findUnique({
       where: { workspaceId_key: { workspaceId, key } },
     });
   }
@@ -78,8 +78,8 @@ export class InventoryDeviceModel extends BaseModel {
   async list(
     workspaceId: string,
     filter: { kind?: string; agentTarget?: boolean } = {}
-  ): Promise<InventoryDevice[]> {
-    return this.db.inventoryDevice.findMany({
+  ): Promise<RegistryDevice[]> {
+    return this.db.registryDevice.findMany({
       where: {
         workspaceId,
         ...(filter.kind ? { kind: filter.kind } : {}),
@@ -92,7 +92,7 @@ export class InventoryDeviceModel extends BaseModel {
   async delete(workspaceId: string, key: string): Promise<number> {
     // Folder targets are meaningless without the machine they sit on, so a
     // machine's children go with it.
-    const { count } = await this.db.inventoryDevice.deleteMany({
+    const { count } = await this.db.registryDevice.deleteMany({
       where: { workspaceId, OR: [{ key }, { parentKey: key }] },
     });
     return count;
@@ -116,13 +116,13 @@ export class InventoryDeviceModel extends BaseModel {
   async updateStatus(
     workspaceId: string,
     key: string,
-    input: UpdateInventoryDeviceStatusInput
-  ): Promise<InventoryDevice | null> {
+    input: UpdateRegistryDeviceStatusInput
+  ): Promise<RegistryDevice | null> {
     const existing = await this.get(workspaceId, key);
     if (!existing) {
       return null;
     }
-    return this.db.inventoryDevice.update({
+    return this.db.registryDevice.update({
       where: { workspaceId_key: { workspaceId, key } },
       data: {
         state: input.state ?? existing.state,

@@ -134,7 +134,7 @@ const ENVIRONMENTS: {
   {
     value: 'remote',
     label: 'Remote device',
-    note: 'Runs on a machine registered in the device inventory',
+    note: 'Runs on a machine registered in the device registry',
   },
   {
     value: 'research',
@@ -236,7 +236,7 @@ export const AgentEditor = ({
         if (!cancelled) setDevices(list);
       })
       .catch((error: Error) => {
-        // An unreachable inventory shouldn't blank the form — say so and
+        // An unreachable registry shouldn't blank the form — say so and
         // leave whatever device was already selected intact.
         if (!cancelled) setDevicesError(error.message);
       });
@@ -540,7 +540,7 @@ export const AgentEditor = ({
               </div>
               <span className={styles.hint}>
                 On-device runs in this browser. Remote runs on a machine you
-                have registered in the device inventory. Cloud runs on the
+                have registered in the device registry. Cloud runs on the
                 server: its copilot model, or Claude Code on its own runner.
               </span>
             </div>
