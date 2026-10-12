@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Hyperion's Timber viewer keeps 200 lines by default; the web console
+         alone fills that in seconds, so keep enough to see what led up to a
+         reload. -->
+    <integer name="tmb_log_buffer">1000</integer>
+</resources>
