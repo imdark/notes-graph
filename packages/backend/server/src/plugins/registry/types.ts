@@ -1,6 +1,6 @@
-import type { InventoryDevice } from '@prisma/client';
+import type { RegistryDevice } from '@prisma/client';
 
-/** Device kinds the inventory accepts. */
+/** Device kinds the registry accepts. */
 export const DEVICE_KINDS = ['machine', 'folder'] as const;
 export type DeviceKind = (typeof DEVICE_KINDS)[number];
 
@@ -62,7 +62,7 @@ export interface DeviceDto {
   updatedAt: number;
 }
 
-export function toDeviceDto(device: InventoryDevice): DeviceDto {
+export function toDeviceDto(device: RegistryDevice): DeviceDto {
   return {
     id: device.id,
     key: device.key,

@@ -645,7 +645,7 @@ export class AgentExecutorService extends Service implements AgentExecutor {
   }
 
   /**
-   * Run on a machine from the device inventory.
+   * Run on a machine from the device registry.
    *
    * The job is queued and the device claims it; this never connects to the
    * machine. Progress arrives by polling the job, which is why the event
@@ -690,7 +690,7 @@ export class AgentExecutorService extends Service implements AgentExecutor {
       taskIds: context.taskIds,
     });
     this.runsStore.attachRemote(runId, job.id, agent.deviceKey);
-    // The folder the device works in, from its inventory entry. Only for the
+    // The folder the device works in, from its registry entry. Only for the
     // details tab, so it never holds the run up or fails it.
     const deviceKey = agent.deviceKey;
     this.remoteRunner

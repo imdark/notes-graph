@@ -39,7 +39,7 @@ export interface CreateMonitoringDecisionInput {
 
 /**
  * The monitoring agent's settings, what it has learned (baselines), and what
- * it noticed (decisions). See plugins/inventory/monitoring-agent.
+ * it noticed (decisions). See plugins/registry/monitoring-agent.
  */
 @Injectable()
 export class MonitoringAgentModel extends BaseModel {

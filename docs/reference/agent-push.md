@@ -45,9 +45,9 @@ that the first poll then takes away.
 
 | Where | What |
 | --- | --- |
-| `server/src/plugins/inventory/push.ts` | Builds and sends the FCM data message; drops dead tokens |
-| `server/src/plugins/inventory/jobs.ts` | Pushes on `ask`, clears on `answer` (fire-and-forget) |
-| `POST /api/inventory/push-tokens` (`/remove`) | A phone registers / unregisters its FCM token for the signed-in user |
+| `server/src/plugins/registry/push.ts` | Builds and sends the FCM data message; drops dead tokens |
+| `server/src/plugins/registry/jobs.ts` | Pushes on `ask`, clears on `answer` (fire-and-forget) |
+| `POST /api/registry/push-tokens` (`/remove`) | A phone registers / unregisters its FCM token for the signed-in user |
 | `android/.../push/` | FCM service, notification, action receiver, question screen, authed HTTP |
 | `android/src/agent-push-glue.ts` | Registers with every signed-in server; sign-out unregisters (`app.tsx`) |
 
@@ -62,7 +62,7 @@ Push is off until both halves have a real Firebase project:
    release secret CI uses for it.
 2. In the same project: Project settings → Service accounts → Generate new
    private key. Give the whole JSON to the server as
-   `NOTESGRAPH_FCM_SERVICE_ACCOUNT` (or the `inventory.fcmServiceAccount`
+   `NOTESGRAPH_FCM_SERVICE_ACCOUNT` (or the `registry.fcmServiceAccount`
    config). Empty means no push; questions still wait in the app.
 3. Rebuild the APK; on first launch while signed in it asks for the
    notification permission and registers.

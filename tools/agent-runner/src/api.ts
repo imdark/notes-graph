@@ -3,7 +3,7 @@
  * `wf agent serve` makes (workflow/deploy/jobs.py JobClient, agent_mcp.py).
  */
 
-/** A shell step, in wf's recipe shape; see plugins/inventory/agent-profiles.ts. */
+/** A shell step, in wf's recipe shape; see plugins/registry/agent-profiles.ts. */
 export interface AutomationStep {
   name: string;
   run: string;
@@ -24,7 +24,7 @@ export interface Automation {
   cwd?: string;
 }
 
-/** How the server says to run a job; see plugins/inventory/agent-profiles.ts. */
+/** How the server says to run a job; see plugins/registry/agent-profiles.ts. */
 export interface AgentProfile {
   systemPrompt: string;
   allowedTools: string[];
@@ -104,7 +104,7 @@ export class NotesGraphApi {
   }
 
   private base(workspaceId: string) {
-    return `/api/inventory/workspaces/${workspaceId}`;
+    return `/api/registry/workspaces/${workspaceId}`;
   }
 
   /** Create or update this runner's device, as one agents may run on. */

@@ -18,7 +18,7 @@ import {
   type Severity,
   WARMUP,
 } from './baseline';
-import { InventoryHealthService } from './health';
+import { RegistryHealthService } from './health';
 import {
   acceptPattern,
   ingestLogs,
@@ -29,13 +29,13 @@ import {
   readCatalog,
   toLogPatternDto,
 } from './log-patterns';
-import { InventoryJobService } from './jobs';
+import { RegistryJobService } from './jobs';
 import { AgentPushService } from './push';
 
 /**
  * The monitoring agent: "learn what normal looks like, flag what's new,
  * escalate only what matters" (after VersusControl's devops-ai-guidelines,
- * ch. 4), applied to the inventory machines' health checks.
+ * ch. 4), applied to the registry machines' health checks.
  *
  * - Every numeric reading (disk, memory, load, or anything the wf CLI sends
  *   with a value) gets an EWMA baseline per machine. A reading too many
@@ -311,8 +311,8 @@ export class MonitoringAgentService {
 
   constructor(
     private readonly models: Models,
-    private readonly jobs: InventoryJobService,
-    private readonly health: InventoryHealthService,
+    private readonly jobs: RegistryJobService,
+    private readonly health: RegistryHealthService,
     @Optional() private readonly push?: AgentPushService
   ) {}
 
@@ -406,8 +406,8 @@ export class MonitoringAgentService {
   }
 
   /** A machine reported: learn from it, and act on what's new. */
-  @OnEvent('inventory.device.status')
-  async onDeviceStatus(event: Events['inventory.device.status']) {
+  @OnEvent('registry.device.status')
+  async onDeviceStatus(event: Events['registry.device.status']) {
     try {
       await this.observe(event.workspaceId, event.key, event.checks);
     } catch (err) {
@@ -432,8 +432,8 @@ export class MonitoringAgentService {
   }
 
   /** A machine's log lines arrived: fold them into its catalog of patterns. */
-  @OnEvent('inventory.device.logs')
-  async onDeviceLogs(event: Events['inventory.device.logs']) {
+  @OnEvent('registry.device.logs')
+  async onDeviceLogs(event: Events['registry.device.logs']) {
     try {
       await this.observeLogs(event.workspaceId, event.key, event.lines, event.until);
     } catch (err) {
@@ -491,7 +491,7 @@ export class MonitoringAgentService {
     const alerts = (agent.alerts ?? {}) as { push?: boolean };
     if (alerts.push) {
       try {
-        const device = await this.models.inventoryDevice.get(agent.workspaceId, decision.deviceKey);
+        const device = await this.models.registryDevice.get(agent.workspaceId, decision.deviceKey);
         // The phone already shows monitor alerts; this rides on the same type.
         await this.push?.monitorAlert(agent.updatedBy, {
           monitorId: `agent:${decision.deviceKey}:${decision.metric}`,
@@ -526,7 +526,7 @@ export class MonitoringAgentService {
       // One already out: don't send a second.
       return toDecisionDto(decision);
     }
-    const device = await this.models.inventoryDevice.get(workspaceId, decision.deviceKey);
+    const device = await this.models.registryDevice.get(workspaceId, decision.deviceKey);
     if (!device) throw new BadRequest(`No device '${decision.deviceKey}' in this workspace`);
     const job = await this.jobs.enqueue(workspaceId, userId, decision.deviceKey, {
       model: 'claude-code',
@@ -544,8 +544,8 @@ export class MonitoringAgentService {
   }
 
   /** A triage run ended: keep what it found on the decision. */
-  @OnEvent('inventory.job.finished')
-  async onJobFinished(event: Events['inventory.job.finished']) {
+  @OnEvent('registry.job.finished')
+  async onJobFinished(event: Events['registry.job.finished']) {
     const decision = await this.models.monitoringAgent.findByTriageJob(event.jobId);
     if (!decision) return;
     const text =

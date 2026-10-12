@@ -1,6 +1,6 @@
 import test from 'ava';
 
-import { InventoryService } from '../service';
+import { RegistryService } from '../service';
 import { toDeviceDto } from '../types';
 
 /**
@@ -19,7 +19,7 @@ function makeService(options: { devices?: any[]; max?: number } = {}) {
   const devices = options.devices ?? [];
   const stored: any[] = [];
   const models: any = {
-    inventoryDevice: {
+    registryDevice: {
       get: async (_ws: string, key: string) =>
         devices.find(d => d.key === key) ?? null,
       list: async () => devices,
@@ -60,9 +60,9 @@ function makeService(options: { devices?: any[]; max?: number } = {}) {
     },
   };
   const config: any = {
-    inventory: { enabled: true, maxDevicesPerWorkspace: options.max ?? 500 },
+    registry: { enabled: true, maxDevicesPerWorkspace: options.max ?? 500 },
   };
-  return { service: new InventoryService(models, config), stored };
+  return { service: new RegistryService(models, config), stored };
 }
 
 test('registers a machine with defaults', async t => {

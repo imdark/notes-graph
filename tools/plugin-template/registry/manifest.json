@@ -1,6 +1,6 @@
 {
-  "id": "com.notesgraph.inventory",
-  "name": "Machine Inventory",
+  "id": "com.notesgraph.registry",
+  "name": "Machine Registry",
   "version": "0.2.0",
   "description": "Machines and folders registered as deployment and agent-execution targets: health, registration and removal.",
   "author": "NotesGraph",

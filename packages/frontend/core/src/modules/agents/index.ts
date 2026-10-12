@@ -77,7 +77,7 @@ export {
   deviceState,
   FleetService,
   fleetSummary,
-  type InventoryDevice,
+  type RegistryDevice,
   type LogCatalog,
   type LogPattern,
   type MonitoringAgent,

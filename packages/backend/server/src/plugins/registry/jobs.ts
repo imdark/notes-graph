@@ -1,5 +1,5 @@
 import { Injectable, Logger, Optional } from '@nestjs/common';
-import type { InventoryJob, InventoryJobQuestion } from '@prisma/client';
+import type { RegistryJob, RegistryJobQuestion } from '@prisma/client';
 
 // See the note in service.ts: a plain HttpException is reported as a 500 by
 // the global filter, so bad input has to be a UserFriendlyError.
@@ -9,7 +9,7 @@ import {
   JOB_TERMINAL,
   QUESTION_KINDS,
   type QuestionKind,
-} from '../../models/inventory-job';
+} from '../../models/registry-job';
 import { type AgentProfile, profileFor } from './agent-profiles';
 import { AgentPushService } from './push';
 import { isSessionLimit, sessionLimitRunAfter } from './session-limit';
@@ -18,7 +18,7 @@ import { JobTaskClaims } from './task-claims';
 declare global {
   interface Events {
     /** A device job reached done, error or cancelled. */
-    'inventory.job.finished': {
+    'registry.job.finished': {
       workspaceId: string;
       jobId: string;
       status: string;
@@ -95,7 +95,7 @@ export interface QuestionDto {
   answeredAt: number | null;
 }
 
-export function toQuestionDto(question: InventoryJobQuestion): QuestionDto {
+export function toQuestionDto(question: RegistryJobQuestion): QuestionDto {
   return {
     id: question.id,
     kind: question.kind,
@@ -112,10 +112,10 @@ export function toQuestionDto(question: InventoryJobQuestion): QuestionDto {
 export interface JobDtoOptions {
   /** Include the transcript, starting at this absolute offset (0 = all kept). */
   logFrom?: number;
-  questions?: InventoryJobQuestion[];
+  questions?: RegistryJobQuestion[];
 }
 
-export function toJobDto(job: InventoryJob, options: JobDtoOptions = {}): JobDto {
+export function toJobDto(job: RegistryJob, options: JobDtoOptions = {}): JobDto {
   return {
     id: job.id,
     deviceKey: job.deviceKey,
@@ -155,7 +155,7 @@ export function toJobDto(job: InventoryJob, options: JobDtoOptions = {}): JobDto
  * Postgres LENGTH() counts when the append trims the head; counting JS
  * string length instead would drift by one per emoji.
  */
-function sliceLog(job: InventoryJob, from: number) {
+function sliceLog(job: RegistryJob, from: number) {
   const chars = Array.from(job.log);
   const start = Math.max(0, Math.floor(from) - job.logDropped);
   return {
@@ -201,7 +201,7 @@ const RUNNER_QUIET_MS = 2 * 60_000;
  * The transcript line for a queued run that no runner is picking up. `marker`
  * is part of it so the note is written once per job.
  */
-function unclaimedNote(job: InventoryJob, host: string, runnerSeenAt: Date | null) {
+function unclaimedNote(job: RegistryJob, host: string, runnerSeenAt: Date | null) {
   const marker = `Nothing on ${job.deviceKey} is picking up runs`;
   const seen = runnerSeenAt
     ? `its runner last asked for work at ${runnerSeenAt.toISOString()}`
@@ -217,7 +217,7 @@ function unclaimedNote(job: InventoryJob, host: string, runnerSeenAt: Date | nul
  * The transcript line for a run whose runner stopped reporting. `marker` is
  * part of it so the note is written once per lapsed lease.
  */
-function leaseLapsedNote(job: InventoryJob, lease: Date) {
+function leaseLapsedNote(job: RegistryJob, lease: Date) {
   const marker = `lease ran out at ${lease.toISOString()}`;
   const runner = job.claimedBy ? `The runner (${job.claimedBy})` : 'The runner';
   const note =
@@ -272,8 +272,8 @@ function parseTitle(value: unknown): string | null {
  * it was already given.
  */
 @Injectable()
-export class InventoryJobService {
-  private readonly logger = new Logger(InventoryJobService.name);
+export class RegistryJobService {
+  private readonly logger = new Logger(RegistryJobService.name);
 
   constructor(
     private readonly models: Models,
@@ -296,7 +296,7 @@ export class InventoryJobService {
     deviceKey: string,
     body: Record<string, unknown>
   ): Promise<JobDto> {
-    const device = await this.models.inventoryDevice.get(workspaceId, deviceKey);
+    const device = await this.models.registryDevice.get(workspaceId, deviceKey);
     if (!device) {
       throw new BadRequest(`No device '${deviceKey}' in this workspace`);
     }
@@ -323,10 +323,10 @@ export class InventoryJobService {
 
     // A device that hit its session limit can't run anything until it
     // resets, so a job asked for meanwhile waits with the others.
-    const runAfter = await this.models.inventoryJob.heldUntil(workspaceId, deviceKey);
+    const runAfter = await this.models.registryJob.heldUntil(workspaceId, deviceKey);
 
     const docId = body.docId ? String(body.docId) : null;
-    const job = await this.models.inventoryJob.create({
+    const job = await this.models.registryJob.create({
       workspaceId,
       deviceKey,
       agentId: String(body.agentId ?? ''),
@@ -361,7 +361,7 @@ export class InventoryJobService {
     id: string,
     logFrom?: number
   ): Promise<JobDto | null> {
-    let job = await this.models.inventoryJob.get(workspaceId, id);
+    let job = await this.models.registryJob.get(workspaceId, id);
     if (!job) return null;
     job = await this.noteLostRunner(job);
     job = await this.noteUnclaimed(job);
@@ -370,7 +370,7 @@ export class InventoryJobService {
     const questions =
       logFrom === undefined
         ? undefined
-        : await this.models.inventoryJob.listQuestions(id);
+        : await this.models.registryJob.listQuestions(id);
     return toJobDto(job, { logFrom, questions });
   }
 
@@ -379,7 +379,7 @@ export class InventoryJobService {
    * sit silent until a runner claims it again — possibly never, with nothing
    * in its log to say why. Write that into the log when someone looks.
    */
-  private async noteLostRunner(job: InventoryJob): Promise<InventoryJob> {
+  private async noteLostRunner(job: RegistryJob): Promise<RegistryJob> {
     const lease = job.leaseExpiresAt;
     if (
       job.status !== 'running' ||
@@ -391,7 +391,7 @@ export class InventoryJobService {
     const { marker, note } = leaseLapsedNote(job, lease);
     // Its own line, even when the last report ended mid-line.
     const text = `${job.log && !job.log.endsWith('\n') ? '\n' : ''}${note}\n`;
-    const written = await this.models.inventoryJob.noteLeaseLapsed(
+    const written = await this.models.registryJob.noteLeaseLapsed(
       job.id,
       lease,
       marker,
@@ -402,7 +402,7 @@ export class InventoryJobService {
       `job ${job.id} on ${job.workspaceId}/${job.deviceKey}: runner ` +
         `${job.claimedBy ?? '?'} lost (lease ran out ${lease.toISOString()})`
     );
-    return (await this.models.inventoryJob.get(job.workspaceId, job.id)) ?? job;
+    return (await this.models.registryJob.get(job.workspaceId, job.id)) ?? job;
   }
 
   /**
@@ -410,7 +410,7 @@ export class InventoryJobService {
    * with an empty log. Say so, and how to start one, when someone looks.
    * A run held back to a later time (a session limit) is waiting on purpose.
    */
-  private async noteUnclaimed(job: InventoryJob): Promise<InventoryJob> {
+  private async noteUnclaimed(job: RegistryJob): Promise<RegistryJob> {
     const now = Date.now();
     if (
       job.status !== 'queued' ||
@@ -419,21 +419,21 @@ export class InventoryJobService {
     ) {
       return job;
     }
-    const device = await this.models.inventoryDevice.get(job.workspaceId, job.deviceKey);
+    const device = await this.models.registryDevice.get(job.workspaceId, job.deviceKey);
     // No device row: the server's own cloud runner, which isn't polled for.
     if (!device) return job;
     const seen = device.runnerSeenAt;
     if (seen && seen.getTime() + RUNNER_QUIET_MS > now) return job;
     const { marker, note } = unclaimedNote(job, device.host, seen);
     const text = `${job.log && !job.log.endsWith('\n') ? '\n' : ''}${note}\n`;
-    if (!(await this.models.inventoryJob.noteUnclaimed(job.id, marker, text))) {
+    if (!(await this.models.registryJob.noteUnclaimed(job.id, marker, text))) {
       return job;
     }
-    return (await this.models.inventoryJob.get(job.workspaceId, job.id)) ?? job;
+    return (await this.models.registryJob.get(job.workspaceId, job.id)) ?? job;
   }
 
   async list(workspaceId: string, deviceKey?: string, status?: string): Promise<JobDto[]> {
-    const jobs = await this.models.inventoryJob.list(workspaceId, { deviceKey, status });
+    const jobs = await this.models.registryJob.list(workspaceId, { deviceKey, status });
     return jobs.map(job => toJobDto(job));
   }
 
@@ -446,11 +446,11 @@ export class InventoryJobService {
     // Asking is what "a runner is listening" means, whether or not there is
     // work to hand out. Best effort: never fail a claim over it.
     try {
-      await this.models.inventoryDevice.touchRunner(workspaceId, deviceKey);
+      await this.models.registryDevice.touchRunner(workspaceId, deviceKey);
     } catch (err) {
       this.logger.warn(`touchRunner failed: ${err}`);
     }
-    const job = await this.models.inventoryJob.claim(
+    const job = await this.models.registryJob.claim(
       workspaceId, deviceKey, runnerId || 'runner', leaseSeconds
     );
     if (!job) return null;
@@ -484,14 +484,14 @@ export class InventoryJobService {
       const note =
         `⏸ Claude session limit reached (${limit!.trim()}). ` +
         `Queued to run again at ${runAfter.toISOString()}.\n`;
-      const requeued = await this.models.inventoryJob.requeue(
+      const requeued = await this.models.registryJob.requeue(
         workspaceId,
         id,
         runAfter,
         (logAppend ?? '') + (logAppend && !logAppend.endsWith('\n') ? '\n' : '') + note
       );
       if (requeued?.status === 'queued') {
-        const held = await this.models.inventoryJob.holdQueued(
+        const held = await this.models.registryJob.holdQueued(
           workspaceId, requeued.deviceKey, runAfter
         );
         this.logger.log(
@@ -502,7 +502,7 @@ export class InventoryJobService {
       return requeued ? toJobDto(requeued) : null;
     }
 
-    const job = await this.models.inventoryJob.report(workspaceId, id, {
+    const job = await this.models.registryJob.report(workspaceId, id, {
       status,
       result,
       error,
@@ -514,7 +514,7 @@ export class InventoryJobService {
     // Whoever queued the job may be waiting on its end (a monitor, say).
     if (job && (JOB_TERMINAL as readonly string[]).includes(job.status)) {
       await this.tasks?.finished(job);
-      this.event?.emit('inventory.job.finished', {
+      this.event?.emit('registry.job.finished', {
         workspaceId,
         jobId: job.id,
         status: job.status,
@@ -535,12 +535,12 @@ export class InventoryJobService {
     if (!title) {
       throw new BadRequest('title is required');
     }
-    const job = await this.models.inventoryJob.setTitle(workspaceId, id, title);
+    const job = await this.models.registryJob.setTitle(workspaceId, id, title);
     return job ? toJobDto(job) : null;
   }
 
   private async runningJob(workspaceId: string, jobId: string) {
-    const job = await this.models.inventoryJob.get(workspaceId, jobId);
+    const job = await this.models.registryJob.get(workspaceId, jobId);
     if (!job) {
       throw new NotFound(`No job '${jobId}' in this workspace`);
     }
@@ -571,7 +571,7 @@ export class InventoryJobService {
     const allowAll =
       kind === 'permission' &&
       (job.allowAllTools || ALWAYS_ALLOWED_PERMISSIONS.has(text));
-    const question = await this.models.inventoryJob.ask(jobId, {
+    const question = await this.models.registryJob.ask(jobId, {
       kind,
       text: text.slice(0, MAX_QUESTION),
       detail: body.detail ? String(body.detail).slice(0, MAX_DETAIL) : null,
@@ -593,7 +593,7 @@ export class InventoryJobService {
    */
   async getQuestion(workspaceId: string, jobId: string, questionId: string) {
     const job = await this.runningJob(workspaceId, jobId);
-    const question = await this.models.inventoryJob.getQuestion(jobId, questionId);
+    const question = await this.models.registryJob.getQuestion(jobId, questionId);
     if (!question) {
       throw new NotFound(`No question '${questionId}' on job '${jobId}'`);
     }
@@ -616,7 +616,7 @@ export class InventoryJobService {
     if (job.createdBy && job.createdBy !== userId) {
       throw new ActionForbidden('Only the person who started this run can answer it.');
     }
-    const question = await this.models.inventoryJob.getQuestion(jobId, questionId);
+    const question = await this.models.registryJob.getQuestion(jobId, questionId);
     if (!question) {
       throw new NotFound(`No question '${questionId}' on job '${jobId}'`);
     }
@@ -645,7 +645,7 @@ export class InventoryJobService {
       input = { answer: answer.slice(0, MAX_ANSWER) };
     }
 
-    const answered = await this.models.inventoryJob.answer(
+    const answered = await this.models.registryJob.answer(
       jobId, questionId, input, userId
     );
     if (!answered) {
@@ -656,14 +656,14 @@ export class InventoryJobService {
       // The permissions still open beside this one are allowed with it, so
       // their notifications go too.
       if (this.push) {
-        const open = await this.models.inventoryJob.listQuestions(jobId);
+        const open = await this.models.registryJob.listQuestions(jobId);
         closed.push(
           ...open
             .filter(q => q.kind === 'permission' && !q.answeredAt && q.id !== questionId)
             .map(q => q.id)
         );
       }
-      await this.models.inventoryJob.allowAllTools(jobId, userId);
+      await this.models.registryJob.allowAllTools(jobId, userId);
       this.logger.log(`job ${jobId}: allow all tools`);
     }
     this.notify(push => push.questionsClosed(job, closed));
@@ -689,11 +689,11 @@ export class InventoryJobService {
     }
     // Any permission already waiting is allowed with it, so its notification goes.
     const open = this.push
-      ? (await this.models.inventoryJob.listQuestions(jobId))
+      ? (await this.models.registryJob.listQuestions(jobId))
           .filter(q => q.kind === 'permission' && !q.answeredAt)
           .map(q => q.id)
       : [];
-    await this.models.inventoryJob.allowAllTools(jobId, userId);
+    await this.models.registryJob.allowAllTools(jobId, userId);
     this.logger.log(`job ${jobId}: allow all tools (up front)`);
     if (open.length) {
       this.notify(push => push.questionsClosed(job, open));
@@ -702,7 +702,7 @@ export class InventoryJobService {
   }
 
   async cancel(workspaceId: string, id: string): Promise<JobDto | null> {
-    const job = await this.models.inventoryJob.cancel(workspaceId, id);
+    const job = await this.models.registryJob.cancel(workspaceId, id);
     if (job?.status === 'cancelled') await this.tasks?.finished(job);
     return job ? toJobDto(job) : null;
   }

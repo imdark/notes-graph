@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import type { InventoryJob } from '@prisma/client';
+import type { RegistryJob } from '@prisma/client';
 
 import { DocWriter } from '../../core/doc';
 import { PermissionAccess } from '../../core/permission';
@@ -27,7 +27,7 @@ export class JobTaskClaims {
     private readonly ac: PermissionAccess
   ) {}
 
-  async queued(job: InventoryJob): Promise<void> {
+  async queued(job: RegistryJob): Promise<void> {
     await this.edit(job, 'queue', async (docId, ids) => {
       await this.writer.editDoc(
         job.workspaceId,
@@ -38,7 +38,7 @@ export class JobTaskClaims {
     });
   }
 
-  async claimed(job: InventoryJob): Promise<void> {
+  async claimed(job: RegistryJob): Promise<void> {
     await this.edit(job, 'start', async (docId, ids) => {
       const { changed } = await this.writer.editDoc(
         job.workspaceId,
@@ -46,13 +46,13 @@ export class JobTaskClaims {
         binary => startTasks(binary, ids),
         job.createdBy ?? undefined
       );
-      await this.models.inventoryJob.addStartedTasks(job.id, changed);
+      await this.models.registryJob.addStartedTasks(job.id, changed);
     });
   }
 
-  async finished(job: InventoryJob): Promise<void> {
+  async finished(job: RegistryJob): Promise<void> {
     await this.edit(job, 'release', async (docId, ids) => {
-      const elsewhere = await this.models.inventoryJob.tasksClaimedElsewhere(
+      const elsewhere = await this.models.registryJob.tasksClaimedElsewhere(
         job.workspaceId,
         docId,
         job.id,
@@ -70,7 +70,7 @@ export class JobTaskClaims {
   }
 
   private async edit(
-    job: InventoryJob,
+    job: RegistryJob,
     what: string,
     run: (docId: string, ids: string[]) => Promise<void>
   ): Promise<void> {

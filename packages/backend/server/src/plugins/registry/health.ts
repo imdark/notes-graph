@@ -2,8 +2,8 @@ import { Injectable, Logger, Optional } from '@nestjs/common';
 
 import { BadRequest, EventBus, OnEvent } from '../../base';
 import { Models } from '../../models';
-import { InventoryJobService, type JobDto } from './jobs';
-import { InventoryService } from './service';
+import { RegistryJobService, type JobDto } from './jobs';
+import { RegistryService } from './service';
 
 /** Jobs of a health check carry this agent id, so their end is recognised. */
 const HEALTH_AGENT_PREFIX = 'health:';
@@ -173,20 +173,20 @@ export function failedHealthStatus(error: string | null) {
 }
 
 /**
- * Health checks on inventory machines, asked for from the Monitoring page.
+ * Health checks on registry machines, asked for from the Monitoring page.
  *
  * A check is a device job like a monitor's command: queued here, run by the
- * machine's runner, and read back when it reports (`inventory.job.finished`),
+ * machine's runner, and read back when it reports (`registry.job.finished`),
  * so the status it records is the machine's own word, as fresh as the check.
  */
 @Injectable()
-export class InventoryHealthService {
-  private readonly logger = new Logger(InventoryHealthService.name);
+export class RegistryHealthService {
+  private readonly logger = new Logger(RegistryHealthService.name);
 
   constructor(
     private readonly models: Models,
-    private readonly devices: InventoryService,
-    private readonly jobs: InventoryJobService,
+    private readonly devices: RegistryService,
+    private readonly jobs: RegistryJobService,
     @Optional() private readonly event?: EventBus
   ) {}
 
@@ -239,9 +239,9 @@ export class InventoryHealthService {
   }
 
   /** A check finished: record what it found as the machine's status. */
-  @OnEvent('inventory.job.finished')
-  async onJobFinished(event: Events['inventory.job.finished']) {
-    const job = await this.models.inventoryJob.get(event.workspaceId, event.jobId);
+  @OnEvent('registry.job.finished')
+  async onJobFinished(event: Events['registry.job.finished']) {
+    const job = await this.models.registryJob.get(event.workspaceId, event.jobId);
     if (!job?.agentId.startsWith(HEALTH_AGENT_PREFIX)) return;
     if (event.status === 'cancelled') return;
     try {
@@ -259,7 +259,7 @@ export class InventoryHealthService {
       });
       const logs = event.status === 'done' ? healthLogs(event.result ?? '') : null;
       if (logs) {
-        this.event?.emit('inventory.device.logs', {
+        this.event?.emit('registry.device.logs', {
           workspaceId: event.workspaceId,
           key: job.deviceKey,
           lines: logs.lines,

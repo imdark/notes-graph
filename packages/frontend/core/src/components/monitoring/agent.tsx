@@ -5,7 +5,7 @@ import {
   agentReadiness,
   type AgentSettings,
   FleetService,
-  type InventoryDevice,
+  type RegistryDevice,
   type LogPattern,
   type MonitoringDecision,
   openDecisions,
@@ -219,7 +219,7 @@ export const MonitoringAgentPanel = ({
   machines,
   now,
 }: {
-  machines: InventoryDevice[];
+  machines: RegistryDevice[];
   now: number;
 }) => {
   const fleet = useService(FleetService);

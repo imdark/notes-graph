@@ -44,7 +44,7 @@ export interface AgentContext {
   title: string;
   /**
    * The task blocks the run is on, in the target's note, for a device run's
-   * server to claim and hand back (see the inventory's task-claims.ts).
+   * server to claim and hand back (see the registry's task-claims.ts).
    * Absent for a whole note, which isn't one task.
    */
   taskIds?: string[];

@@ -10,8 +10,8 @@ import { ApplyType } from '../base';
 import { AccessTokenModel } from './access-token';
 import { BlobModel } from './blob';
 import { CalendarAccountModel } from './calendar-account';
-import { InventoryDeviceModel } from './inventory-device';
-import { InventoryJobModel } from './inventory-job';
+import { RegistryDeviceModel } from './registry-device';
+import { RegistryJobModel } from './registry-job';
 import { MonitorModel } from './monitor';
 import { MonitoringAgentModel } from './monitoring-agent';
 import { CalendarEventModel } from './calendar-event';
@@ -99,8 +99,8 @@ const MODELS = {
   blob: BlobModel,
   accessToken: AccessTokenModel,
   calendarAccount: CalendarAccountModel,
-  inventoryDevice: InventoryDeviceModel,
-  inventoryJob: InventoryJobModel,
+  registryDevice: RegistryDeviceModel,
+  registryJob: RegistryJobModel,
   userPushToken: UserPushTokenModel,
   monitor: MonitorModel,
   monitoringAgent: MonitoringAgentModel,
@@ -185,7 +185,7 @@ export * from './doc';
 export * from './doc-user';
 export * from './feature';
 export * from './history';
-export * from './inventory-job';
+export * from './registry-job';
 export * from './magic-link-otp';
 export * from './monitor';
 export * from './monitoring-agent';

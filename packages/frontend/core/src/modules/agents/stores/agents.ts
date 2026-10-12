@@ -17,7 +17,7 @@ export type AgentOutput = 'panel';
  * AI backend is set to", which is how every agent behaved before this was
  * selectable.
  *
- * `remote` runs the agent on a machine registered in the device inventory:
+ * `remote` runs the agent on a machine registered in the device registry:
  * the run is queued against a device and that device claims it. Nothing
  * here connects outward, so a machine behind NAT works the same as one on
  * the desk.
@@ -69,7 +69,7 @@ export interface Agent {
   targets: AgentTargetKind[];
   output: AgentOutput;
   maxSteps: number;
-  /** For `remote` agents: the inventory key of the device to run on. */
+  /** For `remote` agents: the registry key of the device to run on. */
   deviceKey?: string;
   enabled: boolean;
   createdAt: number;
