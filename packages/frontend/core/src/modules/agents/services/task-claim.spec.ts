@@ -6,6 +6,7 @@ import {
   markTasksQueued,
   markTasksStarted,
   releaseQueuedTasks,
+  reopenTasks,
   targetTaskIds,
   unfinishedTaskIds,
 } from './task-claim';
@@ -237,6 +238,27 @@ describe('releaseQueuedTasks', () => {
     expect(status('ours')).toBe('[ ]');
     expect(status('theirs')).toBe('[-]');
     expect(status('finished')).toBe('[X]');
+  });
+});
+
+describe('reopenTasks', () => {
+  test('takes back queued and in-progress tasks, keeps finished ones', () => {
+    const chip = (orgStatus: string) => ({
+      ops: [{ insert: ' ', attributes: { orgStatus } }, { insert: ' a' }],
+    });
+    const { store, status } = storeOf({
+      queued: chip('QUEUED'),
+      started: chip('[-]'),
+      done: chip('[X]'),
+      committed: chip('COMMITTED'),
+    });
+
+    reopenTasks(store, ['queued', 'started', 'done', 'committed']);
+
+    expect(status('queued')).toBe('[ ]');
+    expect(status('started')).toBe('[ ]');
+    expect(status('done')).toBe('[X]');
+    expect(status('committed')).toBe('COMMITTED');
   });
 });
 
