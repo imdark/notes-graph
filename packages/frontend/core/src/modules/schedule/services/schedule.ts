@@ -1,5 +1,7 @@
 import { LiveData, Service } from '@notesgraph/infra';
+import { combineLatest, map } from 'rxjs';
 
+import type { DocProperties } from '../../db/schema/schema';
 import type { DocsService } from '../../doc';
 import {
   describeRule,
@@ -28,6 +30,11 @@ export interface ScheduleOccurrence {
   /** human-readable recurrence label (recurring only), e.g. "Every Mon" */
   ruleLabel?: string;
 }
+
+type IndexedDoc = Pick<
+  DocProperties,
+  'schedule' | 'scheduleInstance' | 'scheduleBlocks' | 'journal'
+> & { id: string; title: string };
 
 export interface ScheduledDoc {
   docId: string;
@@ -119,19 +126,59 @@ export class ScheduleService extends Service {
     doc.setProperty('scheduleBlocks', blocks);
   }
 
+  /**
+   * Title and schedule properties of every non-trash doc, from one indexed
+   * query per field.
+   *
+   * The lookups below used to `get(doc.properties$)` and `get(doc.title$)` for
+   * every doc. On the journal page (Day schedule section) that meant thousands
+   * of per-doc subscriptions, all torn down and rebuilt whenever the doc list
+   * changed — creating a journal in a workspace of ~1500 docs blocked the main
+   * thread for ~25s. Legacy (pre-db) properties are not read, the same as
+   * `JournalStore`.
+   */
+  private readonly scheduleIndex$ = LiveData.from(
+    combineLatest([
+      this.docsService.list.nonTrashDocsIds$,
+      this.docsService.allDocTitle$(),
+      this.docsService.schemaPropertyValues$('schedule'),
+      this.docsService.schemaPropertyValues$('scheduleInstance'),
+      this.docsService.schemaPropertyValues$('scheduleBlocks'),
+      this.docsService.schemaPropertyValues$('journal'),
+    ]).pipe(
+      map(
+        ([
+          nonTrashIds,
+          titles,
+          schedules,
+          instances,
+          blocks,
+          journals,
+        ]): IndexedDoc[] => {
+          const nonTrash = new Set(nonTrashIds);
+          return titles
+            .filter(({ id }) => nonTrash.has(id))
+            .map(({ id, title }) => ({
+              id,
+              title: title || 'Untitled',
+              schedule: schedules.get(id),
+              scheduleInstance: instances.get(id),
+              scheduleBlocks: blocks.get(id),
+              journal: journals.get(id),
+            }));
+        }
+      )
+    ),
+    [] as IndexedDoc[]
+  );
+
   /** All recurring source docs. */
   scheduledDocs$ = LiveData.computed(get => {
-    const nonTrash = new Set(get(this.docsService.list.nonTrashDocsIds$));
     const docs: ScheduledDoc[] = [];
-    for (const doc of get(this.docsService.list.docs$)) {
-      if (!nonTrash.has(doc.id)) continue;
-      const rule = get(doc.properties$.selector(p => p.schedule));
+    for (const doc of get(this.scheduleIndex$)) {
+      const rule = doc.schedule;
       if (rule && isISODate(rule.start)) {
-        docs.push({
-          docId: doc.id,
-          title: get(doc.title$) || 'Untitled',
-          rule,
-        });
+        docs.push({ docId: doc.id, title: doc.title, rule });
       }
     }
     return docs;
@@ -144,31 +191,27 @@ export class ScheduleService extends Service {
    */
   occurrencesInRange$(rangeStart: string, rangeEnd: string) {
     return LiveData.computed(get => {
-      const nonTrash = new Set(get(this.docsService.list.nonTrashDocsIds$));
-      const docs = get(this.docsService.list.docs$).filter(d =>
-        nonTrash.has(d.id)
-      );
+      const docs = get(this.scheduleIndex$);
       const occurrences: ScheduleOccurrence[] = [];
 
       // `${sourceId}:${date}` -> materialized instance, to suppress the virtual
       // occurrence and surface the real (editable) instance instead.
       const materialized = new Map<string, { docId: string; title: string }>();
       for (const doc of docs) {
-        const instance = get(doc.properties$.selector(p => p.scheduleInstance));
+        const instance = doc.scheduleInstance;
         if (instance?.source && isISODate(instance.date)) {
           materialized.set(`${instance.source}:${instance.date}`, {
             docId: doc.id,
-            title: get(doc.title$) || 'Untitled',
+            title: doc.title,
           });
         }
       }
 
       for (const doc of docs) {
-        const props = get(doc.properties$);
-        const title = get(doc.title$) || 'Untitled';
+        const title = doc.title;
 
         // scheduled blocks within this doc (independent of the doc's own rule)
-        const blocks = props.scheduleBlocks;
+        const blocks = doc.scheduleBlocks;
         if (blocks) {
           for (const [blockId, entry] of Object.entries(blocks)) {
             if (!entry) continue;
@@ -214,7 +257,7 @@ export class ScheduleService extends Service {
           }
         }
 
-        const schedule = props.schedule;
+        const schedule = doc.schedule;
 
         if (schedule && isISODate(schedule.start)) {
           for (const date of expandOccurrences(
@@ -238,9 +281,9 @@ export class ScheduleService extends Service {
 
         // one-off note scheduled on a date (a journal/date property), as long as
         // it isn't itself a materialized recurring instance.
-        const journal = props.journal;
+        const journal = doc.journal;
         if (
-          !props.scheduleInstance &&
+          !doc.scheduleInstance &&
           isISODate(journal) &&
           journal >= rangeStart &&
           journal <= rangeEnd
