@@ -66,6 +66,24 @@ export class DocPropertiesStore extends Store {
     );
   }
 
+  /**
+   * docId -> value of one schema field, typed by the schema (so json fields
+   * come back as their objects). Same query as `watchPropertyAllValues`;
+   * legacy properties are not included.
+   */
+  watchSchemaPropertyAllValues<K extends keyof DocProperties>(propertyKey: K) {
+    return this.dbService.db.docProperties
+      .select$(propertyKey)
+      .pipe(
+        map(
+          o =>
+            new Map<string, DocProperties[K] | undefined>(
+              o.map(i => [i.id, i[propertyKey]])
+            )
+        )
+      );
+  }
+
   private upgradeLegacyDocProperties(properties?: LegacyDocProperties) {
     if (!properties) {
       return {};

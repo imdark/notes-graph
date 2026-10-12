@@ -217,3 +217,8 @@ export function configureAgentsModule(framework: Framework) {
     .store(AgentRunsStore, [WorkspaceDBService, AgentRunLogsStore])
     .entity(Agents, [AgentsStore]);
 }
+export {
+  AGENT_TEMPLATES,
+  type AgentTemplate,
+  DEAL_MONITOR_TEMPLATE,
+} from './services/agent-templates';

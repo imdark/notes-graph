@@ -10,6 +10,7 @@ import {
   DataViewUIBase,
   DataViewUILogicBase,
 } from '../../../core/view/data-view-base.js';
+import type { Row } from '../../../core/view-manager/row.js';
 import {
   LIST_PAGE_SIZE_OPTIONS,
   type ListSingleView,
@@ -40,6 +41,9 @@ export class ListViewUI extends DataViewUIBase<ListViewUILogic> {
 
   // Current page (0-based). Local UI state — not persisted; the page size is.
   private readonly page$ = signal(0);
+  // Rows whose subtasks are folded away. Everything starts expanded, so open
+  // subtasks are never hidden until someone asks.
+  private readonly collapsed$ = signal<ReadonlySet<string>>(new Set());
 
   override connectedCallback(): void {
     super.connectedCallback();
@@ -145,11 +149,92 @@ export class ListViewUI extends DataViewUIBase<ListViewUILogic> {
     dataSource.taskDoneSet(rowId, !dataSource.taskDoneGet?.(rowId));
   }
 
-  override render(): TemplateResult {
+  private toggleCollapsed(event: Event, rowId: string): void {
+    event.stopPropagation();
+    const next = new Set(this.collapsed$.value);
+    if (!next.delete(rowId)) next.add(rowId);
+    this.collapsed$.value = next;
+  }
+
+  /**
+   * One row and, unless it is collapsed, its subtasks beneath it.
+   *
+   * `showToggle` reserves the chevron column even on leaf rows whenever the
+   * list has any tree in it, so checkboxes at the same depth line up.
+   */
+  private renderRow(
+    row: Row,
+    depth: number,
+    showToggle: boolean
+  ): TemplateResult {
     const view = this.logic.view;
     const dataSource = view.manager.dataSource;
     const canToggle = !!dataSource.taskDoneSet;
     const titleColumn = view.mainProperties$.value.titleColumn;
+    const title = titleColumn
+      ? view.cellGetOrCreate(row.rowId, titleColumn).stringValue$.value
+      : '';
+    // A subtask sits right under its parent, so the trail would only repeat
+    // what is one line up.
+    const crumbs = depth === 0 ? this.rowBreadcrumb(row.rowId) : [];
+    const done = dataSource.taskDoneGet?.(row.rowId) ?? false;
+    const children = view.childRows(row.rowId);
+    const expanded = !this.collapsed$.value.has(row.rowId);
+
+    return html`<div
+        class="dv-list-row"
+        style=${depth ? `--dv-list-depth: ${depth}` : nothing}
+        @click=${() => this.openRow(row.rowId)}
+      >
+        ${showToggle
+          ? children.length
+            ? html`<button
+                class="dv-list-toggle"
+                type="button"
+                aria-expanded=${expanded ? 'true' : 'false'}
+                aria-label=${expanded ? 'Hide subtasks' : 'Show subtasks'}
+                @click=${(e: Event) => this.toggleCollapsed(e, row.rowId)}
+              ></button>`
+            : html`<span class="dv-list-toggle"></span>`
+          : nothing}
+        ${canToggle
+          ? html`<button
+              class="dv-list-checkbox"
+              type="button"
+              role="checkbox"
+              aria-checked=${done ? 'true' : 'false'}
+              aria-label=${done ? 'Mark task as not done' : 'Mark task as done'}
+              ?data-checked=${done}
+              @click=${(e: Event) => this.toggleDone(e, row.rowId)}
+            ></button>`
+          : html`<span class="dv-list-checkbox"></span>`}
+        <span class="dv-list-main">
+          <span class="dv-list-text" ?data-done=${done}
+            >${title || 'Untitled'}</span
+          >
+          ${crumbs.length
+            ? html`<span class="dv-list-breadcrumb" title=${crumbs.join(' › ')}
+                >${crumbs.map(
+                  (crumb, i) =>
+                    html`${i > 0
+                        ? html`<span class="dv-list-crumb-sep">›</span>`
+                        : nothing}<span class="dv-list-crumb">${crumb}</span>`
+                )}</span
+              >`
+            : nothing}
+        </span>
+      </div>
+      ${expanded
+        ? repeat(
+            children,
+            child => child.rowId,
+            child => this.renderRow(child, depth + 1, showToggle)
+          )
+        : nothing}`;
+  }
+
+  override render(): TemplateResult {
+    const view = this.logic.view;
     const rows = view.rows$.value;
 
     const total = rows.length;
@@ -160,6 +245,9 @@ export class ListViewUI extends DataViewUIBase<ListViewUILogic> {
     const page = Math.min(Math.max(this.page$.value, 0), pageCount - 1);
     const visibleRows = rows.slice(page * pageSize, page * pageSize + pageSize);
     const needsPager = total > pageSize;
+    const showToggle = visibleRows.some(
+      row => view.childRows(row.rowId).length > 0
+    );
 
     return html`
       ${this.logic.headerWidget
@@ -181,49 +269,7 @@ export class ListViewUI extends DataViewUIBase<ListViewUILogic> {
           : repeat(
               visibleRows,
               row => row.rowId,
-              row => {
-                const title = titleColumn
-                  ? view.cellGetOrCreate(row.rowId, titleColumn).stringValue$
-                      .value
-                  : '';
-                const crumbs = this.rowBreadcrumb(row.rowId);
-                const done = dataSource.taskDoneGet?.(row.rowId) ?? false;
-                return html`<div
-                  class="dv-list-row"
-                  @click=${() => this.openRow(row.rowId)}
-                >
-                  ${canToggle
-                    ? html`<button
-                        class="dv-list-checkbox"
-                        type="button"
-                        role="checkbox"
-                        aria-checked=${done ? 'true' : 'false'}
-                        aria-label=${done
-                          ? 'Mark task as not done'
-                          : 'Mark task as done'}
-                        ?data-checked=${done}
-                        @click=${(e: Event) => this.toggleDone(e, row.rowId)}
-                      ></button>`
-                    : html`<span class="dv-list-checkbox"></span>`}
-                  <span class="dv-list-main">
-                    <span class="dv-list-text">${title || 'Untitled'}</span>
-                    ${crumbs.length
-                      ? html`<span
-                          class="dv-list-breadcrumb"
-                          title=${crumbs.join(' › ')}
-                          >${crumbs.map(
-                            (crumb, i) =>
-                              html`${i > 0
-                                ? html`<span class="dv-list-crumb-sep">›</span>`
-                                : nothing}<span class="dv-list-crumb"
-                                  >${crumb}</span
-                                >`
-                          )}</span
-                        >`
-                      : nothing}
-                  </span>
-                </div>`;
-              }
+              row => this.renderRow(row, 0, showToggle)
             )}
         ${total > 0 && view.rowsLoading$.value
           ? html`<div class="dv-list-loading dv-list-loading-more">

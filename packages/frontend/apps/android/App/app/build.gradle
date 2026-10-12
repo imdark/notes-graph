@@ -111,6 +111,10 @@ dependencies {
     debugImplementation composeBom
     debugImplementation libs.androidx.compose.ui.test.manifest
     debugImplementation libs.androidx.compose.ui.tooling
+    // Hyperion debug drawer (shake the device): Timber log viewer, crash details
+    debugImplementation libs.hyperion.core
+    debugImplementation libs.hyperion.crash
+    debugImplementation libs.hyperion.timber
 
     implementation libs.androidx.coordinatorlayout
     implementation libs.androidx.core.ktx

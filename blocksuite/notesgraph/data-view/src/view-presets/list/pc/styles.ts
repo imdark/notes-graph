@@ -27,6 +27,70 @@ export const listViewStyles = css`
     background: var(--notesgraph-hover-color);
   }
 
+  /* Subtasks step in one checkbox-and-gap per level. */
+  .dv-list-row {
+    padding-left: calc(8px + var(--dv-list-depth, 0) * 22px);
+  }
+
+  .dv-list-toggle {
+    position: relative;
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+    margin-top: 2px;
+    padding: 0;
+    border: none;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--notesgraph-text-secondary-color);
+    appearance: none;
+  }
+
+  button.dv-list-toggle {
+    cursor: pointer;
+  }
+
+  /* Chevron: right when folded, down when open. */
+  button.dv-list-toggle::before {
+    content: '';
+    position: absolute;
+    left: 4px;
+    top: 3.5px;
+    width: 5px;
+    height: 5px;
+    border: solid currentColor;
+    border-width: 0 1.5px 1.5px 0;
+    transform: rotate(-45deg);
+    transition: transform 0.12s ease;
+  }
+
+  button.dv-list-toggle[aria-expanded='true']::before {
+    left: 3.5px;
+    top: 2.5px;
+    transform: rotate(45deg);
+  }
+
+  button.dv-list-toggle::after {
+    content: '';
+    position: absolute;
+    inset: -6px;
+  }
+
+  button.dv-list-toggle:hover {
+    color: var(--notesgraph-text-primary-color);
+  }
+
+  button.dv-list-toggle:focus-visible {
+    outline: 2px solid var(--notesgraph-primary-color);
+    outline-offset: 2px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    button.dv-list-toggle::before {
+      transition: none;
+    }
+  }
+
   .dv-list-checkbox {
     width: 14px;
     height: 14px;
@@ -98,6 +162,13 @@ export const listViewStyles = css`
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  /* A done task still listed is there for its open subtasks: keep it legible
+     as context, but quieter than the work left. */
+  .dv-list-text[data-done] {
+    color: var(--notesgraph-text-secondary-color);
+    text-decoration: line-through;
   }
 
   /* Where the task lives: project › note › parent task. Secondary and small -

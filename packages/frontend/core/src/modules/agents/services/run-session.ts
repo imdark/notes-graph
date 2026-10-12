@@ -477,6 +477,15 @@ export class AgentRunSessionService extends Service {
     this.controllers.delete(id);
   }
 
+  /** {@link cancel}, resolving once the run has wound down. */
+  async stop(id: string): Promise<void> {
+    this.cancel(id);
+    await this.sessions$.waitFor(
+      sessions =>
+        !sessions.some(session => session.id === id && session.running)
+    );
+  }
+
   /** Stop everything: every run going and all that are queued. */
   cancelAll(): void {
     for (const run of this.queue$.value) this.unclaim(run.target);
