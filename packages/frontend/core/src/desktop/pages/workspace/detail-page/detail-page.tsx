@@ -25,6 +25,7 @@ import { CommentSidebar } from '@notesgraph/core/components/comment/sidebar';
 import { useGuard } from '@notesgraph/core/components/guard';
 import { useAppSettingHelper } from '@notesgraph/core/components/hooks/notesgraph/use-app-setting-helper';
 import { useRegisterBlocksuiteEditorCommands } from '@notesgraph/core/components/hooks/notesgraph/use-register-blocksuite-editor-commands';
+import { useAgentFinishedNotification } from '@notesgraph/core/components/hooks/notesgraph/use-agent-finished-notification';
 import { useRegisterAgentCommands } from '@notesgraph/core/components/hooks/notesgraph/use-register-agent-commands';
 import { useRegisterSelectionEditCommands } from '@notesgraph/core/components/hooks/notesgraph/use-register-selection-edit-commands';
 import { useActiveBlocksuiteEditor } from '@notesgraph/core/components/hooks/use-block-suite-editor';
@@ -253,6 +254,7 @@ const DetailPageImpl = memo(function DetailPageImpl() {
   useRegisterBlocksuiteEditorCommands(editor, isActiveView);
   useRegisterSelectionEditCommands(editor, isActiveView);
   useRegisterAgentCommands(editor, isActiveView);
+  useAgentFinishedNotification(isActiveView);
 
   const journalService = useService(JournalService);
   const journalDate = useLiveData(journalService.journalDate$(doc.id));
@@ -450,9 +452,7 @@ const DetailPageImpl = memo(function DetailPageImpl() {
                     </div>
                   </div>
                 ) : null}
-                {journalDate ? (
-                  <DayCalendarSection date={journalDate} />
-                ) : null}
+                {journalDate ? <DayCalendarSection date={journalDate} /> : null}
                 {journalDate ? <DayScheduleSection date={journalDate} /> : null}
                 <PageDetailEditor onLoad={onLoad} readonly={readonly} />
               </Scrollable.Viewport>

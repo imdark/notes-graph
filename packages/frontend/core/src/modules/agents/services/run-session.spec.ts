@@ -6,7 +6,7 @@ import { describe, expect, test } from 'vitest';
 
 import type { Agent } from '../stores/agents';
 import { type AgentEvent, AgentExecutorService } from './executor';
-import { AgentRunSessionService } from './run-session';
+import { type AgentRunFinished, AgentRunSessionService } from './run-session';
 import type { AgentTarget } from './target';
 import { AgentTaskClaimService } from './task-claim';
 
@@ -57,7 +57,7 @@ const fakeExecutor = () => {
       if (await ended) yield { type: 'done', output: 'ok' };
     },
   };
-  const { calls, claimedAgain, claim, open } = fakeClaim();
+  const { calls, claimedAgain, reverted, claim, open } = fakeClaim();
   const framework = new Framework();
   framework.service(AgentExecutorService, executor as any);
   framework.service(AgentTaskClaimService, claim as any);
@@ -69,6 +69,7 @@ const fakeExecutor = () => {
     runs,
     calls,
     claimedAgain,
+    reverted,
     open,
     sessions: framework.provider().get(AgentRunSessionService),
   };
@@ -85,7 +86,12 @@ const fakeClaim = () => {
   const open = { ids: [] as string[] };
   const started: Promise<string[]>[] = [];
   const handedBack: string[][] = [];
+  const reverted: Uint8Array[] = [];
   const claim = {
+    snapshot: async () => new Uint8Array([1]),
+    revert: async (_target: AgentTarget, snapshot: Uint8Array) => {
+      reverted.push(snapshot);
+    },
     unfinished: async () => [...open.ids],
     markQueued: async (target: AgentTarget) => {
       calls.push({ op: 'claim', target });
@@ -112,12 +118,48 @@ const fakeClaim = () => {
     titleOf: async (target: AgentTarget) =>
       target.kind === 'block' ? `Task ${target.blockId}` : null,
   };
-  return { calls, claimedAgain, started, handedBack, claim, open };
+  return { calls, claimedAgain, started, handedBack, reverted, claim, open };
 };
 
 const tick = () => new Promise(resolve => setTimeout(resolve, 0));
 
 describe('AgentRunSessionService', () => {
+  test('announces a finished run, and undo puts the note back', async () => {
+    const { runs, reverted, sessions } = fakeExecutor();
+    const finished: AgentRunFinished[] = [];
+    sessions.finished$.subscribe(done => finished.push(done));
+
+    void sessions.start(agent, block('b1'));
+    await tick();
+    runs[0].finish();
+    await tick();
+
+    expect(finished).toHaveLength(1);
+    expect(finished[0]).toMatchObject({
+      output: '',
+      failed: false,
+      undoable: true,
+    });
+    await expect(sessions.undo(finished[0].sessionId)).resolves.toBe(true);
+    expect(reverted).toEqual([new Uint8Array([1])]);
+    // The snapshot is spent.
+    await expect(sessions.undo(finished[0].sessionId)).resolves.toBe(false);
+  });
+
+  test('a stopped run is not announced', async () => {
+    const { runs, sessions } = fakeExecutor();
+    const finished: AgentRunFinished[] = [];
+    sessions.finished$.subscribe(done => finished.push(done));
+
+    void sessions.start(agent, block('b1'));
+    await tick();
+    sessions.cancel(sessions.sessions$.value[0].id);
+    await tick();
+
+    expect(runs[0].signal.aborted).toBe(true);
+    expect(finished).toEqual([]);
+  });
+
   test('device and cloud runs go side by side', async () => {
     const { runs, sessions } = fakeExecutor();
 

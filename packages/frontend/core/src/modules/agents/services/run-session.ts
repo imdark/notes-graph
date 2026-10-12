@@ -1,4 +1,5 @@
 import { LiveData, Service } from '@notesgraph/infra';
+import { Subject } from 'rxjs';
 
 import { type Agent, type AgentKind, agentKind } from '../stores/agents';
 import type { AgentContext } from './context';
@@ -32,6 +33,18 @@ export interface QueuedAgentRun {
  * finishes, so a list that keeps growing can't keep an agent going forever.
  */
 const MAX_LIST_PASSES = 10;
+
+/** A run that has ended for good, for the reader to confirm or undo. */
+export interface AgentRunFinished {
+  sessionId: string;
+  agentName: string;
+  targetLabel: string;
+  /** What the agent said, or why it failed. */
+  output: string;
+  failed: boolean;
+  /** Whether {@link AgentRunSessionService.undo} can put the note back. */
+  undoable: boolean;
+}
 
 export interface AgentRunSession {
   /** This session, for stopping or dismissing it; not the run record. */
@@ -119,6 +132,13 @@ export class AgentRunSessionService extends Service {
   ) {
     super();
   }
+
+  /** Fires once a run — all passes over its task list — has ended. */
+  readonly finished$ = new Subject<AgentRunFinished>();
+
+  /** The note as it was before a run first touched it, by {@link runKey}. */
+  private readonly snapshots = new Map<string, Uint8Array | null>();
+  private readonly taking = new Map<string, Promise<void>>();
 
   /** Runs going or finished and not yet dismissed, oldest first. */
   readonly sessions$ = new LiveData<AgentRunSession[]>([]);
@@ -313,6 +333,8 @@ export class AgentRunSessionService extends Service {
     // it done.
     const before = this.taskClaim.unfinished(target).catch((): string[] => []);
     let answered = false;
+    // Only the first pass over a list: undoing means back to before any ran.
+    this.keepSnapshot(runKey(agent.id, target), target);
 
     // The last run of this agent on this target has ended; this one takes
     // its place rather than stacking up beside it.
@@ -422,8 +444,65 @@ export class AgentRunSessionService extends Service {
       } else {
         this.controllers.delete(id);
         if (claims) this.unclaim(target, started);
+        if (controller.signal.aborted) this.keep(id);
+        else void this.announce(id, agent, target);
       }
     }
+  }
+
+  /** Take the note's state before the first pass; later passes keep it. */
+  private keepSnapshot(key: string, target: AgentTarget): void {
+    if (this.snapshots.has(key)) return;
+    this.snapshots.set(key, null);
+    const taking = Promise.resolve()
+      .then(() => this.taskClaim.snapshot(target))
+      .then(snapshot => void this.snapshots.set(key, snapshot))
+      // No snapshot just means the run can't be undone.
+      .catch(() => {});
+    this.taking.set(key, taking);
+  }
+
+  /** Tell the reader a run has ended, unless it was stopped or dismissed. */
+  private async announce(
+    sessionId: string,
+    agent: Agent,
+    target: AgentTarget
+  ): Promise<void> {
+    await this.taking.get(runKey(agent.id, target));
+    const session = this.sessions$.value.find(s => s.id === sessionId);
+    if (!session) return;
+    const key = runKey(agent.id, target);
+    this.finished$.next({
+      sessionId,
+      agentName: agent.name,
+      targetLabel: session.targetLabel,
+      output: session.error ?? session.output,
+      failed: !!session.error,
+      undoable: !!this.snapshots.get(key),
+    });
+  }
+
+  private discardSnapshot(key: string): void {
+    this.snapshots.delete(key);
+    this.taking.delete(key);
+  }
+
+  /** The reader accepted a run's work; the snapshot is no longer needed. */
+  keep(sessionId: string): void {
+    const session = this.sessions$.value.find(s => s.id === sessionId);
+    if (session) this.discardSnapshot(runKey(session.agentId, session.target));
+  }
+
+  /** The reader denied a run's work: put the note back as it was before. */
+  async undo(sessionId: string): Promise<boolean> {
+    const session = this.sessions$.value.find(s => s.id === sessionId);
+    if (!session) return false;
+    const key = runKey(session.agentId, session.target);
+    const snapshot = this.snapshots.get(key);
+    if (!snapshot) return false;
+    await this.taskClaim.revert(session.target, snapshot);
+    this.discardSnapshot(key);
+    return true;
   }
 
   /**
@@ -464,10 +543,13 @@ export class AgentRunSessionService extends Service {
     }
     const claims = this.claimsHere(agent);
     if (again) {
-      if (claims) await this.taskClaim.handBack(target, started).catch(() => {});
+      if (claims)
+        await this.taskClaim.handBack(target, started).catch(() => {});
       await this.schedule(agent, target, pass + 1, brief);
-    } else if (claims) {
-      this.unclaim(target, started);
+    } else {
+      if (claims) this.unclaim(target, started);
+      if (controller.signal.aborted) this.keep(sessionId);
+      else void this.announce(sessionId, agent, target);
     }
   }
 
@@ -496,6 +578,7 @@ export class AgentRunSessionService extends Service {
   /** Take a session off the panel, stopping it if it is still going. */
   dismiss(id: string): void {
     this.cancel(id);
+    this.keep(id);
     this.sessions$.setValue(
       this.sessions$.value.filter(session => session.id !== id)
     );

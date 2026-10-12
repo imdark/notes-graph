@@ -4,6 +4,13 @@ import {
 } from '@blocksuite/notesgraph/shared/utils';
 import type { BlockModel, Store } from '@blocksuite/notesgraph/store';
 import { Service } from '@notesgraph/infra';
+import {
+  applyUpdate,
+  Doc as YDoc,
+  encodeStateAsUpdate,
+  encodeStateVector,
+  UndoManager,
+} from 'yjs';
 
 import type { DocsService } from '../../doc';
 import { type AgentTarget, agentTargetBlockIds } from './target';
@@ -31,8 +38,7 @@ export const readTaskStatus = (
   const text = model.text;
   if (!text) return null;
   const first = text.toDelta()[0] as
-    | { insert?: string; attributes?: { orgStatus?: string } }
-    | undefined;
+    { insert?: string; attributes?: { orgStatus?: string } } | undefined;
   const embedded = first?.attributes?.orgStatus;
   if (typeof embedded === 'string' && first?.insert) {
     return { text: embedded, length: first.insert.length, embedded: true };
@@ -255,6 +261,41 @@ export class AgentTaskClaimService extends Service {
     await this.withStore(target, store =>
       markTasksQueued(store, targetTaskIds(store, target))
     );
+  }
+
+  /** The note as it is now, to {@link revert} to if a run's work is denied. */
+  async snapshot(target: AgentTarget): Promise<Uint8Array> {
+    const { doc, release } = this.docsService.open(target.docId);
+    try {
+      await doc.waitForSyncReady();
+      return encodeStateAsUpdate(doc.yDoc);
+    } finally {
+      release();
+    }
+  }
+
+  /**
+   * Put the note back as a {@link snapshot} found it, undoing every change
+   * made since — the run's, and any the reader made meanwhile. Done as a new
+   * change on top rather than a rewind, so it syncs like any edit.
+   */
+  async revert(target: AgentTarget, snapshot: Uint8Array): Promise<void> {
+    const { doc, release } = this.docsService.open(target.docId);
+    try {
+      await doc.waitForSyncReady();
+      const before = new YDoc();
+      applyUpdate(before, snapshot);
+      const current = encodeStateVector(doc.yDoc);
+      const undo = new UndoManager(before.getMap('blocks'));
+      applyUpdate(
+        before,
+        encodeStateAsUpdate(doc.yDoc, encodeStateVector(before))
+      );
+      undo.undo();
+      applyUpdate(doc.yDoc, encodeStateAsUpdate(before, current));
+    } finally {
+      release();
+    }
   }
 
   /**
