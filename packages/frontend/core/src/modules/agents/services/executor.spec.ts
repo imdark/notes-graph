@@ -129,6 +129,68 @@ describe('AgentExecutorService device runs', () => {
   });
 });
 
+describe('AgentExecutorService.chatFor', () => {
+  test('a device agent is asked on its device, told only to answer', async () => {
+    const enqueued: any[] = [];
+    const { executor } = setup([], {}, {
+      remoteRunner: {
+        enqueue: async (_ws: string, input: any) => {
+          enqueued.push(input);
+          return job({ id: 'q1', status: 'queued' });
+        },
+        watch: async function* () {
+          yield { job: job({ id: 'q1', status: 'running' }), logDelta: '' };
+          yield { job: job({ id: 'q1', status: 'done', result: 'It edited two lines.' }), logDelta: '' };
+        },
+      },
+    });
+    const chat = await executor.chatFor(
+      { id: 'a1', name: 'Claude', harness: 'remote', deviceKey: 'laptop', model: 'claude-code', tools: ['Bash'], instructions: 'do work', maxSteps: 40 } as any
+    );
+    let reply = '';
+    for await (const delta of chat(
+      [
+        { role: 'user', content: 'The run: fix the toolbar.' },
+        { role: 'user', content: 'What did it change?' },
+      ],
+      new AbortController().signal
+    )) {
+      reply += delta;
+    }
+    expect(reply).toBe('It edited two lines.');
+    expect(enqueued).toHaveLength(1);
+    expect(enqueued[0]).toMatchObject({ deviceKey: 'laptop', agentId: 'a1', model: 'claude-code', tools: [] });
+    expect(enqueued[0].instructions).toMatch(/Only answer/);
+    expect(enqueued[0].context).toContain('What did it change?');
+  });
+
+  test('a device question that fails says why', async () => {
+    const { executor } = setup([], {}, {
+      remoteRunner: {
+        enqueue: async () => job({ id: 'q2', status: 'queued' }),
+        watch: async function* () {
+          yield { job: job({ id: 'q2', status: 'error', error: 'device offline' }), logDelta: '' };
+        },
+      },
+    });
+    const chat = await executor.chatFor(
+      { id: 'a1', name: 'Claude', harness: 'remote', deviceKey: 'laptop', tools: [], instructions: '', maxSteps: 4 } as any
+    );
+    await expect(async () => {
+      for await (const _ of chat([{ role: 'user', content: 'hi' }], new AbortController().signal)) {
+        // drain
+      }
+    }).rejects.toThrow('device offline');
+  });
+
+  test('an agent with no device can\'t be asked', async () => {
+    const { executor } = setup([], {}, {});
+    await expect(
+      executor.chatFor({ id: 'a1', name: 'Claude', harness: 'remote', tools: [], instructions: '', maxSteps: 4 } as any)
+    ).rejects.toThrow(/no device selected/);
+  });
+});
+
 describe('AgentExecutorService research runs', () => {
   test('the server model calls OmniSeek through the research tools, then answers', async () => {
     // The model asks for one search, then answers from its result.

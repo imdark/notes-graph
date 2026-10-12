@@ -131,6 +131,18 @@ const modelLabel = (agent: Agent, harness: AgentHarness) =>
         ? 'server default + OmniSeek'
         : agent.model || 'device default';
 
+const CHAT_ON_DEVICE_INSTRUCTIONS = [
+  'You are answering questions about an earlier agent run. The conversation',
+  'below opens with that run: what it was given, its transcript and how it',
+  'ended. Reply to the last user message only.',
+  '',
+  'Only answer. Do not edit notes or files, run commands that change',
+  'anything, or redo the work — the user will start a new run for that.',
+].join('\n');
+
+/** A turn of the chat is an answer, not a run: keep it short on the device. */
+const CHAT_ON_DEVICE_STEPS = 8;
+
 const clip = (text: string, limit: number) =>
   text.length > limit ? `${text.slice(0, limit - 1)}…` : text;
 
@@ -200,6 +212,64 @@ export class AgentExecutorService extends Service implements AgentExecutor {
       throw new Error('No workspace is open, so there is no server to ask.');
     }
     return this.cloudRunner.open(workspaceId);
+  }
+
+  /**
+   * A chat with the agent itself, on the runtime it runs on: for asking about
+   * a run in the same terms it ran in, not on whatever the server offers.
+   *
+   * In-tab agents answer from their own model. A device agent has no chat
+   * endpoint, so each turn is a short job on its device that is told to only
+   * answer: it is given the conversation so far, and its result is the reply.
+   */
+  async chatFor(agent: Agent): Promise<ChatModel> {
+    const harness = this.harnessFor(agent);
+    if (harness !== 'remote') return this.modelFor(agent, harness);
+
+    const workspaceId = this.workspaceId;
+    const deviceKey = agent.deviceKey;
+    if (!workspaceId) {
+      throw new Error('No workspace is open, so there is nowhere to ask.');
+    }
+    if (!deviceKey) {
+      throw new Error(
+        `"${agent.name}" has no device selected. Pick one in Settings → Agents.`
+      );
+    }
+    const remoteRunner = this.remoteRunner;
+    return async function* (messages, signal) {
+      const job = await remoteRunner.enqueue(workspaceId, {
+        deviceKey,
+        agentId: agent.id,
+        agentName: agent.name,
+        instructions: CHAT_ON_DEVICE_INSTRUCTIONS,
+        context: messages
+          .map(message => `## ${message.role}\n\n${message.content}`)
+          .join('\n\n'),
+        title: `Question for ${agent.name}`,
+        model: agent.model,
+        tools: [],
+        maxSteps: CHAT_ON_DEVICE_STEPS,
+      });
+      for await (const { job: update } of remoteRunner.watch(
+        workspaceId,
+        job.id,
+        signal
+      )) {
+        if (update.status === 'done') {
+          yield update.result ?? '';
+          return;
+        }
+        if (update.status === 'error') {
+          throw new Error(
+            update.error || `The question failed on ${deviceKey}.`
+          );
+        }
+        if (update.status === 'cancelled') {
+          throw new Error('The question was cancelled.');
+        }
+      }
+    };
   }
 
   /** The workspace a remote job is queued against. */
@@ -717,8 +787,16 @@ export class AgentExecutorService extends Service implements AgentExecutor {
         title = update.title;
         yield { type: 'title', title };
       }
-      yield { type: 'waiting', jobId: job.id, questions: openQuestions(update) };
-      if (update.status === 'queued' && update.runAfter && update.runAfter !== heldUntil) {
+      yield {
+        type: 'waiting',
+        jobId: job.id,
+        questions: openQuestions(update),
+      };
+      if (
+        update.status === 'queued' &&
+        update.runAfter &&
+        update.runAfter !== heldUntil
+      ) {
         heldUntil = update.runAfter;
         const at = new Date(update.runAfter * 1000).toLocaleString();
         const held = `Session limit reached on ${agent.deviceKey}; waiting to run again at ${at}…`;
