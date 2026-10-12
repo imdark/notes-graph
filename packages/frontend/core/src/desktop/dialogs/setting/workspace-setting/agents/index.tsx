@@ -8,7 +8,9 @@ import {
 import { SettingHeader } from '@notesgraph/component/setting-components';
 import { useWorkspaceInfo } from '@notesgraph/core/components/hooks/use-workspace-info';
 import {
+  AGENT_TEMPLATES,
   type Agent,
+  type AgentTemplate,
   AgentIcon,
   type AgentDraft,
   type AgentScope,
@@ -146,6 +148,7 @@ const WorkspaceSettingAgentsMain = () => {
 
   const [editing, setEditing] = useState<Agent | undefined>();
   const [creatingScope, setCreatingScope] = useState<AgentScope | undefined>();
+  const [template, setTemplate] = useState<AgentTemplate | undefined>();
 
   const handleCreate = useCallback(
     (draft: AgentDraft) => {
@@ -195,6 +198,18 @@ const WorkspaceSettingAgentsMain = () => {
               <MenuItem onClick={() => setCreatingScope('workspace')}>
                 Shared with the workspace
               </MenuItem>
+              {AGENT_TEMPLATES.map(t => (
+                <MenuItem
+                  key={t.id}
+                  onClick={() => {
+                    setTemplate(t);
+                    setCreatingScope('personal');
+                  }}
+                  data-testid={`new-agent-${t.id}`}
+                >
+                  From template: {t.label}
+                </MenuItem>
+              ))}
             </>
           }
         >
@@ -233,8 +248,13 @@ const WorkspaceSettingAgentsMain = () => {
       {creatingScope ? (
         <AgentEditor
           scope={creatingScope}
+          template={template?.draft}
           open
-          onOpenChange={open => !open && setCreatingScope(undefined)}
+          onOpenChange={open => {
+            if (open) return;
+            setCreatingScope(undefined);
+            setTemplate(undefined);
+          }}
           onSubmit={handleCreate}
         />
       ) : null}
