@@ -118,8 +118,35 @@ export class ListSingleView extends SingleViewBase<ListStoredViewData> {
     return true;
   }
 
+  /**
+   * Roots that match, or that have a matching row anywhere below them.
+   *
+   * Filtering a tree row by row would drop a done parent under "hide done"
+   * and take its unfinished subtasks down with it, since they only render
+   * beneath their parent. Keeping the parent for their sake leaves the open
+   * work visible, in context.
+   */
   override rowsMapping(rows: Row[]) {
-    return this.sortManager.sort(super.rowsMapping(rows));
+    return this.sortManager.sort(
+      rows.filter(row => this.subtreeMatches(row.rowId))
+    );
+  }
+
+  /** Rows nested under `rowId` that should show, sorted like the roots. */
+  childRows(rowId: string): Row[] {
+    const childIds = this.dataSource.rowChildIds?.(rowId) ?? [];
+    return this.sortManager.sort(
+      childIds
+        .filter(id => this.subtreeMatches(id))
+        .map(id => this.rowGetOrCreate(id))
+    );
+  }
+
+  private subtreeMatches(rowId: string): boolean {
+    if (this.rowMatches(rowId)) return true;
+    return (this.dataSource.rowChildIds?.(rowId) ?? []).some(id =>
+      this.subtreeMatches(id)
+    );
   }
 
   propertyGetOrCreate(propertyId: string): ListProperty {

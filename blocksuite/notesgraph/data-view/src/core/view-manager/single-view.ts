@@ -189,21 +189,25 @@ export abstract class SingleViewBase<
   ) {}
 
   private searchRowsMapping(rows: Row[], searchString: string): Row[] {
-    return rows.filter(row => {
-      if (searchString) {
-        const containsSearchString = this.propertyIds$.value.some(
-          propertyId => {
-            return this.cellGetOrCreate(row.rowId, propertyId)
-              .stringValue$.value?.toLowerCase()
-              .includes(searchString?.toLowerCase());
-          }
-        );
-        if (!containsSearchString) {
-          return false;
-        }
+    return rows.filter(row => this.rowMatches(row.rowId, searchString));
+  }
+
+  /** Whether one row passes the search box and the view's filter. */
+  protected rowMatches(
+    rowId: string,
+    searchString = this.searchString.value
+  ): boolean {
+    if (searchString) {
+      const containsSearchString = this.propertyIds$.value.some(propertyId => {
+        return this.cellGetOrCreate(rowId, propertyId)
+          .stringValue$.value?.toLowerCase()
+          .includes(searchString?.toLowerCase());
+      });
+      if (!containsSearchString) {
+        return false;
       }
-      return this.isShow(row.rowId);
-    });
+    }
+    return this.isShow(rowId);
   }
 
   cellGetOrCreate(rowId: string, propertyId: string): Cell {
