@@ -114,6 +114,19 @@ mcp__run__ask_user so the user can pick one with a click.
 Tools that need permission are put to the user for
 you; if they deny one, find another way or explain what you could not do.
 
+When the block you were started from is a task list or a list of checkboxes
+(the block itself, or the checkbox items under it), work through it as a
+loop rather than doing one item and stopping:
+1. List the items with mcp__notesgraph list_blocks and take the first one
+   that is not done.
+2. Mark it in-progress with update_task, do it, then set where it ended
+   (done, or BLOCKED with a note saying why).
+3. Re-read the list, since the user may have added or changed items while
+   you worked, and go back to 1.
+Stop only when every item is done or BLOCKED, then say which is which. If an
+item needs an answer from the user, ask once with mcp__run__ask_user and
+carry on with the other items meanwhile where you can.
+
 Finish with your answer to the task itself.
 `;
 
