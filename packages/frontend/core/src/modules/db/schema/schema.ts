@@ -59,6 +59,11 @@ const agentTable = {
    * hand-edited or imported row must not be able to widen its own reach.
    */
   tools: f.json<string[]>(),
+  /**
+   * Skills a Claude Code agent gets, by name. Unset leaves the choice to the
+   * model's default set; an empty list means none.
+   */
+  skills: f.json<string[]>().optional(),
   /** Which targets this agent may run against: 'block' | 'selection' | 'doc'. */
   targets: f.json<string[]>(),
   /** What happens to the result. Only 'panel' (preview + accept) exists today. */

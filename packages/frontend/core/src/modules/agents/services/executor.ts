@@ -680,6 +680,7 @@ export class AgentExecutorService extends Service implements AgentExecutor {
       title: context.title,
       model: agent.model,
       tools: agent.tools,
+      skills: agent.skills,
       maxSteps: agent.maxSteps,
       // Where the run is, and the tasks there it is on: the server claims
       // and hands them back around the job, whatever becomes of this tab.
