@@ -125,6 +125,7 @@ export { type AgentBlockRef, lastBlockTouched } from './services/focus-block';
 export {
   AgentTaskClaimService,
   isOpenTask,
+  isPlainBlock,
   markTasksQueued,
   QUEUED_STATUS,
   releaseQueuedTasks,
