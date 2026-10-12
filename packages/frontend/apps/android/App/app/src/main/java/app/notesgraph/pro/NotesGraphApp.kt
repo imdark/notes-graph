@@ -3,6 +3,7 @@ package app.notesgraph.pro
 import android.annotation.SuppressLint
 import android.app.Application
 import android.content.Context
+import android.os.Build
 import app.notesgraph.pro.utils.logger.NotesGraphDebugTree
 import app.notesgraph.pro.utils.logger.CrashlyticsTree
 import app.notesgraph.pro.utils.logger.FileTree
@@ -18,6 +19,11 @@ class NotesGraphApp : Application() {
     override fun onCreate() {
         super.onCreate()
         _context = applicationContext
+        // Side processes (Hyperion's `:crash` screen) have no Firebase app, and
+        // touching Crashlytics there crashed the crash screen itself.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && getProcessName() != packageName) {
+            return
+        }
         // init logger
         if (BuildConfig.DEBUG) {
             Timber.plant(NotesGraphDebugTree())
