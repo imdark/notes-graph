@@ -9,6 +9,7 @@ let erudaInitialized = false;
 const ENTRY_BUTTON_SIZE = 40;
 const HEADER_HEIGHT = 44;
 const EDGE_GAP = 8;
+const MAX_LOG_ROWS = 500;
 
 function safeAreaTop() {
   const probe = document.createElement('div');
@@ -49,6 +50,9 @@ export const DebugConsole = () => {
           eruda.init();
           erudaInitialized = true;
         }
+        // eruda keeps every console row as DOM by default ("infinite"); on a
+        // phone that alone grew past 1.5 GB and got the renderer killed.
+        eruda.get('console')?.config.set('maxLogNum', String(MAX_LOG_ROWS));
         // Top right, under the status bar and app header, instead of eruda's
         // bottom-right default where it sits on the tab bar.
         eruda.position({
