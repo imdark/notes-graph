@@ -234,6 +234,13 @@ class MainActivity : BridgeActivity(), AIButtonPlugin.Callback, NotesGraphThemeP
         AuthInitializer.initialize(bridge)
         configureEditorWebView()
         bridge.addWebViewListener(renderProcessGoneListener)
+        pendingRestoreUrl?.let { url ->
+            pendingRestoreUrl = null
+            Timber.i("[webview] reopening $url after renderer recovery")
+            // Capacitor's local server answers any extensionless path with
+            // index.html, so the router opens the page directly.
+            bridge.webView.loadUrl(url)
+        }
         handleShareIntent(intent)
     }
 
@@ -310,6 +317,10 @@ class MainActivity : BridgeActivity(), AIButtonPlugin.Callback, NotesGraphThemeP
             val crashed = detail?.didCrash()
             val priority = detail?.rendererPriorityAtExit()
             Timber.e("[webview] renderer gone (crashed=$crashed, priority=$priority)")
+            // The recreated WebView starts at the app root, which routes to
+            // Home. Remember the page so load() can reopen it.
+            pendingRestoreUrl = webView.url
+                ?.takeIf { it.startsWith("${bridge.localUrl}/workspace/") }
             (webView.parent as? ViewGroup)?.removeView(webView)
             webView.destroy()
             val now = SystemClock.elapsedRealtime()
@@ -381,6 +392,9 @@ class MainActivity : BridgeActivity(), AIButtonPlugin.Callback, NotesGraphThemeP
 
         // Outlives recreate(), so a renderer that dies again at once is seen.
         var lastRendererRecovery = 0L
+
+        // Page the dead renderer was on; reopened once by the next load().
+        var pendingRestoreUrl: String? = null
     }
 
     override fun onClick(v: View) {
