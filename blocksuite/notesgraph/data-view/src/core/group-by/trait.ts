@@ -2,12 +2,7 @@ import {
   insertPositionToIndex,
   type InsertToPosition,
 } from '@blocksuite/notesgraph-shared/utils';
-import {
-  computed,
-  effect,
-  type ReadonlySignal,
-  signal,
-} from '@preact/signals-core';
+import { computed, type ReadonlySignal, signal } from '@preact/signals-core';
 
 import type { GroupBy, GroupProperty } from '../common/types.js';
 import type { TypeInstance } from '../logical/type.js';
@@ -142,8 +137,20 @@ const reorderGroupKeys = (
 };
 
 export class GroupTrait {
-  hideEmpty$ = signal<boolean>(true);
-  sortAsc$ = signal<boolean>(true);
+  // Local choices, used until the view's GroupBy records its own. Derived
+  // rather than synced by effects: an effect here was never disposed and kept
+  // every closed view (and its editor) subscribed to the doc's model.
+  private readonly hideEmptyLocal$ = signal<boolean>(true);
+  private readonly sortAscLocal$ = signal<boolean>(true);
+
+  readonly hideEmpty$ = computed(
+    () => this.groupBy$.value?.hideEmpty ?? this.hideEmptyLocal$.value
+  );
+
+  readonly sortAsc$ = computed(() => {
+    const desc = this.groupBy$.value?.sort?.desc;
+    return desc != null ? !desc : this.sortAscLocal$.value;
+  });
 
   groupProperties$ = computed(() => {
     const data = this.view.data$.value;
@@ -158,9 +165,6 @@ export class GroupTrait {
     return map;
   });
 
-  /**
-   * Synchronize sortAsc$ with the GroupBy sort descriptor
-   */
   constructor(
     private readonly groupBy$: ReadonlySignal<GroupBy | undefined>,
     public view: SingleView,
@@ -176,22 +180,7 @@ export class GroupTrait {
       ) => void;
       changeGroupHide?: (key: string, hide: boolean) => void;
     }
-  ) {
-    effect(() => {
-      const desc = this.groupBy$.value?.sort?.desc;
-      if (desc != null && this.sortAsc$.value === desc) {
-        this.sortAsc$.value = !desc;
-      }
-    });
-
-    // Sync hideEmpty state with GroupBy data
-    effect(() => {
-      const hide = this.groupBy$.value?.hideEmpty;
-      if (hide != null && this.hideEmpty$.value !== hide) {
-        this.hideEmpty$.value = hide;
-      }
-    });
-  }
+  ) {}
 
   groupInfo$ = computed<GroupInfo | undefined>(() => {
     const groupBy = this.groupBy$.value;
@@ -321,7 +310,7 @@ export class GroupTrait {
    */
 
   setHideEmpty(value: boolean) {
-    this.hideEmpty$.value = value;
+    this.hideEmptyLocal$.value = value;
     const gb = this.groupBy$.value;
     if (gb) {
       this.ops.groupBySet({ ...gb, hideEmpty: value });
@@ -340,7 +329,7 @@ export class GroupTrait {
    * Set sort order for date groupings and update GroupBy sort descriptor.
    */
   setDateSortOrder(asc: boolean) {
-    this.sortAsc$.value = asc;
+    this.sortAscLocal$.value = asc;
 
     const gb = this.groupBy$.value;
     if (gb) {

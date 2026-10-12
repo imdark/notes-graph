@@ -8,7 +8,7 @@ import {
   createSignalFromObservable,
   type Signal,
 } from '@blocksuite/notesgraph/shared/utils';
-import { LifeCycleWatcher, StdIdentifier } from '@blocksuite/notesgraph/std';
+import { LifeCycleWatcher } from '@blocksuite/notesgraph/std';
 import { DocService, DocsService } from '@notesgraph/core/modules/doc';
 import { AppThemeService } from '@notesgraph/core/modules/theme';
 import { type FrameworkProvider } from '@notesgraph/infra';
@@ -30,9 +30,13 @@ export function getThemeExtension(
 
     static override setup(di: Container) {
       super.setup(di);
-      di.override(ThemeExtensionIdentifier, NotesGraphThemeExtension, [
-        StdIdentifier,
-      ]);
+      // The same instance the lifecycle registers, so `unmounted` disposes the
+      // subscriptions `getEdgelessTheme` makes. Passing the class here built a
+      // second instance that was never unmounted, and its subscription to the
+      // doc's properties kept every closed editor in memory.
+      di.override(ThemeExtensionIdentifier, provider =>
+        provider.get(NotesGraphThemeExtension)
+      );
     }
 
     getAppTheme() {

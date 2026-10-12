@@ -17,12 +17,7 @@ import {
   parseOrgStatusPrefix,
 } from '@blocksuite/notesgraph-shared/utils';
 import type { EditorHost } from '@blocksuite/std';
-import {
-  type BlockModel,
-  nanoid,
-  type Store,
-  Text,
-} from '@blocksuite/store';
+import { type BlockModel, nanoid, type Store, Text } from '@blocksuite/store';
 import {
   computed,
   effect,
@@ -86,25 +81,29 @@ export class QueryListDataSource extends OrgTaskRowsDataSource {
     init?: ConstructorParameters<typeof OrgTaskRowsDataSource>[1]
   ) {
     super(model, init);
-    effect(() => {
-      this._resolveHits(this.hits$.value);
-    });
+    this.onDispose(
+      effect(() => {
+        this._resolveHits(this.hits$.value);
+      })
+    );
     // Deferred for the same reason as the base's watcher: getOptional needs
     // the provider container which `init` may still be populating. The
     // effect resubscribes whenever the scope tokens change, so editing the
     // query through the scope bar re-runs the index query live.
     queueMicrotask(() => {
+      if (this.disposed) return;
       const provider = this.serviceGet(BlockTaskIndexProvider);
       if (!provider) return;
       // A project scope resolves live to that project's docIds.
       const projectsProvider = this.serviceGet(ProjectsProvider);
       const projects$ = this.projects$;
       if (projectsProvider) {
-        projectsProvider.projects$().subscribe(list => {
+        const projectsSub = projectsProvider.projects$().subscribe(list => {
           projects$.value = list;
         });
+        this.onDispose(() => projectsSub.unsubscribe());
       }
-      effect(() => {
+      const stopQuery = effect(() => {
         const filter: BlockTaskFilter = {
           tags: this._model.props.queryTags$.value ?? [],
           props: this._model.props.queryProps$.value ?? [],
@@ -138,11 +137,9 @@ export class QueryListDataSource extends OrgTaskRowsDataSource {
               : hits;
             this.queryComplete$.value = complete;
           });
-        // Data sources have no dispose lifecycle today (see
-        // DatabaseBlockDataSource); the last subscription lives as long as
-        // the board component's lazily-created data source does.
         return () => subscription.unsubscribe();
       });
+      this.onDispose(stopQuery);
     });
   }
 
@@ -431,13 +428,10 @@ export class QueryListDataSource extends OrgTaskRowsDataSource {
         // Still waiting on docs: keep loading state up and try again.
         this.pendingCount$.value = unresolved.length;
         publish(false);
-        setTimeout(
-          () => {
-            if (generation !== this._resolveGeneration) return;
-            attempt(unresolved, retry + 1);
-          },
-          RETRY_DELAYS_MS[retry]
-        );
+        setTimeout(() => {
+          if (generation !== this._resolveGeneration) return;
+          attempt(unresolved, retry + 1);
+        }, RETRY_DELAYS_MS[retry]);
       };
 
       runBatch(0);
@@ -489,9 +483,7 @@ export class QueryListDataSource extends OrgTaskRowsDataSource {
     () => {
       // Status/deadline live in the items' text — re-filter on text edits.
       this.sourceTextVersion$.value;
-      return this.hitModels$.value.filter(model =>
-        this.matchesCriteria(model)
-      );
+      return this.hitModels$.value.filter(model => this.matchesCriteria(model));
     }
   );
 

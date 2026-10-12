@@ -21,10 +21,12 @@ export class DocCommentManagerService extends Service {
   get(docId: DocId) {
     let commentRef = this.pool.get(docId);
     if (!commentRef) {
+      // `std` is read through the trap, never from the target: the pooled
+      // entity outlives the editor that created it and must not pin it.
       const props = new Proxy(
         {
           docId,
-          std: this.std,
+          std: null as BlockStdScope | null,
         },
         {
           get: (target, prop) => {

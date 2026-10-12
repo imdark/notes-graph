@@ -80,7 +80,8 @@ export abstract class OrgTaskRowsDataSource extends DatabaseBlockDataSource {
     // run only after this base constructor returns, and effect() evaluates
     // its callback immediately.
     queueMicrotask(() => {
-      effect(() => {
+      if (this.disposed) return;
+      const stop = effect(() => {
         const stores = this.watchedStores$.value;
         // Y.Doc-level updates cover text typing too — blockUpdated doesn't
         // fire for Y.Text edits since blocks are only shallowly observed.
@@ -103,6 +104,7 @@ export abstract class OrgTaskRowsDataSource extends DatabaseBlockDataSource {
           }
         };
       });
+      this.onDispose(stop);
     });
   }
 
@@ -157,9 +159,7 @@ export abstract class OrgTaskRowsDataSource extends DatabaseBlockDataSource {
     );
   }
 
-  protected statusOptions(
-    propertyId: string
-  ): { id: string; value: string }[] {
+  protected statusOptions(propertyId: string): { id: string; value: string }[] {
     const options = this.propertyDataGet(propertyId).options;
     return Array.isArray(options) ? options : [];
   }
@@ -179,9 +179,9 @@ export abstract class OrgTaskRowsDataSource extends DatabaseBlockDataSource {
       .getBlocksByFlavour('notesgraph:paragraph')
       .map(b => b.model)
       .find(m =>
-        (m.text?.toString() ?? '').trimStart().startsWith(
-          LANE_DECLARATION_PREFIX
-        )
+        (m.text?.toString() ?? '')
+          .trimStart()
+          .startsWith(LANE_DECLARATION_PREFIX)
       );
     if (existing?.text) {
       if (existing.text.toString() !== line) {
@@ -291,9 +291,7 @@ export abstract class OrgTaskRowsDataSource extends DatabaseBlockDataSource {
    * Child tasks nested under a row — rendered INSIDE the parent's card as
    * mini-cards (epic -> stories). Duck-typed contract for the kanban card.
    */
-  cardChildren(
-    rowId: string
-  ): { id: string; text: string; done: boolean }[] {
+  cardChildren(rowId: string): { id: string; text: string; done: boolean }[] {
     void this.sourceTextVersion$.value;
     const model = this.getModelById(rowId);
     if (!model) return [];

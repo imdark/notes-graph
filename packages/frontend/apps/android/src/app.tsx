@@ -184,6 +184,36 @@ framework.impl(ClientSchemeProvider, {
   },
 });
 
+type KeyboardChange = { visible: boolean; height: number };
+const keyboardSubscribers = new Set<(change: KeyboardChange) => void>();
+let listeningToKeyboard = false;
+
+// One pair of native listeners for the app's lifetime, shared by every editor.
+// Capacitor's bridge keeps each listener's callback in a global map that
+// `handle.remove()` never clears, so a listener per editor kept every closed
+// editor (and its whole doc) in memory until the WebView was killed for it.
+function listenToKeyboard() {
+  if (listeningToKeyboard) return;
+  listeningToKeyboard = true;
+  const emit = (change: KeyboardChange) =>
+    keyboardSubscribers.forEach(subscriber => subscriber(change));
+  Keyboard.addListener('keyboardWillShow', info => {
+    (async () => {
+      const navBarHeight = (await NotesGraphTheme.getSystemNavBarHeight())
+        .height;
+      emit({
+        // When an physical keyboard is connected, the virtual keyboard height is 0,
+        // even though the `keyboardWillShow` event is still triggered.
+        visible: info.keyboardHeight !== 0,
+        height: info.keyboardHeight - navBarHeight,
+      });
+    })().catch(console.error);
+  }).catch(console.error);
+  Keyboard.addListener('keyboardWillHide', () => {
+    emit({ visible: false, height: 0 });
+  }).catch(console.error);
+}
+
 framework.impl(VirtualKeyboardProvider, {
   show: () => {
     Keyboard.show().catch(console.error);
@@ -197,41 +227,10 @@ framework.impl(VirtualKeyboardProvider, {
     });
   },
   onChange: callback => {
-    let disposeRef = {
-      dispose: () => {},
-    };
-
-    Promise.all([
-      Keyboard.addListener('keyboardWillShow', info => {
-        (async () => {
-          const navBarHeight = (await NotesGraphTheme.getSystemNavBarHeight())
-            .height;
-          callback({
-            // When an physical keyboard is connected, the virtual keyboard height is 0,
-            // even though the `keyboardWillShow` event is still triggered.
-            visible: info.keyboardHeight !== 0,
-            height: info.keyboardHeight - navBarHeight,
-          });
-        })().catch(console.error);
-      }),
-      Keyboard.addListener('keyboardWillHide', () => {
-        callback({
-          visible: false,
-          height: 0,
-        });
-      }),
-    ])
-      .then(handlers => {
-        disposeRef.dispose = () => {
-          Promise.all(handlers.map(handler => handler.remove())).catch(
-            console.error
-          );
-        };
-      })
-      .catch(console.error);
-
+    keyboardSubscribers.add(callback);
+    listenToKeyboard();
     return () => {
-      disposeRef.dispose();
+      keyboardSubscribers.delete(callback);
     };
   },
 });
