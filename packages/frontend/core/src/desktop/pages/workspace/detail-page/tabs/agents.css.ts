@@ -273,6 +273,14 @@ export const logToolbar = style({
   gap: 8,
 });
 
+export const logToggle = style({
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 4,
+  fontSize: cssVar('fontXs'),
+  color: cssVarV2('text/secondary'),
+});
+
 export const logScroll = style({
   height: '55vh',
   // Both axes: lines never wrap, so a long one scrolls sideways.

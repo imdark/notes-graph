@@ -67,6 +67,11 @@ export const AgentLogView = ({
   );
 
   const [relative, setRelative] = useState(false);
+  // On a phone the gutter eats the width the text needs, so the line numbers
+  // and times start hidden and each opens from a checkbox in the toolbar.
+  const mobile = BUILD_CONFIG.isMobileEdition;
+  const [showNumbers, setShowNumbers] = useState(!mobile);
+  const [showTimes, setShowTimes] = useState(!mobile);
   const [selected, setSelected] = useState<LineRange | null>(null);
   const anchor = useRef<number | null>(null);
 
@@ -139,6 +144,7 @@ export const AgentLogView = ({
       .catch(() => notify.error({ title: "Couldn't copy" }));
   }, [lines, selected]);
 
+  const timesShown = hasTimes && showTimes;
   const numberWidth = String(lines.length).length;
 
   const renderLine = (line: LogLine) => {
@@ -150,33 +156,37 @@ export const AgentLogView = ({
         className={styles.logLine}
         data-selected={isSelected || undefined}
       >
-        <span className={styles.logGutter}>
-          <button
-            className={styles.logLineNumber}
-            style={{ minWidth: `${numberWidth + 1}ch` }}
-            onClick={e => onLineNumber(e, line.number)}
-            title="Select line (Shift-click for a range)"
-            data-testid="agent-log-line-number"
-          >
-            {line.number}
-          </button>
-          {hasTimes ? (
-            line.at !== null ? (
+        {showNumbers || timesShown ? (
+          <span className={styles.logGutter}>
+            {showNumbers ? (
               <button
-                className={styles.logTime}
-                onClick={toggleTimes}
-                title={`${new Date(line.at).toLocaleString()} — click to show ${relative ? 'clock time' : 'time since start'}`}
-                data-testid="agent-log-time"
+                className={styles.logLineNumber}
+                style={{ minWidth: `${numberWidth + 1}ch` }}
+                onClick={e => onLineNumber(e, line.number)}
+                title="Select line (Shift-click for a range)"
+                data-testid="agent-log-line-number"
               >
-                {relative && startAt !== null
-                  ? elapsed(line.at - startAt)
-                  : clockTime(line.at)}
+                {line.number}
               </button>
-            ) : (
-              <span className={styles.logTime} />
-            )
-          ) : null}
-        </span>
+            ) : null}
+            {timesShown ? (
+              line.at !== null ? (
+                <button
+                  className={styles.logTime}
+                  onClick={toggleTimes}
+                  title={`${new Date(line.at).toLocaleString()} — click to show ${relative ? 'clock time' : 'time since start'}`}
+                  data-testid="agent-log-time"
+                >
+                  {relative && startAt !== null
+                    ? elapsed(line.at - startAt)
+                    : clockTime(line.at)}
+                </button>
+              ) : (
+                <span className={styles.logTime} />
+              )
+            ) : null}
+          </span>
+        ) : null}
         <span className={styles.logLineText}>{line.text || ' '}</span>
       </div>
     );
@@ -189,13 +199,17 @@ export const AgentLogView = ({
     const names = [...new Set(tools)].join(', ');
     return (
       <div key={`tools-${first}`} className={styles.logLine}>
-        <span className={styles.logGutter}>
-          <span
-            className={styles.logLineNumber}
-            style={{ minWidth: `${numberWidth + 1}ch` }}
-          />
-          {hasTimes ? <span className={styles.logTime} /> : null}
-        </span>
+        {showNumbers || timesShown ? (
+          <span className={styles.logGutter}>
+            {showNumbers ? (
+              <span
+                className={styles.logLineNumber}
+                style={{ minWidth: `${numberWidth + 1}ch` }}
+              />
+            ) : null}
+            {timesShown ? <span className={styles.logTime} /> : null}
+          </span>
+        ) : null}
         <button
           className={styles.logFold}
           onClick={() => toggleGroup(first)}
@@ -213,7 +227,7 @@ export const AgentLogView = ({
 
   return (
     <div className={styles.logView}>
-      {selected || hasTools ? (
+      {selected || hasTools || mobile ? (
         <div className={styles.logToolbar}>
           {selected ? (
             <>
@@ -222,12 +236,34 @@ export const AgentLogView = ({
                   ? `Line ${selected.from}`
                   : `Lines ${selected.from}–${selected.to}`}
               </span>
-              <Button onClick={copySelected}>
-                Copy
-              </Button>
+              <Button onClick={copySelected}>Copy</Button>
               <Button variant="plain" onClick={() => setSelected(null)}>
                 Clear
               </Button>
+            </>
+          ) : null}
+          {mobile ? (
+            <>
+              <label className={styles.logToggle}>
+                <input
+                  type="checkbox"
+                  checked={showNumbers}
+                  onChange={e => setShowNumbers(e.target.checked)}
+                  data-testid="agent-log-numbers-toggle"
+                />
+                Lines
+              </label>
+              {hasTimes ? (
+                <label className={styles.logToggle}>
+                  <input
+                    type="checkbox"
+                    checked={showTimes}
+                    onChange={e => setShowTimes(e.target.checked)}
+                    data-testid="agent-log-times-toggle"
+                  />
+                  Times
+                </label>
+              ) : null}
             </>
           ) : null}
           {hasTools ? (
