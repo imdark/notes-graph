@@ -71,14 +71,53 @@ export class NotesGraphKeyboardToolbar extends SignalWatcher(
     return this._currentPanelIndex$.value !== -1;
   }
 
+  /**
+   * How far the window has already shrunk for the virtual keyboard. On Android
+   * (adjustResize) it shrinks by the whole keyboard; on iOS the keyboard is
+   * drawn over the page and nothing shrinks.
+   */
+  private readonly _viewportShrink$ = signal(0);
+
+  private _fullViewport = { width: 0, height: 0 };
+
+  private readonly _measureViewport = () => {
+    const { innerWidth: width, innerHeight: height } = window;
+    // A new width means a rotation or a resized window: start over.
+    if (width !== this._fullViewport.width) {
+      this._fullViewport = { width, height };
+    } else if (height > this._fullViewport.height) {
+      this._fullViewport.height = height;
+    }
+    const shrink = Math.max(0, this._fullViewport.height - height);
+    if (shrink === this._viewportShrink$.peek()) return;
+    this._viewportShrink$.value = shrink;
+    // The window just shrank (or grew back) for the keyboard: keep the line
+    // being edited in view of the space that's left.
+    if (shrink > 0 && this.isConnected) {
+      requestAnimationFrame(() => this._scrollCurrentBlockIntoView());
+    }
+  };
+
   private get panelHeight() {
-    return this._expanded$.value
-      ? `${
-          this.keyboard.staticHeight$.value !== 0
-            ? this.keyboard.staticHeight$.value
-            : 330
-        }px`
-      : this.keyboard.appTabSafeArea$.value;
+    if (!this._expanded$.value) return this.keyboard.appTabSafeArea$.value;
+    const keyboardHeight =
+      this.keyboard.staticHeight$.value !== 0
+        ? this.keyboard.staticHeight$.value
+        : 330;
+    if (this.panelOpened) return `${keyboardHeight}px`;
+    // With the keyboard up and no panel, the panel only holds the toolbar above
+    // the keyboard by sitting behind it. Where the window already shrank for
+    // the keyboard there is nothing to sit behind: a full-height panel would
+    // cover the lines being typed.
+    return `${Math.max(0, keyboardHeight - this._viewportShrink$.value)}px`;
+  }
+
+  private get panelPaddingBottom() {
+    const keyboardShrankWindow =
+      this._expanded$.value &&
+      !this.panelOpened &&
+      this._viewportShrink$.value > 0;
+    return keyboardShrankWindow ? '0px' : this.keyboard.appTabSafeArea$.value;
   }
 
   /**
@@ -148,7 +187,20 @@ export class NotesGraphKeyboardToolbar extends SignalWatcher(
         const block = this.std.view.getBlock(selectedModels[0].id);
         if (!block) return;
 
-        const { y: y1 } = this.getBoundingClientRect();
+        // Where the line must stay above. With a panel open, that's the top
+        // of the toolbar. Otherwise it's the toolbar's bar sitting on the
+        // visible area's bottom: measured from the visual viewport so it's
+        // right both where the keyboard covers the page (iOS) and where the
+        // window shrinks for it (Android). The toolbar's own box is wrong
+        // while Android resizes: its panel is keyboard-tall for a moment.
+        const bar = this.querySelector('.keyboard-toolbar');
+        const viewport = window.visualViewport;
+        const y1 =
+          this.panelOpened || !bar || !viewport
+            ? this.getBoundingClientRect().y
+            : viewport.offsetTop +
+              viewport.height -
+              bar.getBoundingClientRect().height;
         const gap = 8;
 
         // Reveal the caret, not the whole block. Aligning the block's
@@ -298,6 +350,9 @@ export class NotesGraphKeyboardToolbar extends SignalWatcher(
   override connectedCallback() {
     super.connectedCallback();
 
+    this._measureViewport();
+    this.disposables.addFromEvent(window, 'resize', this._measureViewport);
+
     // There are two cases that `_expanded$` will be true:
     // 1. when virtual keyboard is opened, the panel need to be expanded and overlapped by the keyboard,
     // so that the toolbar will be on the top of the keyboard.
@@ -413,7 +468,7 @@ export class NotesGraphKeyboardToolbar extends SignalWatcher(
         .context=${this._context}
         style=${styleMap({
           height: this.panelHeight,
-          paddingBottom: this.keyboard.appTabSafeArea$.value,
+          paddingBottom: this.panelPaddingBottom,
         })}
       ></notesgraph-keyboard-tool-panel>
     `;
