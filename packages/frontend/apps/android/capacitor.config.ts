@@ -19,6 +19,11 @@ const config: CapacitorConfig & AppConfig = {
   appName: 'NotesGraph',
   webDir: 'dist',
   notesgraphVersion: packageJson.version,
+  // The default ('debug') logs every plugin call and result to the console in
+  // debug builds — tens of thousands a minute from the search index. With the
+  // on-screen debug console on, those rows piled up until the WebView renderer
+  // was killed for memory (~2 GB), reloading the app to Home.
+  loggingBehavior: 'none',
   android: {
     path: 'App',
     buildOptions: {
