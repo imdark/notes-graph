@@ -129,40 +129,34 @@ framework.impl(ValidatorProvider, {
     return res.value;
   },
 });
+type KeyboardChange = { visible: boolean; height: number };
+const keyboardSubscribers = new Set<(change: KeyboardChange) => void>();
+let listeningToKeyboard = false;
+
+// One pair of native listeners for the app's lifetime, shared by every editor:
+// a listener per editor kept each closed editor reachable from the bridge.
+function listenToKeyboard() {
+  if (listeningToKeyboard) return;
+  listeningToKeyboard = true;
+  const emit = (change: KeyboardChange) =>
+    keyboardSubscribers.forEach(subscriber => subscriber(change));
+  Keyboard.addListener('keyboardWillShow', info => {
+    emit({ visible: info.keyboardHeight !== 0, height: info.keyboardHeight });
+  }).catch(console.error);
+  Keyboard.addListener('keyboardWillHide', () => {
+    emit({ visible: false, height: 0 });
+  }).catch(console.error);
+}
+
 framework.impl(VirtualKeyboardProvider, {
   // We dose not provide show and hide because:
   // - Keyboard.show() is not implemented
   // - Keyboard.hide() will blur the current editor
   onChange: callback => {
-    let disposeRef = {
-      dispose: () => {},
-    };
-
-    Promise.all([
-      Keyboard.addListener('keyboardWillShow', info => {
-        callback({
-          visible: info.keyboardHeight !== 0,
-          height: info.keyboardHeight,
-        });
-      }),
-      Keyboard.addListener('keyboardWillHide', () => {
-        callback({
-          visible: false,
-          height: 0,
-        });
-      }),
-    ])
-      .then(handlers => {
-        disposeRef.dispose = () => {
-          Promise.all(handlers.map(handler => handler.remove())).catch(
-            console.error
-          );
-        };
-      })
-      .catch(console.error);
-
+    keyboardSubscribers.add(callback);
+    listenToKeyboard();
     return () => {
-      disposeRef.dispose();
+      keyboardSubscribers.delete(callback);
     };
   },
 });

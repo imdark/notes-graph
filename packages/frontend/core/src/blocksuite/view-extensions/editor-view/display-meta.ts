@@ -9,7 +9,7 @@ import {
   createSignalFromObservable,
   referenceToNode,
 } from '@blocksuite/notesgraph/shared/utils';
-import { LifeCycleWatcher, StdIdentifier } from '@blocksuite/notesgraph/std';
+import { LifeCycleWatcher } from '@blocksuite/notesgraph/std';
 import { DocDisplayMetaService } from '@notesgraph/core/modules/doc-display-meta';
 import { type FrameworkProvider } from '@notesgraph/infra';
 import { computed, type ReadonlySignal } from '@preact/signals-core';
@@ -40,7 +40,9 @@ export function buildDocDisplayMetaExtension(framework: FrameworkProvider) {
 
     static override setup(di: Container) {
       super.setup(di);
-      di.override(DocDisplayMetaProvider, this, [StdIdentifier]);
+      // The lifecycle's own instance, so `unmounted` disposes the title and
+      // icon subscriptions; a second instance would never be unmounted.
+      di.override(DocDisplayMetaProvider, provider => provider.get(this));
     }
 
     dispose() {

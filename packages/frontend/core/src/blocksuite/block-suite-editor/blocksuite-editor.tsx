@@ -63,6 +63,18 @@ export interface EditorProps extends HTMLAttributes<HTMLDivElement> {
   onEditorReady?: (editor: NotesGraphEditorContainer) => (() => void) | void;
 }
 
+const dataUrlPassthrough = new WeakSet<ImageProxyService>();
+
+// Module-level so the wrapper closes over nothing but the original function;
+// defined inside the editor's effect it would share (and keep) that scope.
+function passDataUrlsThrough(service: ImageProxyService) {
+  if (dataUrlPassthrough.has(service)) return;
+  dataUrlPassthrough.add(service);
+  const buildUrl = service.buildUrl.bind(service);
+  service.buildUrl = (url: string) =>
+    url.startsWith('data:') ? url : buildUrl(url);
+}
+
 const BlockSuiteEditorImpl = ({
   mode: modeProp,
   page,
@@ -232,9 +244,10 @@ const BlockSuiteEditorImpl = ({
     imageProxyService.setImageProxyURL(imageProxyUrl);
     // Desktop link cards are returned as data: URLs — let them render directly
     // instead of being routed through the (absent) image proxy.
-    const buildUrl = imageProxyService.buildUrl.bind(imageProxyService);
-    imageProxyService.buildUrl = (url: string) =>
-      url.startsWith('data:') ? url : buildUrl(url);
+    // The service belongs to the doc's store, which outlives this editor:
+    // wrap it once, or each mount stacks another wrapper that keeps that
+    // editor in memory.
+    passDataUrlsThrough(imageProxyService);
 
     editor.updateComplete
       .then(() => {

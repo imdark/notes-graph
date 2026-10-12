@@ -138,6 +138,30 @@ export interface DataSource {
 export const DataSourceScope = createScope('data-source');
 
 export abstract class DataSourceBase implements DataSource {
+  private readonly disposers: (() => void)[] = [];
+  protected disposed = false;
+
+  /**
+   * Run `teardown` when the data source is disposed. Use it for effects and
+   * subscriptions on anything that outlives the view (models, other docs, app
+   * services): left running, they keep the view and its editor in memory.
+   */
+  protected onDispose(teardown: () => void) {
+    if (this.disposed) {
+      teardown();
+      return;
+    }
+    this.disposers.push(teardown);
+  }
+
+  /** Called by the owning block when it leaves the DOM. */
+  dispose() {
+    this.disposed = true;
+    while (this.disposers.length > 0) {
+      this.disposers.pop()?.();
+    }
+  }
+
   propertyTypeCanSet(propertyId: string): boolean {
     return !this.isFixedProperty(propertyId);
   }

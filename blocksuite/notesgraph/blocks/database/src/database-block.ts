@@ -161,7 +161,12 @@ export class DatabaseBlockComponent extends CaptionedBlockComponent<DatabaseBloc
     });
   };
 
-  private readonly dataSource = lazy(() => {
+  // Both rebuilt after a reconnect: disconnecting disposes the data source.
+  private dataSource = lazy(() => this.createDataSource());
+
+  private liveDataSource: DatabaseBlockDataSource | undefined;
+
+  private createDataSource() {
     const DataSourceCtor = this.model.props.mirrorBlockId
       ? MirrorListDataSource
       : this.model.props.queryTags || this.model.props.queryProps
@@ -202,8 +207,9 @@ export class DatabaseBlockComponent extends CaptionedBlockComponent<DatabaseBloc
     if (id && dataSource.viewManager.viewGet(id)) {
       dataSource.viewManager.setCurrentView(id);
     }
+    this.liveDataSource = dataSource;
     return dataSource;
-  });
+  }
 
   /** True when this database's rows come from a workspace-wide query. */
   private get isQueryDatabase(): boolean {
@@ -550,6 +556,14 @@ export class DatabaseBlockComponent extends CaptionedBlockComponent<DatabaseBloc
 
   override connectedCallback() {
     super.connectedCallback();
+    // The data source's watchers (a query's live index search, other docs'
+    // updates) would otherwise outlive the block and keep its editor alive.
+    this.disposables.add(() => {
+      this.liveDataSource?.dispose();
+      this.liveDataSource = undefined;
+      this.dataSource = lazy(() => this.createDataSource());
+      this.dataViewRootLogic = lazy(() => this.createRootLogic());
+    });
 
     this.setAttribute(RANGE_SYNC_EXCLUDE_ATTR, 'true');
     this.classList.add(databaseBlockStyles);
@@ -607,101 +621,103 @@ export class DatabaseBlockComponent extends CaptionedBlockComponent<DatabaseBloc
     this.disposables.addFromEvent(this, 'click', handler);
   }
 
-  private readonly dataViewRootLogic = lazy(
-    () =>
-      new DataViewRootUILogic({
-        virtualPadding$: this.virtualPadding$,
-        bindHotkey: hotkeys => {
-          return {
-            dispose: this.host.event.bindHotkey(hotkeys, {
-              blockId: this.topContenteditableElement?.blockId ?? this.blockId,
-            }),
-          };
-        },
-        handleEvent: (name, handler) => {
-          return {
-            dispose: this.host.event.add(name, handler, {
-              blockId: this.blockId,
-            }),
-          };
-        },
-        selection$: this.viewSelection$,
-        setSelection: this.setSelection,
-        dataSource: this.dataSource.value,
-        headerWidget: this.headerWidget,
-        onDrag: this.onDrag,
-        clipboard: this.std.clipboard,
-        dnd: this.std.dnd,
-        notification: {
-          toast: message => {
-            const notification = this.std.getOptional(NotificationProvider);
-            if (notification) {
-              notification.toast(message);
-            } else {
-              toast(this.host, message);
-            }
-          },
-        },
-        eventTrace: (key, params) => {
-          const telemetryService = this.std.getOptional(TelemetryProvider);
-          telemetryService?.track(key, {
-            ...(params as TelemetryEventMap[typeof key]),
+  private dataViewRootLogic = lazy(() => this.createRootLogic());
+
+  private createRootLogic() {
+    return new DataViewRootUILogic({
+      virtualPadding$: this.virtualPadding$,
+      bindHotkey: hotkeys => {
+        return {
+          dispose: this.host.event.bindHotkey(hotkeys, {
+            blockId: this.topContenteditableElement?.blockId ?? this.blockId,
+          }),
+        };
+      },
+      handleEvent: (name, handler) => {
+        return {
+          dispose: this.host.event.add(name, handler, {
             blockId: this.blockId,
-          });
+          }),
+        };
+      },
+      selection$: this.viewSelection$,
+      setSelection: this.setSelection,
+      dataSource: this.dataSource.value,
+      headerWidget: this.headerWidget,
+      onDrag: this.onDrag,
+      clipboard: this.std.clipboard,
+      dnd: this.std.dnd,
+      notification: {
+        toast: message => {
+          const notification = this.std.getOptional(NotificationProvider);
+          if (notification) {
+            notification.toast(message);
+          } else {
+            toast(this.host, message);
+          }
         },
-        detailPanelConfig: {
-          openDetailPanel: (target, data) => {
-            const peekViewService = this.std.getOptional(PeekViewProvider);
-            if (peekViewService) {
-              const openDoc = (docId: string) => {
-                return peekViewService.peek({
-                  docId,
-                  databaseId: this.blockId,
-                  databaseDocId: this.model.store.id,
-                  databaseRowId: data.rowId,
-                  target: this,
-                });
-              };
-              const doc = getSingleDocIdFromText(
-                this.model.store.getBlock(data.rowId)?.model?.text
-              );
-              if (doc) {
-                // The referenced doc may be missing (e.g. orphaned by a partial
-                // import). Recreate it under its original id so the record opens
-                // an editable doc instead of a dead "not found" reference.
-                const workspace = this.model.store.workspace;
-                if (!workspace.getDoc(doc)) {
-                  createDefaultDoc(workspace, { id: doc });
-                }
-                return openDoc(doc);
-              }
-              const abort = new AbortController();
-              return new Promise<void>(focusBack => {
-                peekViewService
-                  .peek(
-                    {
-                      target,
-                      template: this.createTemplate(data, docId => {
-                        // abort.abort();
-                        openDoc(docId).then(focusBack).catch(focusBack);
-                      }),
-                    },
-                    { abortSignal: abort.signal }
-                  )
-                  .then(focusBack)
-                  .catch(focusBack);
+      },
+      eventTrace: (key, params) => {
+        const telemetryService = this.std.getOptional(TelemetryProvider);
+        telemetryService?.track(key, {
+          ...(params as TelemetryEventMap[typeof key]),
+          blockId: this.blockId,
+        });
+      },
+      detailPanelConfig: {
+        openDetailPanel: (target, data) => {
+          const peekViewService = this.std.getOptional(PeekViewProvider);
+          if (peekViewService) {
+            const openDoc = (docId: string) => {
+              return peekViewService.peek({
+                docId,
+                databaseId: this.blockId,
+                databaseDocId: this.model.store.id,
+                databaseRowId: data.rowId,
+                target: this,
               });
-            } else {
-              return popSideDetail(
-                this.createTemplate(data, () => {
-                  //
-                })
-              );
+            };
+            const doc = getSingleDocIdFromText(
+              this.model.store.getBlock(data.rowId)?.model?.text
+            );
+            if (doc) {
+              // The referenced doc may be missing (e.g. orphaned by a partial
+              // import). Recreate it under its original id so the record opens
+              // an editable doc instead of a dead "not found" reference.
+              const workspace = this.model.store.workspace;
+              if (!workspace.getDoc(doc)) {
+                createDefaultDoc(workspace, { id: doc });
+              }
+              return openDoc(doc);
             }
-          },
+            const abort = new AbortController();
+            return new Promise<void>(focusBack => {
+              peekViewService
+                .peek(
+                  {
+                    target,
+                    template: this.createTemplate(data, docId => {
+                      // abort.abort();
+                      openDoc(docId).then(focusBack).catch(focusBack);
+                    }),
+                  },
+                  { abortSignal: abort.signal }
+                )
+                .then(focusBack)
+                .catch(focusBack);
+            });
+          } else {
+            return popSideDetail(
+              this.createTemplate(data, () => {
+                //
+              })
+            );
+          }
         },
-      })
-  );
+      },
+    });
+  }
+
   // The list ("Task List") view gets a distinguishing card background; other
   // view types keep the plain content styling.
   private get contentClass() {

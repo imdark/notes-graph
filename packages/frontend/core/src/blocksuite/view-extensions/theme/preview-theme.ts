@@ -11,7 +11,6 @@ import {
 import {
   type BlockStdScope,
   LifeCycleWatcher,
-  StdIdentifier,
 } from '@blocksuite/notesgraph/std';
 import { AppThemeService } from '@notesgraph/core/modules/theme';
 import type { FrameworkProvider } from '@notesgraph/infra';
@@ -30,10 +29,9 @@ export function getPreviewThemeExtension(framework: FrameworkProvider) {
 
     static override setup(di: Container) {
       super.setup(di);
-      di.override(
-        ThemeExtensionIdentifier,
-        NotesGraphPagePreviewThemeExtension,
-        [StdIdentifier]
+      // The lifecycle's own instance, so `unmounted` disposes its subscription.
+      di.override(ThemeExtensionIdentifier, provider =>
+        provider.get(NotesGraphPagePreviewThemeExtension)
       );
     }
 
