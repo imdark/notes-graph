@@ -188,8 +188,17 @@ export class AgentAssignWidget extends WidgetComponent {
     const end = rects[rects.length - 1] ?? line;
     const box = parent.getBoundingClientRect();
 
-    const left = line.left - box.left;
-    const top = Math.max(end.bottom, line.bottom) - box.top + GAP_PX;
+    let left = line.left - box.left;
+    let top = Math.max(end.bottom, line.bottom) - box.top + GAP_PX;
+
+    // A long block's last line can sit below the screen (or behind the
+    // phone's keyboard), taking the button with it. Pin it to the right end
+    // of the first line instead, where the block starts.
+    const visibleBottom = window.visualViewport?.height ?? window.innerHeight;
+    if (Math.max(end.bottom, line.bottom) > visibleBottom && rects[0]) {
+      left = line.right - box.left - button.offsetWidth;
+      top = rects[0].top - box.top;
+    }
     this.style.transform = `translate(${Math.max(0, left)}px, ${top}px)`;
   }
 
