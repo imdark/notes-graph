@@ -1,6 +1,7 @@
 import test from 'ava';
 
 import { logStamp, stampInnerLines } from '../../../models';
+import { profileFor } from '../agent-profiles';
 import { RegistryJobService, toJobDto } from '../jobs';
 import { questionPushData } from '../push';
 
@@ -868,4 +869,13 @@ test('asking for work marks the device as having a runner', async t => {
   const service = new RegistryJobService(models);
   t.is(await service.claim(workspaceId, 'laptop', 'mac-1'), null);
   t.deepEqual(touched, ['laptop']);
+});
+
+test('a job’s chosen skills replace the model’s defaults, catalog names only', t => {
+  const defaults = profileFor('claude-code')!;
+  t.true(defaults.skills.length > 1);
+  const chosen = profileFor('claude-code', ['antislop-ui', 'not-a-skill']);
+  t.deepEqual(chosen?.skills.map(s => s.name), ['antislop-ui']);
+  t.deepEqual(profileFor('claude-code', [])?.skills, []);
+  t.is(profileFor('some-other-model', ['antislop']), null);
 });

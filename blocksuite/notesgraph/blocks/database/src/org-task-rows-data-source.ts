@@ -126,6 +126,20 @@ export abstract class OrgTaskRowsDataSource extends DatabaseBlockDataSource {
     return this._model.store.readonly;
   });
 
+  /**
+   * Task rows nested directly under a row, in doc order. The same parent
+   * rule `rows$` uses to leave them out of the roots, so every source row is
+   * reachable exactly once: as a root, or as a child here.
+   */
+  rowChildIds(rowId: string): string[] {
+    const model = this.getModelById(rowId);
+    if (!model) return [];
+    const ids = new Set(this.sourceRowModels$.value.map(v => v.id));
+    return model.children
+      .filter(child => ids.has(child.id))
+      .map(child => child.id);
+  }
+
   protected override getModelById(rowId: string): BlockModel | undefined {
     return this.sourceRowModels$.value.find(v => v.id === rowId);
   }

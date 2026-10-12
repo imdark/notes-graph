@@ -28,7 +28,9 @@ import type { DeviceStatusBody, RegisterDeviceBody } from './types';
  * machine without a browser session. Reads need workspace read; writes need
  * settings update, which keeps a viewer from rewriting the fleet.
  */
-@Controller('/api/registry')
+// `/api/inventory` is the pre-rename path: installed APKs and older `wf`
+// runners still call it, so it stays served alongside the new one.
+@Controller(['/api/registry', '/api/inventory'])
 export class RegistryController {
   constructor(
     private readonly ac: PermissionAccess,

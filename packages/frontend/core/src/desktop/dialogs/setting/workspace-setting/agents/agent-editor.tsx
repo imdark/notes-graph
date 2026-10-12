@@ -15,6 +15,7 @@ import {
 import { AiIconGenerator } from '@notesgraph/core/blocksuite/block-suite-editor/doc-banner';
 import {
   type Agent,
+  AGENT_SKILLS,
   agentIconData,
   type AgentDraft,
   type AgentHarness,
@@ -24,6 +25,7 @@ import {
   type AgentTargetKind,
   CLAUDE_CODE_MODEL,
   DEFAULT_MAX_STEPS,
+  defaultSkillsFor,
   editorHarness,
   FILE_TOOLS,
   isDeviceClaudeModel,
@@ -166,6 +168,8 @@ const TARGETS: { kind: AgentTargetKind; label: string }[] = [
 export interface AgentEditorProps {
   /** Editing an existing agent, or undefined when creating one. */
   agent?: Agent;
+  /** Pre-fills a new agent; ignored when editing. */
+  template?: AgentDraft;
   /** Scope for a new agent; ignored when editing. */
   scope: AgentScope;
   open: boolean;
@@ -175,35 +179,39 @@ export interface AgentEditorProps {
 
 export const AgentEditor = ({
   agent,
+  template,
   scope,
   open,
   onOpenChange,
   onSubmit,
 }: AgentEditorProps) => {
-  const [name, setName] = useState(agent?.name ?? '');
+  const seed: Partial<AgentDraft> | undefined = agent ?? template;
+  const [name, setName] = useState(seed?.name ?? '');
   const [icon, setIcon] = useState<IconData | undefined>(
     agent ? agentIconData(agent) : undefined
   );
-  const [instructions, setInstructions] = useState(agent?.instructions ?? '');
+  const [instructions, setInstructions] = useState(seed?.instructions ?? '');
   // Left unset until picked, so an older agent keeps following its harness
   // (see `agentKind`) rather than being pinned by merely opening the editor.
-  const [kind, setKind] = useState<AgentKind | undefined>(agent?.kind);
+  const [kind, setKind] = useState<AgentKind | undefined>(seed?.kind);
   const [tools, setTools] = useState<string[]>(
-    agent?.tools ?? READ_TOOLS.slice(0, 5).map(t => t.name)
+    seed?.tools ?? READ_TOOLS.slice(0, 5).map(t => t.name)
   );
   const [targets, setTargets] = useState<AgentTargetKind[]>(
-    agent?.targets ?? ['block', 'selection', 'doc']
+    seed?.targets ?? ['block', 'selection', 'doc']
   );
   const [maxSteps, setMaxSteps] = useState(
-    agent?.maxSteps ?? DEFAULT_MAX_STEPS
+    seed?.maxSteps ?? DEFAULT_MAX_STEPS
   );
   const [pickerOpen, setPickerOpen] = useState(false);
   const [harness, setHarness] = useState<AgentHarness | undefined>(
-    editorHarness(agent?.harness, agent?.model, agent?.deviceKey)
+    editorHarness(seed?.harness, seed?.model, seed?.deviceKey)
   );
-  const [model, setModel] = useState<string | undefined>(agent?.model);
+  const [model, setModel] = useState<string | undefined>(seed?.model);
+  // Unset follows the model's default set; ticking one pins an explicit list.
+  const [skills, setSkills] = useState<string[] | undefined>(seed?.skills);
   const [deviceKey, setDeviceKey] = useState<string | undefined>(
-    agent?.deviceKey
+    seed?.deviceKey
   );
   // Claude Code picked under Cloud runs on the server's runner (see
   // `savedPlacement`), the same as picking that runner as the device.
@@ -289,6 +297,7 @@ export const AgentEditor = ({
       kind,
       ...savedPlacement(harness, model, deviceKey),
       tools,
+      skills: claudeHarness ? skills : undefined,
       targets,
       output: 'panel',
       maxSteps,
@@ -298,6 +307,7 @@ export const AgentEditor = ({
   }, [
     agent,
     canSave,
+    claudeHarness,
     deviceKey,
     harness,
     icon,
@@ -307,6 +317,7 @@ export const AgentEditor = ({
     name,
     onOpenChange,
     onSubmit,
+    skills,
     targets,
     tools,
   ]);
@@ -638,6 +649,32 @@ export const AgentEditor = ({
                     : 'A different on-device model is downloaded the first time it runs.'}
               </span>
             </div>
+
+            {claudeHarness ? (
+              <div className={styles.field}>
+                <span className={styles.label}>Skills</span>
+                <div className={styles.checkGrid}>
+                  {AGENT_SKILLS.map(({ name: skill, desc }) => {
+                    const current = skills ?? defaultSkillsFor(model);
+                    return (
+                      <label key={skill} className={styles.check} title={desc}>
+                        <Checkbox
+                          checked={current.includes(skill)}
+                          onChange={() => setSkills(toggle(current, skill))}
+                          data-testid={`agent-editor-skill-${skill}`}
+                        />
+                        {skill}
+                      </label>
+                    );
+                  })}
+                </div>
+                <span className={styles.hint}>
+                  {skills
+                    ? 'Only these skills are loaded for the run.'
+                    : 'Following the default set for this model; tick or untick to choose your own.'}
+                </span>
+              </div>
+            ) : null}
 
             {/* Claude Code (and Workflow) have no step limit: they count every
               tool call as a turn, and the run's time limit bounds them. */}

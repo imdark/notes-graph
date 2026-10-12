@@ -39,6 +39,13 @@ export interface DataSource {
   taskDoneGet?(rowId: string): boolean | undefined;
   taskDoneSet?(rowId: string, done: boolean): void;
 
+  /**
+   * Rows nested directly under `rowId`, for sources whose rows form a tree
+   * (a task with subtasks). `rows$` lists only the roots; a view that wants
+   * the tree walks down from them with this. Absent on flat sources.
+   */
+  rowChildIds?(rowId: string): string[];
+
   cellValueGet(rowId: string, propertyId: string): unknown;
   cellValueGet$(
     rowId: string,

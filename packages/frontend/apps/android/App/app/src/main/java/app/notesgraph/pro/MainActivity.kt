@@ -40,6 +40,7 @@ import app.notesgraph.pro.plugin.SpeechToTextPlugin
 import app.notesgraph.pro.service.GraphQLService
 import app.notesgraph.pro.service.SSEService
 import app.notesgraph.pro.service.WebService
+import app.notesgraph.pro.utils.logger.ConsoleTimberChromeClient
 import app.notesgraph.pro.utils.px2dp
 import app.notesgraph.pro.utils.dp2px
 import com.getcapacitor.BridgeActivity
@@ -325,6 +326,11 @@ class MainActivity : BridgeActivity(), AIButtonPlugin.Callback, NotesGraphThemeP
 
     private fun configureEditorWebView() {
         bridge.webView.apply {
+            // Release builds keep Capacitor's logger, so console noise stays
+            // out of Crashlytics and the log file.
+            if (BuildConfig.DEBUG) {
+                webChromeClient = ConsoleTimberChromeClient(bridge)
+            }
             overScrollMode = View.OVER_SCROLL_NEVER
             isHorizontalScrollBarEnabled = false
             isVerticalScrollBarEnabled = false

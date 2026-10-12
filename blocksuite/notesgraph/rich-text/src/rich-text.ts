@@ -288,7 +288,24 @@ export class RichText extends WithDisposable(ShadowlessElement) {
               if (!movedToAnotherRoot) {
                 const containerRect =
                   verticalScrollContainer.getBoundingClientRect();
-                const rangeRect = range.getBoundingClientRect();
+                let rangeRect = range.getBoundingClientRect();
+                // A collapsed range in an empty line reports an all-zero
+                // rect, which reads as "above the viewport" and scrolls the
+                // page up. Measure the line's own element instead.
+                if (
+                  rangeRect.width === 0 &&
+                  rangeRect.height === 0 &&
+                  rangeRect.top === 0 &&
+                  rangeRect.left === 0
+                ) {
+                  const lineRect = (
+                    range.startContainer instanceof Element
+                      ? range.startContainer
+                      : range.startContainer.parentElement
+                  )?.getBoundingClientRect();
+                  if (!lineRect || lineRect.height === 0) return;
+                  rangeRect = lineRect;
+                }
 
                 // Scroll the KNOWN container by just enough to reveal the
                 // caret line (+ a small margin). Using

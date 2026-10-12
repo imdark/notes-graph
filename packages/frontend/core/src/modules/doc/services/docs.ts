@@ -9,6 +9,7 @@ import { ObjectPool, Service } from '@notesgraph/infra';
 import { combineLatest, map } from 'rxjs';
 
 import { initDocFromProps } from '../../../blocksuite/initialization';
+import type { DocProperties } from '../../db/schema/schema';
 import { getNotesGraphWorkspaceSchema } from '../../workspace/global-schema';
 import type { Doc } from '../entities/doc';
 import { DocRecordList } from '../entities/record-list';
@@ -51,6 +52,16 @@ export class DocsService extends Service {
         return result;
       })
     );
+  }
+
+  /**
+   * docId -> value of a schema property, typed (json fields are objects).
+   * One indexed query, unlike reading `doc.properties$` for every doc.
+   *
+   * Legacy property data is not included, as with `propertyValues$`.
+   */
+  schemaPropertyValues$<K extends keyof DocProperties>(propertyKey: K) {
+    return this.docPropertiesStore.watchSchemaPropertyAllValues(propertyKey);
   }
 
   /**

@@ -34,6 +34,16 @@ declare global {
  * variable. If a row exists for one of these keys, the env var below is
  * ignored - delete the row rather than fighting it.
  */
+// Pre-rename variable names, still read so an existing `.env` keeps working.
+for (const [legacy, current] of [
+  ['NOTESGRAPH_INVENTORY_ENABLED', 'NOTESGRAPH_REGISTRY_ENABLED'],
+  ['NOTESGRAPH_INVENTORY_MAX_DEVICES', 'NOTESGRAPH_REGISTRY_MAX_DEVICES'],
+]) {
+  if (process.env[current] === undefined && process.env[legacy] !== undefined) {
+    process.env[current] = process.env[legacy];
+  }
+}
+
 defineModuleConfig('registry', {
   enabled: {
     desc: 'Enable the device registry API for deployment and agent targets.',

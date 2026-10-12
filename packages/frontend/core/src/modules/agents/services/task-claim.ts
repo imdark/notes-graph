@@ -224,6 +224,24 @@ export function releaseQueuedTasks(
 }
 
 /**
+ * Put tasks queued or in progress back to to-do, whoever moved them there:
+ * the reader has taken the work off the agent that had it. Done, and any
+ * other keyword (COMMITTED, BLOCKED, …), is kept.
+ */
+export function reopenTasks(store: Store, blockIds: string[]): void {
+  for (const id of blockIds) {
+    const model = store.getBlock(id)?.model;
+    if (!model) continue;
+    const status = readTaskStatus(model);
+    if (!status) continue;
+    const taken =
+      status.text === QUEUED_STATUS ||
+      orgStatusLabel(status.text) === 'In Progress';
+    if (taken) writeStatus(model, status, '[ ]');
+  }
+}
+
+/**
  * Claims the tasks a run is on the moment it is asked for, before any work
  * starts, so another agent working down the same list — here, on a device or
  * through MCP — sees them as taken rather than to-do and doesn't pick them up.
@@ -292,6 +310,19 @@ export class AgentTaskClaimService extends Service {
     const startedIds = await started.catch(() => []);
     await this.withStore(target, store =>
       releaseQueuedTasks(store, targetTaskIds(store, target), startedIds)
+    );
+  }
+
+  /**
+   * Take the target's tasks back from the agents on them, for another to be
+   * given them; see {@link reopenTasks}. With `settle`, first gives a device
+   * job's own hand-back time to sync here, so it doesn't land on top of the
+   * next agent's claim.
+   */
+  async reopen(target: AgentTarget, settle = false): Promise<void> {
+    if (settle) await settled();
+    await this.withStore(target, store =>
+      reopenTasks(store, targetTaskIds(store, target))
     );
   }
 

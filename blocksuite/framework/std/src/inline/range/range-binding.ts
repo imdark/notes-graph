@@ -302,6 +302,11 @@ export class RangeBinding {
     // wait for lit updated
     this.host.updateComplete
       .then(() => {
+        // A newer selection (e.g. a click) may have landed while waiting;
+        // applying the captured one would move the caret back to it.
+        const latest = this.selectionManager.find(TextSelection) ?? null;
+        if (latest !== text) return;
+
         const id = text?.blockId;
         const path = id && this._computePath(id);
 

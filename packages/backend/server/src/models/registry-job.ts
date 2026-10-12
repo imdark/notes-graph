@@ -29,6 +29,8 @@ export interface CreateRegistryJobInput {
   blockId?: string | null;
   title?: string | null;
   taskIds?: string[];
+  /** Skill names the agent chose; null for the model's default set. */
+  skills?: string[] | null;
   createdBy?: string | null;
   runAfter?: Date | null;
 }
@@ -96,6 +98,7 @@ export class RegistryJobModel extends BaseModel {
         blockId: input.blockId ?? null,
         title: input.title ?? null,
         taskIds: input.taskIds ?? [],
+        skills: input.skills ?? Prisma.DbNull,
         createdBy: input.createdBy ?? null,
         runAfter: input.runAfter ?? null,
       },

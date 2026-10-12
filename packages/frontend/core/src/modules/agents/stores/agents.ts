@@ -64,6 +64,8 @@ export interface Agent {
   harness?: AgentHarness;
   model?: string;
   tools: string[];
+  /** Skill names for a Claude agent; unset is the model's default set. */
+  skills?: string[];
   targets: AgentTargetKind[];
   output: AgentOutput;
   maxSteps: number;
@@ -90,6 +92,7 @@ interface AgentRowShape {
   harness?: string | null;
   model?: string | null;
   tools: string[];
+  skills?: string[] | null;
   targets: string[];
   output: string;
   maxSteps: number;
@@ -138,6 +141,7 @@ export class AgentsStore extends Store {
           : undefined,
       model: row.model ?? undefined,
       tools: row.tools ?? [],
+      skills: Array.isArray(row.skills) ? row.skills : undefined,
       // Unknown values are dropped rather than trusted: these rows sync, and a
       // row written by a newer build (or edited by hand) shouldn't be able to
       // put an agent somewhere this build doesn't understand.
@@ -164,6 +168,7 @@ export class AgentsStore extends Store {
       deviceKey: draft.deviceKey,
       model: draft.model,
       tools: draft.tools,
+      skills: draft.skills,
       targets: draft.targets,
       output: draft.output,
       maxSteps: draft.maxSteps,
@@ -236,6 +241,7 @@ export class AgentsStore extends Store {
       deviceKey: agent.deviceKey,
       model: agent.model,
       tools: agent.tools,
+      skills: agent.skills,
       targets: agent.targets,
       output: agent.output,
       maxSteps: agent.maxSteps,
