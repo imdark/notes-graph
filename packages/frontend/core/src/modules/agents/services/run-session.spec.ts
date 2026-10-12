@@ -156,6 +156,19 @@ describe('AgentRunSessionService', () => {
     expect(runs.map(r => r.signal.aborted)).toEqual([true, false]);
   });
 
+  test('once stop resolves, the same agent can be started on it again', async () => {
+    const { runs, sessions } = fakeExecutor();
+
+    void sessions.start(cloud, block('b1'));
+    await tick();
+    await sessions.stop(sessions.sessions$.value[0].id);
+    void sessions.start(cloud, block('b1'));
+    await tick();
+
+    expect(runs.map(r => r.signal.aborted)).toEqual([true, false]);
+    expect(sessions.sessions$.value.filter(s => s.running)).toHaveLength(1);
+  });
+
   test('an on-device run asked for while one is going queues', async () => {
     const { runs, sessions } = fakeExecutor();
 
