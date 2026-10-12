@@ -39,6 +39,7 @@ export const DebugConsole = () => {
 
     let disposed = false;
     let instance: { destroy: () => void } | undefined;
+    let onResize: (() => void) | undefined;
 
     import('eruda')
       .then(({ default: eruda }) => {
@@ -55,10 +56,17 @@ export const DebugConsole = () => {
         eruda.get('console')?.config.set('maxLogNum', String(MAX_LOG_ROWS));
         // Top right, under the status bar and app header, instead of eruda's
         // bottom-right default where it sits on the tab bar.
-        eruda.position({
-          x: window.innerWidth - ENTRY_BUTTON_SIZE - EDGE_GAP,
-          y: safeAreaTop() + HEADER_HEIGHT + EDGE_GAP,
-        });
+        const place = () =>
+          eruda.position({
+            x: window.innerWidth - ENTRY_BUTTON_SIZE - EDGE_GAP,
+            y: safeAreaTop() + HEADER_HEIGHT + EDGE_GAP,
+          });
+        place();
+        // eruda resets the button to its bottom-right default on every window
+        // resize (WebView layout settling, keyboard, rotation), which undid the
+        // placement above. Re-apply after its own resize handler has run.
+        onResize = () => setTimeout(place, 0);
+        window.addEventListener('resize', onResize);
       })
       .catch(err => {
         console.error('Failed to load debug console', err);
@@ -66,6 +74,9 @@ export const DebugConsole = () => {
 
     return () => {
       disposed = true;
+      if (onResize) {
+        window.removeEventListener('resize', onResize);
+      }
       if (erudaInitialized) {
         try {
           instance?.destroy();
