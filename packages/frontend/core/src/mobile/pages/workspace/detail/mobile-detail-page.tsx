@@ -13,6 +13,7 @@ import { useNavigateHelper } from '@notesgraph/core/components/hooks/use-navigat
 import { NotesGraphErrorBoundary } from '@notesgraph/core/components/notesgraph/notesgraph-error-boundary';
 import { PageDetailEditor } from '@notesgraph/core/components/page-detail-editor';
 import { DetailPageWrapper } from '@notesgraph/core/desktop/pages/workspace/detail-page/detail-page-wrapper';
+import { DayScheduleSection } from '@notesgraph/core/desktop/pages/workspace/detail-page/day-schedule-section';
 import {
   AppTabs,
   PageHeader,
@@ -26,7 +27,6 @@ import { DocDisplayMetaService } from '@notesgraph/core/modules/doc-display-meta
 import { EditorService } from '@notesgraph/core/modules/editor';
 import { FeatureFlagService } from '@notesgraph/core/modules/feature-flag';
 import { GlobalContextService } from '@notesgraph/core/modules/global-context';
-import { DayScheduleSection } from '@notesgraph/core/desktop/pages/workspace/detail-page/day-schedule-section';
 import { JournalService } from '@notesgraph/core/modules/journal';
 import { WorkbenchService } from '@notesgraph/core/modules/workbench';
 import { ViewService } from '@notesgraph/core/modules/workbench/services/view';
