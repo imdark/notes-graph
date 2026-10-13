@@ -39,6 +39,41 @@ step_end() {
   fi
 }
 
+# What this deploy is, for the Deployments screen to check pull requests
+# against: the commit, whether the synced tree had uncommitted changes on top
+# of it, and the pull requests merged into it ("Merge pull request #N" on the
+# first-parent line). Read before the build touches the tree; the server image
+# copies packages/backend/server, so the server serves it from /app.
+git rev-parse HEAD >/dev/null 2>&1 && node -e '
+  const { execSync } = require("node:child_process");
+  const git = args => execSync(`git ${args}`, { encoding: "utf8" }).trim();
+  const prs = git("log --first-parent --merges -n 500 --format=%s HEAD")
+    .split("\n")
+    .map(line => /^Merge pull request #(\d+)/.exec(line)?.[1])
+    .filter(Boolean)
+    .map(Number);
+  let repo = "";
+  try {
+    // owner/name, as in a pull request URL, from git@ or https remotes.
+    repo = git("config --get remote.origin.url")
+      .replace(/\.git$/, "")
+      .replace(/^.*github\.com[:/]/, "");
+  } catch {}
+  const record = {
+    repo,
+    commit: git("rev-parse HEAD"),
+    branch: git("rev-parse --abbrev-ref HEAD"),
+    subject: git("log -1 --format=%s HEAD"),
+    dirty: git("status --porcelain --untracked-files=no") !== "",
+    deployedAt: new Date().toISOString(),
+    pullRequests: prs,
+  };
+  require("node:fs").writeFileSync(
+    "packages/backend/server/deploy-info.json",
+    JSON.stringify(record, null, 2)
+  );
+' || echo "deploy record: skipped (no git checkout)"
+
 step "yarn install"
 yarn install
 

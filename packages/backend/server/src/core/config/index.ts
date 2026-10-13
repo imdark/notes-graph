@@ -2,6 +2,7 @@ import './config';
 
 import { Module } from '@nestjs/common';
 
+import { DeployInfoController } from './deploy-info';
 import {
   AppConfigResolver,
   ServerConfigResolver,
@@ -21,7 +22,9 @@ export class ServerConfigModule {}
     ServerFeatureConfigResolver,
     AppConfigResolver,
   ],
+  controllers: [DeployInfoController],
 })
 export class ServerConfigResolverModule {}
+export type { DeployInfo } from './deploy-info';
 export { ServerService };
 export { ServerFeature } from './types';

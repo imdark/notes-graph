@@ -21,7 +21,10 @@ export const AGENT_SKILLS: { name: string; desc: string }[] = [
   { name: 'antislop-ui', desc: 'Color, layout, components, motion' },
   { name: 'antislop-copywriting', desc: 'Headlines, tone, prose' },
   { name: 'antislop-human', desc: 'Contrast, keyboard, focus, states' },
-  { name: 'antislop-layoutmobile', desc: 'Layouts that reflow phone to desktop' },
+  {
+    name: 'antislop-layoutmobile',
+    desc: 'Layouts that reflow phone to desktop',
+  },
   { name: 'antislop-code', desc: 'Code comment hygiene' },
   { name: 'omniseek-investigate', desc: 'Deep multi-source research method' },
 ];
@@ -91,7 +94,9 @@ export const savedPlacement = <H extends string>(
     : {
         harness,
         model:
-          isDeviceClaudeModel(model) && harness !== 'remote' ? undefined : model,
+          isDeviceClaudeModel(model) && harness !== 'remote'
+            ? undefined
+            : model,
         deviceKey: harness === 'remote' ? deviceKey : undefined,
       };
 
@@ -180,6 +185,23 @@ export interface RemoteJobUpdate {
   job: RemoteJob;
   /** Transcript text that is new since the previous update. */
   logDelta: string;
+}
+
+/**
+ * What the server's running build was deployed from (`deploy-info.json`,
+ * written by scripts/prod/redeploy.sh). Null where a build has no record.
+ */
+export interface DeployInfo {
+  /** owner/name, as in its pull request URLs. */
+  repo: string;
+  commit: string;
+  branch: string;
+  subject: string;
+  /** The synced tree had uncommitted changes on top of `commit`. */
+  dirty: boolean;
+  deployedAt: string;
+  /** Pull requests merged into `commit`, newest first (bounded). */
+  pullRequests: number[];
 }
 
 export interface EnqueueRemoteJob {
@@ -288,6 +310,14 @@ export class RemoteAgentRunnerService extends Service {
   }
 
   /** List the devices in this workspace that accept agent work. */
+  /** What the server is running, for checking pull requests against. */
+  async deployInfo(): Promise<DeployInfo | null> {
+    const data = await this.json<{ deployInfo?: DeployInfo | null }>(
+      '/api/server/deploy-info'
+    );
+    return data.deployInfo ?? null;
+  }
+
   async agentTargets(workspaceId: string) {
     const data = await this.json<{
       devices: {

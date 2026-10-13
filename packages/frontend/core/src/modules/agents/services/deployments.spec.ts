@@ -16,6 +16,7 @@ import {
   parsePullRequests,
   type PullRequest,
   pullRequestsCommand,
+  pullRequestStage,
   shipAgents,
   shipBrief,
   type ShipStage,
@@ -270,5 +271,40 @@ describe('mergeReadiness', () => {
     expect(canFixToMerge('failing')).toBe(true);
     expect(canFixToMerge('conflicts')).toBe(true);
     expect(canFixToMerge('pending')).toBe(false);
+  });
+});
+
+describe('pullRequestStage', () => {
+  const deploy = {
+    repo: 'imdark/notes-graph',
+    commit: 'abc1234',
+    branch: 'main',
+    subject: 'Merge pull request #112',
+    dirty: false,
+    deployedAt: '2026-10-12T23:55:00Z',
+    pullRequests: [112, 111, 110],
+  };
+  const pr = (number: number, state: 'open' | 'merged', repo = 'imdark/notes-graph') => ({
+    number,
+    state,
+    url: `https://github.com/${repo}/pull/${number}`,
+  });
+
+  test('a merged pull request in the deployed commit is deployed', () => {
+    expect(pullRequestStage(pr(111, 'merged'), deploy)).toBe('deployed');
+  });
+
+  test('one merged since the deploy is merged, not deployed', () => {
+    expect(pullRequestStage(pr(113, 'merged'), deploy)).toBe('merged');
+  });
+
+  test('an open one is open, whatever prod runs', () => {
+    expect(pullRequestStage(pr(114, 'open'), deploy)).toBe('open');
+    expect(pullRequestStage(pr(114, 'open'), null)).toBe('open');
+  });
+
+  test("can't tell without a deploy record, or for another repo", () => {
+    expect(pullRequestStage(pr(111, 'merged'), null)).toBeNull();
+    expect(pullRequestStage(pr(19, 'merged', 'imdark/workflow'), deploy)).toBeNull();
   });
 });
