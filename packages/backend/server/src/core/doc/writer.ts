@@ -15,6 +15,7 @@ import {
 } from '../../native';
 import { PgWorkspaceDocStorageAdapter } from './adapters/workspace';
 import { appendLinkedDocReference } from './blocksuite-headless';
+import { fileDocInFolders, foldersDocId } from './folders';
 
 export interface CreateDocResult {
   docId: string;
@@ -236,10 +237,7 @@ export class DocWriter {
   }
 
   /** The doc's binary, as a zero-copy Buffer view when possible. */
-  private async docBinary(
-    workspaceId: string,
-    docId: string
-  ): Promise<Buffer> {
+  private async docBinary(workspaceId: string, docId: string): Promise<Buffer> {
     const existingDoc = await this.storage.getDoc(workspaceId, docId);
     if (!existingDoc?.bin) {
       throw new NotFoundException(`Document ${docId} not found`);
@@ -561,6 +559,41 @@ export class DocWriter {
     );
 
     return { success: true };
+  }
+
+  /**
+   * File a doc in the workspace's folder tree (the app's Organize folders),
+   * making the folders on `folder` that don't exist yet. Filing it again in
+   * the same folder changes nothing. Returns the folder it is in.
+   */
+  async fileInFolder(
+    workspaceId: string,
+    docId: string,
+    folder: string[],
+    editorId?: string
+  ): Promise<string> {
+    const tableDocId = foldersDocId(workspaceId);
+    const existing = await this.storage.getDoc(workspaceId, tableDocId);
+    const { update, folderId } = fileDocInFolders(
+      existing?.bin ? new Uint8Array(existing.bin) : new Uint8Array(),
+      folder,
+      docId
+    );
+    if (this.storage.isEmptyBin(update)) return folderId;
+    const timestamp = await this.storage.pushDocUpdates(
+      workspaceId,
+      tableDocId,
+      [update],
+      editorId
+    );
+    this.emitDocUpdatesPushed({
+      spaceId: workspaceId,
+      docId: tableDocId,
+      updates: [update],
+      timestamp,
+      editor: editorId,
+    });
+    return folderId;
   }
 
   private emitDocUpdatesPushed(payload: {

@@ -23,6 +23,24 @@ import {
 } from '../doc';
 import { PermissionAccess } from '../permission';
 
+/** A folder path, outermost first, as the API takes it. */
+const folderPath = (value: unknown): string[] | null => {
+  if (value === undefined || value === null) return null;
+  if (
+    !Array.isArray(value) ||
+    value.length === 0 ||
+    value.length > 16 ||
+    !value.every(
+      name => typeof name === 'string' && name.trim() && name.length <= 200
+    )
+  ) {
+    throw new BadRequestException(
+      'folder must be a list of 1-16 folder names, outermost first'
+    );
+  }
+  return value as string[];
+};
+
 /**
  * User-facing (Personal Access Token authenticated) doc API for the notes CLI
  * and, later, the MCP server. Unlike the internal `/rpc` controller, these
@@ -62,7 +80,10 @@ export class NotesApiController {
     // The root doc (docId === workspaceId) holds the doc list; gate it on
     // workspace read. Page docs use per-doc read.
     if (docId === workspaceId) {
-      await this.ac.user(userId).workspace(workspaceId).assert('Workspace.Read');
+      await this.ac
+        .user(userId)
+        .workspace(workspaceId)
+        .assert('Workspace.Read');
     } else {
       await this.ac.user(userId).doc(workspaceId, docId).assert('Doc.Read');
     }
@@ -89,12 +110,13 @@ export class NotesApiController {
   async createDoc(
     @CurrentUser() user: CurrentUserType,
     @Param('workspaceId') workspaceId: string,
-    @Body() body: { title?: string; markdown?: string }
+    @Body() body: { title?: string; markdown?: string; folder?: string[] }
   ) {
     await this.ac
       .user(user.id)
       .workspace(workspaceId)
       .assert('Workspace.CreateDoc');
+    const folder = folderPath(body.folder);
     const { docId } = await this.docWriter.createDoc(
       workspaceId,
       body.title ?? 'Untitled',
@@ -102,7 +124,56 @@ export class NotesApiController {
       user.id
     );
     this.logger.log(`created doc ${docId} in ${workspaceId} by ${user.id}`);
-    return { docId };
+    const folderId = folder
+      ? await this.fileInFolder(workspaceId, docId, folder, user.id)
+      : undefined;
+    return { docId, folderId };
+  }
+
+  /**
+   * File a doc in the workspace's folder tree (the app's Organize folders),
+   * making the folders on `folder` that don't exist yet. Filing it again in
+   * the same folder changes nothing.
+   */
+  @Put('/workspaces/:workspaceId/docs/:docId/folder')
+  async fileDoc(
+    @CurrentUser() user: CurrentUserType,
+    @Param('workspaceId') workspaceId: string,
+    @Param('docId') docId: string,
+    @Body() body: { folder?: string[] }
+  ) {
+    await this.ac
+      .user(user.id)
+      .workspace(workspaceId)
+      .assert('Workspace.CreateDoc');
+    await this.ac.user(user.id).doc(workspaceId, docId).assert('Doc.Read');
+    const folder = folderPath(body.folder);
+    if (!folder) throw new BadRequestException('folder is required');
+    const folderId = await this.fileInFolder(
+      workspaceId,
+      docId,
+      folder,
+      user.id
+    );
+    return { ok: true, folderId };
+  }
+
+  private async fileInFolder(
+    workspaceId: string,
+    docId: string,
+    folder: string[],
+    userId: string
+  ): Promise<string> {
+    const folderId = await this.docWriter.fileInFolder(
+      workspaceId,
+      docId,
+      folder,
+      userId
+    );
+    this.logger.log(
+      `filed ${docId} in ${workspaceId} under ${folder.join(' / ')}`
+    );
+    return folderId;
   }
 
   @Put('/workspaces/:workspaceId/docs/:docId')
@@ -110,18 +181,29 @@ export class NotesApiController {
     @CurrentUser() user: CurrentUserType,
     @Param('workspaceId') workspaceId: string,
     @Param('docId') docId: string,
-    @Body() body: { markdown?: string }
+    @Body() body: { markdown?: string; title?: string }
   ) {
     await this.ac.user(user.id).doc(workspaceId, docId).assert('Doc.Update');
-    if (typeof body.markdown !== 'string') {
-      throw new BadRequestException('markdown is required');
+    const title = typeof body.title === 'string' ? body.title.trim() : '';
+    if (typeof body.markdown !== 'string' && !title) {
+      throw new BadRequestException('markdown or title is required');
     }
-    await this.docWriter.updateDoc(
-      workspaceId,
-      docId,
-      body.markdown,
-      user.id
-    );
+    if (typeof body.markdown === 'string') {
+      await this.docWriter.updateDoc(
+        workspaceId,
+        docId,
+        body.markdown,
+        user.id
+      );
+    }
+    if (title) {
+      await this.docWriter.updateDocMeta(
+        workspaceId,
+        docId,
+        { title },
+        user.id
+      );
+    }
     this.logger.log(`edited doc ${workspaceId}/${docId} by ${user.id}`);
     return { ok: true };
   }
