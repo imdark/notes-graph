@@ -127,3 +127,6 @@ doordash-out/
 
 # python bytecode from the tools/ generators
 __pycache__/
+
+# Written by scripts/prod/redeploy.sh on the prod box for each deploy.
+packages/backend/server/deploy-info.json

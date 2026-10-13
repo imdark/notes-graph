@@ -18,6 +18,7 @@ import type { Agent } from '../stores/agents';
 import type { AgentContext } from './context';
 import {
   COMMAND_MODEL,
+  type DeployInfo,
   isDeviceClaudeModel,
   type RemoteAgentRunnerService,
   type RemoteJob,
@@ -93,6 +94,26 @@ export interface PullRequest {
   checks: ChecksState;
   /** Epoch ms. */
   mergedAt: number | null;
+}
+
+/**
+ * Where a pull request is on its way to production: still open, merged but
+ * not in the build prod runs, or in it.
+ */
+export type PullRequestStage = 'open' | 'merged' | 'deployed';
+
+/**
+ * Checked against what prod says it runs. Null when that can't be told: the
+ * server has no deploy record, or the pull request is in another repo than
+ * the one deployed.
+ */
+export function pullRequestStage(
+  pr: Pick<PullRequest, 'state' | 'number' | 'url'>,
+  deploy: DeployInfo | null
+): PullRequestStage | null {
+  if (pr.state === 'open') return 'open';
+  if (!deploy || repoOf(pr.url) !== deploy.repo) return null;
+  return deploy.pullRequests.includes(pr.number) ? 'deployed' : 'merged';
 }
 
 /**
@@ -447,6 +468,22 @@ export class DeploymentsService extends Service {
     at: null,
   });
 
+  /**
+   * What prod runs, to tell merged pull requests that are live from those
+   * waiting on a deploy. Undefined until read; null where the server keeps no
+   * deploy record.
+   */
+  readonly deployInfo$ = new LiveData<DeployInfo | null | undefined>(undefined);
+
+  async refreshDeployInfo(): Promise<void> {
+    try {
+      this.deployInfo$.setValue(await this.remote.deployInfo());
+    } catch {
+      // An older server has no endpoint: same as no record.
+      this.deployInfo$.setValue(null);
+    }
+  }
+
   private get workspaceId(): string {
     const id = this.workspaceService.workspace?.id;
     if (!id) throw new Error('No workspace is open');
@@ -507,6 +544,8 @@ export class DeploymentsService extends Service {
   async refreshPullRequests(agent: Agent, repos: string[]): Promise<void> {
     const prev = this.pullRequests$.value;
     this.pullRequests$.setValue({ ...prev, loading: true });
+    // Checked alongside, so a refresh also catches a deploy since.
+    this.refreshDeployInfo().catch(() => {});
     try {
       let cwd: string | undefined;
       if (repos.length === 0) {

@@ -5,11 +5,13 @@ import {
   type AgentTarget,
   agentTargetKey,
   canFixToMerge,
+  type DeployInfo,
   DeploymentsService,
   type MergeReadiness,
   mergeReadiness,
   mergesDirectly,
   type PullRequest,
+  pullRequestStage,
   repoOf,
   type ShipAction,
   shipAgents,
@@ -77,14 +79,71 @@ const prLabel = (url: string) => {
   return match ? `${match[1]} #${match[2]}` : 'Pull request';
 };
 
-/** What GitHub says of a row's pull request, as a badge. */
-const PullBadge = ({ pr }: { pr: PullRequest | undefined }) => {
+/**
+ * Where a row's pull request is, as a badge: checked against GitHub and,
+ * once merged, against the build prod says it runs.
+ */
+const PullBadge = ({
+  pr,
+  deploy,
+}: {
+  pr: PullRequest | undefined;
+  deploy: DeployInfo | null;
+}) => {
   if (!pr) return null;
   if (pr.state === 'merged') {
+    const stage = pullRequestStage(pr, deploy);
+    if (stage === 'deployed') {
+      return <span className={styles.badgeGood}>Deployed</span>;
+    }
+    if (stage === 'merged') {
+      return <span className={styles.badge}>Merged · not deployed</span>;
+    }
     return <span className={styles.badgeGood}>Merged on GitHub</span>;
   }
   const { label, tone } = READINESS[mergeReadiness(pr)];
   return <span className={badgeClass(tone)}>{label}</span>;
+};
+
+/**
+ * A task marked DEPLOYED whose pull request isn't in prod's build: an agent
+ * said so, or the deploy that had it was rolled back.
+ */
+const NotLiveBadge = ({
+  pr,
+  deploy,
+}: {
+  pr: PullRequest | undefined;
+  deploy: DeployInfo | null;
+}) => {
+  if (!pr) return null;
+  const stage = pullRequestStage(pr, deploy);
+  if (stage === 'deployed' || stage === null) return null;
+  return (
+    <span className={styles.badgeBad} data-testid="deployments-not-live">
+      Marked deployed, not on prod
+    </span>
+  );
+};
+
+/** What prod runs, so a merge can be checked for being live. */
+const ProdLine = ({ deploy }: { deploy: DeployInfo | null | undefined }) => {
+  if (deploy === undefined) return null;
+  if (deploy === null) {
+    return (
+      <div className={styles.sectionHint} data-testid="deployments-prod">
+        This server keeps no deploy record, so merged pull requests can't be
+        checked for being live. It starts with the next deploy.
+      </div>
+    );
+  }
+  return (
+    <div className={styles.sectionHint} data-testid="deployments-prod">
+      Prod runs <code>{deploy.commit.slice(0, 7)}</code> ({deploy.subject}),
+      deployed {new Date(deploy.deployedAt).toLocaleString()}
+      {deploy.dirty ? ', with uncommitted changes on top' : ''}.
+    </div>
+  );
 };
 
 /**
@@ -106,6 +165,12 @@ export const DeploymentsView = () => {
 
   const tasks = useLiveData(deployments.tasks$);
   const github = useLiveData(deployments.pullRequests$);
+  const deployInfo = useLiveData(deployments.deployInfo$);
+  const deploy = deployInfo ?? null;
+  // Read on open too, not only with the pull requests (which need an agent).
+  useEffect(() => {
+    deployments.refreshDeployInfo().catch(() => {});
+  }, [deployments]);
   const agents = useLiveData(agentsService.agents$);
   const candidates = useMemo(() => shipAgents(agents), [agents]);
   const [agentId, setAgentId] = useState<string | null>(null);
@@ -409,6 +474,7 @@ export const DeploymentsView = () => {
 
   return (
     <div className={styles.content} data-testid="deployments-view">
+      <ProdLine deploy={deployInfo} />
       {shippable ? (
         candidates.length > 0 && agent ? (
           <div className={styles.shipBar}>
@@ -560,7 +626,11 @@ export const DeploymentsView = () => {
                         ) : (
                           <span>No PR link</span>
                         )}
-                        {stage === 'deployed' ? null : <PullBadge pr={pr} />}
+                        {stage === 'deployed' ? (
+                          <NotLiveBadge pr={pr} deploy={deploy} />
+                        ) : (
+                          <PullBadge pr={pr} deploy={deploy} />
+                        )}
                       </span>
                     </div>
                     {stage === 'committed' ? mergeActions(pr, row) : null}
@@ -586,7 +656,7 @@ export const DeploymentsView = () => {
                       </a>
                       <span>{pr.branch}</span>
                       <span>No task</span>
-                      <PullBadge pr={pr} />
+                      <PullBadge pr={pr} deploy={deploy} />
                     </span>
                   </div>
                   {mergeActions(pr)}
@@ -630,6 +700,7 @@ export const DeploymentsView = () => {
                         merged {new Date(pr.mergedAt).toLocaleString()}
                       </span>
                     ) : null}
+                    <PullBadge pr={pr} deploy={deploy} />
                   </span>
                 </div>
               </div>
