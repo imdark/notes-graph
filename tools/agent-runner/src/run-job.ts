@@ -68,9 +68,24 @@ export interface RunOutcome {
   steps: number;
 }
 
-/** What a job asks, as wf words it (jobs.py _prompt). */
-export const jobPrompt = (job: Job) =>
-  job.instructions + (job.context.trim() ? `\n\n--- context ---\n${job.context}` : '');
+/**
+ * What a job asks, as wf words it (jobs.py _prompt). The note item the run
+ * was started on leads as the task; the agent's instructions follow as how to
+ * work on it. Led by the instructions, runs took standing ones ("work through
+ * the checkboxes until all are done") for a feature to build.
+ */
+export const jobPrompt = (job: Job) => {
+  const context = job.context.trim();
+  const instructions = job.instructions.trim();
+  if (!context) return job.instructions;
+  if (!instructions) return job.context;
+  return (
+    `THE TASK - the note item this run was started on:\n${context}\n\n` +
+    `HOW TO WORK ON IT - standing instructions from the agent "${job.agentName}". ` +
+    'They say how to approach the task above; they are not a separate ' +
+    `feature or change to make:\n${instructions}`
+  );
+};
 
 async function omniseek(settings: RunnerSettings, fetchImpl: typeof fetch) {
   const url = settings.omniseekUrl?.replace(/\/$/, '');
@@ -116,6 +131,11 @@ export async function runJob(job: Job, deps: RunDeps): Promise<RunOutcome> {
     prompt_file: join(workdir.path, 'prompt.md'),
   };
   await writeFile(values.prompt_file, jobPrompt(job));
+  // What the job is about, for the ticket's title (`wf agent prepare-task`
+  // reads it from the job directory): the note item, not the instructions.
+  if (job.title?.trim()) {
+    await writeFile(join(workdir.path, 'title.txt'), job.title.trim());
+  }
   // Steps and tools see the runner's credentials for git and the network,
   // never the API key the model runs on.
   const shell: ShellEnv = {
