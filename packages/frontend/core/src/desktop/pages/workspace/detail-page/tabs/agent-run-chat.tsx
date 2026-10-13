@@ -1,6 +1,8 @@
 import {
+  AgentExecutorService,
   type AgentRun,
   AgentRunLogsStore,
+  AgentsService,
   forkTranscript,
   RemoteAgentRunnerService,
   runChatMessages,
@@ -32,6 +34,20 @@ export const AgentRunChat = ({
   const logsStore = useService(AgentRunLogsStore);
   const remoteRunner = useService(RemoteAgentRunnerService);
   const workspaceService = useService(WorkspaceService);
+  const executor = useService(AgentExecutorService);
+  const agentsService = useService(AgentsService);
+
+  // Asked of the agent that ran it, on the same runtime — a run on a device's
+  // Claude Code is asked there, not on the server's model.
+  const openModel = useCallback(async () => {
+    const agent = agentsService.agents$.value.find(a => a.id === run.agentId);
+    if (!agent) {
+      throw new Error(
+        `The agent that ran this (${run.agentName}) no longer exists, so there is no one to ask.`
+      );
+    }
+    return executor.chatFor(agent);
+  }, [agentsService, executor, run.agentId, run.agentName]);
 
   const opening = useCallback(async () => {
     // Without the transcript the chat can still go on the input and answer.
@@ -61,6 +77,7 @@ export const AgentRunChat = ({
           : 'What did it change? What is left to do?'
       }
       opening={opening}
+      openModel={openModel}
       onClose={onClose}
       testId="agent-run-chat"
     />

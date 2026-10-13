@@ -18,7 +18,7 @@ import {
 import * as styles from './agents.css';
 
 /**
- * A chat with the server's model about a run, seeded with the run's context:
+ * A chat about a run, seeded with the run's context:
  * the question fork beside a question a run is waiting on, and the chat about
  * a run that has ended. Neither reaches the run itself.
  *
@@ -32,6 +32,7 @@ export const AgentSideChat = ({
   placeholder,
   opening,
   renderReply = reply => <p className={styles.output}>{reply || '…'}</p>,
+  openModel,
   onClose,
   testId,
 }: {
@@ -41,6 +42,8 @@ export const AgentSideChat = ({
   /** The conversation's opening: what it is for and what it knows. */
   opening: () => Promise<ChatMessage[]>;
   renderReply?: (reply: string) => ReactNode;
+  /** Who answers; the server's model when not given. */
+  openModel?: () => Promise<ChatModel>;
   onClose?: () => void;
   testId: string;
 }) => {
@@ -66,9 +69,11 @@ export const AgentSideChat = ({
   const start = useCallback(async (): Promise<ChatModel> => {
     if (model.current) return model.current;
     history.current = await opening();
-    model.current = await cloudRunner.open(workspaceService.workspace.id);
+    model.current = openModel
+      ? await openModel()
+      : await cloudRunner.open(workspaceService.workspace.id);
     return model.current;
-  }, [cloudRunner, opening, workspaceService]);
+  }, [cloudRunner, opening, openModel, workspaceService]);
 
   const ask = useCallback(
     async (message: string) => {
