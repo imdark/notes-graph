@@ -219,7 +219,13 @@ describe('running a job', () => {
     });
 
     expect(outcome).toEqual({ result: 'Bluey', steps: 3 });
-    expect(seen.prompt).toBe('Find a show to watch with Cosmo\n\n--- context ---\nnote text');
+    // The note item leads as the task; the agent's instructions say how.
+    expect(seen.prompt).toBe(
+      'THE TASK - the note item this run was started on:\nnote text\n\n' +
+        'HOW TO WORK ON IT - standing instructions from the agent "shows". ' +
+        'They say how to approach the task above; they are not a separate ' +
+        'feature or change to make:\nFind a show to watch with Cosmo'
+    );
     const options = seen.options!;
     expect(options.cwd).toBe(join(root, 'jobs', 'job-1234abcd-ffff', 'repo'));
     expect(options.systemPrompt).toEqual({ type: 'preset', preset: 'claude_code', append: 'Be the agent.' });
@@ -265,13 +271,15 @@ describe('running a job', () => {
           run:
             'mkdir -p {job_dir}/wt {job_dir}/skills && ' +
             'printf \'{"cwd":"%s","prompt":"TASK: CLOUD-1 %s","plugins":["%s"]}\' ' +
-            '"{job_dir}/wt" "$(cat {prompt_file} | head -1)" "{job_dir}/skills" > {job_dir}/automation.json',
+            '"{job_dir}/wt" "$(cat {job_dir}/title.txt)" "{job_dir}/skills" > {job_dir}/automation.json',
         },
       ],
       tools: [{ name: 'where', description: 'pwd', run: 'echo "$AGENT_CWD"' }],
       teardown: [{ name: 'gone', run: 'echo "$AGENT_CWD" > {cache}/last-cwd' }],
     };
-    await runJob(job({ model: 'workflow', profile: profile({ automation }) }), {
+    // The ticket is named after the note item (title.txt), as
+    // `wf agent prepare-task` does, not after the agent's instructions.
+    await runJob(job({ model: 'workflow', title: 'Plan movie night', profile: profile({ automation }) }), {
       api: api(),
       workspaceId: 'ws-1',
       settings: settings(),
@@ -281,7 +289,7 @@ describe('running a job', () => {
     });
     const dir = join(root, 'jobs', 'job-1234abcd-ffff');
     expect(seen.options!.cwd).toBe(join(dir, 'wt'));
-    expect(seen.prompt).toBe('TASK: CLOUD-1 Find a show to watch with Cosmo');
+    expect(seen.prompt).toBe('TASK: CLOUD-1 Plan movie night');
     expect(seen.options!.plugins).toEqual([{ type: 'local', path: join(dir, 'skills') }]);
     expect(await readFile(join(root, 'cache', 'last-cwd'), 'utf8')).toBe(`${join(dir, 'wt')}\n`);
   });
