@@ -26,6 +26,7 @@ import { DocDisplayMetaService } from '@notesgraph/core/modules/doc-display-meta
 import { EditorService } from '@notesgraph/core/modules/editor';
 import { FeatureFlagService } from '@notesgraph/core/modules/feature-flag';
 import { GlobalContextService } from '@notesgraph/core/modules/global-context';
+import { DayScheduleSection } from '@notesgraph/core/desktop/pages/workspace/detail-page/day-schedule-section';
 import { JournalService } from '@notesgraph/core/modules/journal';
 import { WorkbenchService } from '@notesgraph/core/modules/workbench';
 import { ViewService } from '@notesgraph/core/modules/workbench/services/view';
@@ -112,7 +113,8 @@ const DetailPageImpl = ({
   // Journal entries are dated pages that stand on their own — they
   // shouldn't be nudged to adopt a suggested parent (matches desktop's
   // detail-page.tsx).
-  const isJournal = !!useLiveData(journalService.journalDate$(doc.id));
+  const journalDate = useLiveData(journalService.journalDate$(doc.id));
+  const isJournal = !!journalDate;
 
   const mode = useLiveData(editor.mode$);
 
@@ -270,6 +272,7 @@ const DetailPageImpl = ({
             key={doc.id}
             className={styles.errorBoundary}
           >
+            {journalDate ? <DayScheduleSection date={journalDate} /> : null}
             <PageDetailEditor onLoad={onLoad} readonly={readonly} />
           </NotesGraphErrorBoundary>
         </div>
