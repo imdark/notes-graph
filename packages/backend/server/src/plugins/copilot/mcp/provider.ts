@@ -9,7 +9,12 @@ import { IndexerService } from '../../indexer';
 import { SearchTable } from '../../indexer/tables';
 import { SearchQueryOccur, SearchQueryType } from '../../indexer/types';
 import { CopilotContextService } from '../context/service';
-import { buildOutline, readSection } from './outline';
+import {
+  buildOutline,
+  loadOutlineSource,
+  type OutlineSource,
+  readSection,
+} from './outline';
 
 function first(value: unknown): string {
   const item = Array.isArray(value) ? value[0] : value;
@@ -817,10 +822,10 @@ export class WorkspaceMcpProvider {
       },
     });
 
-    const loadMarkdown = async (
+    const loadOutline = async (
       docId: string,
       signal: AbortSignal
-    ): Promise<{ markdown: string } | WorkspaceMcpToolResult> => {
+    ): Promise<OutlineSource | WorkspaceMcpToolResult> => {
       const notFoundError = toolError(`Doc with id ${docId} not found.`);
       const accessible = await this.ac
         .user(userId)
@@ -830,20 +835,16 @@ export class WorkspaceMcpProvider {
       if (!accessible) return notFoundError;
       const aborted = abortIfNeeded(signal);
       if (aborted) return aborted;
-      const content = await this.reader.getDocMarkdown(
-        workspaceId,
-        docId,
-        false
-      );
-      if (!content) return notFoundError;
-      return abortIfNeeded(signal) ?? { markdown: content.markdown };
+      const source = await loadOutlineSource(this.reader, workspaceId, docId);
+      if (!source) return notFoundError;
+      return abortIfNeeded(signal) ?? source;
     };
 
     const docOutline = defineTool({
       name: 'doc_outline',
       title: 'Document Outline',
       description:
-        "Return a document's heading tree (index, level, title, line, section length in characters) without its body. Use it to skim a long note, then read_section for the parts that matter instead of loading the whole document with read_document.",
+        "Return a document's heading tree without its body: for each heading its blockId, level (1-6), title, parentBlockId (the enclosing heading) and the section's size (characters and top-level blocks, sub-sections included), plus the size of any intro before the first heading. Use it to skim a long note by structure, then read_section the parts that matter instead of loading the whole document with read_document. Heading blockIds also work with update_block.",
       parser: z.object({ docId: z.string() }),
       inputSchema: {
         type: 'object',
@@ -852,13 +853,13 @@ export class WorkspaceMcpProvider {
         additionalProperties: false,
       },
       execute: async ({ docId }, options) => {
-        const loaded = await loadMarkdown(docId, options.signal);
+        const loaded = await loadOutline(docId, options.signal);
         if (!('markdown' in loaded)) return loaded;
         return toolText(
           JSON.stringify({
             docId,
-            length: loaded.markdown.length,
-            headings: buildOutline(loaded.markdown),
+            title: loaded.title,
+            ...buildOutline(loaded.markdown, loaded.headings),
           })
         );
       },
@@ -868,28 +869,31 @@ export class WorkspaceMcpProvider {
       name: 'read_section',
       title: 'Read Document Section',
       description:
-        'Read one section of a document: the heading at `index` from doc_outline, its text and its sub-sections.',
-      parser: z.object({ docId: z.string(), index: z.number().int() }),
+        "Read one section of a document as markdown: the heading at blockId (from doc_outline) with its text and sub-sections, up to the next heading of the same or a higher level. Pass the outline's intro blockId to read the content before the first heading. Each block is preceded by a `<!-- block_id=… flavour=… -->` comment, so you can target a block with update_block / update_task.",
+      parser: z.object({ docId: z.string(), blockId: z.string() }),
       inputSchema: {
         type: 'object',
         properties: {
           docId: { type: 'string' },
-          index: {
-            type: 'number',
-            description: 'Heading index from doc_outline',
+          blockId: {
+            type: 'string',
+            description:
+              "A heading's blockId from doc_outline (or its intro blockId)",
           },
         },
-        required: ['docId', 'index'],
+        required: ['docId', 'blockId'],
         additionalProperties: false,
       },
-      execute: async ({ docId, index }, options) => {
-        const loaded = await loadMarkdown(docId, options.signal);
+      execute: async ({ docId, blockId }, options) => {
+        const loaded = await loadOutline(docId, options.signal);
         if (!('markdown' in loaded)) return loaded;
-        const section = readSection(loaded.markdown, index);
-        if (section === null) {
-          return toolError(`Doc ${docId} has no heading at index ${index}.`);
+        const section = readSection(loaded.markdown, loaded.headings, blockId);
+        if (!section) {
+          return toolError(
+            `Doc ${docId} has no top-level block ${blockId}; get heading blockIds from doc_outline.`
+          );
         }
-        return toolText(section);
+        return toolText(section.markdown);
       },
     });
 
