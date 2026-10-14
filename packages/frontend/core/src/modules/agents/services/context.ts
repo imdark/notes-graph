@@ -9,6 +9,7 @@ import { getStoreManager } from '@notesgraph/core/blocksuite/manager/store';
 import { Service } from '@notesgraph/infra';
 
 import type { DocsService } from '../../doc';
+import type { Project, ProjectsService } from '../../projects';
 import type { AgentTarget } from './target';
 import {
   QUEUED_STATUS,
@@ -27,6 +28,9 @@ import {
 const MAX_DOC_CHARS = 12_000;
 
 const HASHTAG_RE = /#([\p{L}\p{N}_-]+)(?::([\p{L}\p{N}._-]+))?/gu;
+
+/** How long a run waits for a cold projects list before going without. */
+const PROJECTS_WAIT_MS = 2_000;
 
 /** Org planning stamps and `@agent` claims: bookkeeping, not what a task says. */
 const PLANNING_RE =
@@ -50,6 +54,34 @@ export interface AgentContext {
   taskIds?: string[];
 }
 
+/**
+ * The project a block belongs to, the way a project's task list decides it:
+ * sitting under a section named for the project (each project's heading in
+ * a journal day), nearest first, wherever it was written; else being in one
+ * of the project's notes. Null is Inbox. Position comes first because a
+ * journal has a section for every project, so it belongs to all and none.
+ */
+export function projectOf(
+  store: Store,
+  docId: string,
+  model: BlockModel,
+  projects: Pick<Project, 'id' | 'name' | 'docIds'>[]
+): Pick<Project, 'id' | 'name'> | null {
+  for (
+    let current = store.getParent(model);
+    current;
+    current = store.getParent(current)
+  ) {
+    const section = current.text?.toString().trim().toLowerCase();
+    if (!section) continue;
+    const named = projects.find(
+      project => project.name.trim().toLowerCase() === section
+    );
+    if (named) return named;
+  }
+  return projects.find(project => project.docIds.includes(docId)) ?? null;
+}
+
 const clipTitle = (text: string) =>
   text.length > TITLE_CHARS ? `${text.slice(0, TITLE_CHARS - 1)}…` : text;
 
@@ -62,8 +94,25 @@ const clipTitle = (text: string) =>
  * nothing to a model without the heading above it.
  */
 export class AgentContextService extends Service {
-  constructor(private readonly docsService: DocsService) {
+  constructor(
+    private readonly docsService: DocsService,
+    private readonly projectsService: ProjectsService
+  ) {
     super();
+  }
+
+  /**
+   * The workspace's projects. The list is cold until something has shown it
+   * (on a phone, nothing may have), so wait briefly; a run without it just
+   * isn't told its project.
+   */
+  private async projects(): Promise<Project[]> {
+    const { projects } = this.projectsService;
+    if (projects.projects$.value) return projects.projects$.value;
+    projects.revalidate().catch(() => {});
+    return projects.projects$
+      .waitForNonNull(AbortSignal.timeout(PROJECTS_WAIT_MS))
+      .catch(() => []);
   }
 
   async build(target: AgentTarget): Promise<AgentContext> {
@@ -95,8 +144,9 @@ export class AgentContextService extends Service {
 
       const blockIds =
         target.kind === 'block' ? [target.blockId] : target.blockIds;
+      const projects = await this.projects();
       const parts = blockIds
-        .map(id => this.describeBlock(store, target.docId, id))
+        .map(id => this.describeBlock(store, target.docId, id, projects))
         .filter((part): part is string => !!part);
 
       const label =
@@ -175,7 +225,8 @@ export class AgentContextService extends Service {
   private describeBlock(
     store: Store,
     docId: string,
-    blockId: string
+    blockId: string,
+    projects: Project[]
   ): string | null {
     const model = store.getBlock(blockId)?.model;
     if (!model) return null;
@@ -185,6 +236,8 @@ export class AgentContextService extends Service {
     const lines: string[] = [];
     const trail = this.ancestorTrail(store, model);
     if (trail) lines.push(`Under: ${trail}`);
+    const project = projectOf(store, docId, model, projects);
+    if (project) lines.push(`Project: ${project.name} (projectId: ${project.id})`);
 
     // The chip, a typed annotation, or the native checkbox.
     const status = readTaskStatus(model);

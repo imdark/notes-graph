@@ -163,6 +163,7 @@ import { WorkspaceDBService } from '../db';
 import { DocsService } from '../doc';
 import { DocsSearchService } from '../docs-search';
 import { FolderSyncService } from '../folder-sync';
+import { ProjectsService } from '../projects';
 import { WorkspaceScope, WorkspaceService } from '../workspace';
 import { Agents } from './entities/agents';
 import { AgentsService } from './services/agents';
@@ -185,7 +186,7 @@ export function configureAgentsModule(framework: Framework) {
   framework
     .scope(WorkspaceScope)
     .service(AgentsService, [AgentsStore, Agents])
-    .service(AgentContextService, [DocsService])
+    .service(AgentContextService, [DocsService, ProjectsService])
     .service(AgentFileToolsService, [FolderSyncService])
     .service(RemoteAgentRunnerService, [WorkspaceServerService])
     .service(CloudAgentRunnerService, [WorkspaceServerService])
