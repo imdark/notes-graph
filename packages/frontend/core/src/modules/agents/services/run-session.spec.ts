@@ -17,6 +17,12 @@ const remote = {
   harness: 'remote',
 } as Agent;
 const cloud = { id: 'a3', name: 'Cloud worker', harness: 'cloud' } as Agent;
+const fanOut = {
+  id: 'a4',
+  name: 'Fan-out',
+  harness: 'cloud',
+  kind: 'fan-out',
+} as Agent;
 const block = (blockId: string): AgentTarget => ({
   kind: 'block',
   docId: 'doc',
@@ -57,7 +63,8 @@ const fakeExecutor = () => {
       if (await ended) yield { type: 'done', output: 'ok' };
     },
   };
-  const { calls, claimedAgain, reverted, claim, open } = fakeClaim();
+  const { calls, claimedAgain, reverted, claim, open, children } =
+    fakeClaim();
   const framework = new Framework();
   framework.service(AgentExecutorService, executor as any);
   framework.service(AgentTaskClaimService, claim as any);
@@ -71,6 +78,7 @@ const fakeExecutor = () => {
     claimedAgain,
     reverted,
     open,
+    children,
     sessions: framework.provider().get(AgentRunSessionService),
   };
 };
@@ -84,6 +92,8 @@ const fakeClaim = () => {
     [];
   const claimedAgain: (() => boolean)[] = [];
   const open = { ids: [] as string[] };
+  /** Each block's sub-blocks, for a fan-out run to split into. */
+  const children: Record<string, string[]> = {};
   const started: Promise<string[]>[] = [];
   const handedBack: string[][] = [];
   const reverted: Uint8Array[] = [];
@@ -115,15 +125,60 @@ const fakeClaim = () => {
     ) => {
       handedBack.push(await moved);
     },
+    subBlocks: async (target: AgentTarget) =>
+      target.kind === 'block' ? (children[target.blockId] ?? []) : [],
     titleOf: async (target: AgentTarget) =>
       target.kind === 'block' ? `Task ${target.blockId}` : null,
   };
-  return { calls, claimedAgain, started, handedBack, reverted, claim, open };
+  return {
+    calls,
+    claimedAgain,
+    started,
+    handedBack,
+    reverted,
+    claim,
+    open,
+    children,
+  };
 };
 
 const tick = () => new Promise(resolve => setTimeout(resolve, 0));
 
 describe('AgentRunSessionService', () => {
+  test('a fan-out agent starts one run per sub-block, side by side', async () => {
+    const { runs, children, sessions } = fakeExecutor();
+    children.list = ['a', 'b', 'c'];
+
+    void sessions.start(fanOut, block('list'));
+    await tick();
+    await tick();
+
+    expect(runs.map(run => run.blockId)).toEqual(['a', 'b', 'c']);
+    expect(
+      sessions.sessions$.value.map(session => session.targetLabel)
+    ).toEqual(['“Task a”', '“Task b”', '“Task c”']);
+    expect(sessions.sessions$.value.every(s => s.running)).toBe(true);
+  });
+
+  test('a fan-out agent on a block with no sub-blocks works the block', async () => {
+    const { runs, sessions } = fakeExecutor();
+
+    void sessions.start(fanOut, block('leaf'));
+    await tick();
+
+    expect(runs.map(run => run.blockId)).toEqual(['leaf']);
+  });
+
+  test('other agents run on the block, not its sub-blocks', async () => {
+    const { runs, children, sessions } = fakeExecutor();
+    children.list = ['a', 'b'];
+
+    void sessions.start(cloud, block('list'));
+    await tick();
+
+    expect(runs.map(run => run.blockId)).toEqual(['list']);
+  });
+
   test('announces a finished run, and undo puts the note back', async () => {
     const { runs, reverted, sessions } = fakeExecutor();
     const finished: AgentRunFinished[] = [];

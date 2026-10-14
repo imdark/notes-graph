@@ -34,6 +34,12 @@ export interface QueuedAgentRun {
  */
 const MAX_LIST_PASSES = 10;
 
+/**
+ * Most runs one fan-out starts at once, so a long list under a block can't
+ * put dozens of agents (and device worktrees) to work in one click.
+ */
+const MAX_FAN_OUT = 20;
+
 /** A run that has ended for good, for the reader to confirm or undo. */
 export interface AgentRunFinished {
   sessionId: string;
@@ -196,13 +202,40 @@ export class AgentRunSessionService extends Service {
    *
    * With a `brief`, the agent reads that instead of the target's text, and
    * the target only places the run's record (see AgentExecutorService.run).
+   *
+   * A fan-out agent on a block with sub-blocks starts one run per sub-block
+   * instead (see {@link fanOut}).
    */
   async start(
     agent: Agent,
     target: AgentTarget,
     brief?: AgentContext
   ): Promise<void> {
+    if (agentKind(agent) === 'fan-out' && target.kind !== 'doc' && !brief) {
+      const children = await this.fanOut(target);
+      if (children.length) {
+        await Promise.all(
+          children.map(child => this.schedule(agent, child, 1))
+        );
+        return;
+      }
+    }
     await this.schedule(agent, target, 1, brief);
+  }
+
+  /**
+   * The runs a fan-out agent on `target` splits into: one per sub-block (see
+   * subBlockIds), at most {@link MAX_FAN_OUT}. Each is an ordinary block run,
+   * so it claims, loops and is listed by its own item, and reads the block it
+   * came from as the trail above it.
+   */
+  private async fanOut(target: AgentTarget): Promise<AgentTarget[]> {
+    const ids = await this.taskClaim.subBlocks(target).catch(() => []);
+    return ids.slice(0, MAX_FAN_OUT).map(blockId => ({
+      kind: 'block',
+      docId: target.docId,
+      blockId,
+    }));
   }
 
   /** {@link start}, for the `pass`th run over the target's task list. */

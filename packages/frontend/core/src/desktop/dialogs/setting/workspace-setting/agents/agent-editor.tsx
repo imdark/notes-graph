@@ -157,6 +157,11 @@ const KINDS: { value: AgentKind; label: string; note: string }[] = [
     label: 'Works in the note',
     note: 'Edits the note itself — works a task list, fills in blocks',
   },
+  {
+    value: 'fan-out',
+    label: 'Fans out over sub-blocks',
+    note: 'Starts one run per block under the one it is run on, side by side',
+  },
 ];
 
 const TARGETS: { kind: AgentTargetKind; label: string }[] = [
@@ -448,7 +453,9 @@ export const AgentEditor = ({
               </div>
               <span className={styles.hint}>
                 An answer is shown in the run panel with a Copy button. A worker
-                changes the note itself, so its run shows what it did instead.
+                changes the note itself, so its run shows what it did instead. A
+                fan-out works like a worker, but on a block with sub-blocks it
+                starts a run on each sub-block at once.
               </span>
             </div>
 
