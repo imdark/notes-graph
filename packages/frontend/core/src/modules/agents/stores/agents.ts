@@ -35,8 +35,14 @@ export type AgentHarness = 'on-device' | 'cloud' | 'remote' | 'research';
  * - `worker` does work in the note — ticks off a task list, edits blocks,
  *   files what it learns. The note is the result; whatever it says at the end
  *   is a report on what it did, not something to copy.
+ * - `fan-out` is a worker that splits itself: run on a block with sub-blocks
+ *   under it, it starts one run per sub-block, side by side, each on its own
+ *   item (see AgentRunSessionService.start). On a block with none it works
+ *   that block like a worker.
  */
-export type AgentKind = 'answer' | 'worker';
+export type AgentKind = 'answer' | 'worker' | 'fan-out';
+
+const AGENT_KINDS: AgentKind[] = ['answer', 'worker', 'fan-out'];
 
 /**
  * An agent's kind, for rows saved before it was a setting: a Claude Code or
@@ -130,8 +136,9 @@ export class AgentsStore extends Store {
       icon: row.icon ?? undefined,
       emoji: row.emoji ?? undefined,
       instructions: row.instructions,
-      kind:
-        row.kind === 'answer' || row.kind === 'worker' ? row.kind : undefined,
+      kind: AGENT_KINDS.includes(row.kind as AgentKind)
+        ? (row.kind as AgentKind)
+        : undefined,
       harness:
         row.harness === 'on-device' ||
         row.harness === 'cloud' ||

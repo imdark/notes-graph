@@ -7,6 +7,7 @@ import {
   markTasksStarted,
   releaseQueuedTasks,
   reopenTasks,
+  subBlockIds,
   targetTaskIds,
   unfinishedTaskIds,
 } from './task-claim';
@@ -194,6 +195,40 @@ describe('targetTaskIds and unfinishedTaskIds', () => {
         blockIds: ['c', 'e', 'heading', 'gone'],
       })
     ).toEqual(['c', 'e']);
+  });
+});
+
+describe('subBlockIds', () => {
+  const store = treeOf('page', {
+    page: { children: ['list', 'other'] },
+    list: { children: ['a', 'b', 'c', 'd', 'prose'] },
+    a: { status: '[ ]', children: ['nested'] },
+    b: { status: '[X]' },
+    c: { status: 'QUEUED' },
+    d: { status: 'BLOCKED' },
+    prose: {},
+    nested: { status: '[ ]' },
+    other: { children: ['a'] },
+  });
+
+  test("a block's direct children, less tasks already out of a run's hands", () => {
+    expect(
+      subBlockIds(store, { kind: 'block', docId: 'doc', blockId: 'list' })
+    ).toEqual(['a', 'c', 'prose']);
+  });
+
+  test('a selection splits into each block once; a note or a leaf into none', () => {
+    expect(
+      subBlockIds(store, {
+        kind: 'selection',
+        docId: 'doc',
+        blockIds: ['list', 'other'],
+      })
+    ).toEqual(['a', 'c', 'prose']);
+    expect(subBlockIds(store, { kind: 'doc', docId: 'doc' })).toEqual([]);
+    expect(
+      subBlockIds(store, { kind: 'block', docId: 'doc', blockId: 'b' })
+    ).toEqual([]);
   });
 });
 

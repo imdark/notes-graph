@@ -133,6 +133,23 @@ export function targetTaskIds(store: Store, target: AgentTarget): string[] {
   return ids;
 }
 
+/**
+ * The blocks a fan-out run splits into: the direct children of each targeted
+ * block, in note order, that have text and aren't a task already out of a
+ * run's hands (done, BLOCKED, …). None for a whole note.
+ */
+export function subBlockIds(store: Store, target: AgentTarget): string[] {
+  const ids: string[] = [];
+  for (const id of agentTargetBlockIds(target)) {
+    for (const child of store.getBlock(id)?.model.children ?? []) {
+      if (ids.includes(child.id) || !taskTitle(child)) continue;
+      if (readTaskStatus(child) && !isUnfinishedTask(child)) continue;
+      ids.push(child.id);
+    }
+  }
+  return ids;
+}
+
 /** The tasks a run is on that still need work; see {@link isUnfinishedTask}. */
 export function unfinishedTaskIds(store: Store, target: AgentTarget): string[] {
   return targetTaskIds(store, target).filter(id => {
@@ -365,6 +382,11 @@ export class AgentTaskClaimService extends Service {
     await this.withStore(target, store =>
       reopenTasks(store, targetTaskIds(store, target))
     );
+  }
+
+  /** What a fan-out run on the target splits into; see {@link subBlockIds}. */
+  async subBlocks(target: AgentTarget): Promise<string[]> {
+    return (await this.withStore(target, store => subBlockIds(store, target))) ?? [];
   }
 
   /** What the tasks a run is on are called; see {@link targetTitle}. */
