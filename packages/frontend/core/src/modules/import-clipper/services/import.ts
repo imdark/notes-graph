@@ -14,6 +14,8 @@ export interface ClipperInput {
   contentMarkdown: string;
   contentHtml: string;
   attachments: Record<string, Blob>;
+  /** The page the content was clipped from, when the clipper sends it. */
+  sourceUrl?: string;
   workspace?: 'select-by-user' | 'last-open-workspace';
 }
 
@@ -45,6 +47,14 @@ export class ImportClipperService extends Service {
       // only support page mode for now
       await docsService.changeDocTitle(docId, clipperInput.title);
       docsService.list.setPrimaryMode(docId, 'page');
+      // Marks the note as a clip, which is what offers "Compile into my
+      // notes" on it, and keeps where it came from for the citation.
+      docsService.list.doc$(docId).value?.updateProperties({
+        clipSource: {
+          url: clipperInput.sourceUrl || undefined,
+          clippedAt: new Date().toISOString(),
+        },
+      });
       workspace.engine.doc.addPriority(workspace.id, 100);
       workspace.engine.doc.addPriority(docId, 100);
       await workspace.engine.doc.waitForSynced(workspace.id);
