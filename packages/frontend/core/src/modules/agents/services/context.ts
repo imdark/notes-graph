@@ -28,6 +28,9 @@ const MAX_DOC_CHARS = 12_000;
 
 const HASHTAG_RE = /#([\p{L}\p{N}_-]+)(?::([\p{L}\p{N}._-]+))?/gu;
 
+/** A journal note is titled by its date, e.g. 2026-10-14. */
+const JOURNAL_TITLE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
 /** Org planning stamps and `@agent` claims: bookkeeping, not what a task says. */
 const PLANNING_RE =
   /\b(?:SCHEDULED|DEADLINE|STARTED|CLOSED):\s*[<[][^>\]]*[>\]]|(?:^|\s)@[\w.-]+/g;
@@ -96,7 +99,7 @@ export class AgentContextService extends Service {
       const blockIds =
         target.kind === 'block' ? [target.blockId] : target.blockIds;
       const parts = blockIds
-        .map(id => this.describeBlock(store, target.docId, id))
+        .map(id => this.describeBlock(store, target.docId, id, title))
         .filter((part): part is string => !!part);
 
       const label =
@@ -175,7 +178,8 @@ export class AgentContextService extends Service {
   private describeBlock(
     store: Store,
     docId: string,
-    blockId: string
+    blockId: string,
+    docTitle: string
   ): string | null {
     const model = store.getBlock(blockId)?.model;
     if (!model) return null;
@@ -185,6 +189,12 @@ export class AgentContextService extends Service {
     const lines: string[] = [];
     const trail = this.ancestorTrail(store, model);
     if (trail) lines.push(`Under: ${trail}`);
+    // A journal note is a dated page, and the heading a checkbox sits under
+    // there is the project it belongs to.
+    const project = JOURNAL_TITLE_RE.test(docTitle)
+      ? this.nearestAncestorText(store, model)
+      : null;
+    if (project) lines.push(`Project: ${project}`);
 
     // The chip, a typed annotation, or the native checkbox.
     const status = readTaskStatus(model);
@@ -212,6 +222,11 @@ export class AgentContextService extends Service {
 
     lines.push('', text);
     return lines.join('\n');
+  }
+
+  private nearestAncestorText(store: Store, model: BlockModel): string | null {
+    const parent = store.getParent(model);
+    return parent?.text?.toString().trim().slice(0, 80) || null;
   }
 
   /** Ancestor block text, outermost first — the headings this sits under. */
