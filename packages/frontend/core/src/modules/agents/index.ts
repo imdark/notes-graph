@@ -35,6 +35,10 @@ export {
 export { runChatMessages } from './services/run-chat';
 export { AgentContextService } from './services/context';
 export {
+  AGENT_RULES_TITLE,
+  AgentRulesService,
+} from './services/agent-rules';
+export {
   canFixToMerge,
   DeploymentsService,
   type MergeReadiness,
@@ -68,6 +72,16 @@ export {
   type MonitorSource,
   type MonitorSpec,
 } from './services/monitors';
+export {
+  isNotesHealthMonitor,
+  NOTES_HEALTH_DOC_TITLE,
+  NOTES_HEALTH_INSTRUCTIONS,
+  NOTES_HEALTH_NAME,
+  NOTES_HEALTH_TEMPLATE,
+  notesHealthDevice,
+  notesHealthMonitorDraft,
+  WEEK_MINUTES,
+} from './services/notes-health';
 export {
   AGENT_MODES,
   AGENT_WARMUP,
@@ -168,6 +182,7 @@ import { FolderSyncService } from '../folder-sync';
 import { ProjectsService } from '../projects';
 import { WorkspaceScope, WorkspaceService } from '../workspace';
 import { Agents } from './entities/agents';
+import { AgentRulesService } from './services/agent-rules';
 import { AgentsService } from './services/agents';
 import { CloudAgentRunnerService } from './services/cloud-runner';
 import { AgentContextService } from './services/context';
@@ -189,6 +204,7 @@ export function configureAgentsModule(framework: Framework) {
     .scope(WorkspaceScope)
     .service(AgentsService, [AgentsStore, Agents])
     .service(AgentContextService, [DocsService, ProjectsService])
+    .service(AgentRulesService, [DocsService])
     .service(AgentFileToolsService, [FolderSyncService])
     .service(RemoteAgentRunnerService, [WorkspaceServerService])
     .service(CloudAgentRunnerService, [WorkspaceServerService])
@@ -205,6 +221,7 @@ export function configureAgentsModule(framework: Framework) {
       CloudAgentRunnerService,
       ResearchToolsService,
       WorkspaceService,
+      AgentRulesService,
     ])
     .service(AgentTaskClaimService, [DocsService])
     .service(AgentRunSessionService, [
@@ -226,5 +243,13 @@ export function configureAgentsModule(framework: Framework) {
 export {
   AGENT_TEMPLATES,
   type AgentTemplate,
+  COMPILE_SOURCE_TEMPLATE,
   DEAL_MONITOR_TEMPLATE,
 } from './services/agent-templates';
+export {
+  COMPILE_AGENT_NAME,
+  compileBrief,
+  type CompileSource,
+  compileSourceOf,
+  findCompileAgent,
+} from './services/compile-source';

@@ -47,6 +47,7 @@ import { AIChatRuntime, ForkAIChatSessionStrategy } from '../runtime/chat';
 import { getAIRequestService } from '../runtime/request';
 import { reportResponse } from '../utils/action-reporter';
 import { insertBelow } from '../utils/editor-actions';
+import { saveAnswerAsDoc } from '../utils/save-answer-as-doc';
 
 type Selections = {
   text?: TextSelection;
@@ -480,43 +481,45 @@ const ADD_TO_EDGELESS_AS_NOTE = {
   },
 };
 
-export const SAVE_AS_DOC = {
+/**
+ * Saves the answer as a note of its own, titled from its heading or first
+ * line, with its citations as real links — cited notes as doc references (so
+ * the note joins their backlinks), web citations as URLs — and opens it.
+ * `openDoc` opens it where there's no editor to follow a doc link, as in the
+ * workspace chat page.
+ */
+export const createSaveAsDocAction = (openDoc?: (docId: string) => void) => ({
   icon: PageIcon({ width: '20px', height: '20px' }),
   title: 'Save as doc',
   showWhen: () => true,
   toast: 'New doc created',
-  handler: (host: EditorHost, content: string) => {
+  handler: async (host: EditorHost, content: string) => {
     reportResponse('result:add-page', host);
-    const doc = host.store.workspace.createDoc();
-    const newDoc = doc.getStore();
-    newDoc.load();
-    const rootId = newDoc.addBlock('notesgraph:page');
-    newDoc.addBlock('notesgraph:surface', {}, rootId);
-    const noteId = newDoc.addBlock('notesgraph:note', {}, rootId);
-
-    host.std.getOptional(RefNodeSlotsProvider)?.docLinkClicked.next({
-      pageId: newDoc.id,
-      host,
-    });
-    let complete = false;
-    (function addContent() {
-      if (complete) return;
-      const newHost = document.querySelector('editor-host');
-      // FIXME: this is a hack to wait for the host to be ready, now we don't have a way to know if the new host is ready
-      if (!newHost || newHost === host) {
-        setTimeout(addContent, 100);
-        return;
+    try {
+      const docId = await saveAnswerAsDoc(host.store.workspace, content);
+      if (!docId) return false;
+      if (openDoc) {
+        openDoc(docId);
+      } else {
+        host.std.getOptional(RefNodeSlotsProvider)?.docLinkClicked.next({
+          pageId: docId,
+          host,
+        });
       }
-      complete = true;
-      const { store } = newHost;
-      insertFromMarkdown(newHost, content, store, noteId, 0).catch(
-        console.error
-      );
-    })();
-
-    return true;
+      return true;
+    } catch (err) {
+      console.error(err);
+      host.std.getOptional(NotificationProvider)?.notify({
+        title: 'Failed to save the answer as a doc',
+        accent: 'error',
+        onClose: function (): void {},
+      });
+      return false;
+    }
   },
-};
+});
+
+export const SAVE_AS_DOC = createSaveAsDocAction();
 
 const CREATE_AS_LINKED_DOC = {
   icon: LinkedPageIcon({ width: '20px', height: '20px' }),

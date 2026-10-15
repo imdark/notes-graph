@@ -189,7 +189,14 @@ test('a claimed job gets its skill notes from its own workspace, readable by its
     }),
   };
   const skillNotes = new SkillNoteService(models, {} as any, ac);
-  const service = new RegistryJobService(models, undefined, undefined, undefined, skillNotes);
+  const service = new RegistryJobService(
+    models,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    skillNotes
+  );
   const claimed = await service.claim('ws-1', 'cloud', 'runner');
   t.deepEqual(asked, [{ workspaceId: 'ws-1', prefix: 'skill', docIds: ['a', 'secret'] }]);
   t.deepEqual(claimed?.profile?.skills, [

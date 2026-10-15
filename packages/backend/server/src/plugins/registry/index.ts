@@ -6,6 +6,7 @@ import { AuthModule } from '../../core/auth';
 import { DocStorageModule } from '../../core/doc';
 import { PermissionModule } from '../../core/permission';
 import { WorkspaceModule } from '../../core/workspaces';
+import { AgentRules } from './agent-rules';
 import { RegistryController } from './controller';
 import { RegistryHealthService } from './health';
 import { RegistryJobService } from './jobs';
@@ -30,6 +31,7 @@ import { JobTaskClaims } from './task-claims';
     MonitoringAgentService,
     AgentPushService,
     JobTaskClaims,
+    AgentRules,
     SkillNoteService,
   ],
   controllers: [RegistryController],
