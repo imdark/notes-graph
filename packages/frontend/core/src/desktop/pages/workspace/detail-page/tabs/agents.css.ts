@@ -583,13 +583,6 @@ export const mdCode = style({
   fontSize: cssVar('fontXs'),
 });
 
-export const attachRow = style({
-  display: 'flex',
-  flexWrap: 'wrap',
-  alignItems: 'center',
-  gap: 6,
-});
-
 export const attachChip = style({
   display: 'inline-flex',
   alignItems: 'center',
