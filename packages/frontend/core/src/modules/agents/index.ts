@@ -33,6 +33,10 @@ export {
 export { runChatMessages } from './services/run-chat';
 export { AgentContextService } from './services/context';
 export {
+  AGENT_RULES_TITLE,
+  AgentRulesService,
+} from './services/agent-rules';
+export {
   canFixToMerge,
   DeploymentsService,
   type MergeReadiness,
@@ -166,6 +170,7 @@ import { FolderSyncService } from '../folder-sync';
 import { ProjectsService } from '../projects';
 import { WorkspaceScope, WorkspaceService } from '../workspace';
 import { Agents } from './entities/agents';
+import { AgentRulesService } from './services/agent-rules';
 import { AgentsService } from './services/agents';
 import { CloudAgentRunnerService } from './services/cloud-runner';
 import { AgentContextService } from './services/context';
@@ -187,6 +192,7 @@ export function configureAgentsModule(framework: Framework) {
     .scope(WorkspaceScope)
     .service(AgentsService, [AgentsStore, Agents])
     .service(AgentContextService, [DocsService, ProjectsService])
+    .service(AgentRulesService, [DocsService])
     .service(AgentFileToolsService, [FolderSyncService])
     .service(RemoteAgentRunnerService, [WorkspaceServerService])
     .service(CloudAgentRunnerService, [WorkspaceServerService])
@@ -203,6 +209,7 @@ export function configureAgentsModule(framework: Framework) {
       CloudAgentRunnerService,
       ResearchToolsService,
       WorkspaceService,
+      AgentRulesService,
     ])
     .service(AgentTaskClaimService, [DocsService])
     .service(AgentRunSessionService, [
