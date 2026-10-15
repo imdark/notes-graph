@@ -16,6 +16,7 @@ import {
   buildDocContentGetter,
   buildDocCreateHandler,
   buildDocKeywordSearchGetter,
+  buildDocOutlineGetter,
   buildDocSearchGetter,
   buildDocUpdateHandler,
   buildDocUpdateMetaHandler,
@@ -27,6 +28,8 @@ import {
   createDocComposeTool,
   createDocCreateTool,
   createDocKeywordSearchTool,
+  createDocOutlineTool,
+  createDocReadSectionTool,
   createDocReadTool,
   createDocSemanticSearchTool,
   createDocUpdateMetaTool,
@@ -152,6 +155,15 @@ export class ToolRuntime {
             this.models
           );
           tools.doc_read = createDocReadTool(getDoc.bind(null, options));
+          // outline-first reading of long docs rides on the same permission
+          // (and the same "reading docs" switch) as doc_read
+          const getOutline = buildDocOutlineGetter(
+            this.ac,
+            this.docReader,
+            this.models
+          ).bind(null, options);
+          tools.doc_outline = createDocOutlineTool(getOutline);
+          tools.doc_read_section = createDocReadSectionTool(getOutline);
           break;
         }
         case 'docCreate': {
