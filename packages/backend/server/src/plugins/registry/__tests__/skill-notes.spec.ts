@@ -133,6 +133,7 @@ test('profileFor takes catalog skills and the looked-up skill notes, nothing els
   const profile = profileFor(
     'claude-code',
     ['antislop-ui', 'note:a', 'note:elsewhere', 'https://evil.example/SKILL.md'],
+    null,
     noteSkills
   );
   t.deepEqual(profile?.skills, [
@@ -141,11 +142,11 @@ test('profileFor takes catalog skills and the looked-up skill notes, nothing els
   ]);
   // A skill note the job didn't name isn't added.
   t.deepEqual(
-    profileFor('claude-code', ['antislop-ui'], noteSkills)?.skills.map(s => s.name),
+    profileFor('claude-code', ['antislop-ui'], null, noteSkills)?.skills.map(s => s.name),
     ['antislop-ui']
   );
   // Without a list of its own the job keeps the model's defaults.
-  t.deepEqual(profileFor('claude-code', null, noteSkills), profileFor('claude-code'));
+  t.deepEqual(profileFor('claude-code', null, null, noteSkills), profileFor('claude-code'));
 });
 
 test('a claimed job gets its skill notes from its own workspace, readable by its starter', async t => {

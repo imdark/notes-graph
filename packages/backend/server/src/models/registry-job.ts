@@ -33,6 +33,8 @@ export interface CreateRegistryJobInput {
   skills?: string[] | null;
   createdBy?: string | null;
   runAfter?: Date | null;
+  maxCostUsd?: number | null;
+  access?: string | null;
 }
 
 /**
@@ -63,6 +65,8 @@ export interface ReportRegistryJobInput {
   result?: string | null;
   error?: string | null;
   steps?: number;
+  costUsd?: number;
+  tokens?: number;
   /** Transcript text produced since the last report, appended to `log`. */
   logAppend?: string;
   tmuxSession?: string | null;
@@ -101,6 +105,8 @@ export class RegistryJobModel extends BaseModel {
         skills: input.skills ?? Prisma.DbNull,
         createdBy: input.createdBy ?? null,
         runAfter: input.runAfter ?? null,
+        maxCostUsd: input.maxCostUsd ?? null,
+        access: input.access ?? null,
       },
     });
   }
@@ -204,6 +210,8 @@ export class RegistryJobModel extends BaseModel {
         result: input.result ?? job.result,
         error: input.error ?? job.error,
         steps: input.steps ?? job.steps,
+        costUsd: input.costUsd ?? job.costUsd,
+        tokens: input.tokens ?? job.tokens,
         tmuxSession: input.tmuxSession ?? job.tmuxSession,
         finishedAt: terminal ? new Date() : null,
         leaseExpiresAt: terminal
@@ -410,6 +418,8 @@ export class RegistryJobModel extends BaseModel {
       detail?: string | null;
       options?: string[];
       allowedBy?: string | null;
+      /** Refused on the spot, with this as the answer the runner sees. */
+      refused?: string;
     }
   ): Promise<RegistryJobQuestion> {
     const allowed = input.allowedBy !== undefined;
@@ -423,6 +433,9 @@ export class RegistryJobModel extends BaseModel {
         ...(allowed
           ? { allowed: true, answeredBy: input.allowedBy, answeredAt: new Date() }
           : {}),
+        ...(input.refused !== undefined
+          ? { allowed: false, answer: input.refused, answeredAt: new Date() }
+          : {}),
       },
     });
   }
@@ -432,13 +445,18 @@ export class RegistryJobModel extends BaseModel {
    * asking, and any still open alongside the one answered are allowed now.
    */
   @Transactional()
-  async allowAllTools(jobId: string, userId: string): Promise<void> {
+  async allowAllTools(
+    jobId: string,
+    userId: string,
+    /** Open permissions "Allow all" doesn't cover; they stay open. */
+    except: string[] = []
+  ): Promise<void> {
     await this.db.registryJob.update({
       where: { id: jobId },
       data: { allowAllTools: true },
     });
     await this.db.registryJobQuestion.updateMany({
-      where: { jobId, kind: 'permission', answeredAt: null },
+      where: { jobId, kind: 'permission', answeredAt: null, id: { notIn: except } },
       data: { allowed: true, answeredBy: userId, answeredAt: new Date() },
     });
   }
@@ -498,6 +516,37 @@ export class RegistryJobModel extends BaseModel {
     return this.db.registryJob.update({
       where: { id },
       data: { status: 'cancelled', finishedAt: new Date(), leaseExpiresAt: null },
+    });
+  }
+
+  /** What the workspace's runs created since `since` have cost (USD). */
+  async spentSince(workspaceId: string, since: Date): Promise<number> {
+    const { _sum } = await this.db.registryJob.aggregate({
+      where: { workspaceId, createdAt: { gte: since } },
+      _sum: { costUsd: true },
+    });
+    return _sum.costUsd ?? 0;
+  }
+
+  async getBudget(workspaceId: string): Promise<number | null> {
+    const row = await this.db.registryAgentBudget.findUnique({ where: { workspaceId } });
+    return row?.monthlyUsd ?? null;
+  }
+
+  /** Set the monthly budget, or remove it with null. */
+  async setBudget(
+    workspaceId: string,
+    monthlyUsd: number | null,
+    userId: string
+  ): Promise<void> {
+    if (monthlyUsd === null) {
+      await this.db.registryAgentBudget.deleteMany({ where: { workspaceId } });
+      return;
+    }
+    await this.db.registryAgentBudget.upsert({
+      where: { workspaceId },
+      create: { workspaceId, monthlyUsd, updatedBy: userId },
+      update: { monthlyUsd, updatedBy: userId },
     });
   }
 }

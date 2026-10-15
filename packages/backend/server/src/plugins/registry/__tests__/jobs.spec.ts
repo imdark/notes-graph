@@ -17,14 +17,22 @@ import { questionPushData } from '../push';
 const workspaceId = 'ws-1';
 const userId = 'user-1';
 
-function makeService(options: { device?: any; heldUntil?: Date } = {}) {
+function makeService(
+  options: { device?: any; heldUntil?: Date; budget?: number; spent?: number } = {}
+) {
   const created: any[] = [];
+  const allowedAll: string[] = [];
   const models: any = {
     registryDevice: {
       get: async () => options.device ?? null,
     },
     registryJob: {
       heldUntil: async () => options.heldUntil ?? null,
+      getBudget: async () => options.budget ?? null,
+      spentSince: async () => options.spent ?? 0,
+      allowAllTools: async (jobId: string) => {
+        allowedAll.push(jobId);
+      },
       create: async (input: any) => {
         const job = {
           id: 'job-1',
@@ -42,7 +50,7 @@ function makeService(options: { device?: any; heldUntil?: Date } = {}) {
       },
     },
   };
-  return { service: new RegistryJobService(models), created };
+  return { service: new RegistryJobService(models), created, allowedAll };
 }
 
 const agentTarget = { key: 'laptop', agentTarget: true };
@@ -193,16 +201,19 @@ test('a report passes log text and the tmux session to the model', async t => {
   t.is(job?.tmuxSession, 'wf-job-1234abcd');
 });
 
-function questionService(job: any, question?: any) {
+function questionService(job: any, question?: any, open: any[] = []) {
   const answered: any[] = [];
   const asked: any[] = [];
   const allowedAll: string[] = [];
+  const kept: string[][] = [];
   const models: any = {
     registryJob: {
       get: async () => job,
-      allowAllTools: async (_jobId: string, by: string) => {
+      allowAllTools: async (_jobId: string, by: string, except: string[] = []) => {
         allowedAll.push(by);
+        kept.push(except);
       },
+      listQuestions: async () => open,
       ask: async (jobId: string, input: any) => (asked.push(input), {
         id: 'q1',
         jobId,
@@ -221,7 +232,7 @@ function questionService(job: any, question?: any) {
       },
     },
   };
-  return { service: new RegistryJobService(models), answered, asked, allowedAll };
+  return { service: new RegistryJobService(models), answered, asked, allowedAll, kept };
 }
 
 const openQuestion = (overrides: Record<string, unknown> = {}) => ({
@@ -878,4 +889,110 @@ test('a job’s chosen skills replace the model’s defaults, catalog names only
   t.deepEqual(chosen?.skills.map(s => s.name), ['antislop-ui']);
   t.deepEqual(profileFor('claude-code', [])?.skills, []);
   t.is(profileFor('some-other-model', ['antislop']), null);
+});
+
+test('a run is refused once the month has used the budget', async t => {
+  const { service, created } = makeService({ device: agentTarget, budget: 20, spent: 20.5 });
+  await t.throwsAsync(
+    service.enqueue(workspaceId, userId, 'laptop', { instructions: 'go' }),
+    { message: /used their \$20\.00 budget for \d{4}-\d{2} \(\$20\.50 spent\)/ }
+  );
+  t.deepEqual(created, []);
+
+  const under = makeService({ device: agentTarget, budget: 20, spent: 19.99 });
+  await under.service.enqueue(workspaceId, userId, 'laptop', { instructions: 'go' });
+  t.is(under.created.length, 1);
+});
+
+test('a job carries its cost cap and level; full access allows all from the start', async t => {
+  const { service, created, allowedAll } = makeService({ device: agentTarget });
+  const job = await service.enqueue(workspaceId, userId, 'laptop', {
+    instructions: 'go',
+    maxCostUsd: '2.5',
+    access: 'full',
+  });
+  t.is(created[0].maxCostUsd, 2.5);
+  t.is(created[0].access, 'full');
+  t.deepEqual(allowedAll, ['job-1']);
+  t.true(job.allowAllTools);
+
+  const plain = makeService({ device: agentTarget });
+  await plain.service.enqueue(workspaceId, userId, 'laptop', {
+    instructions: 'go',
+    maxCostUsd: -1,
+    access: 'root',
+  });
+  t.is(plain.created[0].maxCostUsd, null);
+  t.is(plain.created[0].access, null);
+  t.deepEqual(plain.allowedAll, []);
+});
+
+test('a report passes what the run cost to the model', async t => {
+  let received: any;
+  const models: any = {
+    registryJob: {
+      report: async (_ws: string, _id: string, input: any) => {
+        received = input;
+        return storedJob({ status: 'done', costUsd: input.costUsd, tokens: input.tokens });
+      },
+    },
+  };
+  const job = await new RegistryJobService(models).report(workspaceId, 'job-1', {
+    status: 'done',
+    costUsd: 0.4213,
+    tokens: 1200.4,
+  });
+  t.is(received.costUsd, 0.4213);
+  t.is(received.tokens, 1200);
+  t.is(job?.costUsd, 0.4213);
+});
+
+test('a read-only run is refused a tool without anyone being asked', async t => {
+  const { service, asked } = questionService(storedJob({ createdBy: userId, access: 'read' }));
+  const question = await service.ask(workspaceId, 'job-1', {
+    kind: 'permission',
+    text: 'Allow mcp__notesgraph__update_document?',
+  });
+  t.regex(asked[0].refused, /can only read/);
+  t.false('allowedBy' in asked[0]);
+  t.is(question.kind, 'permission');
+  // Its own tools and plain questions still go through.
+  await service.ask(workspaceId, 'job-1', { kind: 'permission', text: 'Allow mcp__run__set_title?' });
+  await service.ask(workspaceId, 'job-1', { text: 'Which topic?' });
+  t.false('refused' in asked[1]);
+  t.false('refused' in asked[2]);
+});
+
+test('"Allow all" does not cover deploying, spending or deleting', async t => {
+  const { service, asked } = questionService(
+    storedJob({ createdBy: userId, allowAllTools: true })
+  );
+  await service.ask(workspaceId, 'job-1', {
+    kind: 'permission',
+    text: 'Allow Bash?',
+    detail: JSON.stringify({ command: 'scripts/deploy-bg.sh' }),
+  });
+  await service.ask(workspaceId, 'job-1', {
+    kind: 'permission',
+    text: 'Allow Bash?',
+    detail: JSON.stringify({ command: 'git push -u origin feat/x' }),
+  });
+  t.false('allowedBy' in asked[0]);
+  t.is(asked[1].allowedBy, userId);
+});
+
+test('pressing "Allow all" leaves an open deploy waiting', async t => {
+  const deploy = openQuestion({
+    id: 'q2',
+    kind: 'permission',
+    text: 'Allow Bash?',
+    detail: JSON.stringify({ command: 'fly deploy' }),
+  });
+  const { service, kept } = questionService(
+    storedJob({ createdBy: userId }),
+    openQuestion({ kind: 'permission', text: 'Allow Edit?' }),
+    [deploy]
+  );
+  await service.answer(workspaceId, 'job-1', 'q1', userId, { allowed: true, allowAll: true });
+  t.deepEqual(kept, [['q2']]);
 });

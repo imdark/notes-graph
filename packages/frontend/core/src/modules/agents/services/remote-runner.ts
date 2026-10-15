@@ -2,6 +2,7 @@ import { UserFriendlyError } from '@notesgraph/error';
 import { Service } from '@notesgraph/infra';
 
 import { FetchService, type WorkspaceServerService } from '../../cloud';
+import type { AgentAccess } from '../stores/agents';
 
 /**
  * Runs an agent on a registered device instead of in this browser.
@@ -184,6 +185,14 @@ export interface RemoteJob {
    * Absent from older servers.
    */
   allowAllTools?: boolean;
+  /** What the run cost in USD, once its runner reports it. Absent from older servers. */
+  costUsd?: number | null;
+  /** Tokens the run used, once its runner reports them. Absent from older servers. */
+  tokens?: number | null;
+  /** The cost cap the run was queued with, in USD. */
+  maxCostUsd?: number | null;
+  /** The permission level the run was queued with; unset is `write`. */
+  access?: AgentAccess | null;
   /** Transcript from absolute offset `logFrom` to `logEnd`. */
   log?: string;
   logFrom?: number;
@@ -192,6 +201,15 @@ export interface RemoteJob {
   finishedAt: number | null;
   /** Present on single-job reads. */
   questions?: RemoteQuestion[];
+}
+
+/** A workspace's agent spend this month, against its budget if it has one. */
+export interface AgentBudget {
+  /** Unset when there is no budget. */
+  monthlyUsd: number | null;
+  spentUsd: number;
+  /** 'YYYY-MM' */
+  month: string;
 }
 
 export const openQuestions = (job: RemoteJob): RemoteQuestion[] =>
@@ -232,6 +250,10 @@ export interface EnqueueRemoteJob {
   /** Skills the run gets, by name; unset for the model's default set. */
   skills?: string[];
   maxSteps?: number;
+  /** The most the run may spend, in USD; unset is no cap. */
+  maxCostUsd?: number;
+  /** What the run may do without asking; unset is `write`. */
+  access?: AgentAccess;
   /** What the run starts out called; the agent may rename it. */
   title?: string;
   targetKind?: string;
@@ -281,6 +303,11 @@ export class RemoteAgentRunnerService extends Service {
    */
   private get fetchService(): FetchService | undefined {
     return this.workspaceServerService.server?.scope.get(FetchService);
+  }
+
+  /** False for a local workspace, which has no server to run jobs on. */
+  get hasServer(): boolean {
+    return !!this.fetchService;
   }
 
   private base(workspaceId: string) {
@@ -347,6 +374,26 @@ export class RemoteAgentRunnerService extends Service {
       }[];
     }>(`${this.base(workspaceId)}/devices?agentTarget=true`);
     return data.devices;
+  }
+
+  /** This month's agent spend in the workspace, and its budget if one is set. */
+  async budget(workspaceId: string): Promise<AgentBudget> {
+    const data = await this.json<{ budget: AgentBudget }>(
+      `${this.base(workspaceId)}/agent-budget`
+    );
+    return data.budget;
+  }
+
+  /** Set the monthly budget in USD, or clear it with null. */
+  async setBudget(
+    workspaceId: string,
+    monthlyUsd: number | null
+  ): Promise<AgentBudget> {
+    const data = await this.json<{ budget: AgentBudget }>(
+      `${this.base(workspaceId)}/agent-budget`,
+      { method: 'POST', body: JSON.stringify({ monthlyUsd }) }
+    );
+    return data.budget;
   }
 
   /**

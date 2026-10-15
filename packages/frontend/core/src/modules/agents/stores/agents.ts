@@ -77,10 +77,39 @@ export interface Agent {
   maxSteps: number;
   /** For `remote` agents: the registry key of the device to run on. */
   deviceKey?: string;
+  /** For device and cloud runs: the most one run may spend, in USD. */
+  maxCostUsd?: number;
+  /** For device and cloud runs: what a run may do without asking. Unset is `write`. */
+  access?: AgentAccess;
   enabled: boolean;
   createdAt: number;
   createdBy?: string;
 }
+
+/**
+ * What a device or cloud run may do without asking first. `read` refuses
+ * anything but reading; `write` (the default) also writes notes; `manage`
+ * also edits files; `full` is as if "Allow all" were pressed at the start.
+ * Deploying, spending and deleting always ask, whatever the level.
+ */
+export type AgentAccess = 'read' | 'write' | 'manage' | 'full';
+
+export const AGENT_ACCESS_LEVELS: AgentAccess[] = [
+  'read',
+  'write',
+  'manage',
+  'full',
+];
+
+const toAccess = (value: unknown): AgentAccess | undefined =>
+  AGENT_ACCESS_LEVELS.includes(value as AgentAccess)
+    ? (value as AgentAccess)
+    : undefined;
+
+const toCostCap = (value: unknown): number | undefined =>
+  typeof value === 'number' && Number.isFinite(value) && value > 0
+    ? value
+    : undefined;
 
 export type AgentDraft = Omit<Agent, 'id' | 'scope' | 'createdAt'> &
   Partial<Pick<Agent, 'createdAt' | 'createdBy'>>;
@@ -103,6 +132,8 @@ interface AgentRowShape {
   output: string;
   maxSteps: number;
   deviceKey?: string | null;
+  maxCostUsd?: number | null;
+  access?: string | null;
   enabled: boolean;
   createdAt: number;
   createdBy?: string | null;
@@ -158,6 +189,8 @@ export class AgentsStore extends Store {
       output: 'panel',
       maxSteps: row.maxSteps ?? DEFAULT_MAX_STEPS,
       deviceKey: row.deviceKey ?? undefined,
+      maxCostUsd: toCostCap(row.maxCostUsd),
+      access: toAccess(row.access),
       enabled: row.enabled ?? true,
       createdAt: row.createdAt ?? 0,
       createdBy: row.createdBy ?? undefined,
@@ -179,6 +212,8 @@ export class AgentsStore extends Store {
       targets: draft.targets,
       output: draft.output,
       maxSteps: draft.maxSteps,
+      maxCostUsd: draft.maxCostUsd,
+      access: draft.access,
       enabled: draft.enabled,
       createdAt: draft.createdAt ?? Date.now(),
       createdBy: draft.createdBy,
@@ -252,6 +287,8 @@ export class AgentsStore extends Store {
       targets: agent.targets,
       output: agent.output,
       maxSteps: agent.maxSteps,
+      maxCostUsd: agent.maxCostUsd,
+      access: agent.access,
       enabled: agent.enabled,
       createdAt: agent.createdAt,
       createdBy: agent.createdBy,

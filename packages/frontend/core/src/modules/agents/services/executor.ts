@@ -266,6 +266,7 @@ export class AgentExecutorService extends Service implements AgentExecutor {
         model: agent.model,
         tools: [],
         maxSteps: CHAT_ON_DEVICE_STEPS,
+        maxCostUsd: agent.maxCostUsd,
       });
       for await (const { job: update } of remoteRunner.watch(
         workspaceId,
@@ -426,11 +427,16 @@ export class AgentExecutorService extends Service implements AgentExecutor {
     if (job.title) this.runsStore.setTitle(runId, job.title);
     const endedAt = job.finishedAt ? job.finishedAt * 1000 : Date.now();
     const steps = job.steps ?? 0;
+    // Older servers and runners report neither.
+    const usage =
+      job.costUsd != null || job.tokens != null
+        ? { costUsd: job.costUsd, tokens: job.tokens }
+        : undefined;
     switch (job.status) {
       case 'done':
         this.runsStore.finish(
           runId,
-          { status: 'done', steps, output: job.result ?? '' },
+          { status: 'done', steps, output: job.result ?? '', usage },
           endedAt
         );
         return;
@@ -441,12 +447,17 @@ export class AgentExecutorService extends Service implements AgentExecutor {
             status: 'error',
             steps,
             error: job.error || 'The run failed on its device.',
+            usage,
           },
           endedAt
         );
         return;
       case 'cancelled':
-        this.runsStore.finish(runId, { status: 'cancelled', steps }, endedAt);
+        this.runsStore.finish(
+          runId,
+          { status: 'cancelled', steps, usage },
+          endedAt
+        );
         return;
     }
   }
@@ -774,6 +785,8 @@ export class AgentExecutorService extends Service implements AgentExecutor {
       tools: agent.tools,
       skills: agent.skills,
       maxSteps: agent.maxSteps,
+      maxCostUsd: agent.maxCostUsd,
+      access: agent.access,
       // Where the run is, and the tasks there it is on: the server claims
       // and hands them back around the job, whatever becomes of this tab.
       targetKind: target.kind,
@@ -805,6 +818,10 @@ export class AgentExecutorService extends Service implements AgentExecutor {
       signal
     )) {
       if (logDelta) yield { type: 'log', text: logDelta };
+      this.runsStore.setUsage(runId, {
+        costUsd: update.costUsd,
+        tokens: update.tokens,
+      });
       if (update.title && update.title !== title) {
         title = update.title;
         yield { type: 'title', title };

@@ -13,6 +13,7 @@ import {
   SearchQueryType,
 } from '../../indexer/types';
 import { CopilotContextService } from '../context/service';
+import { findSecret, guardSecrets, secretRefusal } from './secret-guard';
 import {
   DEFAULT_STALE_DAYS,
   DEFAULT_STUB_CHARS,
@@ -1095,6 +1096,11 @@ export class WorkspaceMcpProvider {
           additionalProperties: false,
         },
         execute: async ({ title, content, agent }, options) => {
+          // A secret written into a synced note stays in its history on
+          // every device, so refuse before the write rather than after.
+          const secret = guardSecrets(title, content, agent);
+          if (secret) return toolError(secret);
+
           try {
             await this.ac
               .user(userId)
@@ -1172,6 +1178,14 @@ export class WorkspaceMcpProvider {
             .can('Doc.Update');
           if (!accessible) return notFoundError;
 
+          // The whole body comes back on every update, so a secret the user
+          // wrote into the note themselves isn't the agent's to answer for.
+          if (guardSecrets(content, agent)) {
+            const current = await this.reader.getDocMarkdown(workspaceId, docId, false);
+            const label = findSecret(`${content}\n${agent ?? ''}`, current?.markdown ?? '');
+            if (label) return toolError(secretRefusal(label));
+          }
+
           const abortedBeforeWrite = abortIfNeeded(options.signal);
           if (abortedBeforeWrite) return abortedBeforeWrite;
 
@@ -1221,6 +1235,9 @@ export class WorkspaceMcpProvider {
           additionalProperties: false,
         },
         execute: async ({ docId, title }, options) => {
+          const secret = guardSecrets(title);
+          if (secret) return toolError(secret);
+
           const notFoundError = toolError(`Doc with id ${docId} not found.`);
 
           const accessible = await this.ac
@@ -1306,6 +1323,9 @@ export class WorkspaceMcpProvider {
           if (!status && !note) {
             return toolError('Provide a status and/or a note to update.');
           }
+          const secret = guardSecrets(note, status, agent);
+          if (secret) return toolError(secret);
+
           const accessible = await this.ac
             .user(userId)
             .workspace(workspaceId)
@@ -1376,6 +1396,9 @@ export class WorkspaceMcpProvider {
           additionalProperties: false,
         },
         execute: async ({ docId, blockId, text, agent }, options) => {
+          const secret = guardSecrets(text, agent);
+          if (secret) return toolError(secret);
+
           const accessible = await this.ac
             .user(userId)
             .workspace(workspaceId)

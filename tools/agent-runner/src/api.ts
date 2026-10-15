@@ -45,6 +45,8 @@ export interface Job {
   model: string | null;
   status: string;
   title: string | null;
+  /** Stop the run once it has spent this much (USD). */
+  maxCostUsd?: number | null;
   profile?: AgentProfile | null;
 }
 

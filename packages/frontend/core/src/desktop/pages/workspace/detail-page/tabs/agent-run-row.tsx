@@ -1,6 +1,9 @@
 import { DeleteIcon, ResetIcon } from '@blocksuite/icons/rc';
 import { IconButton } from '@notesgraph/component';
-import type { AgentRun } from '@notesgraph/core/modules/agents';
+import {
+  type AgentRun,
+  formatRunCost,
+} from '@notesgraph/core/modules/agents';
 import { DocDisplayMetaService } from '@notesgraph/core/modules/doc-display-meta';
 import { useLiveData, useService } from '@notesgraph/infra';
 import { type ReactNode, useEffect, useMemo, useState } from 'react';
@@ -234,6 +237,7 @@ const RunRowContent = ({
           {run.durationMs !== undefined
             ? ` · ${formatDuration(run.durationMs)}`
             : ''}
+          {run.costUsd !== undefined ? ` · ${formatRunCost(run.costUsd)}` : ''}
         </span>
       </div>
     </>

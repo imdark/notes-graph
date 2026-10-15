@@ -86,6 +86,8 @@ export class AgentsService extends Service {
       targets: agent.targets,
       output: agent.output,
       maxSteps: agent.maxSteps,
+      maxCostUsd: agent.maxCostUsd,
+      access: agent.access,
       enabled: agent.enabled,
     });
   }
