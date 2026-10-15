@@ -94,13 +94,26 @@ export const AgentSideChat = ({
           { role: 'user', content: message },
         ];
         let reply = '';
-        for await (const delta of chat(history.current, controller.signal)) {
-          reply += delta;
+        // A long reply streams in many small chunks; one render per frame
+        // keeps the page responsive instead of one per chunk.
+        let frame = 0;
+        const show = () => {
+          frame = 0;
+          const content = reply;
           setTurns(prev => [
             ...prev.slice(0, -1),
-            { role: 'assistant', content: reply },
+            { role: 'assistant', content },
           ]);
+        };
+        try {
+          for await (const delta of chat(history.current, controller.signal)) {
+            reply += delta;
+            if (!frame) frame = requestAnimationFrame(show);
+          }
+        } finally {
+          if (frame) cancelAnimationFrame(frame);
         }
+        show();
         history.current = [
           ...history.current,
           { role: 'assistant', content: reply },
