@@ -153,6 +153,60 @@ export function splitChunkText(text: string, max = MAX_CHUNK_CHARS): string[] {
   return pieces;
 }
 
+/**
+ * Relevance cutoff for vector-distance ranking (no rerank model): a chunk is
+ * kept only when its cosine distance is within this margin of the best hit…
+ */
+export const RELEVANCE_DISTANCE_MARGIN = 0.15;
+/** …and no farther than this from the query at all. */
+export const RELEVANCE_MAX_DISTANCE = 0.75;
+
+/** The doc, file or blob a chunk belongs to. */
+export function chunkTargetId(chunk: ChunkSimilarity): string {
+  for (const key of ['docId', 'fileId', 'blobId'] as const) {
+    const value = (chunk as Partial<Record<typeof key, unknown>>)[key];
+    if (typeof value === 'string') return `${key}:${value}`;
+  }
+  return '';
+}
+
+/** Keep the first of chunks with the same target and chunk index. */
+export function dedupeChunks<C extends ChunkSimilarity>(chunks: C[]): C[] {
+  const seen = new Set<string>();
+  return chunks.filter(chunk => {
+    const key = `${chunkTargetId(chunk)}#${chunk.chunk}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+export function sortByDistance<C extends ChunkSimilarity>(chunks: C[]): C[] {
+  return chunks.toSorted(
+    (a, b) => (a.distance ?? Infinity) - (b.distance ?? Infinity)
+  );
+}
+
+/**
+ * Drop chunks much farther from the query than the best hit, or too far
+ * altogether, so a RAG prompt gets fewer, better passages. Chunks without a
+ * distance are kept only when no chunk has one.
+ */
+export function applyRelevanceCutoff<C extends ChunkSimilarity>(
+  chunks: C[],
+  margin = RELEVANCE_DISTANCE_MARGIN,
+  maxDistance = RELEVANCE_MAX_DISTANCE
+): C[] {
+  const distances = chunks
+    .map(chunk => chunk.distance)
+    .filter((distance): distance is number => typeof distance === 'number');
+  if (!distances.length) return chunks;
+  const limit = Math.min(Math.min(...distances) + margin, maxDistance);
+  return chunks.filter(
+    chunk => typeof chunk.distance === 'number' && chunk.distance <= limit
+  );
+}
+
 export type EmbeddingCallOptions = {
   signal?: AbortSignal;
   userId?: string;
@@ -266,16 +320,17 @@ export abstract class EmbeddingClient {
     return embeddings.map(e => ({ ...e, index: chunks[e.index].index }));
   }
 
+  /**
+   * Without a rerank model: drop duplicate chunks (context and workspace
+   * searches can find the same one) and order by vector distance.
+   */
   async reRank<Chunk extends ChunkSimilarity = ChunkSimilarity>(
     _query: string,
     embeddings: Chunk[],
     topK: number,
     _options?: EmbeddingCallOptionsInput
   ): Promise<Chunk[]> {
-    // sort by distance with ascending order
-    return embeddings
-      .toSorted((a, b) => (a.distance ?? Infinity) - (b.distance ?? Infinity))
-      .slice(0, topK);
+    return sortByDistance(dedupeChunks(embeddings)).slice(0, topK);
   }
 
   async getEmbedding(query: string, options?: EmbeddingCallOptionsInput) {

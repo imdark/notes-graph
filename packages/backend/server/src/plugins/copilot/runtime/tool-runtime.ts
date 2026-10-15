@@ -125,7 +125,8 @@ export class ToolRuntime {
             this.ac,
             this.context,
             options.session,
-            this.models
+            this.models,
+            this.config.indexer.enabled ? this.indexerService : undefined
           );
           tools.doc_semantic_search = createDocSemanticSearchTool(
             searchDocs.bind(null, options)
