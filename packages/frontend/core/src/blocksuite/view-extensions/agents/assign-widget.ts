@@ -181,13 +181,16 @@ export class AgentAssignWidget extends WidgetComponent {
   private _place() {
     const button =
       this.renderRoot.querySelector<HTMLElement>('.ng-agent-assign');
+    // Every block's widget re-renders on each streamed run event; a hidden
+    // one must not force a layout to find that out.
+    if (!button) return;
     const parent = this.offsetParent;
     // The block's own line comes before its children, so the first rich text
     // in it is this line's.
     const editor = this.parentElement
       ?.closest(`[${BLOCK_ID_ATTR}]`)
       ?.querySelector('rich-text .inline-editor');
-    if (!button || !parent || !editor) return;
+    if (!parent || !editor) return;
 
     const range = document.createRange();
     range.selectNodeContents(editor);
