@@ -56,6 +56,13 @@ export interface Question {
   answeredAt: number | null;
 }
 
+/** An instruction the person sent the job while it ran. */
+export interface Steer {
+  id: string;
+  text: string;
+  createdAt: number;
+}
+
 export class NotesGraphError extends Error {
   constructor(
     message: string,
@@ -160,6 +167,15 @@ export class NotesGraphApi {
       question
     );
     return asked;
+  }
+
+  /** Take the instructions sent to the job since the last take; each comes once. */
+  async takeSteers(workspaceId: string, jobId: string): Promise<Steer[]> {
+    const { steers } = await this.request<{ steers?: Steer[] }>(
+      'POST',
+      `${this.base(workspaceId)}/jobs/${jobId}/steer/take`
+    );
+    return steers ?? [];
   }
 
   async getQuestion(

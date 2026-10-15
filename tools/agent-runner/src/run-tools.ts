@@ -6,11 +6,17 @@
 import {
   type CanUseTool,
   createSdkMcpServer,
+  type Options,
   tool,
 } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
 
-import { type NotesGraphApi, NotesGraphError, type Question } from './api';
+import {
+  type NotesGraphApi,
+  NotesGraphError,
+  type Question,
+  type Steer,
+} from './api';
 
 /** Matches the server's cap on a question's detail (registry jobs.ts MAX_DETAIL). */
 const MAX_DETAIL = 200_000;
@@ -62,10 +68,71 @@ export async function ask(
   }
 }
 
+/** How instructions sent mid-run are put to the model (wf's steer_hook.py words them alike). */
+export const steerNote = (steers: Steer[]) =>
+  steers.length === 1
+    ? `The user sent a new instruction while you were working: ${steers[0].text}\n` +
+      'Take it into account from here on.'
+    : 'The user sent new instructions while you were working:\n' +
+      steers.map(s => `- ${s.text}`).join('\n') +
+      '\nTake them into account from here on.';
+
+/**
+ * The instructions waiting for this run, worded for the model; null when
+ * there are none. A failed read is no reason to stop the run: they wait on
+ * the server for the next step.
+ */
+export async function takeSteerNote(ctx: RunContext): Promise<string | null> {
+  try {
+    const steers = await ctx.api.takeSteers(ctx.workspaceId, ctx.jobId);
+    return steers.length ? steerNote(steers) : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Deliver instructions sent mid-run: after every tool call as context the
+ * model reads with the result, and at the end of the run by sending it back
+ * to work instead of stopping.
+ */
+export function steerHooks(ctx: RunContext): Options['hooks'] {
+  return {
+    PostToolUse: [
+      {
+        hooks: [
+          async () => {
+            const note = await takeSteerNote(ctx);
+            return note
+              ? { hookSpecificOutput: { hookEventName: 'PostToolUse', additionalContext: note } }
+              : {};
+          },
+        ],
+      },
+    ],
+    Stop: [
+      {
+        hooks: [
+          async () => {
+            const note = await takeSteerNote(ctx);
+            return note ? { decision: 'block', reason: note } : {};
+          },
+        ],
+      },
+    ],
+  };
+}
+
 const text = (value: string, isError = false) => ({
   content: [{ type: 'text' as const, text: value }],
   isError,
 });
+
+/** A tool's own result, with any instructions sent meanwhile after it. */
+const withSteers = async (ctx: RunContext, value: string) => {
+  const note = await takeSteerNote(ctx);
+  return text(note ? `${value}\n\n${note}` : value);
+};
 
 /** The `run` MCP server: mcp__run__ask_user and mcp__run__set_title. */
 export function runServer(ctx: RunContext) {
@@ -96,7 +163,7 @@ export function runServer(ctx: RunContext) {
             const answer = await ask(ctx, 'question', asked, {
               options: (options ?? []).map(o => o.trim()).filter(Boolean),
             });
-            return text(answer.answer ?? '');
+            return await withSteers(ctx, answer.answer ?? '');
           } catch (err) {
             return stopOr(err);
           }
@@ -114,7 +181,7 @@ export function runServer(ctx: RunContext) {
           if (!name) return text('title is required', true);
           try {
             const kept = await ctx.api.setTitle(ctx.workspaceId, ctx.jobId, name);
-            return text(`Run renamed to: ${kept}`);
+            return await withSteers(ctx, `Run renamed to: ${kept}`);
           } catch (err) {
             return text(`Could not rename the run (${err}); carry on.`, true);
           }

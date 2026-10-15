@@ -30,7 +30,7 @@ import {
   type ShellEnv,
 } from './automation';
 import { Narrator } from './narrate';
-import { permissionPrompt, runServer } from './run-tools';
+import { permissionPrompt, runServer, steerHooks } from './run-tools';
 import { skillsPlugin } from './skills';
 import { jobDir } from './workdir';
 
@@ -196,6 +196,8 @@ export async function runJob(job: Job, deps: RunDeps): Promise<RunOutcome> {
       systemPrompt: { type: 'preset', preset: 'claude_code', append: profile.systemPrompt },
       allowedTools,
       canUseTool: permissionPrompt(ctx),
+      // What the person sends the run from NotesGraph while it works.
+      hooks: steerHooks(ctx),
       mcpServers,
       strictMcpConfig: true,
       // Nothing from the runner's own settings or CLAUDE.md files; the profile is the agent.

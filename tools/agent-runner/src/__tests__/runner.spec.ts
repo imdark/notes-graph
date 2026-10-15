@@ -9,7 +9,7 @@ import { type AgentProfile, type Job, NotesGraphApi } from '../api';
 import { argVar, jobPlaceholders, render, runSteps, runTool } from '../automation';
 import { Narrator } from '../narrate';
 import { runJob } from '../run-job';
-import { ask, JobCancelled, permissionPrompt } from '../run-tools';
+import { ask, JobCancelled, permissionPrompt, steerHooks, steerNote } from '../run-tools';
 import { runClaimed } from '../serve';
 import { FakeNotesGraph, until } from './fake-notesgraph';
 
@@ -199,6 +199,47 @@ describe('asking the person', () => {
   });
 });
 
+describe('steering a run', () => {
+  const ctx = () => ({ api: api(), workspaceId: 'ws-1', jobId: 'j1', pollMs: 5 });
+  const signal = { signal: new AbortController().signal };
+
+  test('an instruction sent mid-run reaches the model after its next tool call, once', async () => {
+    const hook = steerHooks(ctx())!.PostToolUse![0].hooks[0];
+    expect(await hook({} as any, 't1', signal)).toEqual({});
+    ng.steers.push({ id: 's1', text: 'Use the staging DB', createdAt: 1 });
+    expect(await hook({} as any, 't2', signal)).toEqual({
+      hookSpecificOutput: {
+        hookEventName: 'PostToolUse',
+        additionalContext: steerNote([{ id: 's1', text: 'Use the staging DB', createdAt: 1 }]),
+      },
+    });
+    expect(await hook({} as any, 't3', signal)).toEqual({});
+  });
+
+  test('one sent as the agent finishes sends it back to work', async () => {
+    const stop = steerHooks(ctx())!.Stop![0].hooks[0];
+    expect(await stop({} as any, undefined, signal)).toEqual({});
+    ng.steers.push({ id: 's1', text: 'Also update the README', createdAt: 1 });
+    const out = (await stop({} as any, undefined, signal)) as { decision?: string; reason?: string };
+    expect(out.decision).toBe('block');
+    expect(out.reason).toContain('Also update the README');
+  });
+
+  test('the server being away delivers nothing and fails nothing', async () => {
+    const hook = steerHooks({ ...ctx(), api: new NotesGraphApi('http://127.0.0.1:1', 'pat') })!
+      .PostToolUse![0].hooks[0];
+    expect(await hook({} as any, 't1', signal)).toEqual({});
+  });
+
+  test('several instructions are listed together', () => {
+    const note = steerNote([
+      { id: 's1', text: 'Skip tests', createdAt: 1 },
+      { id: 's2', text: 'Open a draft PR', createdAt: 2 },
+    ]);
+    expect(note).toContain('- Skip tests\n- Open a draft PR');
+  });
+});
+
 describe('running a job', () => {
   test('prepares with the automation, runs the agent the profile describes, then cleans up', async () => {
     const seen: { options?: Options; prompt?: string } = {};
@@ -239,6 +280,7 @@ describe('running a job', () => {
     expect(options.env!.ANTHROPIC_API_KEY).toBe('sk-test');
     expect(options.env!.CLAUDE_CODE_OAUTH_TOKEN).toBeUndefined();
     expect(options.settingSources).toEqual([]);
+    expect(Object.keys(options.hooks!).sort()).toEqual(['PostToolUse', 'Stop']);
     expect(lines.some(l => /^⚙ setup · prepare ✓/.test(l))).toBe(true);
     expect(lines.at(-2)).toMatch(/^✓ finished in 3 turns/);
     expect(lines.at(-1)).toMatch(/^⚙ teardown · note ✓/);

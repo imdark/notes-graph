@@ -9,6 +9,7 @@ import {
   JOB_TERMINAL,
   QUESTION_KINDS,
   type QuestionKind,
+  STEER_KIND,
 } from '../../models/registry-job';
 import { type AgentProfile, profileFor } from './agent-profiles';
 import { AgentPushService } from './push';
@@ -72,6 +73,8 @@ export interface JobDto {
   logEnd?: number;
   /** Everything the run has asked, open ones last. Single-job reads only. */
   questions?: QuestionDto[];
+  /** What the person sent the run while it worked. Single-job reads only. */
+  steers?: SteerDto[];
   /**
    * How to run it, for the runner that claimed it (see agent-profiles.ts);
    * null for a model that isn't a Claude agent. Claims only.
@@ -109,6 +112,23 @@ export function toQuestionDto(question: RegistryJobQuestion): QuestionDto {
   };
 }
 
+/** A message sent to a running job; `deliveredAt` once its runner took it. */
+export interface SteerDto {
+  id: string;
+  text: string;
+  createdAt: number;
+  deliveredAt: number | null;
+}
+
+export function toSteerDto(steer: RegistryJobQuestion): SteerDto {
+  return {
+    id: steer.id,
+    text: steer.text,
+    createdAt: steer.createdAt.getTime() / 1000,
+    deliveredAt: steer.answeredAt ? steer.answeredAt.getTime() / 1000 : null,
+  };
+}
+
 export interface JobDtoOptions {
   /** Include the transcript, starting at this absolute offset (0 = all kept). */
   logFrom?: number;
@@ -141,7 +161,18 @@ export function toJobDto(job: RegistryJob, options: JobDtoOptions = {}): JobDto 
     leaseExpiresAt: job.leaseExpiresAt ? job.leaseExpiresAt.getTime() / 1000 : null,
     allowAllTools: job.allowAllTools,
     ...(options.logFrom === undefined ? {} : sliceLog(job, options.logFrom)),
-    ...(options.questions ? { questions: options.questions.map(toQuestionDto) } : {}),
+    // Steers share the questions table but are no question: anything reading
+    // `questions` for what the run waits on must not see them.
+    ...(options.questions
+      ? {
+          questions: options.questions
+            .filter(q => q.kind !== STEER_KIND)
+            .map(toQuestionDto),
+          steers: options.questions
+            .filter(q => q.kind === STEER_KIND)
+            .map(toSteerDto),
+        }
+      : {}),
     createdAt: job.createdAt.getTime() / 1000,
     startedAt: job.startedAt ? job.startedAt.getTime() / 1000 : null,
     finishedAt: job.finishedAt ? job.finishedAt.getTime() / 1000 : null,
@@ -617,7 +648,8 @@ export class RegistryJobService {
       throw new ActionForbidden('Only the person who started this run can answer it.');
     }
     const question = await this.models.registryJob.getQuestion(jobId, questionId);
-    if (!question) {
+    // A steer is taken by the runner; answering one would mark it delivered.
+    if (!question || question.kind === STEER_KIND) {
       throw new NotFound(`No question '${questionId}' on job '${jobId}'`);
     }
     if (question.answeredAt) {
@@ -668,6 +700,60 @@ export class RegistryJobService {
     }
     this.notify(push => push.questionsClosed(job, closed));
     return toQuestionDto(answered);
+  }
+
+  /**
+   * Send a running job a new instruction. Its runner picks it up after the
+   * agent's next tool call, so the run changes course without restarting.
+   * Only the job's starter may, as with answering it. A queued job keeps it
+   * for its first step.
+   */
+  async steer(
+    workspaceId: string,
+    jobId: string,
+    userId: string,
+    body: Record<string, unknown>
+  ): Promise<SteerDto> {
+    const job = await this.runningJob(workspaceId, jobId);
+    if (job.createdBy && job.createdBy !== userId) {
+      throw new ActionForbidden('Only the person who started this run can message it.');
+    }
+    if ((JOB_TERMINAL as readonly string[]).includes(job.status)) {
+      throw new BadRequest(`Job '${jobId}' is ${job.status}; it can't take a message now.`);
+    }
+    const text = String(body.text ?? '').trim();
+    if (!text) {
+      throw new BadRequest('text is required');
+    }
+    if (text.length > MAX_ANSWER) {
+      throw new BadRequest(`The message exceeds ${MAX_ANSWER} characters.`);
+    }
+    const steer = await this.models.registryJob.steer(jobId, text);
+    this.logger.log(`job ${jobId}: message queued`);
+    return toSteerDto(steer);
+  }
+
+  /**
+   * The runner takes the messages waiting for its job, each once. Empty for
+   * a job that is no longer running: an ended run has no next step.
+   */
+  async takeSteers(workspaceId: string, jobId: string) {
+    const job = await this.runningJob(workspaceId, jobId);
+    if (job.status !== 'running') {
+      return { steers: [], jobStatus: job.status };
+    }
+    const steers = await this.models.registryJob.takeSteers(jobId);
+    if (steers.length) {
+      this.logger.log(`job ${jobId}: delivered ${steers.length} message(s)`);
+    }
+    return {
+      steers: steers.map(steer => ({
+        id: steer.id,
+        text: steer.text,
+        createdAt: steer.createdAt.getTime() / 1000,
+      })),
+      jobStatus: job.status,
+    };
   }
 
   /**

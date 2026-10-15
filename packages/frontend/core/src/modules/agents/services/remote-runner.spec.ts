@@ -17,6 +17,7 @@ import {
   type RemoteJob,
   RESEARCH_MODEL,
   savedPlacement,
+  waitingSteers,
 } from './remote-runner';
 
 describe('device harnesses', () => {
@@ -248,5 +249,31 @@ describe('RemoteAgentRunnerService questions', () => {
     expect(requests).toEqual([
       { url: '/api/registry/workspaces/ws-1/jobs/job-1/questions/q1/answer', method: 'POST' },
     ]);
+  });
+});
+
+describe('RemoteAgentRunnerService steering', () => {
+  const steer = { id: 's1', text: 'Skip tests', createdAt: 0, deliveredAt: null };
+
+  test('sending a run a message posts to its steer route', async () => {
+    const { runner, requests } = createRunner([() => job({})]);
+    await runner.steer('ws-1', 'job-1', 'Skip tests');
+    expect(requests).toEqual([
+      { url: '/api/registry/workspaces/ws-1/jobs/job-1/steer', method: 'POST' },
+    ]);
+  });
+
+  test('a message waiting, then taken, is an update even with no new log text', async () => {
+    const { runner } = createRunner([
+      () => job({ log: '', logEnd: 0 }),
+      () => job({ log: '', logEnd: 0, steers: [steer] }),
+      () => job({ log: '', logEnd: 0, steers: [{ ...steer, deliveredAt: 1 }] }),
+      () => job({ status: 'done', result: 'ok', log: '', logEnd: 0 }),
+    ]);
+    const waiting: string[][] = [];
+    for await (const { job: update } of runner.watch('ws-1', 'job-1', new AbortController().signal)) {
+      waiting.push(waitingSteers(update).map(s => s.text));
+    }
+    expect(waiting).toEqual([[], ['Skip tests'], [], []]);
   });
 });
