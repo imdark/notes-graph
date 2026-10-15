@@ -361,15 +361,22 @@ const PROFILES: Record<string, AgentProfile> = {
  * The profile for a job's model; null for one that isn't a Claude agent. A
  * list of skill names replaces the model's default skills; names outside the
  * catalog are dropped, so a job can't point a runner at an arbitrary URL.
+ * The one other kind it may name is a skill note (`note:<docId>`), and only
+ * those in `noteSkills`: the job's own workspace's, looked up by the server
+ * (skill-notes.ts).
  */
 export function profileFor(
   model: string | null | undefined,
-  skills?: unknown
+  skills?: unknown,
+  noteSkills: ReadonlyArray<{ ref: string; skill: AgentSkill }> = []
 ): AgentProfile | null {
   const profile = (model && PROFILES[model]) || null;
   if (!profile || !Array.isArray(skills)) return profile;
   return {
     ...profile,
-    skills: SKILL_CATALOG.filter(skill => skills.includes(skill.name)),
+    skills: [
+      ...SKILL_CATALOG.filter(skill => skills.includes(skill.name)),
+      ...noteSkills.filter(note => skills.includes(note.ref)).map(note => note.skill),
+    ],
   };
 }

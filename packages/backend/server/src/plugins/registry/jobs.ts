@@ -14,6 +14,7 @@ import { type AgentProfile, profileFor } from './agent-profiles';
 import { AgentRules, withAgentRules } from './agent-rules';
 import { AgentPushService } from './push';
 import { isSessionLimit, sessionLimitRunAfter } from './session-limit';
+import { SkillNoteService } from './skill-notes';
 import { JobTaskClaims } from './task-claims';
 
 declare global {
@@ -281,7 +282,8 @@ export class RegistryJobService {
     @Optional() private readonly push?: AgentPushService,
     @Optional() private readonly event?: EventBus,
     @Optional() private readonly tasks?: JobTaskClaims,
-    @Optional() private readonly rules?: AgentRules
+    @Optional() private readonly rules?: AgentRules,
+    @Optional() private readonly skillNotes?: SkillNoteService
   ) {}
 
   /** Push without holding up the request it rides on, or failing it. */
@@ -462,11 +464,15 @@ export class RegistryJobService {
 
   /**
    * How the runner is to run a claimed job: its model's profile, with the
-   * workspace's "Agent rules" note (see agent-rules.ts) read now, at the
-   * start of the run, so the user's latest edit is the one it follows.
+   * skill notes it names (looked up in the job's own workspace only) and
+   * the workspace's "Agent rules" note (see agent-rules.ts), both read
+   * now, at the start of the run, so the user's latest edits are the ones
+   * it follows.
    */
   private async profile(job: RegistryJob): Promise<AgentProfile | null> {
-    const profile = profileFor(job.model, job.skills);
+    const noteSkills =
+      (await this.skillNotes?.forJob(job.workspaceId, job.skills, job.createdBy)) ?? [];
+    const profile = profileFor(job.model, job.skills, noteSkills);
     if (!profile || !this.rules) return profile;
     return withAgentRules(
       profile,

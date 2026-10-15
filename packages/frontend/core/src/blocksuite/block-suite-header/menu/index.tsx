@@ -49,6 +49,7 @@ import { useCallback, useState } from 'react';
 
 import { HeaderDropDownButton } from '../../../components/pure/header-drop-down-button';
 import { useFavorite } from '../favorite';
+import { ExportSkillMenuItem } from './export-skill';
 import { HistoryTipsModal } from './history-tips-modal';
 import { shareMenu } from './style.css';
 
@@ -482,6 +483,7 @@ const PageHeaderMenuItem = ({
         {t['Import']()}
       </MenuItem>
       <Export exportHandler={exportHandler} pageMode={currentMode} />
+      <ExportSkillMenuItem />
       <MenuSeparator />
       <MoveToTrash
         data-testid="editor-option-menu-delete"
