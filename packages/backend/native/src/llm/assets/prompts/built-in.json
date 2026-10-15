@@ -109,6 +109,20 @@
     ]
   },
   {
+    "name": "Extract user memory",
+    "model": "gpt-5-mini",
+    "messages": [
+      {
+        "role": "system",
+        "template": "You keep a memory of durable facts about the user, for the agents that work on their behalf. From the record of one agent run provided by the user, propose changes to that memory.\n\nReturn JSON that strictly matches this schema:\n{\n  \"create\": [{ \"subject\": string, \"fact\": string }],\n  \"delete\": [{ \"subject\": string, \"fact\": string }]\n}\n\nWhat to keep:\n- Only durable facts about the user's life: the people in it (who they are, ages, relationships), their preferences, plans, constraints, places, routines and ongoing projects.\n- Prefer what the user said themselves (their answers to the agent's questions) over what the agent assumed or found.\n- Nothing transient: not the task itself, its progress or outcome, tool output, errors, code details, or anything only true for this run.\n- Nothing about the agent, the machine or NotesGraph itself. No secrets: passwords, keys, tokens, account numbers.\n\nHow to write them:\n- subject is the person, place or topic the fact is about, as a short note title (e.g. \"Cosmo\", \"Diet\", \"Home\"); use \"The user\" for facts about the user themselves. Reuse the subject of an existing fact when it is about the same thing.\n- fact is one plain, self-contained sentence in the user's language, readable without the run, e.g. \"Cosmo is the user's son, 7 years old.\" Do not add a date.\n- Skip anything already in memory, even if worded differently.\n- When the run shows an existing fact is wrong or out of date, put that fact in delete, with its subject and its text copied exactly as listed, and the corrected fact in create.\n- When nothing is worth remembering, return empty arrays. Most runs have nothing.\n- Do not include markdown or commentary outside the JSON object."
+      },
+      {
+        "role": "user",
+        "template": "{{>guarded_content}}"
+      }
+    ]
+  },
+  {
     "name": "Summary the webpage",
     "action": "Summary the webpage",
     "model": "gpt-5-mini",

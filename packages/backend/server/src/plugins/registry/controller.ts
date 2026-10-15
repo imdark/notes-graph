@@ -550,6 +550,37 @@ export class RegistryController {
   }
 
   /**
+   * Send a running job a new instruction. Workspace.Read, like answering:
+   * the service only lets the job's starter.
+   */
+  @Post('/workspaces/:workspaceId/jobs/:jobId/steer')
+  async steerJob(
+    @CurrentUser() user: CurrentUserType,
+    @Param('workspaceId') workspaceId: string,
+    @Param('jobId') jobId: string,
+    @Body() body: Record<string, unknown>
+  ) {
+    this.assertEnabled();
+    await this.ac.user(user.id).workspace(workspaceId).assert('Workspace.Read');
+    return { steer: await this.jobs.steer(workspaceId, jobId, user.id, body ?? {}) };
+  }
+
+  /**
+   * The runner takes the instructions sent since it last looked, after each
+   * tool call. Workspace.Read, like report: the runner's own side of its job.
+   */
+  @Post('/workspaces/:workspaceId/jobs/:jobId/steer/take')
+  async takeSteers(
+    @CurrentUser() user: CurrentUserType,
+    @Param('workspaceId') workspaceId: string,
+    @Param('jobId') jobId: string
+  ) {
+    this.assertEnabled();
+    await this.ac.user(user.id).workspace(workspaceId).assert('Workspace.Read');
+    return this.jobs.takeSteers(workspaceId, jobId);
+  }
+
+  /**
    * A running job asks its starter something and then polls for the answer.
    * Workspace.Read, like claim and report: it is the runner's own side of a
    * job it was already given.

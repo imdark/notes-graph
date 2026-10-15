@@ -13,6 +13,11 @@ export const JOB_TERMINAL = ['done', 'error', 'cancelled'] as const;
 export const JOB_STATUSES = ['queued', 'running', ...JOB_TERMINAL] as const;
 export const QUESTION_KINDS = ['question', 'permission'] as const;
 export type QuestionKind = (typeof QUESTION_KINDS)[number];
+/**
+ * A message the person sent a running job, kept with its questions: `text`
+ * is the instruction and `answeredAt` is when the runner took it.
+ */
+export const STEER_KIND = 'steer';
 
 export interface CreateRegistryJobInput {
   workspaceId: string;
@@ -346,7 +351,12 @@ export class RegistryJobModel extends BaseModel {
     id: string,
     raw: string,
     /** Extra WHERE condition; the append is skipped when it doesn't hold. */
-    guard: Prisma.Sql = Prisma.empty
+    guard: Prisma.Sql = Prisma.empty,
+    /**
+     * Start the chunk on a line of its own, breaking the runner's current
+     * line if it is mid-way through one. For text the server writes itself.
+     */
+    ownLine = false
   ): Promise<number> {
     const stamp = logStamp(new Date());
     const text = stampInnerLines(raw, stamp);
@@ -356,7 +366,7 @@ export class RegistryJobModel extends BaseModel {
     // concurrent append cannot make the decision stale.
     const lead = Prisma.sql`CASE
       WHEN "log" = '' OR RIGHT("log", 1) = E'\n' THEN ${stamp}::text
-      ELSE ''
+      ELSE ${ownLine ? `\n${stamp}` : ''}::text
     END`;
     return this.db.$executeRaw`
       UPDATE "registry_jobs"
@@ -503,6 +513,41 @@ export class RegistryJobModel extends BaseModel {
       return null;
     }
     return this.db.registryJobQuestion.findUnique({ where: { id: questionId } });
+  }
+
+  /** Queue a message for a running job; its runner takes it on its next step. */
+  async steer(jobId: string, text: string): Promise<RegistryJobQuestion> {
+    return this.db.registryJobQuestion.create({
+      data: { jobId, kind: STEER_KIND, text },
+    });
+  }
+
+  /**
+   * Hand a job's waiting messages to its runner, marking them taken in the
+   * same statement so two hooks firing at once cannot both deliver one.
+   * Each taken message is written into the transcript as its own line.
+   */
+  async takeSteers(
+    jobId: string
+  ): Promise<{ id: string; text: string; createdAt: Date }[]> {
+    const taken = await this.db.$queryRaw<
+      { id: string; text: string; created_at: Date }[]
+    >`
+      UPDATE "registry_job_questions"
+      SET "answered_at" = NOW()
+      WHERE "job_id" = ${jobId} AND "kind" = ${STEER_KIND}
+        AND "answered_at" IS NULL
+      RETURNING "id", "text", "created_at"`;
+    const steers = taken
+      .map(row => ({ id: row.id, text: row.text, createdAt: row.created_at }))
+      .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+    if (steers.length) {
+      const lines = steers
+        .map(steer => `✉ You sent: ${steer.text.replace(/\s*\n\s*/g, ' ')}\n`)
+        .join('');
+      await this.appendLog(jobId, lines, Prisma.empty, true);
+    }
+    return steers;
   }
 
   async cancel(workspaceId: string, id: string): Promise<RegistryJob | null> {

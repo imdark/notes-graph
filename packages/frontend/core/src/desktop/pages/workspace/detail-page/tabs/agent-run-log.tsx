@@ -8,6 +8,7 @@ import {
   openQuestions,
   RemoteAgentRunnerService,
   type RemoteQuestion,
+  type RemoteSteer,
 } from '@notesgraph/core/modules/agents';
 import { WorkspaceService } from '@notesgraph/core/modules/workspace';
 import { useLiveData, useService } from '@notesgraph/infra';
@@ -24,6 +25,8 @@ import { AgentLogView } from './agent-log-view';
 import { AgentQuestionCard } from './agent-question';
 import { AgentRunChat } from './agent-run-chat';
 import { formatDuration } from './agent-run-row';
+import { AgentRunShare } from './agent-run-share';
+import { AgentRunSteer } from './agent-run-steer';
 import * as styles from './agents.css';
 
 interface RunLogState {
@@ -32,6 +35,8 @@ interface RunLogState {
   tmuxSession: string | null;
   /** What a remote run is waiting for the reader to answer. */
   questions: RemoteQuestion[];
+  /** What the reader sent a remote run while it worked. */
+  steers: RemoteSteer[];
   /** A remote run whose every tool is allowed without asking. */
   allowAllTools: boolean;
   /** Why there is no log to show, when there isn't. */
@@ -43,6 +48,7 @@ const EMPTY: RunLogState = {
   log: '',
   tmuxSession: null,
   questions: [],
+  steers: [],
   allowAllTools: false,
   note: null,
   loading: true,
@@ -99,6 +105,7 @@ const useRunLog = (run: AgentRun | undefined): RunLogState => {
             log: prev.log + logDelta,
             tmuxSession: job.tmuxSession,
             questions: openQuestions(job),
+            steers: job.steers ?? [],
             allowAllTools: !!job.allowAllTools,
             note:
               job.status === 'queued'
@@ -127,6 +134,7 @@ const useRunLog = (run: AgentRun | undefined): RunLogState => {
             log: text ?? '',
             tmuxSession: null,
             questions: [],
+            steers: [],
             allowAllTools: false,
             note:
               text !== undefined
@@ -162,6 +170,7 @@ const useRunLog = (run: AgentRun | undefined): RunLogState => {
       log: live.log,
       tmuxSession: null,
       questions: [],
+      steers: [],
       allowAllTools: false,
       note: null,
       loading: false,
@@ -223,7 +232,9 @@ const RunDetails = ({ run }: { run: AgentRun }) => {
     [
       'Machine',
       run.deviceKey ??
-        (harness === 'on-device' || harness === 'cloud' || harness === 'research'
+        (harness === 'on-device' ||
+        harness === 'cloud' ||
+        harness === 'research'
           ? 'This browser'
           : undefined),
     ],
@@ -279,7 +290,7 @@ export const AgentRunLogDialog = ({
       [runsStore, runId]
     )
   );
-  const { log, tmuxSession, questions, allowAllTools, note, loading } =
+  const { log, tmuxSession, questions, steers, allowAllTools, note, loading } =
     useRunLog(run ?? undefined);
 
   // A run can be stopped from here when this tab is driving it, or when it
@@ -381,6 +392,8 @@ export const AgentRunLogDialog = ({
             data-testid="agent-run-log-tabs"
           />
         ) : null}
+        {/* Only a device run lives on the server, so only it can be shared. */}
+        {run?.remoteJobId ? <AgentRunShare jobId={run.remoteJobId} /> : null}
         {run && tab === DETAILS_TAB ? (
           <RunDetails run={run} />
         ) : run && ended && tab === ASK_TAB ? (
@@ -430,6 +443,11 @@ export const AgentRunLogDialog = ({
                       : 'This run left no log.'
               }
             />
+
+            {/* A device run takes new instructions until it ends. */}
+            {run?.status === 'running' && run.remoteJobId && !loading ? (
+              <AgentRunSteer jobId={run.remoteJobId} steers={steers} />
+            ) : null}
 
             {canStop || canAllowAll ? (
               <div className={styles.sessionActions}>

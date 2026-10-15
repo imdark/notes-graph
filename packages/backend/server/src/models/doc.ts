@@ -512,6 +512,25 @@ export class DocModel extends BaseModel {
   }
 
   /**
+   * Ids of docs whose title contains `title` (case-insensitive), or whose id
+   * is `title`.
+   */
+  async findIdsByTitleMatch(workspaceId: string, title: string, limit = 200) {
+    const rows = await this.db.workspaceDoc.findMany({
+      where: {
+        workspaceId,
+        OR: [
+          { docId: title },
+          { title: { contains: title, mode: 'insensitive' } },
+        ],
+      },
+      select: { docId: true },
+      take: limit,
+    });
+    return rows.map(row => row.docId);
+  }
+
+  /**
    * The ids of the workspace's docs titled `title`, ignoring case and the
    * spaces around it, as last synced into the doc metas. A title the user
    * has just typed may take a moment to show up here.
@@ -781,6 +800,27 @@ export class DocModel extends BaseModel {
         docId: true,
       },
     });
+    return rows.map(row => row.docId);
+  }
+
+  /**
+   * Docs titled `title` (case-insensitive), most recently edited first. The
+   * title is the one kept from the doc's last snapshot, so a doc created
+   * moments ago may not be found yet.
+   */
+  async findIdsByExactTitle(workspaceId: string, title: string) {
+    const rows = await this.db.$queryRaw<{ docId: string }[]>`
+      SELECT "workspace_pages"."page_id" as "docId"
+      FROM "workspace_pages"
+      INNER JOIN "snapshots"
+      ON "workspace_pages"."workspace_id" = "snapshots"."workspace_id"
+      AND "workspace_pages"."page_id" = "snapshots"."guid"
+      WHERE
+        "workspace_pages"."workspace_id" = ${workspaceId}
+        AND LOWER("workspace_pages"."title") = LOWER(${title})
+      ORDER BY "snapshots"."updated_at" DESC
+      LIMIT 10
+    `;
     return rows.map(row => row.docId);
   }
 

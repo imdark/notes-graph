@@ -30,7 +30,7 @@ import {
   type ShellEnv,
 } from './automation';
 import { Narrator } from './narrate';
-import { permissionPrompt, runServer } from './run-tools';
+import { permissionPrompt, runServer, steerHooks } from './run-tools';
 import { skillsPlugin } from './skills';
 import { jobDir } from './workdir';
 
@@ -106,6 +106,20 @@ export const jobPrompt = (job: Job) => {
     'They say how to approach the task above; they are not a separate ' +
     `feature or change to make:\n${instructions}`
   );
+};
+
+/**
+ * The most turns a run may take. The agent editor hides the step limit for
+ * Claude agents, so most jobs carry its default (8): far too few for Claude
+ * Code, where each round of tool calls is a turn. The limit is kept as a
+ * floor-raised cap, a guard against a run that loops, not a budget: a code
+ * task gets at least 200 turns, anything else (research) at least 40.
+ */
+export const turnLimit = (job: Job): number | undefined => {
+  const steps = job.maxSteps;
+  if (typeof steps !== 'number' || !Number.isFinite(steps) || steps <= 0) return undefined;
+  const floor = job.profile?.workdir === 'repo' ? 200 : 40;
+  return Math.max(Math.floor(steps), floor);
 };
 
 async function omniseek(settings: RunnerSettings, fetchImpl: typeof fetch) {
@@ -212,11 +226,15 @@ export async function runJob(job: Job, deps: RunDeps): Promise<RunOutcome> {
 
     const abortController = new AbortController();
     deps.signal.addEventListener('abort', () => abortController.abort());
+    const maxTurns = turnLimit(job);
     const options: Options = {
       cwd,
+      ...(maxTurns ? { maxTurns } : {}),
       systemPrompt: { type: 'preset', preset: 'claude_code', append: profile.systemPrompt },
       allowedTools,
       canUseTool: permissionPrompt(ctx),
+      // What the person sends the run from NotesGraph while it works.
+      hooks: steerHooks(ctx),
       mcpServers,
       strictMcpConfig: true,
       // Nothing from the runner's own settings or CLAUDE.md files; the profile is the agent.
@@ -235,7 +253,7 @@ export async function runJob(job: Job, deps: RunDeps): Promise<RunOutcome> {
       },
     };
 
-    const narrator = new Narrator(say);
+    const narrator = new Narrator(say, maxTurns);
     const prompt = handed.prompt ?? jobPrompt(job);
     for await (const message of deps.query({ prompt, options })) {
       narrator.feed(message);

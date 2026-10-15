@@ -159,6 +159,30 @@ export interface RemoteQuestion {
   answeredAt: number | null;
 }
 
+/** A run's public read-only link (see the server's registry/share.ts). */
+export interface RunShare {
+  token: string;
+  url: string;
+  /** When the snapshot it shows was taken, epoch seconds. */
+  sharedAt: number;
+}
+
+/** What a share link shows: a snapshot, not the live run. */
+export interface SharedRun {
+  title: string | null;
+  status: string;
+  log: string;
+  result: string | null;
+  error: string | null;
+  questions: {
+    kind: string;
+    text: string;
+    answer: string | null;
+    allowed: boolean | null;
+  }[];
+  sharedAt: number;
+}
+
 export interface RemoteJob {
   id: string;
   deviceKey: string;
@@ -201,6 +225,20 @@ export interface RemoteJob {
   finishedAt: number | null;
   /** Present on single-job reads. */
   questions?: RemoteQuestion[];
+  /** What the starter sent the run while it worked. Single-job reads only. */
+  steers?: RemoteSteer[];
+}
+
+/**
+ * An instruction sent to a running job. Its runner takes it on its next
+ * step, and the server writes it into the transcript then.
+ */
+export interface RemoteSteer {
+  id: string;
+  text: string;
+  createdAt: number;
+  /** When the runner took it; null while it waits. */
+  deliveredAt: number | null;
 }
 
 /** A workspace's agent spend this month, against its budget if it has one. */
@@ -214,6 +252,10 @@ export interface AgentBudget {
 
 export const openQuestions = (job: RemoteJob): RemoteQuestion[] =>
   (job.questions ?? []).filter(q => !q.answeredAt);
+
+/** Messages sent to the job that its runner hasn't taken yet. */
+export const waitingSteers = (job: RemoteJob): RemoteSteer[] =>
+  (job.steers ?? []).filter(s => !s.deliveredAt);
 
 /** One step of {@link RemoteAgentRunnerService.watch}. */
 export interface RemoteJobUpdate {
@@ -353,6 +395,30 @@ export class RemoteAgentRunnerService extends Service {
     }
   }
 
+  /** The run's public link, if it has one. */
+  async getShare(workspaceId: string, jobId: string): Promise<RunShare | null> {
+    const data = await this.json<{ share: RunShare | null }>(
+      `${this.base(workspaceId)}/jobs/${encodeURIComponent(jobId)}/share`
+    );
+    return data.share;
+  }
+
+  /** Make the run's public link, or refresh what it shows. */
+  async share(workspaceId: string, jobId: string): Promise<RunShare> {
+    const data = await this.json<{ share: RunShare }>(
+      `${this.base(workspaceId)}/jobs/${encodeURIComponent(jobId)}/share`,
+      { method: 'POST' }
+    );
+    return data.share;
+  }
+
+  async unshare(workspaceId: string, jobId: string): Promise<void> {
+    await this.json(
+      `${this.base(workspaceId)}/jobs/${encodeURIComponent(jobId)}/share`,
+      { method: 'DELETE' }
+    );
+  }
+
   /** List the devices in this workspace that accept agent work. */
   /** What the server is running, for checking pull requests against. */
   async deployInfo(): Promise<DeployInfo | null> {
@@ -482,6 +548,22 @@ export class RemoteAgentRunnerService extends Service {
     return data.job;
   }
 
+  /**
+   * Send a running job a new instruction; its runner takes it on its next
+   * step. Only its starter is allowed to, and only before it ends.
+   */
+  async steer(
+    workspaceId: string,
+    jobId: string,
+    text: string
+  ): Promise<RemoteSteer> {
+    const data = await this.json<{ steer: RemoteSteer }>(
+      `${this.base(workspaceId)}/jobs/${encodeURIComponent(jobId)}/steer`,
+      { method: 'POST', body: JSON.stringify({ text }) }
+    );
+    return data.steer;
+  }
+
   async cancel(workspaceId: string, jobId: string): Promise<void> {
     await this.json(
       `${this.base(workspaceId)}/jobs/${encodeURIComponent(jobId)}/cancel`,
@@ -510,6 +592,7 @@ export class RemoteAgentRunnerService extends Service {
   ): AsyncIterable<RemoteJobUpdate> {
     let lastStatus = '';
     let lastOpen = '';
+    let lastWaiting = '';
     let lastTitle: string | null | undefined;
     let lastAllowAll: boolean | undefined;
     let logFrom = 0;
@@ -540,15 +623,20 @@ export class RemoteAgentRunnerService extends Service {
         const open = openQuestions(job)
           .map(q => q.id)
           .join(',');
+        const waiting = waitingSteers(job)
+          .map(s => s.id)
+          .join(',');
         if (
           job.status !== lastStatus ||
           logDelta ||
           open !== lastOpen ||
+          waiting !== lastWaiting ||
           job.title !== lastTitle ||
           job.allowAllTools !== lastAllowAll
         ) {
           lastStatus = job.status;
           lastOpen = open;
+          lastWaiting = waiting;
           lastTitle = job.title;
           lastAllowAll = job.allowAllTools;
           yield { job, logDelta };

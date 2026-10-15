@@ -96,6 +96,8 @@ Do not guess facts about the user's life: the people in it, their ages,
 relationships, preferences, plans, constraints. For each one you need:
 1. Look in NotesGraph first (keyword_search and semantic_search; read the
    notes you find). A fact already written down must not be asked again.
+   Run searches that don't depend on each other together, in one turn. Don't
+   repeat a search you already ran; refine it instead.
 2. If it is not there, ask with mcp__run__ask_user. One short, specific
    question; group closely related unknowns into it. For a task like "find a
    show to watch with Cosmo", ask "Who is Cosmo, and how old are they?"

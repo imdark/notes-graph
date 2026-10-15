@@ -11,7 +11,7 @@ import { type AgentRun, AgentRunsStore } from '../stores/agent-runs';
 import { AgentRulesService } from './agent-rules';
 import { CloudAgentRunnerService } from './cloud-runner';
 import { AgentContextService } from './context';
-import { AgentExecutorService } from './executor';
+import { AgentExecutorService, countFound, foundLine } from './executor';
 import { AgentFileToolsService } from './file-tools';
 import { RemoteAgentRunnerService, type RemoteJob } from './remote-runner';
 import { ResearchToolsService } from './research-tools';
@@ -365,6 +365,80 @@ describe('AgentExecutorService research runs', () => {
       if (event.type === 'log') logs.push(event.text);
     }
     expect(logs.join('')).toContain('There is no tool called omniseek_curator_act');
+  });
+
+  test('independent searches in one reply run together, in order; a repeat is not re-run', async () => {
+    const replies = [
+      [
+        '```tool\n{"tool": "omniseek_search", "args": {"query": "graph RAG"}}\n```',
+        '```tool\n{"tool": "omniseek_search", "args": {"query": "GraphRAG eval"}}\n```',
+      ].join('\n'),
+      '```tool\n{"tool": "omniseek_search", "args": {"query": "  Graph   RAG "}}\n```',
+      'Done.',
+    ];
+    const userTurns: string[] = [];
+    let inFlight = 0;
+    let maxInFlight = 0;
+    const calls: string[] = [];
+    const logs: string[] = [];
+    const { executor } = setup([], {}, {
+      context: { build: async () => ({ text: 'x', label: 'a block', title: 'x' }) },
+      fileTools: { available: false },
+      cloudRunner: {
+        open: async () =>
+          async function* (messages: { role: string; content: string }[]) {
+            userTurns.push(messages.at(-1)!.content);
+            yield replies.shift() ?? '';
+          },
+      },
+      researchTools: {
+        specs: async () => [{ name: 'omniseek_search', desc: 's', args: { query: 'q' }, mutates: false }],
+        call: async (_ws: string, _name: string, args: { query: string }) => {
+          calls.push(args.query);
+          inFlight += 1;
+          maxInFlight = Math.max(maxInFlight, inFlight);
+          // The first call finishes last: results still come back in order.
+          await new Promise(resolve => setTimeout(resolve, args.query === 'graph RAG' ? 20 : 1));
+          inFlight -= 1;
+          return `results for ${args.query}`;
+        },
+      },
+    });
+    for await (const event of executor.run(
+      { id: 'a1', name: 'R', harness: 'research', tools: [], instructions: '', maxSteps: 4 } as any,
+      { kind: 'block', docId: 'doc', blockId: 'b1' },
+      new AbortController().signal
+    )) {
+      if (event.type === 'log') logs.push(event.text);
+    }
+    expect(calls).toEqual(['graph RAG', 'GraphRAG eval']);
+    expect(maxInFlight).toBe(2);
+    expect(userTurns[1]).toBe(
+      'Result of omniseek_search:\nresults for graph RAG\n\nResult of omniseek_search:\nresults for GraphRAG eval'
+    );
+    expect(userTurns[2]).toContain('Already searched for "Graph   RAG" — see the earlier result.');
+    expect(logs.join('')).toContain('Already searched for');
+  });
+});
+
+describe('countFound', () => {
+  test('counts hits and distinct docs in each NotesGraph result shape', () => {
+    expect(
+      countFound(
+        JSON.stringify({
+          blocks: [
+            { docId: 'd1', blockId: 'a' },
+            { docId: 'd1', blockId: 'b' },
+            { docId: 'd2', blockId: 'c' },
+          ],
+          nextCursor: null,
+        })
+      )
+    ).toEqual({ notes: 3, docs: 2 });
+    expect(countFound('{"docId":"d1","title":"A"}\n{"docId":"d2","title":"B"}')).toEqual({ notes: 2, docs: 2 });
+    expect(countFound('No matching documents found.')).toEqual({ notes: 0, docs: 0 });
+    expect(foundLine({ notes: 3, docs: 2 })).toBe('Found 3 notes across 2 docs');
+    expect(foundLine({ notes: 1, docs: 0 })).toBe('Found 1 note');
   });
 });
 

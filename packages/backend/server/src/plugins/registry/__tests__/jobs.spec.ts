@@ -418,6 +418,91 @@ test('a single job carries its questions; a listing does not', t => {
   t.is(toJobDto(storedJob()).questions, undefined);
 });
 
+test('messages sent to a run travel apart from its questions', t => {
+  const rows = [
+    openQuestion(),
+    openQuestion({ id: 's1', kind: 'steer', text: 'Use the staging DB' }),
+    openQuestion({ id: 's2', kind: 'steer', text: 'Skip tests', answeredAt: new Date(2000) }),
+  ] as any;
+  const dto = toJobDto(storedJob(), { logFrom: 0, questions: rows });
+  // Nothing that reads open questions may take a waiting message for one.
+  t.deepEqual(dto.questions?.map(q => q.id), ['q1']);
+  t.deepEqual(dto.steers, [
+    { id: 's1', text: 'Use the staging DB', createdAt: 0, deliveredAt: null },
+    { id: 's2', text: 'Skip tests', createdAt: 0, deliveredAt: 2 },
+  ]);
+});
+
+function steerService(job: any, waiting: any[] = []) {
+  const sent: string[] = [];
+  let taken = 0;
+  const models: any = {
+    registryJob: {
+      get: async () => job,
+      getQuestion: async () => waiting[0] ?? null,
+      steer: async (jobId: string, text: string) => (sent.push(text), {
+        ...openQuestion({ id: 's1', jobId, kind: 'steer', text }),
+      }),
+      takeSteers: async () => {
+        taken++;
+        return waiting.splice(0).map(s => ({ id: s.id, text: s.text, createdAt: new Date(0) }));
+      },
+    },
+  };
+  return { service: new RegistryJobService(models), sent, takes: () => taken };
+}
+
+test('the starter can send a running job a new instruction', async t => {
+  const { service, sent } = steerService(storedJob({ createdBy: userId }));
+  const steer = await service.steer(workspaceId, 'job-1', userId, {
+    text: '  Use the staging DB  ',
+  });
+  t.deepEqual(sent, ['Use the staging DB']);
+  t.is(steer.deliveredAt, null);
+});
+
+test('only the starter can message a run, and only before it ends', async t => {
+  const { service, sent } = steerService(storedJob({ createdBy: userId }));
+  await t.throwsAsync(
+    service.steer(workspaceId, 'job-1', 'someone-else', { text: 'x' }),
+    { message: /Only the person who started this run/ }
+  );
+  await t.throwsAsync(service.steer(workspaceId, 'job-1', userId, { text: '  ' }), {
+    message: /text is required/,
+  });
+  const ended = steerService(storedJob({ createdBy: userId, status: 'done' }));
+  await t.throwsAsync(ended.service.steer(workspaceId, 'job-1', userId, { text: 'x' }), {
+    message: /can't take a message/,
+  });
+  t.deepEqual(sent, []);
+  t.deepEqual(ended.sent, []);
+});
+
+test('the runner takes waiting messages once, and none after the run ends', async t => {
+  const waiting = [openQuestion({ id: 's1', kind: 'steer', text: 'Skip tests' })];
+  const { service } = steerService(storedJob({ createdBy: userId }), waiting);
+  const first = await service.takeSteers(workspaceId, 'job-1');
+  t.deepEqual(first.steers.map(s => s.text), ['Skip tests']);
+  t.deepEqual((await service.takeSteers(workspaceId, 'job-1')).steers, []);
+
+  const ended = steerService(storedJob({ status: 'cancelled' }), [
+    openQuestion({ id: 's2', kind: 'steer', text: 'too late' }),
+  ]);
+  const late = await ended.service.takeSteers(workspaceId, 'job-1');
+  t.deepEqual(late, { steers: [], jobStatus: 'cancelled' });
+  t.is(ended.takes(), 0);
+});
+
+test('a waiting message cannot be answered as if it were a question', async t => {
+  const { service } = steerService(storedJob({ createdBy: userId }), [
+    openQuestion({ id: 's1', kind: 'steer', text: 'Skip tests' }),
+  ]);
+  await t.throwsAsync(
+    service.answer(workspaceId, 'job-1', 's1', userId, { answer: 'x' }),
+    { message: /No question 's1'/ }
+  );
+});
+
 function pushStub() {
   const asked: string[] = [];
   const closed: string[][] = [];

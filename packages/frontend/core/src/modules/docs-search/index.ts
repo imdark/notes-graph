@@ -1,4 +1,12 @@
-export { DocsSearchService } from './services/docs-search';
+export {
+  type DocSearchResult,
+  DocsSearchService,
+} from './services/docs-search';
+export {
+  hasSearchFilters,
+  parseSearchQuery,
+  type SearchQueryFilters,
+} from './utils/search-query';
 
 import { type Framework } from '@notesgraph/infra';
 

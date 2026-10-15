@@ -4,7 +4,7 @@ import z from 'zod/v3';
 
 import { DocReader, DocWriter } from '../../../core/doc';
 import { PermissionAccess } from '../../../core/permission';
-import { clearEmbeddingChunk } from '../../../models';
+import { clearEmbeddingChunk, Models } from '../../../models';
 import { IndexerService } from '../../indexer';
 import { SearchTable } from '../../indexer/tables';
 import {
@@ -13,6 +13,19 @@ import {
   SearchQueryType,
 } from '../../indexer/types';
 import { CopilotContextService } from '../context/service';
+import {
+  filterDocIdsByDates,
+  resolveSearchScope,
+  resolveWordDocIds,
+  SEARCH_FILTER_OVERFETCH,
+  SEARCH_FILTER_SYNTAX,
+  tokenList,
+} from '../search-filter';
+import {
+  matchesWordFilters,
+  parseSearchQuery,
+  searchText,
+} from '../search-query';
 import { findSecret, guardSecrets, secretRefusal } from './secret-guard';
 import {
   DEFAULT_STALE_DAYS,
@@ -31,30 +44,8 @@ function first(value: unknown): string {
   return typeof item === 'string' ? item : '';
 }
 
-/**
- * Multi-value index fields come back as a plain string, an array, or (from
- * the Manticore write path) a JSON-stringified array — normalize to a
- * string list.
- */
-function tokenList(value: unknown): string[] {
-  if (Array.isArray(value)) {
-    return value.filter((item): item is string => typeof item === 'string');
-  }
-  if (typeof value !== 'string' || !value) return [];
-  if (value.startsWith('[')) {
-    try {
-      const parsed = JSON.parse(value);
-      if (Array.isArray(parsed)) {
-        return parsed.filter(
-          (item): item is string => typeof item === 'string'
-        );
-      }
-    } catch {
-      // fall through — treat as a single token
-    }
-  }
-  return [value];
-}
+const SEMANTIC_SEARCH_TOP_K = 5;
+const KEYWORD_SEARCH_LIMIT = 20;
 
 type McpTextContent = {
   type: 'text';
@@ -118,6 +109,55 @@ function toInputError(error: z.ZodError) {
   return toolError(`Invalid arguments: ${details || 'Invalid input'}`);
 }
 
+/** The diagram types Mermaid draws, as a diagram's first word. */
+const MERMAID_DIAGRAMS = [
+  'graph',
+  'flowchart',
+  'sequenceDiagram',
+  'classDiagram',
+  'stateDiagram',
+  'stateDiagram-v2',
+  'erDiagram',
+  'gantt',
+  'pie',
+  'mindmap',
+  'timeline',
+  'journey',
+  'quadrantChart',
+  'gitGraph',
+  'xychart-beta',
+];
+
+/**
+ * The Mermaid source an agent passed, ready for a ```mermaid fence, or why
+ * it can't be drawn. Only the shape is checked: a fence it was wrapped in is
+ * taken off, and its first word must name a diagram type.
+ */
+export function mermaidSource(input: string): string | { error: string } {
+  const source = input
+    .trim()
+    .replace(/^```\s*mermaid[^\n]*\n/i, '')
+    .replace(/\n?```\s*$/, '')
+    .trim();
+  if (!source) return { error: 'The Mermaid source is empty.' };
+  if (/^```/m.test(source)) {
+    return { error: 'The Mermaid source cannot contain a ``` fence.' };
+  }
+  // Front matter (---) and %% directives may come before the diagram type.
+  const first = source
+    .replace(/^---\n[\s\S]*?\n---\n/, '')
+    .split('\n')
+    .map(line => line.trim())
+    .find(line => line && !line.startsWith('%%'));
+  const keyword = first?.split(/[\s:;{]/)[0] ?? '';
+  if (!MERMAID_DIAGRAMS.includes(keyword)) {
+    return {
+      error: `The Mermaid source must start with a diagram type (${MERMAID_DIAGRAMS.slice(0, 12).join(', ')}); it starts with "${keyword.slice(0, 40)}".`,
+    };
+  }
+  return source;
+}
+
 function abortIfNeeded(
   signal: AbortSignal
 ): WorkspaceMcpToolResult | undefined {
@@ -151,7 +191,8 @@ export class WorkspaceMcpProvider {
     private readonly reader: DocReader,
     private readonly writer: DocWriter,
     private readonly context: CopilotContextService,
-    private readonly indexer: IndexerService
+    private readonly indexer: IndexerService,
+    private readonly models: Models
   ) {}
 
   async for(userId: string, workspaceId: string): Promise<WorkspaceMcpServer> {
@@ -200,13 +241,16 @@ export class WorkspaceMcpProvider {
     const semanticSearch = defineTool({
       name: 'semantic_search',
       title: 'Semantic Search',
-      description:
-        'Retrieve conceptually related passages by performing vector-based semantic similarity search across embedded documents; use this tool only when exact keyword search fails or the user explicitly needs meaning-level matches (e.g., paraphrases, synonyms, broader concepts, recent documents). Pass docId to scope matching to a single document.',
+      description: `Retrieve conceptually related passages by performing vector-based semantic similarity search across embedded documents; use this tool only when exact keyword search fails or the user explicitly needs meaning-level matches (e.g., paraphrases, synonyms, broader concepts, recent documents). Pass docId to scope matching to a single document. ${SEARCH_FILTER_SYNTAX} Example: deploy steps tag:work dt>=2026-01-01 -"staging".`,
       parser: z.object({ query: z.string(), docId: z.string().optional() }),
       inputSchema: {
         type: 'object',
         properties: {
-          query: { type: 'string' },
+          query: {
+            type: 'string',
+            description:
+              'Search text, optionally with filters: tag:x prop:k:v doc:"Title" dt>=YYYY-MM-DD dt<=YYYY-MM-DD +"word" -"word".',
+          },
           docId: {
             type: 'string',
             description:
@@ -217,31 +261,53 @@ export class WorkspaceMcpProvider {
         additionalProperties: false,
       },
       execute: async ({ query, docId }, options) => {
-        const trimmed = query.trim();
-        if (!trimmed) {
-          return toolError('Query is required for semantic search.');
+        const filters = parseSearchQuery(query);
+        const text = searchText(filters);
+        if (!text) {
+          return toolError(
+            'Semantic search needs search text (or a +"word") besides its filters.'
+          );
         }
 
+        let scope = await resolveSearchScope(
+          { models: this.models, indexer: this.indexer },
+          workspaceId,
+          filters
+        );
+        if (docId) {
+          scope = {
+            ...scope,
+            docIds: scope?.docIds
+              ? scope.docIds.filter(id => id === docId)
+              : [docId],
+          };
+        }
+
+        const wordFiltered =
+          filters.include.length > 0 || filters.exclude.length > 0;
         const chunks = await this.context.matchWorkspaceDocs(
           workspaceId,
-          trimmed,
-          5,
+          text,
+          wordFiltered
+            ? SEMANTIC_SEARCH_TOP_K * SEARCH_FILTER_OVERFETCH
+            : SEMANTIC_SEARCH_TOP_K,
           options.signal,
           undefined,
           undefined,
-          docId ? [docId] : undefined
+          scope
         );
 
         const abortedAfterMatch = abortIfNeeded(options.signal);
         if (abortedAfterMatch) return abortedAfterMatch;
 
+        const matched = chunks
+          .filter(chunk => 'docId' in chunk)
+          .filter(chunk => matchesWordFilters(filters, chunk.content))
+          .slice(0, SEMANTIC_SEARCH_TOP_K);
         const docs = await this.ac
           .user(userId)
           .workspace(workspaceId)
-          .docs(
-            chunks.filter(chunk => 'docId' in chunk),
-            'Doc.Read'
-          );
+          .docs(matched, 'Doc.Read');
 
         const abortedAfterDocs = abortIfNeeded(options.signal);
         if (abortedAfterDocs) return abortedAfterDocs;
@@ -262,22 +328,58 @@ export class WorkspaceMcpProvider {
     const keywordSearch = defineTool({
       name: 'keyword_search',
       title: 'Keyword Search',
-      description:
-        'Fuzzy search all workspace documents for the exact keyword or phrase supplied and return matching documents ranked by textual match. Use this tool by default whenever a straightforward term-based or keyword-base lookup is sufficient. For block-level hits, or to search inside one document, use search_blocks instead.',
+      description: `Fuzzy search all workspace documents for the exact keyword or phrase supplied and return matching documents ranked by textual match. Use this tool by default whenever a straightforward term-based or keyword-base lookup is sufficient. For block-level hits, or to search inside one document, use search_blocks instead. ${SEARCH_FILTER_SYNTAX} Example: release notes prop:status:done doc:"Roadmap" +"v2".`,
       parser: z.object({ query: z.string() }),
       inputSchema: {
         type: 'object',
         properties: {
-          query: { type: 'string' },
+          query: {
+            type: 'string',
+            description:
+              'Keywords, optionally with filters: tag:x prop:k:v doc:"Title" dt>=YYYY-MM-DD dt<=YYYY-MM-DD +"word" -"word".',
+          },
         },
         required: ['query'],
         additionalProperties: false,
       },
       execute: async ({ query }, options) => {
-        const trimmed = query.trim();
-        if (!trimmed) return toolError('Query is required for keyword search.');
+        const filters = parseSearchQuery(query);
+        const text = searchText(filters);
+        if (!text) {
+          return toolError(
+            'Keyword search needs keywords (or a +"word") besides its filters.'
+          );
+        }
 
-        let docs = await this.indexer.searchDocsByKeyword(workspaceId, trimmed);
+        const deps = { models: this.models, indexer: this.indexer };
+        const [scope, words] = await Promise.all([
+          resolveSearchScope(deps, workspaceId, filters),
+          resolveWordDocIds(deps, workspaceId, filters),
+        ]);
+        let docIds = scope?.docIds;
+        if (words.include) {
+          const include = words.include;
+          docIds = docIds ? docIds.filter(id => include.has(id)) : [...include];
+        }
+        const postFiltered = filters.dates.length > 0 || words.exclude.size > 0;
+
+        let docs = await this.indexer.searchDocsByKeyword(workspaceId, text, {
+          docIds,
+          limit: postFiltered
+            ? KEYWORD_SEARCH_LIMIT * SEARCH_FILTER_OVERFETCH
+            : KEYWORD_SEARCH_LIMIT,
+        });
+        docs = docs.filter(doc => !words.exclude.has(doc.docId));
+        if (filters.dates.length) {
+          const inRange = await filterDocIdsByDates(
+            this.models,
+            workspaceId,
+            docs.map(doc => doc.docId),
+            filters
+          );
+          docs = docs.filter(doc => inRange.has(doc.docId));
+        }
+        docs = docs.slice(0, KEYWORD_SEARCH_LIMIT);
 
         const abortedAfterSearch = abortIfNeeded(options.signal);
         if (abortedAfterSearch) return abortedAfterSearch;
@@ -1495,13 +1597,150 @@ export class WorkspaceMcpProvider {
         },
       });
 
+      const createDiagram = defineTool({
+        name: 'create_diagram',
+        title: 'Create Diagram',
+        description:
+          'Add a Mermaid diagram (flowchart, sequence, class, state, ER, gantt, pie, mindmap, timeline, journey) to the notes; it shows as the drawing, not its source. With docId it is appended to the end of that document, leaving the rest as it is; without, a new document is created (title required) and its ID returned. Pass only the Mermaid source, without the ``` fence.',
+        parser: z.object({
+          docId: z.string().optional(),
+          title: z.string().optional(),
+          mermaid: z.string(),
+          caption: z.string().optional(),
+          agent: z.string().optional(),
+        }),
+        inputSchema: {
+          type: 'object',
+          properties: {
+            docId: {
+              type: 'string',
+              description:
+                'The document to append the diagram to. Omit to create a new document.',
+            },
+            title: {
+              type: 'string',
+              description: 'Title of the new document, when no docId is given.',
+            },
+            mermaid: {
+              type: 'string',
+              description:
+                "The Mermaid source, starting with its diagram type, e.g. 'flowchart TD\\n  A --> B'.",
+            },
+            caption: {
+              type: 'string',
+              description: 'A line of text placed above the diagram.',
+            },
+            agent: agentInputSchema,
+          },
+          required: ['mermaid'],
+          additionalProperties: false,
+        },
+        execute: async ({ docId, title, mermaid, caption, agent }, options) => {
+          const source = mermaidSource(mermaid);
+          if (typeof source !== 'string') return toolError(source.error);
+          const block = [
+            ...(caption?.trim()
+              ? [caption.replace(/[\r\n]+/g, ' ').trim(), '']
+              : []),
+            '```mermaid',
+            source,
+            '```',
+          ].join('\n');
+
+          if (!docId) {
+            const sanitizedTitle = (title ?? '')
+              .replace(/[\r\n]+/g, ' ')
+              .trim();
+            if (!sanitizedTitle) {
+              return toolError(
+                'Give a title for the new document, or a docId to add the diagram to.'
+              );
+            }
+            try {
+              await this.ac
+                .user(userId)
+                .workspace(workspaceId)
+                .assert('Workspace.CreateDoc');
+              const aborted = abortIfNeeded(options.signal);
+              if (aborted) return aborted;
+              const result = await this.writer.createDoc(
+                workspaceId,
+                sanitizedTitle,
+                stampAttribution(block, agent),
+                userId
+              );
+              return toolText(
+                JSON.stringify({
+                  success: true,
+                  docId: result.docId,
+                  message: `Diagram created in new document "${sanitizedTitle}"`,
+                })
+              );
+            } catch (error) {
+              return toolError(
+                `Failed to create diagram: ${error instanceof Error ? error.message : 'Unknown error'}`
+              );
+            }
+          }
+
+          const notFoundError = toolError(`Doc with id ${docId} not found.`);
+          const accessible = await this.ac
+            .user(userId)
+            .workspace(workspaceId)
+            .doc(docId)
+            .can('Doc.Update');
+          if (!accessible) return notFoundError;
+
+          const aborted = abortIfNeeded(options.signal);
+          if (aborted) return aborted;
+
+          try {
+            // The doc as it is now, plus the diagram: the writer's structural
+            // diff leaves every existing block untouched and adds the new one.
+            const current = await this.reader.getDocMarkdown(
+              workspaceId,
+              docId,
+              false
+            );
+            if (!current) return notFoundError;
+            // This agent's last stamp moves below the diagram rather than
+            // staying above it; another agent's stays, as update_document does.
+            const name =
+              (agent ?? '').replace(/[\r\n]+/g, ' ').trim() || 'AI agent';
+            const trimmed = current.markdown.replace(/\s+$/, '');
+            const lastLine = trimmed.split('\n').at(-1) ?? '';
+            const body = lastLine.startsWith(`> Edited via MCP by ${name} — `)
+              ? trimmed.slice(0, trimmed.length - lastLine.length).trimEnd()
+              : trimmed;
+            await this.writer.updateDoc(
+              workspaceId,
+              docId,
+              stampAttribution(body ? `${body}\n\n${block}` : block, agent),
+              userId
+            );
+            return toolText(
+              JSON.stringify({
+                success: true,
+                docId,
+                message: 'Diagram added to the end of the document',
+              })
+            );
+          } catch (error) {
+            return toolError(
+              `Failed to add diagram: ${error instanceof Error ? error.message : 'Unknown error'}`
+            );
+          }
+        },
+      });
+
       tools.push(
         createDocument,
         updateDocument,
         updateDocumentMeta,
         linkDocument,
         updateTask,
-        updateBlock
+        updateBlock,
+        createDiagram
       );
     }
 

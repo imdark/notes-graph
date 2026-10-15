@@ -38,6 +38,7 @@ import {
   ServerService,
   SubscriptionService,
 } from '@notesgraph/core/modules/cloud';
+import { DesktopApiService } from '@notesgraph/core/modules/desktop-api';
 import { WorkspaceDialogService } from '@notesgraph/core/modules/dialogs';
 import { FeatureFlagService } from '@notesgraph/core/modules/feature-flag';
 import { PeekViewService } from '@notesgraph/core/modules/peek-view';
@@ -52,8 +53,18 @@ import {
   WorkbenchService,
 } from '@notesgraph/core/modules/workbench';
 import { WorkspaceService } from '@notesgraph/core/modules/workspace';
+import {
+  hasPendingQuickAskPrompt,
+  isQuickAskWindow,
+  prefillQuickAskPrompt,
+} from '@notesgraph/core/utils/quick-ask';
 import { useI18n } from '@notesgraph/i18n';
-import { useFramework, useLiveData, useService } from '@notesgraph/infra';
+import {
+  useFramework,
+  useLiveData,
+  useService,
+  useServiceOptional,
+} from '@notesgraph/infra';
 import { type Signal, signal } from '@preact/signals-core';
 import { nanoid } from 'nanoid';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -133,6 +144,39 @@ export const Component = () => {
   const workbench = useService(WorkbenchService).workbench;
 
   const workspaceId = useService(WorkspaceService).workspace.id;
+  const aiDraftService = useService(AIDraftService);
+  const desktopApi = useServiceOptional(DesktopApiService);
+  const quickAsk = isQuickAskWindow();
+
+  // The input reads the draft when it first renders, so write the clipboard
+  // prompt into the draft before the chat element is created.
+  const [draftReady, setDraftReady] = useState(
+    () => !hasPendingQuickAskPrompt()
+  );
+  useEffect(() => {
+    if (draftReady) return;
+    let canceled = false;
+    prefillQuickAskPrompt(input => aiDraftService.setDraft({ input }))
+      .catch(console.error)
+      .finally(() => {
+        if (!canceled) setDraftReady(true);
+      });
+    return () => {
+      canceled = true;
+    };
+  }, [aiDraftService, draftReady]);
+
+  // Escape hides the quick-ask window unless a menu or dialog handled it.
+  useEffect(() => {
+    if (!quickAsk || !desktopApi) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || event.defaultPrevented) return;
+      if (document.querySelector('[role="dialog"]')) return;
+      desktopApi.handler.ui.hideQuickAsk().catch(console.error);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [desktopApi, quickAsk]);
 
   const runtime = useMemo(
     () =>
@@ -153,9 +197,11 @@ export const Component = () => {
 
   const onOpenDoc = useCallback(
     (docId: string) => {
-      workbench.openDoc(docId, { at: 'active' });
+      // the quick-ask window is too small to read a doc in; send it to a
+      // tab in the main window instead
+      workbench.openDoc(docId, { at: quickAsk ? 'new-tab' : 'active' });
     },
-    [workbench]
+    [quickAsk, workbench]
   );
   const onOpenSessionDoc = useCallback(
     (docId: string, sessionId: string) => {
@@ -206,7 +252,7 @@ export const Component = () => {
   useAIChatElement({
     containerRef: chatContainerRef,
     selector: 'ai-chat-content',
-    enabled: isBodyProvided,
+    enabled: isBodyProvided && draftReady,
     createElement: () => new AIChatContent(),
     configureElement: content => {
       content.session = session;

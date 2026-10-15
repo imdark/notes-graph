@@ -1804,6 +1804,7 @@ model RegistryJob {
 
   workspace Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   questions RegistryJobQuestion[]
+  share     RegistryJobShare?
 
   @@index([workspaceId, deviceKey, status])
   @@index([workspaceId, status, createdAt])
@@ -1833,6 +1834,33 @@ model RegistryJobQuestion {
 
   @@index([jobId, createdAt])
   @@map("registry_job_questions")
+}
+
+/// A public, read-only snapshot of an agent run, opened by its token with no
+/// sign-in. A copy rather than a view of the job: what the link shows is what
+/// its owner saw when sharing, and the job's device, session and instructions
+/// never leave the workspace. Sharing again refreshes the copy, same token.
+model RegistryJobShare {
+  /// Unguessable: the link is the only credential.
+  token       String   @id @db.VarChar
+  jobId       String   @unique @map("job_id") @db.VarChar
+  workspaceId String   @map("workspace_id") @db.VarChar
+  title       String?  @db.VarChar
+  status      String   @db.VarChar
+  /// Transcript with secret-looking values redacted.
+  log         String   @default("") @db.Text
+  result      String?  @db.Text
+  error       String?  @db.Text
+  /// `[{ kind, text, answer, allowed }]`, redacted like the log.
+  questions   Json     @default("[]")
+  createdBy   String?  @map("created_by") @db.VarChar
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  job RegistryJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@map("registry_job_shares")
 }
 
 /// What a workspace lets its agent runs spend in a calendar month (UTC).

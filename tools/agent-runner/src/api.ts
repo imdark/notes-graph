@@ -45,6 +45,8 @@ export interface Job {
   model: string | null;
   status: string;
   title: string | null;
+  /** The agent's step limit; see turnLimit in run-job.ts for how it caps a run. */
+  maxSteps?: number;
   /** Stop the run once it has spent this much (USD). */
   maxCostUsd?: number | null;
   profile?: AgentProfile | null;
@@ -56,6 +58,13 @@ export interface Question {
   answer: string | null;
   allowed: boolean | null;
   answeredAt: number | null;
+}
+
+/** An instruction the person sent the job while it ran. */
+export interface Steer {
+  id: string;
+  text: string;
+  createdAt: number;
 }
 
 export class NotesGraphError extends Error {
@@ -162,6 +171,15 @@ export class NotesGraphApi {
       question
     );
     return asked;
+  }
+
+  /** Take the instructions sent to the job since the last take; each comes once. */
+  async takeSteers(workspaceId: string, jobId: string): Promise<Steer[]> {
+    const { steers } = await this.request<{ steers?: Steer[] }>(
+      'POST',
+      `${this.base(workspaceId)}/jobs/${jobId}/steer/take`
+    );
+    return steers ?? [];
   }
 
   async getQuestion(

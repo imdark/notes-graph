@@ -225,6 +225,7 @@ test('MCP doc_outline and read_section', async t => {
     reader,
     {} as any,
     {} as any,
+    {} as any,
     {} as any
   );
   const server = await provider.for('u', 'ws');

@@ -145,6 +145,36 @@ mod tests {
   }
 
   #[test]
+  fn test_mermaid_code_block_opens_in_preview() {
+    let markdown = "```mermaid\ngraph TD\n  A --> B\n```\n\n```rust\nfn main() {}\n```";
+    let doc_id = "mermaid-doc";
+    let bin = build_full_doc("Diagram", markdown, doc_id).expect("create doc");
+
+    let mut doc = DocOptions::new().with_guid(doc_id.to_string()).build();
+    doc.apply_update_from_binary_v1(&bin).expect("apply update");
+
+    let blocks_map = doc.get_map("blocks").expect("blocks map");
+    let mut previews = Vec::new();
+    for (_, value) in blocks_map.iter() {
+      if let Some(block_map) = value.to_map()
+        && get_string(&block_map, "sys:flavour").as_deref() == Some("notesgraph:code")
+      {
+        let preview = block_map.get("prop:preview").and_then(|v| v.to_any());
+        previews.push((get_string(&block_map, "prop:language"), preview));
+      }
+    }
+    previews.sort_by(|a, b| a.0.cmp(&b.0));
+
+    assert_eq!(
+      previews,
+      vec![
+        (Some("mermaid".to_string()), Some(Any::True)),
+        (Some("rust".to_string()), None),
+      ]
+    );
+  }
+
+  #[test]
   fn test_markdown_with_headings() {
     let markdown = "# H1\n\n## H2\n\n### H3\n\nParagraph text.";
     let result = build_full_doc("H1", markdown, "test-doc-id");

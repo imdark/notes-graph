@@ -61,6 +61,12 @@ export const desktopAppViewMain = style({
   width: '100%',
   height: 'calc(100% - 40px)',
   position: 'relative',
+  selectors: {
+    // the quick-ask window has no tabs header above it
+    '&[data-quick-ask="true"]': {
+      height: '100%',
+    },
+  },
 });
 
 export const desktopTabsHeader = style({
