@@ -7,6 +7,7 @@ import type {
 } from '@notesgraph/nbstore';
 import { isEmpty, omit } from 'lodash-es';
 import {
+  combineLatest,
   distinctUntilChanged,
   map,
   type Observable,
@@ -18,6 +19,50 @@ import { z } from 'zod';
 import { normalizeSearchText } from '../../../utils/normalize-search-text';
 import type { DocsService } from '../../doc/services/docs';
 import type { WorkspaceService } from '../../workspace';
+import {
+  hasSearchFilters,
+  matchesDateFilters,
+  type SearchQueryFilters,
+} from '../utils/search-query';
+
+export interface DocSearchResult {
+  docId: string;
+  title: string;
+  score: number;
+  blockId?: string;
+  blockContent?: string;
+}
+
+/** Docs one search returns. */
+const SEARCH_LIMIT = 50;
+/** Candidates fetched when results are filtered afterwards. */
+const FILTERED_SEARCH_LIMIT = 200;
+/** Upper bound on index rows read when resolving one filter to doc ids. */
+const FILTER_SCAN_LIMIT = 10000;
+
+/**
+ * Multi-value index fields come back as a string, an array, or a
+ * JSON-stringified array; normalize to a string list.
+ */
+function indexTokens(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value.filter((item): item is string => typeof item === 'string');
+  }
+  if (typeof value !== 'string' || !value) return [];
+  if (value.startsWith('[')) {
+    try {
+      const parsed: unknown = JSON.parse(value);
+      if (Array.isArray(parsed)) {
+        return parsed.filter(
+          (item): item is string => typeof item === 'string'
+        );
+      }
+    } catch {
+      // not JSON: a single token
+    }
+  }
+  return [value];
+}
 
 export class DocsSearchService extends Service {
   constructor(
@@ -89,18 +134,163 @@ export class DocsSearchService extends Service {
       );
   }
 
+  /**
+   * Full-text doc search. With `filters` (from `parseSearchQuery`), `query`
+   * is the query's remaining text and results are narrowed to docs with the
+   * tags/props, the doc: titles/ids, the date ranges and the +/- words; with
+   * no text left, lists the docs matching the filters, recently updated first.
+   */
   search$(
     query: string,
-    prefer: IndexerPreferOptions = 'remote'
-  ): Observable<
-    {
-      docId: string;
-      title: string;
-      score: number;
-      blockId?: string;
-      blockContent?: string;
-    }[]
-  > {
+    prefer: IndexerPreferOptions = 'remote',
+    filters?: SearchQueryFilters
+  ): Observable<DocSearchResult[]> {
+    if (!filters || !hasSearchFilters(filters)) {
+      return this.searchText$(query, prefer, SEARCH_LIMIT);
+    }
+    return this.filterDocIds$(filters, prefer).pipe(
+      switchMap(({ allowed, excluded }) => {
+        if (allowed?.size === 0) return of([]);
+        const results$ = query
+          ? this.searchText$(query, prefer, FILTERED_SEARCH_LIMIT)
+          : of(this.listDocs(allowed));
+        return results$.pipe(
+          map(results =>
+            results
+              .filter(result => {
+                if (allowed && !allowed.has(result.docId)) return false;
+                if (excluded.has(result.docId)) return false;
+                if (!filters.dates.length) return true;
+                const record = this.docsService.list.doc$(result.docId).value;
+                return (
+                  !!record &&
+                  matchesDateFilters(filters.dates, {
+                    createdAt: record.createdAt$.value,
+                    updatedAt: record.updatedAt$.value,
+                  })
+                );
+              })
+              .slice(0, SEARCH_LIMIT)
+          )
+        );
+      })
+    );
+  }
+
+  /** Non-trashed docs (of `allowed`, if given), recently updated first. */
+  private listDocs(allowed?: Set<string>): DocSearchResult[] {
+    return this.docsService.list.docs$.value
+      .filter(
+        record => !record.trash$.value && (!allowed || allowed.has(record.id))
+      )
+      .toSorted((a, b) => (b.updatedAt$.value ?? 0) - (a.updatedAt$.value ?? 0))
+      .map(record => ({
+        docId: record.id,
+        title: record.title$.value,
+        score: 0,
+      }));
+  }
+
+  /**
+   * Docs with a block whose `field` matches `value`; `verify` re-checks each
+   * hit, since index matching can be tokenized.
+   */
+  private docIdsWithBlock$(
+    field: 'tags' | 'props' | 'content',
+    value: string,
+    prefer: IndexerPreferOptions,
+    verify: (tokens: string[]) => boolean
+  ) {
+    return this.indexer
+      .search$(
+        'block',
+        { type: 'match', field, match: value },
+        {
+          fields: ['docId', field],
+          pagination: { limit: FILTER_SCAN_LIMIT, skip: 0 },
+          prefer,
+        }
+      )
+      .pipe(
+        map(({ nodes }) => {
+          const docIds = new Set<string>();
+          for (const node of nodes) {
+            const docId = indexTokens(node.fields.docId)[0];
+            if (docId && verify(indexTokens(node.fields[field]))) {
+              docIds.add(docId);
+            }
+          }
+          return docIds;
+        })
+      );
+  }
+
+  /**
+   * The docs a filtered query may return (undefined: no restriction), and
+   * the docs a `-word` rules out.
+   */
+  private filterDocIds$(
+    filters: SearchQueryFilters,
+    prefer: IndexerPreferOptions
+  ): Observable<{ allowed?: Set<string>; excluded: Set<string> }> {
+    const containing = (word: string) => {
+      const needle = word.toLowerCase();
+      return this.docIdsWithBlock$('content', word, prefer, tokens =>
+        tokens.some(text => text.toLowerCase().includes(needle))
+      );
+    };
+    const required$ = [
+      ...filters.tags.map(tag =>
+        this.docIdsWithBlock$('tags', tag, prefer, tokens =>
+          tokens.includes(tag)
+        )
+      ),
+      ...filters.props.map(prop =>
+        this.docIdsWithBlock$('props', prop, prefer, tokens =>
+          tokens.includes(prop)
+        )
+      ),
+      ...filters.include.map(containing),
+    ];
+    const excluded$ = filters.exclude.map(containing);
+
+    let docs: Set<string> | undefined;
+    if (filters.docs.length) {
+      const needles = filters.docs.map(doc => doc.toLowerCase());
+      docs = new Set(
+        this.docsService.list.docs$.value
+          .filter(record => {
+            const title = record.title$.value.toLowerCase();
+            return filters.docs.some(
+              (doc, i) => record.id === doc || title.includes(needles[i])
+            );
+          })
+          .map(record => record.id)
+      );
+    }
+
+    return combineLatest([
+      required$.length ? combineLatest(required$) : of([]),
+      excluded$.length ? combineLatest(excluded$) : of([]),
+    ]).pipe(
+      map(([required, excludedSets]) => {
+        let allowed = docs;
+        for (const ids of required) {
+          allowed = allowed
+            ? new Set([...allowed].filter(id => ids.has(id)))
+            : ids;
+        }
+        const excluded = new Set(excludedSets.flatMap(ids => [...ids]));
+        return { allowed, excluded };
+      })
+    );
+  }
+
+  private searchText$(
+    query: string,
+    prefer: IndexerPreferOptions,
+    limit: number
+  ): Observable<DocSearchResult[]> {
     return this.indexer
       .aggregate$(
         'block',
@@ -138,7 +328,7 @@ export class DocsSearchService extends Service {
         'docId',
         {
           pagination: {
-            limit: 50,
+            limit,
             skip: 0,
           },
           hits: {

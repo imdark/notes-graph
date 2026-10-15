@@ -13,6 +13,7 @@ import { type CopilotRerankRequest } from '../providers/types';
 import { CapabilityRuntime } from '../runtime/capability-runtime';
 import { TaskPolicy } from '../runtime/task-policy';
 import {
+  applyRelevanceCutoff,
   type EmbeddingCallOptionsInput,
   EmbeddingClient,
   normalizeEmbeddingCallOptions,
@@ -218,16 +219,13 @@ const OPENAI_COMPATIBLE_TIMEOUT_MS = 5 * 60_000;
  * being searched), matched by model name.
  */
 const QUERY_PREFIXES: [RegExp, string][] = [
-  [
-    /mxbai-embed/i,
-    'Represent this sentence for searching relevant passages: ',
-  ],
+  [/mxbai-embed/i, 'Represent this sentence for searching relevant passages: '],
 ];
 
 /**
  * Embeddings from an OpenAI-compatible endpoint (`POST {url}/embeddings`),
- * e.g. an open model served by Ollama next to the server. Reranking falls
- * back to vector distance (the base class), which needs no model at all.
+ * e.g. an open model served by Ollama next to the server. Reranking is by
+ * vector distance, which needs no model at all, plus a relevance cutoff.
  */
 export class OpenAICompatibleEmbeddingClient extends EmbeddingClient {
   private inFlight = 0;
@@ -275,12 +273,17 @@ export class OpenAICompatibleEmbeddingClient extends EmbeddingClient {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ model: this.model, input }),
         signal: signal
-          ? AbortSignal.any([signal, AbortSignal.timeout(OPENAI_COMPATIBLE_TIMEOUT_MS)])
+          ? AbortSignal.any([
+              signal,
+              AbortSignal.timeout(OPENAI_COMPATIBLE_TIMEOUT_MS),
+            ])
           : AbortSignal.timeout(OPENAI_COMPATIBLE_TIMEOUT_MS),
       }
     );
     if (!response.ok) {
-      this.fail(`HTTP ${response.status}: ${(await response.text()).slice(0, 200)}`);
+      this.fail(
+        `HTTP ${response.status}: ${(await response.text()).slice(0, 200)}`
+      );
     }
     const body = (await response.json()) as {
       data?: { index: number; embedding: number[] }[];
@@ -303,6 +306,25 @@ export class OpenAICompatibleEmbeddingClient extends EmbeddingClient {
     return !!this.url && !!this.model;
   }
 
+  /**
+   * No rerank model here, so the base distance order alone would hand RAG
+   * every candidate up to topK however weak; cut off the far ones.
+   */
+  override async reRank<Chunk extends ChunkSimilarity = ChunkSimilarity>(
+    query: string,
+    embeddings: Chunk[],
+    topK: number,
+    options?: EmbeddingCallOptionsInput
+  ): Promise<Chunk[]> {
+    const ranked = await super.reRank(
+      query,
+      embeddings,
+      embeddings.length,
+      options
+    );
+    return applyRelevanceCutoff(ranked).slice(0, topK);
+  }
+
   override async getEmbedding(
     query: string,
     options?: EmbeddingCallOptionsInput
@@ -320,7 +342,10 @@ export class OpenAICompatibleEmbeddingClient extends EmbeddingClient {
     const vectors: number[][] = [];
     for (let i = 0; i < input.length; i += OPENAI_COMPATIBLE_BATCH) {
       vectors.push(
-        ...(await this.embedBatch(input.slice(i, i + OPENAI_COMPATIBLE_BATCH), signal))
+        ...(await this.embedBatch(
+          input.slice(i, i + OPENAI_COMPATIBLE_BATCH),
+          signal
+        ))
       );
     }
     return vectors.map((embedding, index) => ({

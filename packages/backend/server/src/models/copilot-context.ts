@@ -21,6 +21,16 @@ import {
 
 type UpdateCopilotContextInput = Pick<CopilotContext, 'config'>;
 
+type TimeRange = { from?: Date; to?: Date };
+
+export type WorkspaceEmbeddingScope = {
+  /** Only chunks of these docs; an empty list matches nothing. */
+  docIds?: string[];
+  /** `from` inclusive, `to` exclusive, on the doc's snapshot. */
+  createdAt?: TimeRange;
+  updatedAt?: TimeRange;
+};
+
 /**
  * `updated_at` of a doc's chunks saved while the doc is still being embedded.
  * Older than any doc edit, so the doc keeps reading as needing embedding
@@ -388,13 +398,29 @@ export class CopilotContextModel extends BaseModel {
     await this.fulfillEmptyEmbedding(workspaceId, docId);
   }
 
+  /**
+   * @param matchDocIds docs to match even if the workspace ignores them
+   *   (docs added to a chat context); does not narrow the search.
+   * @param scope narrows the search: only these docs, and/or only docs whose
+   *   snapshot was created/updated within the given ranges.
+   */
   async matchWorkspaceEmbedding(
     embedding: number[],
     workspaceId: string,
     topK: number,
     threshold: number,
-    matchDocIds?: string[]
+    matchDocIds?: string[],
+    scope?: WorkspaceEmbeddingScope
   ): Promise<DocChunkSimilarity[]> {
+    if (scope?.docIds && scope.docIds.length === 0) return [];
+    const { createdAt, updatedAt } = scope ?? {};
+    const timeConditions = [
+      createdAt?.from && Prisma.sql`AND s."created_at" >= ${createdAt.from}`,
+      createdAt?.to && Prisma.sql`AND s."created_at" < ${createdAt.to}`,
+      updatedAt?.from && Prisma.sql`AND s."updated_at" >= ${updatedAt.from}`,
+      updatedAt?.to && Prisma.sql`AND s."updated_at" < ${updatedAt.to}`,
+    ].filter((condition): condition is Prisma.Sql => !!condition);
+
     const similarityChunks = await this.db.$queryRaw<Array<DocChunkSimilarity>>`
       SELECT
         w."doc_id" as "docId",
@@ -406,10 +432,19 @@ export class CopilotContextModel extends BaseModel {
         ON i."workspace_id" = w."workspace_id"
           AND i."doc_id" = w."doc_id"
           ${matchDocIds?.length ? Prisma.sql`AND w."doc_id" NOT IN (${Prisma.join(matchDocIds)})` : Prisma.empty}
+      ${
+        timeConditions.length
+          ? Prisma.sql`INNER JOIN "snapshots" s
+              ON s."workspace_id" = w."workspace_id"
+                AND s."guid" = w."doc_id"`
+          : Prisma.empty
+      }
       WHERE
         w."workspace_id" = ${workspaceId}
         AND i."doc_id" IS NULL
         AND (w."embedding" <=> ${embedding}::vector) <= ${threshold}
+        ${scope?.docIds ? Prisma.sql`AND w."doc_id" IN (${Prisma.join(scope.docIds)})` : Prisma.empty}
+        ${timeConditions.length ? Prisma.join(timeConditions, ' ') : Prisma.empty}
       ORDER BY "distance" ASC
       LIMIT ${topK};
     `;

@@ -512,6 +512,25 @@ export class DocModel extends BaseModel {
   }
 
   /**
+   * Ids of docs whose title contains `title` (case-insensitive), or whose id
+   * is `title`.
+   */
+  async findIdsByTitle(workspaceId: string, title: string, limit = 200) {
+    const rows = await this.db.workspaceDoc.findMany({
+      where: {
+        workspaceId,
+        OR: [
+          { docId: title },
+          { title: { contains: title, mode: 'insensitive' } },
+        ],
+      },
+      select: { docId: true },
+      take: limit,
+    });
+    return rows.map(row => row.docId);
+  }
+
+  /**
    * Find the workspace public doc metas.
    */
   async findPublics(workspaceId: string, order: 'asc' | 'desc' = 'asc') {

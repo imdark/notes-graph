@@ -13,6 +13,7 @@ import {
   ContextEmbedStatus,
   ContextFile,
   Models,
+  type WorkspaceEmbeddingScope,
 } from '../../../models';
 import { CopilotEmbeddingClientService } from '../embedding/client';
 import type {
@@ -236,10 +237,11 @@ export class CopilotContextService implements OnApplicationBootstrap {
     signal?: AbortSignal,
     threshold: number = 0.5,
     routeContext?: EmbeddingRouteContext,
-    docIds?: string[]
+    scope?: WorkspaceEmbeddingScope
   ) {
     const client = this.embeddingClient;
     if (!client) return [];
+    if (scope?.docIds && scope.docIds.length === 0) return [];
     const options = this.embeddingOptions(workspaceId, signal, routeContext);
     const embedding = await client.getEmbedding(content, options);
     if (!embedding) return [];
@@ -250,7 +252,8 @@ export class CopilotContextService implements OnApplicationBootstrap {
         workspaceId,
         topK * 2,
         threshold,
-        docIds
+        undefined,
+        scope
       );
     if (!workspaceChunks.length) return [];
 

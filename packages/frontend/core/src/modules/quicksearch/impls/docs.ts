@@ -14,6 +14,10 @@ import type { WorkspaceServerService } from '../../cloud';
 import type { DocRecord, DocsService } from '../../doc';
 import type { DocDisplayMetaService } from '../../doc-display-meta';
 import type { DocsSearchService } from '../../docs-search';
+import {
+  hasSearchFilters,
+  parseSearchQuery,
+} from '../../docs-search/utils/search-query';
 import type { FeatureFlagService } from '../../feature-flag';
 import type { WorkspaceService } from '../../workspace';
 import type { QuickSearchSession } from '../providers/quick-search-provider';
@@ -107,13 +111,17 @@ export class DocsQuickSearchSession
       // A quoted query ("…") is an exact-phrase search: we still hit the
       // indexer with the inner phrase (token match) for candidates, then keep
       // only docs whose title or matched content contains the phrase verbatim.
-      const trimmed = query.trim();
+      // Filter tokens (tag:, prop:, doc:, dt>=…, +"…", -"…") are taken out
+      // first and narrow the results; see parseSearchQuery.
+      const parsed = parseSearchQuery(query);
+      const filters = hasSearchFilters(parsed) ? parsed : undefined;
+      const trimmed = parsed.text;
       const exactMatch =
         trimmed.length >= 2 && trimmed.startsWith('"') && trimmed.endsWith('"');
       const phrase = exactMatch ? trimmed.slice(1, -1).trim() : '';
-      const searchTerm = exactMatch ? phrase : query;
+      const searchTerm = exactMatch ? phrase : trimmed;
       let out;
-      if (!searchTerm) {
+      if (!searchTerm && !filters) {
         out = of({ items: [], useLocalLabel: false });
       } else {
         const preferRemote =
@@ -134,37 +142,43 @@ export class DocsQuickSearchSession
           );
         }
         const search$ = preferRemote
-          ? this.docsSearchService.search$(searchTerm, 'remote').pipe(
+          ? this.docsSearchService.search$(searchTerm, 'remote', filters).pipe(
               switchMap(docs => {
                 if (docs.length > 0) {
                   return of({ docs, useLocalLabel: false });
                 }
-                return this.docsSearchService.search$(searchTerm, 'local').pipe(
-                  map(localDocs => ({
-                    docs: localDocs,
-                    useLocalLabel: true,
-                  }))
-                );
+                return this.docsSearchService
+                  .search$(searchTerm, 'local', filters)
+                  .pipe(
+                    map(localDocs => ({
+                      docs: localDocs,
+                      useLocalLabel: true,
+                    }))
+                  );
               }),
               catchError(err => {
                 console.error(
                   '[NG-DIAG search] remote search failed — falling back to local index:',
                   err
                 );
-                return this.docsSearchService.search$(searchTerm, 'local').pipe(
-                  map(localDocs => ({
-                    docs: localDocs,
-                    useLocalLabel: true,
-                  }))
-                );
+                return this.docsSearchService
+                  .search$(searchTerm, 'local', filters)
+                  .pipe(
+                    map(localDocs => ({
+                      docs: localDocs,
+                      useLocalLabel: true,
+                    }))
+                  );
               })
             )
-          : this.docsSearchService.search$(searchTerm, preferMode).pipe(
-              map(docs => ({
-                docs,
-                useLocalLabel: preferMode === 'local',
-              }))
-            );
+          : this.docsSearchService
+              .search$(searchTerm, preferMode, filters)
+              .pipe(
+                map(docs => ({
+                  docs,
+                  useLocalLabel: preferMode === 'local',
+                }))
+              );
 
         out = search$.pipe(
           map(({ docs, useLocalLabel }) => {
@@ -219,6 +233,7 @@ export class DocsQuickSearchSession
             // title matches instead of an empty result.
             const finalItems =
               !exactMatch &&
+              !filters &&
               items.length === 0 &&
               searchTerm.trim().length >= 3
                 ? this.suggestSimilarDocs(query)

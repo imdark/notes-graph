@@ -4,41 +4,32 @@ import z from 'zod/v3';
 
 import { DocReader, DocWriter } from '../../../core/doc';
 import { PermissionAccess } from '../../../core/permission';
-import { clearEmbeddingChunk } from '../../../models';
+import { clearEmbeddingChunk, Models } from '../../../models';
 import { IndexerService } from '../../indexer';
 import { SearchTable } from '../../indexer/tables';
 import { SearchQueryOccur, SearchQueryType } from '../../indexer/types';
 import { CopilotContextService } from '../context/service';
+import {
+  filterDocIdsByDates,
+  resolveSearchScope,
+  resolveWordDocIds,
+  SEARCH_FILTER_OVERFETCH,
+  SEARCH_FILTER_SYNTAX,
+  tokenList,
+} from '../search-filter';
+import {
+  matchesWordFilters,
+  parseSearchQuery,
+  searchText,
+} from '../search-query';
 
 function first(value: unknown): string {
   const item = Array.isArray(value) ? value[0] : value;
   return typeof item === 'string' ? item : '';
 }
 
-/**
- * Multi-value index fields come back as a plain string, an array, or (from
- * the Manticore write path) a JSON-stringified array — normalize to a
- * string list.
- */
-function tokenList(value: unknown): string[] {
-  if (Array.isArray(value)) {
-    return value.filter((item): item is string => typeof item === 'string');
-  }
-  if (typeof value !== 'string' || !value) return [];
-  if (value.startsWith('[')) {
-    try {
-      const parsed = JSON.parse(value);
-      if (Array.isArray(parsed)) {
-        return parsed.filter(
-          (item): item is string => typeof item === 'string'
-        );
-      }
-    } catch {
-      // fall through — treat as a single token
-    }
-  }
-  return [value];
-}
+const SEMANTIC_SEARCH_TOP_K = 5;
+const KEYWORD_SEARCH_LIMIT = 20;
 
 type McpTextContent = {
   type: 'text';
@@ -135,7 +126,8 @@ export class WorkspaceMcpProvider {
     private readonly reader: DocReader,
     private readonly writer: DocWriter,
     private readonly context: CopilotContextService,
-    private readonly indexer: IndexerService
+    private readonly indexer: IndexerService,
+    private readonly models: Models
   ) {}
 
   async for(userId: string, workspaceId: string): Promise<WorkspaceMcpServer> {
@@ -184,13 +176,16 @@ export class WorkspaceMcpProvider {
     const semanticSearch = defineTool({
       name: 'semantic_search',
       title: 'Semantic Search',
-      description:
-        'Retrieve conceptually related passages by performing vector-based semantic similarity search across embedded documents; use this tool only when exact keyword search fails or the user explicitly needs meaning-level matches (e.g., paraphrases, synonyms, broader concepts, recent documents). Pass docId to scope matching to a single document.',
+      description: `Retrieve conceptually related passages by performing vector-based semantic similarity search across embedded documents; use this tool only when exact keyword search fails or the user explicitly needs meaning-level matches (e.g., paraphrases, synonyms, broader concepts, recent documents). Pass docId to scope matching to a single document. ${SEARCH_FILTER_SYNTAX} Example: deploy steps tag:work dt>=2026-01-01 -"staging".`,
       parser: z.object({ query: z.string(), docId: z.string().optional() }),
       inputSchema: {
         type: 'object',
         properties: {
-          query: { type: 'string' },
+          query: {
+            type: 'string',
+            description:
+              'Search text, optionally with filters: tag:x prop:k:v doc:"Title" dt>=YYYY-MM-DD dt<=YYYY-MM-DD +"word" -"word".',
+          },
           docId: {
             type: 'string',
             description:
@@ -201,31 +196,53 @@ export class WorkspaceMcpProvider {
         additionalProperties: false,
       },
       execute: async ({ query, docId }, options) => {
-        const trimmed = query.trim();
-        if (!trimmed) {
-          return toolError('Query is required for semantic search.');
+        const filters = parseSearchQuery(query);
+        const text = searchText(filters);
+        if (!text) {
+          return toolError(
+            'Semantic search needs search text (or a +"word") besides its filters.'
+          );
         }
 
+        let scope = await resolveSearchScope(
+          { models: this.models, indexer: this.indexer },
+          workspaceId,
+          filters
+        );
+        if (docId) {
+          scope = {
+            ...scope,
+            docIds: scope?.docIds
+              ? scope.docIds.filter(id => id === docId)
+              : [docId],
+          };
+        }
+
+        const wordFiltered =
+          filters.include.length > 0 || filters.exclude.length > 0;
         const chunks = await this.context.matchWorkspaceDocs(
           workspaceId,
-          trimmed,
-          5,
+          text,
+          wordFiltered
+            ? SEMANTIC_SEARCH_TOP_K * SEARCH_FILTER_OVERFETCH
+            : SEMANTIC_SEARCH_TOP_K,
           options.signal,
           undefined,
           undefined,
-          docId ? [docId] : undefined
+          scope
         );
 
         const abortedAfterMatch = abortIfNeeded(options.signal);
         if (abortedAfterMatch) return abortedAfterMatch;
 
+        const matched = chunks
+          .filter(chunk => 'docId' in chunk)
+          .filter(chunk => matchesWordFilters(filters, chunk.content))
+          .slice(0, SEMANTIC_SEARCH_TOP_K);
         const docs = await this.ac
           .user(userId)
           .workspace(workspaceId)
-          .docs(
-            chunks.filter(chunk => 'docId' in chunk),
-            'Doc.Read'
-          );
+          .docs(matched, 'Doc.Read');
 
         const abortedAfterDocs = abortIfNeeded(options.signal);
         if (abortedAfterDocs) return abortedAfterDocs;
@@ -246,22 +263,58 @@ export class WorkspaceMcpProvider {
     const keywordSearch = defineTool({
       name: 'keyword_search',
       title: 'Keyword Search',
-      description:
-        'Fuzzy search all workspace documents for the exact keyword or phrase supplied and return matching documents ranked by textual match. Use this tool by default whenever a straightforward term-based or keyword-base lookup is sufficient. For block-level hits, or to search inside one document, use search_blocks instead.',
+      description: `Fuzzy search all workspace documents for the exact keyword or phrase supplied and return matching documents ranked by textual match. Use this tool by default whenever a straightforward term-based or keyword-base lookup is sufficient. For block-level hits, or to search inside one document, use search_blocks instead. ${SEARCH_FILTER_SYNTAX} Example: release notes prop:status:done doc:"Roadmap" +"v2".`,
       parser: z.object({ query: z.string() }),
       inputSchema: {
         type: 'object',
         properties: {
-          query: { type: 'string' },
+          query: {
+            type: 'string',
+            description:
+              'Keywords, optionally with filters: tag:x prop:k:v doc:"Title" dt>=YYYY-MM-DD dt<=YYYY-MM-DD +"word" -"word".',
+          },
         },
         required: ['query'],
         additionalProperties: false,
       },
       execute: async ({ query }, options) => {
-        const trimmed = query.trim();
-        if (!trimmed) return toolError('Query is required for keyword search.');
+        const filters = parseSearchQuery(query);
+        const text = searchText(filters);
+        if (!text) {
+          return toolError(
+            'Keyword search needs keywords (or a +"word") besides its filters.'
+          );
+        }
 
-        let docs = await this.indexer.searchDocsByKeyword(workspaceId, trimmed);
+        const deps = { models: this.models, indexer: this.indexer };
+        const [scope, words] = await Promise.all([
+          resolveSearchScope(deps, workspaceId, filters),
+          resolveWordDocIds(deps, workspaceId, filters),
+        ]);
+        let docIds = scope?.docIds;
+        if (words.include) {
+          const include = words.include;
+          docIds = docIds ? docIds.filter(id => include.has(id)) : [...include];
+        }
+        const postFiltered = filters.dates.length > 0 || words.exclude.size > 0;
+
+        let docs = await this.indexer.searchDocsByKeyword(workspaceId, text, {
+          docIds,
+          limit: postFiltered
+            ? KEYWORD_SEARCH_LIMIT * SEARCH_FILTER_OVERFETCH
+            : KEYWORD_SEARCH_LIMIT,
+        });
+        docs = docs.filter(doc => !words.exclude.has(doc.docId));
+        if (filters.dates.length) {
+          const inRange = await filterDocIdsByDates(
+            this.models,
+            workspaceId,
+            docs.map(doc => doc.docId),
+            filters
+          );
+          docs = docs.filter(doc => inRange.has(doc.docId));
+        }
+        docs = docs.slice(0, KEYWORD_SEARCH_LIMIT);
 
         const abortedAfterSearch = abortIfNeeded(options.signal);
         if (abortedAfterSearch) return abortedAfterSearch;
@@ -383,9 +436,7 @@ export class WorkspaceMcpProvider {
               trail: first(node.fields.todoTrail) || undefined,
             };
           })
-          .filter(
-            block => block.text && (!docId || block.docId === docId)
-          );
+          .filter(block => block.text && (!docId || block.docId === docId));
 
         // permission filter by owning doc
         const docIds = [...new Set(candidates.map(block => block.docId))];
@@ -475,7 +526,7 @@ export class WorkspaceMcpProvider {
       name: 'list_blocks',
       title: 'List Task Blocks',
       description:
-        'Query individual task blocks (todo list items) across the whole workspace by their inline #tags, #key:value properties and org status — the block-level equivalent of list_documents. Returns each task\'s docId/blockId, text, status (todo | in-progress | done | custom keyword), tags, properties and org planning timestamps. To act on a task, read_document its docId and update_document the task line (see update_document for the org-mode workflow).',
+        "Query individual task blocks (todo list items) across the whole workspace by their inline #tags, #key:value properties and org status — the block-level equivalent of list_documents. Returns each task's docId/blockId, text, status (todo | in-progress | done | custom keyword), tags, properties and org planning timestamps. To act on a task, read_document its docId and update_document the task line (see update_document for the org-mode workflow).",
       parser: z.object({
         tags: z.array(z.string()).optional(),
         props: z.array(z.string()).optional(),
@@ -520,7 +571,10 @@ export class WorkspaceMcpProvider {
         },
         additionalProperties: false,
       },
-      execute: async ({ tags, props, status, docId, limit, cursor }, options) => {
+      execute: async (
+        { tags, props, status, docId, limit, cursor },
+        options
+      ) => {
         const result = await this.indexer.search({
           table: SearchTable.block,
           query: {
@@ -634,7 +688,7 @@ export class WorkspaceMcpProvider {
       name: 'get_board',
       title: 'Get Board',
       description:
-        'Read the virtual kanban/table boards defined in a document: each board is a saved query (scope) over task blocks — inline #tags, #key:value props, org status slice, and an optional due-within-days bound. Combine the scope with list_blocks to fetch the board\'s tasks, then act on a task with update_task (pull into in-progress, add notes, move it through committed → merged → deployed → done as it ships). Find board documents with keyword_search or list_documents first.',
+        "Read the virtual kanban/table boards defined in a document: each board is a saved query (scope) over task blocks — inline #tags, #key:value props, org status slice, and an optional due-within-days bound. Combine the scope with list_blocks to fetch the board's tasks, then act on a task with update_task (pull into in-progress, add notes, move it through committed → merged → deployed → done as it ships). Find board documents with keyword_search or list_documents first.",
       parser: z.object({ docId: z.string() }),
       inputSchema: {
         type: 'object',
@@ -665,7 +719,7 @@ export class WorkspaceMcpProvider {
               boards,
               usage:
                 boards.length > 0
-                  ? 'Fetch tasks with list_blocks using each board\'s tags/props (and status to slice by column); update a task with update_task.'
+                  ? "Fetch tasks with list_blocks using each board's tags/props (and status to slice by column); update a task with update_task."
                   : 'No query boards in this document. Boards are created in the editor via /query board, /query table or /task report.',
             })
           );
@@ -681,7 +735,7 @@ export class WorkspaceMcpProvider {
       name: 'get_backlinks',
       title: 'Get Backlinks',
       description:
-        "List documents that link to the given document (its \"parents\" in the graph — NotesGraph has no single fixed parent, a doc can have several). Use this to understand where a document sits in the graph before you decide where to file something new.",
+        'List documents that link to the given document (its "parents" in the graph — NotesGraph has no single fixed parent, a doc can have several). Use this to understand where a document sits in the graph before you decide where to file something new.',
       parser: z.object({ docId: z.string() }),
       inputSchema: {
         type: 'object',
@@ -729,7 +783,10 @@ export class WorkspaceMcpProvider {
           .user(userId)
           .workspace(workspaceId)
           .docs(candidates, 'Doc.Read');
-        const titled = await this.titlesFor(workspaceId, readable.map(d => d.docId));
+        const titled = await this.titlesFor(
+          workspaceId,
+          readable.map(d => d.docId)
+        );
 
         const abortedAfterFilter = abortIfNeeded(options.signal);
         if (abortedAfterFilter) return abortedAfterFilter;
@@ -800,7 +857,10 @@ export class WorkspaceMcpProvider {
           .user(userId)
           .workspace(workspaceId)
           .docs(candidates, 'Doc.Read');
-        const titled = await this.titlesFor(workspaceId, readable.map(d => d.docId));
+        const titled = await this.titlesFor(
+          workspaceId,
+          readable.map(d => d.docId)
+        );
 
         const abortedAfterFilter = abortIfNeeded(options.signal);
         if (abortedAfterFilter) return abortedAfterFilter;
@@ -926,7 +986,7 @@ export class WorkspaceMcpProvider {
         title: 'Update Document',
         description:
           'Update an existing document with new markdown content (body only). Uses structural diffing to apply minimal changes, preserving document history and enabling real-time collaboration. Every update is stamped "Edited via MCP by <agent>". ' +
-          'Task workflow: task lists use org-mode annotations at the start of each list item — `[ ]` todo, `[-]` in progress, `[X]` done, or an UPPERCASE keyword — which kanban boards mirroring the list group by, plus planning annotations like `SCHEDULED: <date>`, `DEADLINE: <date>`, `STARTED: [date]`, `CLOSED: [date]` at the end of the line. To pick up a task, rewrite its annotation to `[-]` and append ` @<your-agent-name>` to the task line to claim it; mark it `[X]` when finished. A task that ships code only becomes `[X]` once it is deployed and verified live — until then it climbs `COMMITTED` → `MERGED` → `DEPLOYED`. Keep working memory and documentation in the task\'s own linked note (see link_document). ' +
+          "Task workflow: task lists use org-mode annotations at the start of each list item — `[ ]` todo, `[-]` in progress, `[X]` done, or an UPPERCASE keyword — which kanban boards mirroring the list group by, plus planning annotations like `SCHEDULED: <date>`, `DEADLINE: <date>`, `STARTED: [date]`, `CLOSED: [date]` at the end of the line. To pick up a task, rewrite its annotation to `[-]` and append ` @<your-agent-name>` to the task line to claim it; mark it `[X]` when finished. A task that ships code only becomes `[X]` once it is deployed and verified live — until then it climbs `COMMITTED` → `MERGED` → `DEPLOYED`. Keep working memory and documentation in the task's own linked note (see link_document). " +
           'This does NOT update the document title. This tool not support insert or update database block and image yet.' +
           firstPersonGuidance,
         parser: z.object({
@@ -1197,7 +1257,7 @@ export class WorkspaceMcpProvider {
         name: 'link_document',
         title: 'Link Document',
         description:
-          'Link a document under another as a real, first-class graph reference (the same relationship the app\'s own backlinks/graph view are built from) — not a plain-text link. A doc can have several parents; this only adds a link, it never removes or replaces existing ones. Use this to file a newly created or existing document into the graph, e.g. under a topic note.',
+          "Link a document under another as a real, first-class graph reference (the same relationship the app's own backlinks/graph view are built from) — not a plain-text link. A doc can have several parents; this only adds a link, it never removes or replaces existing ones. Use this to file a newly created or existing document into the graph, e.g. under a topic note.",
         parser: z.object({
           parentDocId: z.string(),
           childDocId: z.string(),
@@ -1309,7 +1369,10 @@ export class WorkspaceMcpProvider {
       },
     });
     const titleByDocId = new Map(
-      result.nodes.map(node => [first(node.fields.docId), first(node.fields.title)])
+      result.nodes.map(node => [
+        first(node.fields.docId),
+        first(node.fields.title),
+      ])
     );
     return docIds.map(docId => ({
       docId,
