@@ -224,5 +224,13 @@ export function configureAgentsModule(framework: Framework) {
 export {
   AGENT_TEMPLATES,
   type AgentTemplate,
+  COMPILE_SOURCE_TEMPLATE,
   DEAL_MONITOR_TEMPLATE,
 } from './services/agent-templates';
+export {
+  COMPILE_AGENT_NAME,
+  compileBrief,
+  type CompileSource,
+  compileSourceOf,
+  findCompileAgent,
+} from './services/compile-source';

@@ -2,12 +2,17 @@ import { PlusIcon } from '@blocksuite/icons/rc';
 import { Button, notify, Scrollable } from '@notesgraph/component';
 import {
   type Agent,
+  AgentContextService,
   AgentIcon,
   type AgentRunSession,
   AgentRunSessionService,
   AgentRunsStore,
   AgentsService,
   agentTargetBlockIds,
+  COMPILE_SOURCE_TEMPLATE,
+  compileBrief,
+  compileSourceOf,
+  findCompileAgent,
 } from '@notesgraph/core/modules/agents';
 import { WorkspaceDialogService } from '@notesgraph/core/modules/dialogs';
 import { DocService } from '@notesgraph/core/modules/doc';
@@ -135,7 +140,9 @@ export const SessionCard = ({
             onClick={() => sessionService.cancel(session.id)}
             data-testid="cancel-agent"
             title={
-              queued > 0 ? 'Stop this run; the next queued one starts' : undefined
+              queued > 0
+                ? 'Stop this run; the next queued one starts'
+                : undefined
             }
           >
             Stop
@@ -215,6 +222,52 @@ export const EditorAgentsPanel = () => {
     [doc.id, sessionService]
   );
 
+  // A clipped or imported note offers to be compiled into the rest of the
+  // notes. The agent is made from its template the first time, so the button
+  // works before anyone has set one up.
+  const contextService = useService(AgentContextService);
+  const properties = useLiveData(doc.properties$);
+  const source = useMemo(() => compileSourceOf(properties), [properties]);
+  const compileAgent = findCompileAgent(
+    allAgents,
+    COMPILE_SOURCE_TEMPLATE.draft.instructions
+  );
+  const compiling = sessions.some(
+    session =>
+      session.running &&
+      session.agentId === compileAgent?.id &&
+      session.target.docId === doc.id
+  );
+  const compileIntoNotes = useCallback(() => {
+    if (!source) return;
+    const agent =
+      compileAgent ??
+      agentsService.create('personal', COMPILE_SOURCE_TEMPLATE.draft);
+    const target = { kind: 'doc', docId: doc.id } as const;
+    contextService
+      .build(target)
+      .then(context =>
+        sessionService.start(
+          agent,
+          target,
+          compileBrief(context, doc.id, source)
+        )
+      )
+      .catch(err =>
+        notify.error({
+          title: "Couldn't start compiling",
+          message: err instanceof Error ? err.message : String(err),
+        })
+      );
+  }, [
+    agentsService,
+    compileAgent,
+    contextService,
+    doc.id,
+    sessionService,
+    source,
+  ]);
+
   const runningCount = sessions.filter(session => session.running).length;
   const onDeviceBusy = sessions.some(
     session => session.running && session.onDevice
@@ -245,6 +298,30 @@ export const EditorAgentsPanel = () => {
     <Scrollable.Root className={styles.root}>
       <Scrollable.Viewport>
         <div className={styles.body}>
+          {source ? (
+            <div className={styles.section} data-testid="compile-source">
+              <span className={styles.sectionLabel}>
+                {source.kind === 'readwise'
+                  ? 'Imported from Readwise'
+                  : 'Clipped from the web'}
+              </span>
+              <Button
+                variant="primary"
+                onClick={compileIntoNotes}
+                disabled={compiling}
+                data-testid="compile-into-notes"
+              >
+                {compiling ? 'Compiling…' : 'Compile into my notes'}
+              </Button>
+              <span className={styles.hint}>
+                An agent writes a summary note linked to this one, adds what it
+                says to your notes on the same people and ideas with a citation
+                back here, and creates notes for new concepts. Anything that
+                contradicts what you have is flagged, not overwritten.
+              </span>
+            </div>
+          ) : null}
+
           <div className={styles.section}>
             <span className={styles.sectionLabel}>Run on this note</span>
             {docAgents.length === 0 ? (
