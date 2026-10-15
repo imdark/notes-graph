@@ -9,6 +9,7 @@ import {
 import type { AgentRunLogsStore } from '../stores/agent-run-logs';
 import type { AgentRunsStore } from '../stores/agent-runs';
 import type { ChatModel, CloudAgentRunnerService } from './cloud-runner';
+import { agentRulesSection, type AgentRulesService } from './agent-rules';
 import type { AgentContext, AgentContextService } from './context';
 import {
   type AgentFileToolsService,
@@ -187,9 +188,24 @@ export class AgentExecutorService extends Service implements AgentExecutor {
     private readonly remoteRunner: RemoteAgentRunnerService,
     private readonly cloudRunner: CloudAgentRunnerService,
     private readonly researchTools: ResearchToolsService,
-    private readonly workspaceService: WorkspaceService
+    private readonly workspaceService: WorkspaceService,
+    private readonly agentRules: AgentRulesService
   ) {
     super();
+  }
+
+  /**
+   * The workspace's "Agent rules" note as a system-prompt section, read at
+   * the start of an in-tab run; empty without one. A device run is given it
+   * by the server instead, with the profile it claims.
+   */
+  private async agentRulesPrompt(): Promise<string> {
+    try {
+      const section = agentRulesSection(await this.agentRules.read());
+      return section ? `\n${section}` : '';
+    } catch {
+      return '';
+    }
   }
 
   /**
@@ -287,6 +303,7 @@ export class AgentExecutorService extends Service implements AgentExecutor {
    *
    * `tools` and `rules` are what the run is offered (file tools, research
    * tools, or both) and `dispatch` runs them; set_title is always added.
+   * `agentRules` is the user's rules note, already worded for the prompt.
    */
   private async *runWithTools(
     agent: Agent,
@@ -295,6 +312,7 @@ export class AgentExecutorService extends Service implements AgentExecutor {
     tools: AgentToolSpec[],
     rules: string[],
     dispatch: ToolDispatch,
+    agentRules: string,
     signal: AbortSignal
   ): AsyncIterable<AgentEvent> {
     const specs = [...tools, SET_TITLE_TOOL];
@@ -309,6 +327,7 @@ export class AgentExecutorService extends Service implements AgentExecutor {
             'Help the reader with the content below.',
           '',
           buildToolPrompt(specs, rules),
+          agentRules,
         ].join('\n'),
       },
       { role: 'user', content: contextText },
@@ -591,6 +610,7 @@ export class AgentExecutorService extends Service implements AgentExecutor {
       // Opened before anything is logged, so a server with no copilot fails
       // the run with its reason rather than after a half-written transcript.
       const model = await this.modelFor(agent, harness);
+      const agentRules = await this.agentRulesPrompt();
 
       // An agent given file tools, in a workspace with a folder bound, runs
       // the tool loop, as does every research run (its tools are the point);
@@ -631,6 +651,7 @@ export class AgentExecutorService extends Service implements AgentExecutor {
           tools,
           rules,
           dispatch,
+          agentRules,
           controller.signal
         )) {
           if (event.type === 'step') steps = event.index + 1;
@@ -665,6 +686,7 @@ export class AgentExecutorService extends Service implements AgentExecutor {
             'You are given the content the reader selected. Answer about that',
             'content only, and say so plainly if it does not contain what is',
             'needed rather than inventing it.',
+            agentRules,
           ].join('\n'),
         },
         { role: 'user' as const, content: context.text },

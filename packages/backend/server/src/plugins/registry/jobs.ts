@@ -11,6 +11,7 @@ import {
   type QuestionKind,
 } from '../../models/registry-job';
 import { type AgentProfile, profileFor } from './agent-profiles';
+import { AgentRules, withAgentRules } from './agent-rules';
 import { AgentPushService } from './push';
 import { isSessionLimit, sessionLimitRunAfter } from './session-limit';
 import { JobTaskClaims } from './task-claims';
@@ -279,7 +280,8 @@ export class RegistryJobService {
     private readonly models: Models,
     @Optional() private readonly push?: AgentPushService,
     @Optional() private readonly event?: EventBus,
-    @Optional() private readonly tasks?: JobTaskClaims
+    @Optional() private readonly tasks?: JobTaskClaims,
+    @Optional() private readonly rules?: AgentRules
   ) {}
 
   /** Push without holding up the request it rides on, or failing it. */
@@ -455,7 +457,21 @@ export class RegistryJobService {
     );
     if (!job) return null;
     await this.tasks?.claimed(job);
-    return { ...toJobDto(job), profile: profileFor(job.model, job.skills) };
+    return { ...toJobDto(job), profile: await this.profile(job) };
+  }
+
+  /**
+   * How the runner is to run a claimed job: its model's profile, with the
+   * workspace's "Agent rules" note (see agent-rules.ts) read now, at the
+   * start of the run, so the user's latest edit is the one it follows.
+   */
+  private async profile(job: RegistryJob): Promise<AgentProfile | null> {
+    const profile = profileFor(job.model, job.skills);
+    if (!profile || !this.rules) return profile;
+    return withAgentRules(
+      profile,
+      await this.rules.read(job.workspaceId, job.createdBy)
+    );
   }
 
   async report(
