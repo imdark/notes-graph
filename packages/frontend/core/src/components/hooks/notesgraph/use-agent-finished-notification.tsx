@@ -19,7 +19,10 @@ export function useAgentFinishedNotification(active: boolean) {
     if (!active) return;
     const subscription = sessions.finished$.subscribe(done => {
       const text = done.output.trim();
+      // The Agents tab is registered by a note's page, so from any other view
+      // there is nothing to switch to; open the note the run was on first.
       const open = () => {
+        workbench.openDoc(done.docId, { at: 'active' });
         workbench.openSidebar();
         workbench.activeView$.value.activeSidebarTab('agents');
       };
