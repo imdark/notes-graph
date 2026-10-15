@@ -1,4 +1,5 @@
 import type { AgentDraft } from '../stores/agents';
+import { NOTES_HEALTH_TEMPLATE } from './notes-health';
 import { CLOUD_DEVICE_KEY, RESEARCH_MODEL } from './remote-runner';
 
 /** A starting point for a new agent: the editor opens pre-filled with it. */
@@ -58,4 +59,7 @@ export const DEAL_MONITOR_TEMPLATE: AgentTemplate = {
   },
 };
 
-export const AGENT_TEMPLATES: AgentTemplate[] = [DEAL_MONITOR_TEMPLATE];
+export const AGENT_TEMPLATES: AgentTemplate[] = [
+  DEAL_MONITOR_TEMPLATE,
+  NOTES_HEALTH_TEMPLATE,
+];

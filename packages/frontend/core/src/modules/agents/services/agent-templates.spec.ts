@@ -1,3 +1,6 @@
+/**
+ * @vitest-environment happy-dom
+ */
 import { describe, expect, test } from 'vitest';
 
 import { AGENT_TEMPLATES, DEAL_MONITOR_TEMPLATE } from './agent-templates';
