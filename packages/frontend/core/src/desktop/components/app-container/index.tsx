@@ -9,6 +9,7 @@ import {
 import { AppTabsHeader } from '@notesgraph/core/modules/app-tabs-header';
 import { NavigationButtons } from '@notesgraph/core/modules/navigation';
 import { WorkspaceService } from '@notesgraph/core/modules/workspace';
+import { isQuickAskWindow } from '@notesgraph/core/utils/quick-ask';
 import { useLiveData, useService, useServiceOptional } from '@notesgraph/infra';
 import clsx from 'clsx';
 import {
@@ -60,6 +61,15 @@ const DesktopLayout = ({
 }: PropsWithChildren<{ fallback?: boolean }>) => {
   const workspaceService = useServiceOptional(WorkspaceService);
   const isInWorkspace = !!workspaceService;
+  if (isQuickAskWindow()) {
+    return (
+      <div className={styles.desktopAppViewContainer}>
+        <div className={styles.desktopAppViewMain} data-quick-ask="true">
+          <MainContainer>{children}</MainContainer>
+        </div>
+      </div>
+    );
+  }
   return (
     <div className={styles.desktopAppViewContainer}>
       <div className={styles.desktopTabsHeader}>
