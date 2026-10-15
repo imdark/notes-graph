@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 
 import { DocReader } from '../../core/doc';
 import { PermissionAccess } from '../../core/permission';
+import { readAllDocIdsFromWorkspaceSnapshot } from '../../core/utils/blocksuite';
 import { Models } from '../../models';
 import type { AgentProfile } from './agent-profiles';
 
@@ -26,16 +27,17 @@ export const MAX_AGENT_RULES_CHARS = 8_000;
 
 /**
  * The rules as a system-prompt section, or null for a note with nothing in
- * it. They come after the built-in conventions and are said to win, since
- * the point of the note is to override them.
+ * it. They are said to win over any built-in conventions, since the point
+ * of the note is to override them; an in-tab run may have none, so the
+ * wording doesn't assume there are any.
  */
 export function agentRulesSection(markdown: string | null | undefined) {
   const text = markdown?.trim();
   if (!text) return null;
   const clipped = text.length > MAX_AGENT_RULES_CHARS;
   return [
-    `The user keeps rules for agents in their note titled "${AGENT_RULES_TITLE}".`,
-    'Follow them; where they differ from the conventions above, they win.',
+    `These rules are from the user's note titled "${AGENT_RULES_TITLE}". Follow them;`,
+    'they take precedence over any built-in conventions you were given.',
     '',
     '<agent-rules>',
     clipped ? text.slice(0, MAX_AGENT_RULES_CHARS) : text,
@@ -72,8 +74,9 @@ export class AgentRules {
   /**
    * The note's markdown, or null. A run reads it as whoever started it, so a
    * note they can't open isn't put in front of their agent; a job the server
-   * queued itself has no one to check for. With more than one note of that
-   * title, the first that has anything in it is used.
+   * queued itself has no one to check for. A note in the trash doesn't
+   * count. With more than one note of that title, the first that has
+   * anything in it is used.
    */
   async read(workspaceId: string, userId?: string | null) {
     try {
@@ -81,7 +84,9 @@ export class AgentRules {
         workspaceId,
         AGENT_RULES_TITLE
       );
+      const live = ids.length ? await this.liveDocIds(workspaceId) : null;
       for (const docId of ids) {
+        if (live && !live.has(docId)) continue;
         if (userId) {
           const allowed = await this.ac
             .user(userId)
@@ -100,5 +105,17 @@ export class AgentRules {
       );
     }
     return null;
+  }
+
+  /**
+   * The workspace's docs outside the trash, from the pages list in its root
+   * doc, which is where the trash flag lives (the doc metas the title lookup
+   * reads don't have it). Null with no root doc to read, in which case
+   * nothing is ruled out.
+   */
+  private async liveDocIds(workspaceId: string) {
+    const root = await this.models.doc.getSnapshot(workspaceId, workspaceId);
+    if (!root) return null;
+    return new Set(readAllDocIdsFromWorkspaceSnapshot(root.blob));
   }
 }

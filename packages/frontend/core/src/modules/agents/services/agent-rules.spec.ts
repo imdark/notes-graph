@@ -65,7 +65,8 @@ describe('agentRulesSection', () => {
   test('wraps the note and says it wins', () => {
     const section = agentRulesSection('  Tag research #research \n')!;
     expect(section).toContain(`"${AGENT_RULES_TITLE}"`);
-    expect(section).toContain('they win');
+    expect(section).toContain('take precedence over any built-in conventions');
+    expect(section).not.toContain('above');
     expect(section.endsWith('<agent-rules>\nTag research #research\n</agent-rules>')).toBe(true);
   });
 

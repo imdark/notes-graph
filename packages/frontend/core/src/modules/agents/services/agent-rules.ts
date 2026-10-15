@@ -29,8 +29,9 @@ const LOAD_WAIT_MS = 3_000;
 
 /**
  * The rules as a system-prompt section, or null for a note with nothing in
- * it. They are said to win over the conventions the prompt already gives,
- * since overriding those is what the note is for.
+ * it. They are said to win over any built-in conventions, since overriding
+ * those is what the note is for; an in-tab run's prompt may have none, so
+ * the wording doesn't assume there are any.
  */
 export function agentRulesSection(
   markdown: string | null | undefined
@@ -39,8 +40,8 @@ export function agentRulesSection(
   if (!text) return null;
   const clipped = text.length > MAX_AGENT_RULES_CHARS;
   return [
-    `The user keeps rules for agents in their note titled "${AGENT_RULES_TITLE}".`,
-    'Follow them; where they differ from the conventions above, they win.',
+    `These rules are from the user's note titled "${AGENT_RULES_TITLE}". Follow them;`,
+    'they take precedence over any built-in conventions you were given.',
     '',
     '<agent-rules>',
     clipped ? text.slice(0, MAX_AGENT_RULES_CHARS) : text,
