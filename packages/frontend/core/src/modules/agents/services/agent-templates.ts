@@ -58,4 +58,74 @@ export const DEAL_MONITOR_TEMPLATE: AgentTemplate = {
   },
 };
 
-export const AGENT_TEMPLATES: AgentTemplate[] = [DEAL_MONITOR_TEMPLATE];
+export const NOTES_HEALTH_CHECK_INSTRUCTIONS = [
+  'You check the health of this NotesGraph workspace the way a linter checks',
+  'code: find the problems, list them where they can be acted on, and fix',
+  'nothing yourself. The output is one report note whose fixes are to-dos.',
+  '',
+  'Walk the workspace with list_documents (page through all of it). Skip',
+  'ai / conversations transcripts, daily notes titled with a bare date, and',
+  'earlier "Notes health check" reports. Work from titles and the graph',
+  '(get_links, get_backlinks); open a note only when a check needs its text.',
+  '',
+  'Checks:',
+  '1. Orphans: no backlinks and no outgoing links, older than a week. Suggest',
+  '   the note it most likely belongs under.',
+  '2. Dangling links: a link whose target does not exist. Suggest the nearest',
+  '   existing title.',
+  '3. Near-duplicates: titles that differ only by case, spacing, punctuation,',
+  '   a plural or a prefix like "Summary:", or notes semantic_search ranks very',
+  '   close that say the same thing. Say which to keep. Do not merge.',
+  '4. Stale facts: in the "Agent memory" note and the notes under it, a fact',
+  '   dated "as of" more than six months ago, or an age or plan whose date has',
+  '   passed.',
+  '5. Contradictions: two notes on the same person or subject stating',
+  '   incompatible facts, and any line starting "Conflict:". Quote both.',
+  '6. Empty and stub notes: a title and no body, or only a heading.',
+  'List at most the 20 worst of each and say how many more there are.',
+  '',
+  'Create one note titled "Notes health check <YYYY-MM-DD>". Its first line',
+  'gives the counts and whether they are better or worse than the previous',
+  'report (keyword_search "Notes health check"). Then one section per check,',
+  'each finding a task line (- [ ] ...) that links the note, says what is',
+  'wrong and ends with the suggested fix; a clean check is one line saying so.',
+  'Put findings you are unsure of under a "Maybe" sub-heading. End with a',
+  '"Skipped" section: what you did not check and why. Link the report under',
+  'the previous report, or under "Agent memory" for the first one, with',
+  'link_document.',
+  '',
+  'Apply no fix: no merge, link or deletion. When the "Agent rules" note names',
+  'notes to leave alone or another place for reports, it wins over this.',
+  'Finish with the report title and its first line.',
+].join('\n');
+
+/**
+ * Meant to run weekly: make the agent from this, then "Monitor this block…"
+ * → An agent → this agent, every week. Each run's one-line summary lands in
+ * that block.
+ */
+export const NOTES_HEALTH_CHECK_TEMPLATE: AgentTemplate = {
+  id: 'notes-health-check',
+  label: 'Notes health check (weekly)',
+  draft: {
+    name: 'Notes health check',
+    instructions: NOTES_HEALTH_CHECK_INSTRUCTIONS,
+    kind: 'worker',
+    // The server's runner, for NotesGraph's MCP read and write tools; no
+    // OmniSeek skills, it only reads the workspace.
+    harness: 'remote',
+    model: RESEARCH_MODEL,
+    deviceKey: CLOUD_DEVICE_KEY,
+    tools: [],
+    skills: [],
+    targets: ['block', 'doc'],
+    output: 'panel',
+    maxSteps: 60,
+    enabled: true,
+  },
+};
+
+export const AGENT_TEMPLATES: AgentTemplate[] = [
+  DEAL_MONITOR_TEMPLATE,
+  NOTES_HEALTH_CHECK_TEMPLATE,
+];

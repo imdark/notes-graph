@@ -23,6 +23,7 @@ import {
   getSelectedBlocksCommand,
 } from '@blocksuite/notesgraph/shared/commands';
 import type { ImageSelection } from '@blocksuite/notesgraph/shared/selection';
+import type { NotesGraphTextAttributes } from '@blocksuite/notesgraph/shared/types';
 import {
   DocModeProvider,
   EditPropsStore,
@@ -37,7 +38,11 @@ import {
   type TextSelection,
 } from '@blocksuite/notesgraph/std';
 import { GfxControllerIdentifier } from '@blocksuite/notesgraph/std/gfx';
-import type { Store } from '@blocksuite/notesgraph/store';
+import {
+  type DeltaInsert,
+  type Store,
+  Text,
+} from '@blocksuite/notesgraph/store';
 import type { TemplateResult } from 'lit';
 
 import { insertFromMarkdown } from '../../utils';
@@ -47,6 +52,7 @@ import { AIChatRuntime, ForkAIChatSessionStrategy } from '../runtime/chat';
 import { getAIRequestService } from '../runtime/request';
 import { reportResponse } from '../utils/action-reporter';
 import { insertBelow } from '../utils/editor-actions';
+import { savedAnswer } from './saved-answer';
 
 type Selections = {
   text?: TextSelection;
@@ -480,6 +486,11 @@ const ADD_TO_EDGELESS_AS_NOTE = {
   },
 };
 
+const referenceDelta = (pageId: string) => ({
+  insert: ' ',
+  attributes: { reference: { type: 'LinkedPage' as const, pageId } },
+});
+
 export const SAVE_AS_DOC = {
   icon: PageIcon({ width: '20px', height: '20px' }),
   title: 'Save as doc',
@@ -490,9 +501,45 @@ export const SAVE_AS_DOC = {
     const doc = host.store.workspace.createDoc();
     const newDoc = doc.getStore();
     newDoc.load();
-    const rootId = newDoc.addBlock('notesgraph:page');
+    const { title, docIds } = savedAnswer(content);
+    const rootId = newDoc.addBlock('notesgraph:page', {
+      title: new Text(title),
+    });
     newDoc.addBlock('notesgraph:surface', {}, rootId);
     const noteId = newDoc.addBlock('notesgraph:note', {}, rootId);
+    // Real references, so the answer shows up in the backlinks of the doc it
+    // came from and of every note it cites. The answer itself is inserted
+    // above these once the new editor is open.
+    newDoc.addBlock(
+      'notesgraph:paragraph',
+      {
+        text: new Text([
+          { insert: 'Saved from a chat in ' },
+          referenceDelta(host.store.id),
+        ] as DeltaInsert<NotesGraphTextAttributes>[]),
+      },
+      noteId
+    );
+    const cited = docIds.filter(id => id !== host.store.id);
+    if (cited.length) {
+      newDoc.addBlock(
+        'notesgraph:paragraph',
+        { type: 'h3', text: new Text('Cited notes') },
+        noteId
+      );
+      for (const id of cited) {
+        newDoc.addBlock(
+          'notesgraph:list',
+          {
+            type: 'bulleted',
+            text: new Text([
+              referenceDelta(id),
+            ] as DeltaInsert<NotesGraphTextAttributes>[]),
+          },
+          noteId
+        );
+      }
+    }
 
     host.std.getOptional(RefNodeSlotsProvider)?.docLinkClicked.next({
       pageId: newDoc.id,
