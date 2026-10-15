@@ -17,7 +17,9 @@ export {
   type RemoteJobUpdate,
   type RemoteQuestion,
   RemoteAgentRunnerService,
+  type RunShare,
   savedPlacement,
+  type SharedRun,
   WORKFLOW_MODEL,
 } from './services/remote-runner';
 export {

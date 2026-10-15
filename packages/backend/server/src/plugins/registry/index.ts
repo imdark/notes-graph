@@ -12,6 +12,7 @@ import { RegistryJobService } from './jobs';
 import { MonitoringAgentService } from './monitoring-agent';
 import { AgentPushService } from './push';
 import { RegistryService } from './service';
+import { RegistryJobShareController, RegistryJobShareService } from './share';
 import { JobTaskClaims } from './task-claims';
 
 /**
@@ -29,8 +30,9 @@ import { JobTaskClaims } from './task-claims';
     MonitoringAgentService,
     AgentPushService,
     JobTaskClaims,
+    RegistryJobShareService,
   ],
-  controllers: [RegistryController],
+  controllers: [RegistryController, RegistryJobShareController],
   // Monitors queue device jobs and push alerts through these.
   exports: [RegistryJobService, AgentPushService],
 })

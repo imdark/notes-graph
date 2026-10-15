@@ -24,6 +24,7 @@ import { AgentLogView } from './agent-log-view';
 import { AgentQuestionCard } from './agent-question';
 import { AgentRunChat } from './agent-run-chat';
 import { formatDuration } from './agent-run-row';
+import { AgentRunShare } from './agent-run-share';
 import * as styles from './agents.css';
 
 interface RunLogState {
@@ -381,6 +382,8 @@ export const AgentRunLogDialog = ({
             data-testid="agent-run-log-tabs"
           />
         ) : null}
+        {/* Only a device run lives on the server, so only it can be shared. */}
+        {run?.remoteJobId ? <AgentRunShare jobId={run.remoteJobId} /> : null}
         {run && tab === DETAILS_TAB ? (
           <RunDetails run={run} />
         ) : run && ended && tab === ASK_TAB ? (

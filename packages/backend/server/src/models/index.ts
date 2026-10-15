@@ -12,6 +12,7 @@ import { BlobModel } from './blob';
 import { CalendarAccountModel } from './calendar-account';
 import { RegistryDeviceModel } from './registry-device';
 import { RegistryJobModel } from './registry-job';
+import { RegistryJobShareModel } from './registry-job-share';
 import { MonitorModel } from './monitor';
 import { MonitoringAgentModel } from './monitoring-agent';
 import { CalendarEventModel } from './calendar-event';
@@ -101,6 +102,7 @@ const MODELS = {
   calendarAccount: CalendarAccountModel,
   registryDevice: RegistryDeviceModel,
   registryJob: RegistryJobModel,
+  registryJobShare: RegistryJobShareModel,
   userPushToken: UserPushTokenModel,
   monitor: MonitorModel,
   monitoringAgent: MonitoringAgentModel,
@@ -186,6 +188,7 @@ export * from './doc-user';
 export * from './feature';
 export * from './history';
 export * from './registry-job';
+export * from './registry-job-share';
 export * from './magic-link-otp';
 export * from './monitor';
 export * from './monitoring-agent';
