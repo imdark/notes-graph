@@ -22,7 +22,72 @@ function toolResultText(content: unknown): string {
   return String(content ?? '');
 }
 
-type Part = { type?: string; text?: string; name?: string; input?: unknown; content?: unknown; is_error?: boolean };
+type Part = {
+  type?: string;
+  text?: string;
+  id?: string;
+  name?: string;
+  input?: unknown;
+  content?: unknown;
+  is_error?: boolean;
+  tool_use_id?: string;
+};
+
+/** NotesGraph's tools that find notes, whose results get a count. */
+const NOTE_SEARCH_TOOLS = new Set(['semantic_search', 'keyword_search', 'search_blocks', 'list_blocks']);
+
+const searchToolName = (name: string) => {
+  const match = /^mcp__notesgraph__(\w+)$/.exec(name);
+  return match && NOTE_SEARCH_TOOLS.has(match[1]) ? match[1] : null;
+};
+
+function collectDocIds(value: unknown, into: Set<string>) {
+  if (Array.isArray(value)) {
+    for (const item of value) collectDocIds(item, into);
+  } else if (value && typeof value === 'object') {
+    for (const [key, item] of Object.entries(value)) {
+      if (key === 'docId' && typeof item === 'string' && item) into.add(item);
+      else collectDocIds(item, into);
+    }
+  }
+}
+
+/**
+ * How many notes a NotesGraph search found and in how many docs, from its
+ * result as the MCP server words it (provider.ts): one text part per hit
+ * (semantic_search's passages, keyword_search's `{docId, title}`s), or one
+ * JSON part listing them (`{blocks}`, `{tasks}`). A passage names no doc, so
+ * docs can be 0 when notes aren't.
+ */
+export function countFound(content: unknown): { notes: number; docs: number } {
+  const parts = (
+    Array.isArray(content) ? content.map(part => toolResultText([part])) : [String(content ?? '')]
+  ).filter(part => part.trim());
+  if (parts.length === 1 && /^No matching/i.test(parts[0].trim())) return { notes: 0, docs: 0 };
+  const docIds = new Set<string>();
+  let notes = 0;
+  for (const part of parts) {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(part);
+    } catch {
+      notes += 1;
+      continue;
+    }
+    collectDocIds(parsed, docIds);
+    const list =
+      parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+        ? Object.values(parsed).find(Array.isArray)
+        : parsed;
+    notes += Array.isArray(list) ? list.length : 1;
+  }
+  return { notes, docs: docIds.size };
+}
+
+export const foundLine = ({ notes, docs }: { notes: number; docs: number }) => {
+  const n = `${notes} ${notes === 1 ? 'note' : 'notes'}`;
+  return docs ? `Found ${n} across ${docs} ${docs === 1 ? 'doc' : 'docs'}` : `Found ${n}`;
+};
 
 export class Narrator {
   result: string | null = null;
@@ -30,8 +95,13 @@ export class Narrator {
   steps = 0;
   cost: number | null = null;
   private started = false;
+  /** NotesGraph searches awaiting their result, by tool_use id. */
+  private readonly searches = new Map<string, string>();
 
-  constructor(private readonly say: (line: string) => void) {}
+  constructor(
+    private readonly say: (line: string) => void,
+    private readonly maxTurns?: number
+  ) {}
 
   private line(text: string, sub: boolean) {
     this.say(sub ? text.split('\n').map(l => `    ↳ ${l}`).join('\n') : text);
@@ -68,6 +138,7 @@ export class Narrator {
           } else {
             this.line(`→ ${name}  ${short(part.input ?? {})}`, sub);
           }
+          if (part.id && searchToolName(name)) this.searches.set(part.id, name);
         }
       }
     } else if (event.type === 'user') {
@@ -76,12 +147,23 @@ export class Narrator {
         if (part.type === 'tool_result') {
           const mark = part.is_error ? '✗' : '←';
           this.line(`  ${mark} ${short(toolResultText(part.content), TOOL_RESULT_CHARS)}`, sub);
+          const search = part.tool_use_id ? this.searches.get(part.tool_use_id) : undefined;
+          if (search) {
+            this.searches.delete(part.tool_use_id!);
+            if (!part.is_error) this.line(`  ${foundLine(countFound(part.content))}`, sub);
+          }
         }
       }
     } else if (event.type === 'result' && !sub) {
       this.steps = event.num_turns || this.steps;
       this.cost = typeof event.total_cost_usd === 'number' ? event.total_cost_usd : this.cost;
-      if (event.is_error || event.subtype !== 'success') {
+      if (event.subtype === 'error_max_turns') {
+        this.result = null;
+        const limit = this.maxTurns ?? this.steps;
+        this.error =
+          `stopped at the ${limit}-turn limit without a final answer. ` +
+          'Narrow the task or split it, then run it again.';
+      } else if (event.is_error || event.subtype !== 'success') {
         this.result = null;
         const reason =
           ('result' in event && typeof event.result === 'string' && event.result) ||

@@ -45,6 +45,8 @@ export interface Job {
   model: string | null;
   status: string;
   title: string | null;
+  /** The agent's step limit; see turnLimit in run-job.ts for how it caps a run. */
+  maxSteps?: number;
   profile?: AgentProfile | null;
 }
 
