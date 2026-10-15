@@ -140,6 +140,16 @@ export const NotesGraph_WORKSPACE_DB_SCHEMA = {
         date: string;
       }>()
       .optional(),
+    // a note the web clipper made from a page: where it was clipped from (when
+    // the clipper says) and when, so the note can be compiled into the rest
+    // of the user's notes later (see modules/agents compile-source).
+    clipSource: f
+      .json<{
+        url?: string;
+        // ISO time of the clip
+        clippedAt: string;
+      }>()
+      .optional(),
   }),
   docCustomPropertyInfo: {
     id: f.string().primaryKey().optional().default(nanoid),

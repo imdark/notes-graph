@@ -7,7 +7,9 @@ import {
   Param,
   Post,
   Query,
+  Res,
 } from '@nestjs/common';
+import type { Response } from 'express';
 
 import { BadRequest, Config } from '../../base';
 import type { CurrentUser as CurrentUserType } from '../../core/auth';
@@ -18,6 +20,7 @@ import { RegistryHealthService } from './health';
 import { RegistryJobService } from './jobs';
 import { type AgentSettings, MonitoringAgentService } from './monitoring-agent';
 import { RegistryService } from './service';
+import { SkillNoteService } from './skill-notes';
 import type { DeviceStatusBody, RegisterDeviceBody } from './types';
 
 /**
@@ -39,7 +42,8 @@ export class RegistryController {
     private readonly jobs: RegistryJobService,
     private readonly health: RegistryHealthService,
     private readonly monitoringAgent: MonitoringAgentService,
-    private readonly config: Config
+    private readonly config: Config,
+    private readonly skillNotes: SkillNoteService
   ) {}
 
   private assertEnabled() {
@@ -594,5 +598,39 @@ export class RegistryController {
         body ?? {}
       ),
     };
+  }
+
+  // ── skill notes ────────────────────────────────────────────────────────
+  //
+  // A note titled "Skill: <name>" is a Claude Code skill an agent can be
+  // given (skill-notes.ts). The editor lists them; a runner fetches one's
+  // SKILL.md with its token, and the note menu downloads it.
+
+  @Get('/workspaces/:workspaceId/skills')
+  async listSkillNotes(
+    @CurrentUser() user: CurrentUserType,
+    @Param('workspaceId') workspaceId: string
+  ) {
+    this.assertEnabled();
+    await this.ac.user(user.id).workspace(workspaceId).assert('Workspace.Read');
+    return { skills: await this.skillNotes.list(workspaceId, user.id) };
+  }
+
+  @Get('/workspaces/:workspaceId/skills/:docId/SKILL.md')
+  async skillNoteMd(
+    @CurrentUser() user: CurrentUserType,
+    @Param('workspaceId') workspaceId: string,
+    @Param('docId') docId: string,
+    @Res() res: Response
+  ) {
+    this.assertEnabled();
+    await this.ac.user(user.id).doc(workspaceId, docId).assert('Doc.Read');
+    const skill = await this.skillNotes.render(workspaceId, docId);
+    if (!skill) {
+      throw new NotFoundException(`No skill note '${docId}' in this workspace`);
+    }
+    res.setHeader('content-type', 'text/markdown; charset=utf-8');
+    res.setHeader('content-disposition', `attachment; filename="${skill.name}-SKILL.md"`);
+    res.send(skill.text);
   }
 }

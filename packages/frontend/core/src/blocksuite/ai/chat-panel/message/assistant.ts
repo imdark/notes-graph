@@ -16,6 +16,7 @@ import { css, html, nothing } from 'lit';
 import { property } from 'lit/decorators.js';
 
 import {
+  createSaveAsDocAction,
   EdgelessEditorActions,
   PageEditorActions,
 } from '../../_common/chat-actions-handle';
@@ -92,6 +93,10 @@ export class ChatMessageAssistant extends WithDisposable(ShadowlessElement) {
 
   @property({ attribute: false })
   accessor onOpenDoc!: (docId: string, sessionId?: string) => void;
+
+  private readonly saveAsDocAction = createSaveAsDocAction(docId =>
+    this.onOpenDoc(docId)
+  );
 
   get state() {
     const { isLast, status } = this;
@@ -187,13 +192,17 @@ export class ChatMessageAssistant extends WithDisposable(ShadowlessElement) {
       ? mergeStreamContent(streamObjects)
       : content;
 
+    // The workspace chat page has no doc to insert into, but an answer there
+    // can still be kept as a note of its own.
     const actions = host
-      ? isInsidePageEditor(host)
-        ? PageEditorActions
-        : EdgelessEditorActions
+      ? this.independentMode
+        ? [this.saveAsDocAction]
+        : isInsidePageEditor(host)
+          ? PageEditorActions
+          : EdgelessEditorActions
       : null;
 
-    const showActions = host && !!markdown && !this.independentMode;
+    const showActions = host && !!markdown && !!actions;
 
     return html`
       <chat-copy-more

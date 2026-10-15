@@ -8,6 +8,7 @@ import { LocalLLMService } from '../../ai-local';
 import { WorkspaceService } from '../../workspace';
 import { AgentRunLogsStore } from '../stores/agent-run-logs';
 import { type AgentRun, AgentRunsStore } from '../stores/agent-runs';
+import { AgentRulesService } from './agent-rules';
 import { CloudAgentRunnerService } from './cloud-runner';
 import { AgentContextService } from './context';
 import { AgentExecutorService } from './executor';
@@ -54,6 +55,7 @@ const setup = (
     cloudRunner?: object;
     researchTools?: object;
     remoteRunner?: object;
+    agentRules?: object;
   } = {}
 ) => {
   const finished: { runId: string; outcome: any; endedAt?: number }[] = [];
@@ -89,6 +91,7 @@ const setup = (
     .service(CloudAgentRunnerService, (fakes.cloudRunner ?? {}) as any)
     .service(ResearchToolsService, (fakes.researchTools ?? {}) as any)
     .service(WorkspaceService, { workspace: { id: 'ws' } } as any)
+    .service(AgentRulesService, (fakes.agentRules ?? {}) as any)
     .service(AgentExecutorService, [
       AgentContextService,
       AgentRunsStore,
@@ -99,6 +102,7 @@ const setup = (
       CloudAgentRunnerService,
       ResearchToolsService,
       WorkspaceService,
+      AgentRulesService,
     ]);
   const executor = framework.provider().get(AgentExecutorService);
   return { executor, finished, titles, described, usages };
@@ -361,6 +365,64 @@ describe('AgentExecutorService research runs', () => {
       if (event.type === 'log') logs.push(event.text);
     }
     expect(logs.join('')).toContain('There is no tool called omniseek_curator_act');
+  });
+});
+
+describe('AgentExecutorService agent rules', () => {
+  const runCloud = async (agentRules: object, withTools: boolean) => {
+    const prompts: string[] = [];
+    const { executor, finished } = setup([], {}, {
+      context: { build: async () => ({ text: 'x', label: 'a block', title: 'x' }) },
+      fileTools: { available: false },
+      cloudRunner: {
+        open: async () =>
+          async function* (messages: { content: string }[]) {
+            prompts.push(messages[0].content);
+            yield 'Done.';
+          },
+      },
+      researchTools: {
+        specs: async () =>
+          withTools ? [{ name: 'omniseek_search', desc: 's', args: {}, mutates: false }] : [],
+      },
+      agentRules,
+    });
+    for await (const _ of executor.run(
+      { id: 'a1', name: 'R', harness: withTools ? 'research' : 'cloud', tools: [], instructions: 'Do it', maxSteps: 2 } as any,
+      { kind: 'block', docId: 'doc', blockId: 'b1' },
+      new AbortController().signal
+    )) {
+      // drain
+    }
+    return { prompt: prompts[0], finished };
+  };
+
+  test('an in-tab run is told the rules note, with tools or without', async () => {
+    for (const withTools of [true, false]) {
+      const { prompt } = await runCloud(
+        { read: async () => 'Research notes go under "Research".' },
+        withTools
+      );
+      expect(prompt).toContain('Do it');
+      expect(prompt).toContain(
+        '<agent-rules>\nResearch notes go under "Research".\n</agent-rules>'
+      );
+    }
+  });
+
+  test('no note, or one that fails to read, and the run goes without', async () => {
+    for (const agentRules of [
+      { read: async () => null },
+      {
+        read: async () => {
+          throw new Error('boom');
+        },
+      },
+    ]) {
+      const { prompt, finished } = await runCloud(agentRules, false);
+      expect(prompt).not.toContain('agent-rules');
+      expect(finished[0].outcome).toMatchObject({ status: 'done' });
+    }
   });
 });
 

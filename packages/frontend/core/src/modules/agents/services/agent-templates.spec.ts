@@ -5,6 +5,7 @@ import { describe, expect, test } from 'vitest';
 
 import {
   AGENT_TEMPLATES,
+  COMPILE_SOURCE_TEMPLATE,
   DEAL_MONITOR_TEMPLATE,
   GOAL_CHECK_TEMPLATE,
   RESEARCH_TEMPLATE,
@@ -61,6 +62,18 @@ describe('agent templates', () => {
     expect(draft.instructions).toContain(
       'Do not tick, edit, reschedule or delete milestones yourself.'
     );
+  });
+
+  test('compile runs on a whole note on the server runner, without research skills', () => {
+    const { draft } = COMPILE_SOURCE_TEMPLATE;
+    expect(draft.kind).toBe('worker');
+    expect(draft.targets).toEqual(['doc']);
+    expect(draft.skills).toEqual([]);
+    expect(editorHarness(draft.harness, draft.model, draft.deviceKey)).toBe(
+      'cloud'
+    );
+    expect(draft.instructions).toContain('link_document');
+    expect(draft.instructions).toContain('Conflict:');
   });
 
   test('template ids are unique', () => {

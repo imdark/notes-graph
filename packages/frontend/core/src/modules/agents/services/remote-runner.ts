@@ -30,6 +30,23 @@ export const AGENT_SKILLS: { name: string; desc: string }[] = [
   { name: 'omniseek-investigate', desc: 'Deep multi-source research method' },
 ];
 
+/**
+ * A note titled "Skill: <name>", offered as a skill beside the catalog's
+ * (the server's plugins/registry/skill-notes.ts). An agent names it by
+ * `ref` ("note:<docId>"); the server only hands a run the ones in its own
+ * workspace.
+ */
+export interface SkillNote {
+  ref: string;
+  name: string;
+  title: string;
+  docId: string;
+}
+
+/** Whether a note's title makes it a skill note. */
+export const isSkillNoteTitle = (title: string | undefined | null) =>
+  /^\s*skill\s*:\s*\S/i.test(title ?? '');
+
 /** The skills a Claude model gets when the agent doesn't choose. */
 export const defaultSkillsFor = (model: string | undefined): string[] =>
   model === RESEARCH_MODEL
@@ -377,6 +394,42 @@ export class RemoteAgentRunnerService extends Service {
       { method: 'POST', body: JSON.stringify({ monthlyUsd }) }
     );
     return data.budget;
+  }
+
+  /**
+   * The workspace's skill notes ("Skill: <name>"), which an agent can be
+   * given beside the catalog's skills by their `ref`. Empty on a server
+   * that predates them.
+   */
+  async skillNotes(workspaceId: string): Promise<SkillNote[]> {
+    try {
+      const data = await this.json<{ skills?: SkillNote[] }>(
+        `${this.base(workspaceId)}/skills`
+      );
+      return data.skills ?? [];
+    } catch {
+      return [];
+    }
+  }
+
+  /** A skill note rendered as a Claude Code SKILL.md, as a runner gets it. */
+  async skillNoteMd(workspaceId: string, docId: string): Promise<string> {
+    const fetchService = this.fetchService;
+    if (!fetchService) {
+      throw new Error('This workspace is local, so there is no server to ask.');
+    }
+    const response = await fetchService.fetch(
+      `${this.base(workspaceId)}/skills/${encodeURIComponent(docId)}/SKILL.md`
+    );
+    const text = await response.text();
+    if (!response.ok || text.trimStart().startsWith('<')) {
+      throw new Error(
+        response.status === 404
+          ? 'Only a note titled “Skill: <name>” can be exported as a skill.'
+          : `Could not export the skill (${response.status}).`
+      );
+    }
+    return text;
   }
 
   async enqueue(

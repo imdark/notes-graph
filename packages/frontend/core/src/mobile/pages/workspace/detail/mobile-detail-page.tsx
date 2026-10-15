@@ -13,6 +13,7 @@ import { useNavigateHelper } from '@notesgraph/core/components/hooks/use-navigat
 import { NotesGraphErrorBoundary } from '@notesgraph/core/components/notesgraph/notesgraph-error-boundary';
 import { PageDetailEditor } from '@notesgraph/core/components/page-detail-editor';
 import { DetailPageWrapper } from '@notesgraph/core/desktop/pages/workspace/detail-page/detail-page-wrapper';
+import { DayScheduleSection } from '@notesgraph/core/desktop/pages/workspace/detail-page/day-schedule-section';
 import {
   AppTabs,
   PageHeader,
@@ -112,7 +113,8 @@ const DetailPageImpl = ({
   // Journal entries are dated pages that stand on their own — they
   // shouldn't be nudged to adopt a suggested parent (matches desktop's
   // detail-page.tsx).
-  const isJournal = !!useLiveData(journalService.journalDate$(doc.id));
+  const journalDate = useLiveData(journalService.journalDate$(doc.id));
+  const isJournal = !!journalDate;
 
   const mode = useLiveData(editor.mode$);
 
@@ -270,6 +272,7 @@ const DetailPageImpl = ({
             key={doc.id}
             className={styles.errorBoundary}
           >
+            {journalDate ? <DayScheduleSection date={journalDate} /> : null}
             <PageDetailEditor onLoad={onLoad} readonly={readonly} />
           </NotesGraphErrorBoundary>
         </div>

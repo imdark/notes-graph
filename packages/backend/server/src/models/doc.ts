@@ -512,6 +512,23 @@ export class DocModel extends BaseModel {
   }
 
   /**
+   * The ids of the workspace's docs titled `title`, ignoring case and the
+   * spaces around it, as last synced into the doc metas. A title the user
+   * has just typed may take a moment to show up here.
+   */
+  async findIdsByTitle(workspaceId: string, title: string) {
+    const rows = await this.db.workspaceDoc.findMany({
+      where: {
+        workspaceId,
+        title: { equals: title.trim(), mode: 'insensitive' },
+      },
+      select: { docId: true },
+      orderBy: { docId: 'asc' },
+    });
+    return rows.map(row => row.docId);
+  }
+
+  /**
    * Find the workspace public doc metas.
    */
   async findPublics(workspaceId: string, order: 'asc' | 'desc' = 'asc') {
@@ -732,6 +749,26 @@ export class DocModel extends BaseModel {
     `;
 
     return [count, rows] as const;
+  }
+
+  /**
+   * Docs whose title starts with `prefix`, ignoring case; only those in
+   * `docIds` when given.
+   */
+  async findByTitlePrefix(
+    workspaceId: string,
+    prefix: string,
+    docIds?: string[]
+  ) {
+    return await this.db.workspaceDoc.findMany({
+      where: {
+        workspaceId,
+        title: { startsWith: prefix, mode: 'insensitive' },
+        ...(docIds ? { docId: { in: docIds } } : {}),
+      },
+      select: { docId: true, title: true },
+      take: 500,
+    });
   }
 
   async findEmptySummaryDocIds(workspaceId: string) {

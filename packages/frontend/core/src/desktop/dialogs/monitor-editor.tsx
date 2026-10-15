@@ -17,6 +17,7 @@ import {
   type MonitorKind,
   MonitorsService,
   RemoteAgentRunnerService,
+  WEEK_MINUTES,
 } from '@notesgraph/core/modules/agents';
 import type { DialogComponentProps } from '@notesgraph/core/modules/dialogs';
 import type { WORKSPACE_DIALOG_SCHEMA } from '@notesgraph/core/modules/dialogs/constant';
@@ -49,7 +50,7 @@ const CONDITIONS: { value: ConditionType; label: string }[] = [
   { value: 'always', label: 'Every reading' },
 ];
 
-const INTERVALS = [5, 15, 30, 60, 180, 360, 720, 1440];
+const INTERVALS = [5, 15, 30, 60, 180, 360, 720, 1440, WEEK_MINUTES];
 
 const intervalLabel = (minutes: number) =>
   minutes < 60
@@ -58,7 +59,9 @@ const intervalLabel = (minutes: number) =>
       ? 'Every hour'
       : minutes < 1440
         ? `Every ${minutes / 60} hours`
-        : 'Every day';
+        : minutes < WEEK_MINUTES
+          ? 'Every day'
+          : 'Every week';
 
 /**
  * Make or change the monitor on a block. Opened from "Monitor this block…"

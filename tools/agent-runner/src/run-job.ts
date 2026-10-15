@@ -176,7 +176,7 @@ export async function runJob(job: Job, deps: RunDeps): Promise<RunOutcome> {
   try {
     await runSteps('setup', automation.setup, values, shell, say);
     const handed = await handedOver(workdir.path);
-    const skills = await skillsPlugin(profile.skills ?? [], workdir.path, fetchImpl, say);
+    const skills = await skillsPlugin(profile.skills ?? [], workdir.path, fetchImpl, say, api);
     const plugins = [...(handed.plugins ?? []), ...(skills ? [skills] : [])];
     const cwd = handed.cwd ?? render(automation.cwd ?? '{job_dir}', values);
     // Tools and teardown work where the agent does.

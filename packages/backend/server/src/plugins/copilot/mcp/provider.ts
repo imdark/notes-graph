@@ -7,9 +7,24 @@ import { PermissionAccess } from '../../../core/permission';
 import { clearEmbeddingChunk } from '../../../models';
 import { IndexerService } from '../../indexer';
 import { SearchTable } from '../../indexer/tables';
-import { SearchQueryOccur, SearchQueryType } from '../../indexer/types';
+import {
+  type SearchInput,
+  SearchQueryOccur,
+  SearchQueryType,
+} from '../../indexer/types';
 import { CopilotContextService } from '../context/service';
 import { findSecret, guardSecrets, secretRefusal } from './secret-guard';
+import {
+  DEFAULT_STALE_DAYS,
+  DEFAULT_STUB_CHARS,
+  notesHealth,
+} from './notes-health';
+import {
+  buildOutline,
+  loadOutlineSource,
+  type OutlineSource,
+  readSection,
+} from './outline';
 
 function first(value: unknown): string {
   const item = Array.isArray(value) ? value[0] : value;
@@ -384,9 +399,7 @@ export class WorkspaceMcpProvider {
               trail: first(node.fields.todoTrail) || undefined,
             };
           })
-          .filter(
-            block => block.text && (!docId || block.docId === docId)
-          );
+          .filter(block => block.text && (!docId || block.docId === docId));
 
         // permission filter by owning doc
         const docIds = [...new Set(candidates.map(block => block.docId))];
@@ -476,7 +489,7 @@ export class WorkspaceMcpProvider {
       name: 'list_blocks',
       title: 'List Task Blocks',
       description:
-        'Query individual task blocks (todo list items) across the whole workspace by their inline #tags, #key:value properties and org status — the block-level equivalent of list_documents. Returns each task\'s docId/blockId, text, status (todo | in-progress | done | custom keyword), tags, properties and org planning timestamps. To act on a task, read_document its docId and update_document the task line (see update_document for the org-mode workflow).',
+        "Query individual task blocks (todo list items) across the whole workspace by their inline #tags, #key:value properties and org status — the block-level equivalent of list_documents. Returns each task's docId/blockId, text, status (todo | in-progress | done | custom keyword), tags, properties and org planning timestamps. To act on a task, read_document its docId and update_document the task line (see update_document for the org-mode workflow).",
       parser: z.object({
         tags: z.array(z.string()).optional(),
         props: z.array(z.string()).optional(),
@@ -521,7 +534,10 @@ export class WorkspaceMcpProvider {
         },
         additionalProperties: false,
       },
-      execute: async ({ tags, props, status, docId, limit, cursor }, options) => {
+      execute: async (
+        { tags, props, status, docId, limit, cursor },
+        options
+      ) => {
         const result = await this.indexer.search({
           table: SearchTable.block,
           query: {
@@ -635,7 +651,7 @@ export class WorkspaceMcpProvider {
       name: 'get_board',
       title: 'Get Board',
       description:
-        'Read the virtual kanban/table boards defined in a document: each board is a saved query (scope) over task blocks — inline #tags, #key:value props, org status slice, and an optional due-within-days bound. Combine the scope with list_blocks to fetch the board\'s tasks, then act on a task with update_task (pull into in-progress, add notes, move it through committed → merged → deployed → done as it ships). Find board documents with keyword_search or list_documents first.',
+        "Read the virtual kanban/table boards defined in a document: each board is a saved query (scope) over task blocks — inline #tags, #key:value props, org status slice, and an optional due-within-days bound. Combine the scope with list_blocks to fetch the board's tasks, then act on a task with update_task (pull into in-progress, add notes, move it through committed → merged → deployed → done as it ships). Find board documents with keyword_search or list_documents first.",
       parser: z.object({ docId: z.string() }),
       inputSchema: {
         type: 'object',
@@ -666,7 +682,7 @@ export class WorkspaceMcpProvider {
               boards,
               usage:
                 boards.length > 0
-                  ? 'Fetch tasks with list_blocks using each board\'s tags/props (and status to slice by column); update a task with update_task.'
+                  ? "Fetch tasks with list_blocks using each board's tags/props (and status to slice by column); update a task with update_task."
                   : 'No query boards in this document. Boards are created in the editor via /query board, /query table or /task report.',
             })
           );
@@ -682,7 +698,7 @@ export class WorkspaceMcpProvider {
       name: 'get_backlinks',
       title: 'Get Backlinks',
       description:
-        "List documents that link to the given document (its \"parents\" in the graph — NotesGraph has no single fixed parent, a doc can have several). Use this to understand where a document sits in the graph before you decide where to file something new.",
+        'List documents that link to the given document (its "parents" in the graph — NotesGraph has no single fixed parent, a doc can have several). Use this to understand where a document sits in the graph before you decide where to file something new.',
       parser: z.object({ docId: z.string() }),
       inputSchema: {
         type: 'object',
@@ -730,7 +746,10 @@ export class WorkspaceMcpProvider {
           .user(userId)
           .workspace(workspaceId)
           .docs(candidates, 'Doc.Read');
-        const titled = await this.titlesFor(workspaceId, readable.map(d => d.docId));
+        const titled = await this.titlesFor(
+          workspaceId,
+          readable.map(d => d.docId)
+        );
 
         const abortedAfterFilter = abortIfNeeded(options.signal);
         if (abortedAfterFilter) return abortedAfterFilter;
@@ -801,7 +820,10 @@ export class WorkspaceMcpProvider {
           .user(userId)
           .workspace(workspaceId)
           .docs(candidates, 'Doc.Read');
-        const titled = await this.titlesFor(workspaceId, readable.map(d => d.docId));
+        const titled = await this.titlesFor(
+          workspaceId,
+          readable.map(d => d.docId)
+        );
 
         const abortedAfterFilter = abortIfNeeded(options.signal);
         if (abortedAfterFilter) return abortedAfterFilter;
@@ -810,8 +832,196 @@ export class WorkspaceMcpProvider {
       },
     });
 
+    const notesHealthTool = defineTool({
+      name: 'notes_health',
+      title: 'Notes Health',
+      description:
+        'Check the whole workspace for the problems a person tidying their notes would look for, computed from the search index rather than guessed: orphans (notes no other note links to; journal days excluded), brokenLinks (links to notes that no longer exist), duplicateTitles (notes whose titles have the same words, candidates to merge on the Duplicates page at duplicatesPath), stubs (notes with almost no body), and staleFacts (blocks stamped "as of <date>" longer ago than staleDays). It only reads; nothing is changed. Contradictions between notes need reading, so they are not in here.',
+      parser: z.object({
+        staleDays: z.number().int().min(1).max(3650).optional(),
+        stubChars: z.number().int().min(1).max(2000).optional(),
+      }),
+      inputSchema: {
+        type: 'object',
+        properties: {
+          staleDays: {
+            type: 'number',
+            description: `An "as of" fact older than this many days is stale (default ${DEFAULT_STALE_DAYS}).`,
+          },
+          stubChars: {
+            type: 'number',
+            description: `A note whose body is shorter than this many characters is a stub (default ${DEFAULT_STUB_CHARS}).`,
+          },
+        },
+        additionalProperties: false,
+      },
+      execute: async ({ staleDays, stubChars }, options) => {
+        const inWorkspace = {
+          type: SearchQueryType.match,
+          field: 'workspaceId',
+          match: workspaceId,
+        };
+        const docNodes = await this.searchAll({
+          table: SearchTable.doc,
+          query: inWorkspace,
+          options: { fields: ['docId', 'title', 'summary', 'journal'] },
+        });
+        const linkNodes = await this.searchAll({
+          table: SearchTable.block,
+          query: {
+            type: SearchQueryType.boolean,
+            occur: SearchQueryOccur.must,
+            queries: [inWorkspace, { type: SearchQueryType.exists, field: 'refDocId' }],
+          },
+          options: { fields: ['docId', 'refDocId'] },
+        });
+        // Narrowed by the index to blocks with both words; the date itself
+        // is read from the text afterwards.
+        const factNodes = await this.searchAll({
+          table: SearchTable.block,
+          query: {
+            type: SearchQueryType.boolean,
+            occur: SearchQueryOccur.must,
+            queries: [
+              inWorkspace,
+              { type: SearchQueryType.match, field: 'content', match: 'as' },
+              { type: SearchQueryType.match, field: 'content', match: 'of' },
+            ],
+          },
+          options: { fields: ['docId', 'blockId', 'content'] },
+        });
+
+        const abortedAfterSearch = abortIfNeeded(options.signal);
+        if (abortedAfterSearch) return abortedAfterSearch;
+
+        const allDocs = docNodes.map(node => ({
+          docId: first(node.fields.docId),
+          title: first(node.fields.title),
+          summary: first(node.fields.summary),
+          journal: !!first(node.fields.journal),
+        }));
+        // Every indexed note counts as existing, so a link to one the user
+        // can't read isn't reported as broken; only readable ones are reported.
+        const readable = new Set(
+          (
+            await this.ac.user(userId).workspace(workspaceId).docs(allDocs, 'Doc.Read')
+          ).map(doc => doc.docId)
+        );
+        const links = linkNodes.flatMap(node =>
+          tokenList(node.fields.refDocId).map(toDocId => ({
+            fromDocId: first(node.fields.docId),
+            toDocId,
+          }))
+        );
+        const report = notesHealth(
+          {
+            docs: allDocs,
+            links,
+            blocks: factNodes.map(node => ({
+              docId: first(node.fields.docId),
+              blockId: first(node.fields.blockId),
+              text: first(node.fields.content),
+            })),
+          },
+          { now: new Date(), staleDays, stubChars }
+        );
+        const canRead = (item: { docId: string }) => readable.has(item.docId);
+
+        return toolText(
+          JSON.stringify({
+            orphans: report.orphans.filter(canRead),
+            brokenLinks: report.brokenLinks.filter(link => readable.has(link.fromDocId)),
+            duplicateTitles: report.duplicateTitles
+              .map(group => ({ ...group, docs: group.docs.filter(canRead) }))
+              .filter(group => group.docs.length > 1),
+            stubs: report.stubs.filter(canRead),
+            staleFacts: report.staleFacts.filter(canRead),
+            duplicatesPath: `/workspace/${workspaceId}/duplicates`,
+            notesChecked: readable.size,
+          })
+        );
+      },
+    });
+
+    const loadOutline = async (
+      docId: string,
+      signal: AbortSignal
+    ): Promise<OutlineSource | WorkspaceMcpToolResult> => {
+      const notFoundError = toolError(`Doc with id ${docId} not found.`);
+      const accessible = await this.ac
+        .user(userId)
+        .workspace(workspaceId)
+        .doc(docId)
+        .can('Doc.Read');
+      if (!accessible) return notFoundError;
+      const aborted = abortIfNeeded(signal);
+      if (aborted) return aborted;
+      const source = await loadOutlineSource(this.reader, workspaceId, docId);
+      if (!source) return notFoundError;
+      return abortIfNeeded(signal) ?? source;
+    };
+
+    const docOutline = defineTool({
+      name: 'doc_outline',
+      title: 'Document Outline',
+      description:
+        "Return a document's heading tree without its body: for each heading its blockId, level (1-6), title, parentBlockId (the enclosing heading) and the section's size (characters and top-level blocks, sub-sections included), plus the size of any intro before the first heading. Use it to skim a long note by structure, then read_section the parts that matter instead of loading the whole document with read_document. Heading blockIds also work with update_block.",
+      parser: z.object({ docId: z.string() }),
+      inputSchema: {
+        type: 'object',
+        properties: { docId: { type: 'string' } },
+        required: ['docId'],
+        additionalProperties: false,
+      },
+      execute: async ({ docId }, options) => {
+        const loaded = await loadOutline(docId, options.signal);
+        if (!('markdown' in loaded)) return loaded;
+        return toolText(
+          JSON.stringify({
+            docId,
+            title: loaded.title,
+            ...buildOutline(loaded.markdown, loaded.headings),
+          })
+        );
+      },
+    });
+
+    const readDocSection = defineTool({
+      name: 'read_section',
+      title: 'Read Document Section',
+      description:
+        "Read one section of a document as markdown: the heading at blockId (from doc_outline) with its text and sub-sections, up to the next heading of the same or a higher level. Pass the outline's intro blockId to read the content before the first heading. Each block is preceded by a `<!-- block_id=… flavour=… -->` comment, so you can target a block with update_block / update_task.",
+      parser: z.object({ docId: z.string(), blockId: z.string() }),
+      inputSchema: {
+        type: 'object',
+        properties: {
+          docId: { type: 'string' },
+          blockId: {
+            type: 'string',
+            description:
+              "A heading's blockId from doc_outline (or its intro blockId)",
+          },
+        },
+        required: ['docId', 'blockId'],
+        additionalProperties: false,
+      },
+      execute: async ({ docId, blockId }, options) => {
+        const loaded = await loadOutline(docId, options.signal);
+        if (!('markdown' in loaded)) return loaded;
+        const section = readSection(loaded.markdown, loaded.headings, blockId);
+        if (!section) {
+          return toolError(
+            `Doc ${docId} has no top-level block ${blockId}; get heading blockIds from doc_outline.`
+          );
+        }
+        return toolText(section.markdown);
+      },
+    });
+
     const tools = [
       readDocument,
+      docOutline,
+      readDocSection,
       semanticSearch,
       keywordSearch,
       searchBlocks,
@@ -820,6 +1030,7 @@ export class WorkspaceMcpProvider {
       getBoard,
       getBacklinks,
       getLinks,
+      notesHealthTool,
     ];
 
     if (env.dev || env.namespaces.canary || env.mcpWriteToolsEnabled) {
@@ -932,7 +1143,7 @@ export class WorkspaceMcpProvider {
         title: 'Update Document',
         description:
           'Update an existing document with new markdown content (body only). Uses structural diffing to apply minimal changes, preserving document history and enabling real-time collaboration. Every update is stamped "Edited via MCP by <agent>". ' +
-          'Task workflow: task lists use org-mode annotations at the start of each list item — `[ ]` todo, `[-]` in progress, `[X]` done, or an UPPERCASE keyword — which kanban boards mirroring the list group by, plus planning annotations like `SCHEDULED: <date>`, `DEADLINE: <date>`, `STARTED: [date]`, `CLOSED: [date]` at the end of the line. To pick up a task, rewrite its annotation to `[-]` and append ` @<your-agent-name>` to the task line to claim it; mark it `[X]` when finished. A task that ships code only becomes `[X]` once it is deployed and verified live — until then it climbs `COMMITTED` → `MERGED` → `DEPLOYED`. Keep working memory and documentation in the task\'s own linked note (see link_document). ' +
+          "Task workflow: task lists use org-mode annotations at the start of each list item — `[ ]` todo, `[-]` in progress, `[X]` done, or an UPPERCASE keyword — which kanban boards mirroring the list group by, plus planning annotations like `SCHEDULED: <date>`, `DEADLINE: <date>`, `STARTED: [date]`, `CLOSED: [date]` at the end of the line. To pick up a task, rewrite its annotation to `[-]` and append ` @<your-agent-name>` to the task line to claim it; mark it `[X]` when finished. A task that ships code only becomes `[X]` once it is deployed and verified live — until then it climbs `COMMITTED` → `MERGED` → `DEPLOYED`. Keep working memory and documentation in the task's own linked note (see link_document). " +
           'This does NOT update the document title. This tool not support insert or update database block and image yet.' +
           firstPersonGuidance,
         parser: z.object({
@@ -1220,7 +1431,7 @@ export class WorkspaceMcpProvider {
         name: 'link_document',
         title: 'Link Document',
         description:
-          'Link a document under another as a real, first-class graph reference (the same relationship the app\'s own backlinks/graph view are built from) — not a plain-text link. A doc can have several parents; this only adds a link, it never removes or replaces existing ones. Use this to file a newly created or existing document into the graph, e.g. under a topic note.',
+          "Link a document under another as a real, first-class graph reference (the same relationship the app's own backlinks/graph view are built from) — not a plain-text link. A doc can have several parents; this only adds a link, it never removes or replaces existing ones. Use this to file a newly created or existing document into the graph, e.g. under a topic note.",
         parser: z.object({
           parentDocId: z.string(),
           childDocId: z.string(),
@@ -1301,6 +1512,29 @@ export class WorkspaceMcpProvider {
     };
   }
 
+  /**
+   * Every row a search matches, page by page, up to a cap so one huge
+   * workspace can't hold a tool call for minutes.
+   */
+  private async searchAll(
+    input: Omit<SearchInput, 'options'> & { options: { fields: string[] } },
+    max = 20_000
+  ) {
+    const nodes: Awaited<ReturnType<IndexerService['search']>>['nodes'] = [];
+    let cursor: string | undefined;
+    do {
+      const result = await this.indexer.search({
+        ...input,
+        options: { ...input.options, pagination: { limit: 5000, cursor } },
+      });
+      nodes.push(...result.nodes);
+      // Manticore can hand back the same cursor at the end (see listDocIds).
+      if (!result.nodes.length || result.nextCursor === cursor) break;
+      cursor = result.nextCursor;
+    } while (cursor && nodes.length < max);
+    return nodes;
+  }
+
   /** Best-effort title lookup for a batch of docIds (used to annotate link results). */
   private async titlesFor(workspaceId: string, docIds: string[]) {
     if (docIds.length === 0) return [];
@@ -1332,7 +1566,10 @@ export class WorkspaceMcpProvider {
       },
     });
     const titleByDocId = new Map(
-      result.nodes.map(node => [first(node.fields.docId), first(node.fields.title)])
+      result.nodes.map(node => [
+        first(node.fields.docId),
+        first(node.fields.title),
+      ])
     );
     return docIds.map(docId => ({
       docId,

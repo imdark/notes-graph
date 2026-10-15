@@ -95,6 +95,10 @@ export const isOpenTask = (model: BlockModel): boolean => {
   return !!status && orgStatusLabel(status.text) === 'Todo';
 };
 
+/** Whether a block has text and is not a task, e.g. a long paragraph. */
+export const isPlainBlock = (model: BlockModel): boolean =>
+  !readTaskStatus(model) && !!model.text?.toString().trim();
+
 /**
  * Whether a task still needs work: to do, queued or in progress. Done, and
  * any other keyword (COMMITTED, BLOCKED, …), is out of a run's hands.

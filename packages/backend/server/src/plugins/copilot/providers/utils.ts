@@ -182,6 +182,14 @@ export class TextStreamParser {
             result += `\nReading the doc "${chunk.input.doc_id}"\n`;
             break;
           }
+          case 'doc_outline': {
+            result += `\nReading the outline of the doc "${chunk.input.doc_id}"\n`;
+            break;
+          }
+          case 'doc_read_section': {
+            result += `\nReading a section of the doc "${chunk.input.doc_id}"\n`;
+            break;
+          }
           case 'doc_compose': {
             result += `\nWriting document "${chunk.input.title}"\n`;
             break;
