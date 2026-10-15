@@ -71,6 +71,16 @@ export {
   type MonitorSpec,
 } from './services/monitors';
 export {
+  isNotesHealthMonitor,
+  NOTES_HEALTH_DOC_TITLE,
+  NOTES_HEALTH_INSTRUCTIONS,
+  NOTES_HEALTH_NAME,
+  NOTES_HEALTH_TEMPLATE,
+  notesHealthDevice,
+  notesHealthMonitorDraft,
+  WEEK_MINUTES,
+} from './services/notes-health';
+export {
   AGENT_MODES,
   AGENT_WARMUP,
   type AgentMode,

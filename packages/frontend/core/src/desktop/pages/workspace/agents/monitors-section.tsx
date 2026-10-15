@@ -1,13 +1,22 @@
+import { Text } from '@blocksuite/notesgraph/store';
 import { Button, notify } from '@notesgraph/component';
 import {
   formatTrendValue,
+  isNotesHealthMonitor,
   type Monitor,
   MonitorsService,
+  NOTES_HEALTH_DOC_TITLE,
+  notesHealthDevice,
+  notesHealthMonitorDraft,
+  RemoteAgentRunnerService,
   sparklinePath,
   type Trend,
+  WEEK_MINUTES,
 } from '@notesgraph/core/modules/agents';
 import { WorkspaceDialogService } from '@notesgraph/core/modules/dialogs';
+import { DocsService } from '@notesgraph/core/modules/doc';
 import { WorkbenchService } from '@notesgraph/core/modules/workbench';
+import { WorkspaceService } from '@notesgraph/core/modules/workspace';
 import { useLiveData, useService } from '@notesgraph/infra';
 import { cssVar } from '@toeverything/theme';
 import { useCallback, useEffect, useState } from 'react';
@@ -24,7 +33,13 @@ const host = (url?: string) => {
 };
 
 const every = (minutes: number) =>
-  minutes < 60 ? `every ${minutes}m` : minutes < 1440 ? `every ${minutes / 60}h` : 'daily';
+  minutes < 60
+    ? `every ${minutes}m`
+    : minutes < 1440
+      ? `every ${minutes / 60}h`
+      : minutes < WEEK_MINUTES
+        ? 'daily'
+        : 'weekly';
 
 /** What it watches and how often, in a few words. */
 export const watches = (monitor: Monitor) =>
@@ -158,6 +173,70 @@ const MonitorCard = ({ monitor, now }: { monitor: Monitor; now: number }) => {
   );
 };
 
+/**
+ * Set up the weekly notes health check in one click: a "Notes health" note
+ * whose first block carries the latest summary, and the weekly agent monitor
+ * on it. Each run writes its report as a note linked from that one.
+ */
+const NotesHealthSetup = () => {
+  const monitorsService = useService(MonitorsService);
+  const docsService = useService(DocsService);
+  const remoteRunner = useService(RemoteAgentRunnerService);
+  const workspaceId = useService(WorkspaceService).workspace.id;
+  const workbench = useService(WorkbenchService).workbench;
+  const [busy, setBusy] = useState(false);
+
+  const setUp = useCallback(async () => {
+    setBusy(true);
+    try {
+      // Find somewhere to run it before making a note that would go unused.
+      const deviceKey = notesHealthDevice(await remoteRunner.agentTargets(workspaceId));
+      if (!deviceKey) throw new Error('No device or cloud runner takes agent work here.');
+
+      const record = docsService.createDoc({ title: NOTES_HEALTH_DOC_TITLE });
+      const { doc, release } = docsService.open(record.id);
+      let blockId: string;
+      try {
+        await doc.waitForSyncReady();
+        const [note] = doc.blockSuiteDoc.getBlocksByFlavour('notesgraph:note');
+        if (!note) throw new Error("Couldn't write the new note.");
+        blockId = doc.blockSuiteDoc.addBlock(
+          'notesgraph:paragraph' as never,
+          { text: new Text('Weekly notes health check: the first report is on its way.') },
+          note.id
+        );
+      } finally {
+        release();
+      }
+
+      await monitorsService.create(notesHealthMonitorDraft(record.id, blockId, deviceKey));
+      notify.success({
+        title: 'Notes health check set up',
+        message: 'It runs now and then every week. Fixes come as to-dos in its report.',
+      });
+      workbench.openDoc({ docId: record.id, mode: 'page', blockIds: [blockId] }, { at: 'active' });
+    } catch (err) {
+      notify.error({
+        title: "Couldn't set up the notes health check",
+        message: err instanceof Error ? err.message : String(err),
+      });
+    } finally {
+      setBusy(false);
+    }
+  }, [docsService, monitorsService, remoteRunner, workbench, workspaceId]);
+
+  return (
+    <Button
+      onClick={() => void setUp()}
+      disabled={busy}
+      title="A weekly agent run that reports orphans, broken links, duplicates, stale facts, contradictions and stubs"
+      data-testid="agents-page-notes-health-setup"
+    >
+      Weekly notes health check
+    </Button>
+  );
+};
+
 /** The person's monitors, with their latest readings. */
 export const MonitorsSection = ({ now }: { now: number }) => {
   const monitorsService = useService(MonitorsService);
@@ -171,6 +250,11 @@ export const MonitorsSection = ({ now }: { now: number }) => {
       <div className={styles.sectionTitle}>
         Monitors
         <span className={styles.sectionCount}>{monitors.length}</span>
+        {!error && !monitors.some(isNotesHealthMonitor) ? (
+          <span className={styles.sectionActions}>
+            <NotesHealthSetup />
+          </span>
+        ) : null}
       </div>
       {monitors.length === 0 ? (
         <div className={styles.empty}>

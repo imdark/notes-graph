@@ -7,8 +7,17 @@ import { PermissionAccess } from '../../../core/permission';
 import { clearEmbeddingChunk } from '../../../models';
 import { IndexerService } from '../../indexer';
 import { SearchTable } from '../../indexer/tables';
-import { SearchQueryOccur, SearchQueryType } from '../../indexer/types';
+import {
+  type SearchInput,
+  SearchQueryOccur,
+  SearchQueryType,
+} from '../../indexer/types';
 import { CopilotContextService } from '../context/service';
+import {
+  DEFAULT_STALE_DAYS,
+  DEFAULT_STUB_CHARS,
+  notesHealth,
+} from './notes-health';
 import {
   buildOutline,
   loadOutlineSource,
@@ -822,6 +831,117 @@ export class WorkspaceMcpProvider {
       },
     });
 
+    const notesHealthTool = defineTool({
+      name: 'notes_health',
+      title: 'Notes Health',
+      description:
+        'Check the whole workspace for the problems a person tidying their notes would look for, computed from the search index rather than guessed: orphans (notes no other note links to; journal days excluded), brokenLinks (links to notes that no longer exist), duplicateTitles (notes whose titles have the same words, candidates to merge on the Duplicates page at duplicatesPath), stubs (notes with almost no body), and staleFacts (blocks stamped "as of <date>" longer ago than staleDays). It only reads; nothing is changed. Contradictions between notes need reading, so they are not in here.',
+      parser: z.object({
+        staleDays: z.number().int().min(1).max(3650).optional(),
+        stubChars: z.number().int().min(1).max(2000).optional(),
+      }),
+      inputSchema: {
+        type: 'object',
+        properties: {
+          staleDays: {
+            type: 'number',
+            description: `An "as of" fact older than this many days is stale (default ${DEFAULT_STALE_DAYS}).`,
+          },
+          stubChars: {
+            type: 'number',
+            description: `A note whose body is shorter than this many characters is a stub (default ${DEFAULT_STUB_CHARS}).`,
+          },
+        },
+        additionalProperties: false,
+      },
+      execute: async ({ staleDays, stubChars }, options) => {
+        const inWorkspace = {
+          type: SearchQueryType.match,
+          field: 'workspaceId',
+          match: workspaceId,
+        };
+        const docNodes = await this.searchAll({
+          table: SearchTable.doc,
+          query: inWorkspace,
+          options: { fields: ['docId', 'title', 'summary', 'journal'] },
+        });
+        const linkNodes = await this.searchAll({
+          table: SearchTable.block,
+          query: {
+            type: SearchQueryType.boolean,
+            occur: SearchQueryOccur.must,
+            queries: [inWorkspace, { type: SearchQueryType.exists, field: 'refDocId' }],
+          },
+          options: { fields: ['docId', 'refDocId'] },
+        });
+        // Narrowed by the index to blocks with both words; the date itself
+        // is read from the text afterwards.
+        const factNodes = await this.searchAll({
+          table: SearchTable.block,
+          query: {
+            type: SearchQueryType.boolean,
+            occur: SearchQueryOccur.must,
+            queries: [
+              inWorkspace,
+              { type: SearchQueryType.match, field: 'content', match: 'as' },
+              { type: SearchQueryType.match, field: 'content', match: 'of' },
+            ],
+          },
+          options: { fields: ['docId', 'blockId', 'content'] },
+        });
+
+        const abortedAfterSearch = abortIfNeeded(options.signal);
+        if (abortedAfterSearch) return abortedAfterSearch;
+
+        const allDocs = docNodes.map(node => ({
+          docId: first(node.fields.docId),
+          title: first(node.fields.title),
+          summary: first(node.fields.summary),
+          journal: !!first(node.fields.journal),
+        }));
+        // Every indexed note counts as existing, so a link to one the user
+        // can't read isn't reported as broken; only readable ones are reported.
+        const readable = new Set(
+          (
+            await this.ac.user(userId).workspace(workspaceId).docs(allDocs, 'Doc.Read')
+          ).map(doc => doc.docId)
+        );
+        const links = linkNodes.flatMap(node =>
+          tokenList(node.fields.refDocId).map(toDocId => ({
+            fromDocId: first(node.fields.docId),
+            toDocId,
+          }))
+        );
+        const report = notesHealth(
+          {
+            docs: allDocs,
+            links,
+            blocks: factNodes.map(node => ({
+              docId: first(node.fields.docId),
+              blockId: first(node.fields.blockId),
+              text: first(node.fields.content),
+            })),
+          },
+          { now: new Date(), staleDays, stubChars }
+        );
+        const canRead = (item: { docId: string }) => readable.has(item.docId);
+
+        return toolText(
+          JSON.stringify({
+            orphans: report.orphans.filter(canRead),
+            brokenLinks: report.brokenLinks.filter(link => readable.has(link.fromDocId)),
+            duplicateTitles: report.duplicateTitles
+              .map(group => ({ ...group, docs: group.docs.filter(canRead) }))
+              .filter(group => group.docs.length > 1),
+            stubs: report.stubs.filter(canRead),
+            staleFacts: report.staleFacts.filter(canRead),
+            duplicatesPath: `/workspace/${workspaceId}/duplicates`,
+            notesChecked: readable.size,
+          })
+        );
+      },
+    });
+
     const loadOutline = async (
       docId: string,
       signal: AbortSignal
@@ -909,6 +1029,7 @@ export class WorkspaceMcpProvider {
       getBoard,
       getBacklinks,
       getLinks,
+      notesHealthTool,
     ];
 
     if (env.dev || env.namespaces.canary || env.mcpWriteToolsEnabled) {
@@ -1366,6 +1487,29 @@ export class WorkspaceMcpProvider {
       version: '1.0.1',
       tools,
     };
+  }
+
+  /**
+   * Every row a search matches, page by page, up to a cap so one huge
+   * workspace can't hold a tool call for minutes.
+   */
+  private async searchAll(
+    input: Omit<SearchInput, 'options'> & { options: { fields: string[] } },
+    max = 20_000
+  ) {
+    const nodes: Awaited<ReturnType<IndexerService['search']>>['nodes'] = [];
+    let cursor: string | undefined;
+    do {
+      const result = await this.indexer.search({
+        ...input,
+        options: { ...input.options, pagination: { limit: 5000, cursor } },
+      });
+      nodes.push(...result.nodes);
+      // Manticore can hand back the same cursor at the end (see listDocIds).
+      if (!result.nodes.length || result.nextCursor === cursor) break;
+      cursor = result.nextCursor;
+    } while (cursor && nodes.length < max);
+    return nodes;
   }
 
   /** Best-effort title lookup for a batch of docIds (used to annotate link results). */

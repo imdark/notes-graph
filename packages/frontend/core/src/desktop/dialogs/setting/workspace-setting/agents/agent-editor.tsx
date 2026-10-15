@@ -60,6 +60,7 @@ const READ_TOOLS: { name: string; desc: string }[] = [
   { name: 'get_board', desc: 'Read a task board' },
   { name: 'get_backlinks', desc: 'What links here' },
   { name: 'get_links', desc: 'What this links to' },
+  { name: 'notes_health', desc: 'Orphans, broken links, stubs, stale facts' },
 ];
 
 interface ToolChoice {
