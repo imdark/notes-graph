@@ -26,6 +26,7 @@ import {
   parseSearchQuery,
   searchText,
 } from '../search-query';
+import { applyBudget, fuseRanked } from './rrf';
 import { findSecret, guardSecrets, secretRefusal } from './secret-guard';
 import {
   DEFAULT_STALE_DAYS,
@@ -46,6 +47,8 @@ function first(value: unknown): string {
 
 const SEMANTIC_SEARCH_TOP_K = 5;
 const KEYWORD_SEARCH_LIMIT = 20;
+const HYBRID_DEFAULT_ITEMS = 8;
+const HYBRID_DEFAULT_CHARS = 6000;
 
 type McpTextContent = {
   type: 'text';
@@ -973,7 +976,10 @@ export class WorkspaceMcpProvider {
           query: {
             type: SearchQueryType.boolean,
             occur: SearchQueryOccur.must,
-            queries: [inWorkspace, { type: SearchQueryType.exists, field: 'refDocId' }],
+            queries: [
+              inWorkspace,
+              { type: SearchQueryType.exists, field: 'refDocId' },
+            ],
           },
           options: { fields: ['docId', 'refDocId'] },
         });
@@ -1006,7 +1012,10 @@ export class WorkspaceMcpProvider {
         // can't read isn't reported as broken; only readable ones are reported.
         const readable = new Set(
           (
-            await this.ac.user(userId).workspace(workspaceId).docs(allDocs, 'Doc.Read')
+            await this.ac
+              .user(userId)
+              .workspace(workspaceId)
+              .docs(allDocs, 'Doc.Read')
           ).map(doc => doc.docId)
         );
         const links = linkNodes.flatMap(node =>
@@ -1032,7 +1041,9 @@ export class WorkspaceMcpProvider {
         return toolText(
           JSON.stringify({
             orphans: report.orphans.filter(canRead),
-            brokenLinks: report.brokenLinks.filter(link => readable.has(link.fromDocId)),
+            brokenLinks: report.brokenLinks.filter(link =>
+              readable.has(link.fromDocId)
+            ),
             duplicateTitles: report.duplicateTitles
               .map(group => ({ ...group, docs: group.docs.filter(canRead) }))
               .filter(group => group.docs.length > 1),
@@ -1120,8 +1131,101 @@ export class WorkspaceMcpProvider {
       },
     });
 
+    const hybridSearch = defineTool({
+      name: 'search',
+      title: 'Search',
+      description:
+        'Search the workspace with keyword and semantic search together and fuse the two rankings (reciprocal rank fusion). Use this by default instead of choosing between keyword_search and semantic_search. Returns documents best-first with a passage; limit the output with maxItems and maxChars.',
+      parser: z.object({
+        query: z.string(),
+        maxItems: z.number().int().min(1).max(30).optional(),
+        maxChars: z.number().int().min(200).max(30000).optional(),
+      }),
+      inputSchema: {
+        type: 'object',
+        properties: {
+          query: { type: 'string', description: 'Search text.' },
+          maxItems: {
+            type: 'number',
+            description: `Most documents to return (default ${HYBRID_DEFAULT_ITEMS}).`,
+          },
+          maxChars: {
+            type: 'number',
+            description: `Total passage characters to return (default ${HYBRID_DEFAULT_CHARS}).`,
+          },
+        },
+        required: ['query'],
+        additionalProperties: false,
+      },
+      execute: async (
+        {
+          query,
+          maxItems = HYBRID_DEFAULT_ITEMS,
+          maxChars = HYBRID_DEFAULT_CHARS,
+        },
+        options
+      ) => {
+        const text = query.trim();
+        if (!text) return toolError('Search needs search text.');
+
+        const [keywordDocs, chunks] = await Promise.all([
+          this.indexer.searchDocsByKeyword(workspaceId, text, {
+            limit: KEYWORD_SEARCH_LIMIT,
+          }),
+          this.context.matchWorkspaceDocs(
+            workspaceId,
+            text,
+            SEMANTIC_SEARCH_TOP_K * 2,
+            options.signal
+          ),
+        ]);
+        const abortedAfterSearch = abortIfNeeded(options.signal);
+        if (abortedAfterSearch) return abortedAfterSearch;
+
+        const fused = fuseRanked([
+          {
+            source: 'keyword',
+            hits: keywordDocs.map(doc => ({
+              docId: doc.docId,
+              title: doc.title,
+            })),
+          },
+          {
+            source: 'semantic',
+            hits: chunks
+              .filter(chunk => 'docId' in chunk)
+              .map(chunk => ({
+                docId: chunk.docId as string,
+                text: clearEmbeddingChunk(chunk as any).content,
+              })),
+          },
+        ]);
+        const readable = await this.ac
+          .user(userId)
+          .workspace(workspaceId)
+          .docs(fused, 'Doc.Read');
+        const abortedAfterDocs = abortIfNeeded(options.signal);
+        if (abortedAfterDocs) return abortedAfterDocs;
+
+        const hits = applyBudget(readable ?? [], maxItems, maxChars);
+        if (hits.length === 0) return toolText('No matching documents found.');
+        return {
+          content: hits.map(hit => ({
+            type: 'text' as const,
+            text: JSON.stringify({
+              docId: hit.docId,
+              title: hit.title,
+              via: hit.sources,
+              passage: hit.text,
+            }),
+          })),
+        };
+      },
+    });
+
     const tools = [
       readDocument,
+      hybridSearch,
       docOutline,
       readDocSection,
       semanticSearch,
@@ -1283,8 +1387,15 @@ export class WorkspaceMcpProvider {
           // The whole body comes back on every update, so a secret the user
           // wrote into the note themselves isn't the agent's to answer for.
           if (guardSecrets(content, agent)) {
-            const current = await this.reader.getDocMarkdown(workspaceId, docId, false);
-            const label = findSecret(`${content}\n${agent ?? ''}`, current?.markdown ?? '');
+            const current = await this.reader.getDocMarkdown(
+              workspaceId,
+              docId,
+              false
+            );
+            const label = findSecret(
+              `${content}\n${agent ?? ''}`,
+              current?.markdown ?? ''
+            );
             if (label) return toolError(secretRefusal(label));
           }
 
