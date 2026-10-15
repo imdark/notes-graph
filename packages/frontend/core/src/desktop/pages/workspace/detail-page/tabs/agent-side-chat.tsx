@@ -16,6 +16,25 @@ import {
 } from 'react';
 
 import * as styles from './agents.css';
+import { AgentMarkdown } from './agent-markdown';
+
+const MAX_ATTACHMENT_CHARS = 40_000;
+
+interface Attachment {
+  name: string;
+  text: string;
+}
+
+/** The message as the model sees it: attached files follow the question. */
+const withAttachments = (message: string, files: Attachment[]) =>
+  files.length === 0
+    ? message
+    : [
+        message,
+        ...files.map(
+          f => `\n\nAttached file ${f.name}:\n\`\`\`\n${f.text}\n\`\`\``
+        ),
+      ].join('');
 
 /**
  * A chat about a run, seeded with the run's context:
@@ -31,7 +50,7 @@ export const AgentSideChat = ({
   hint,
   placeholder,
   opening,
-  renderReply = reply => <p className={styles.output}>{reply || '…'}</p>,
+  renderReply = reply => <AgentMarkdown text={reply} />,
   openModel,
   onClose,
   testId,
@@ -53,6 +72,7 @@ export const AgentSideChat = ({
   // Shown turns only; the opening context lives in `history` alone.
   const [turns, setTurns] = useState<ChatMessage[]>([]);
   const [text, setText] = useState('');
+  const [files, setFiles] = useState<Attachment[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -60,6 +80,7 @@ export const AgentSideChat = ({
   const history = useRef<ChatMessage[]>([]);
   const abort = useRef<AbortController | null>(null);
   const listEnd = useRef<HTMLDivElement>(null);
+  const picker = useRef<HTMLInputElement>(null);
 
   useEffect(() => () => abort.current?.abort(), []);
   useEffect(() => {
@@ -76,13 +97,15 @@ export const AgentSideChat = ({
   }, [cloudRunner, opening, openModel, workspaceService]);
 
   const ask = useCallback(
-    async (message: string) => {
+    async (shown: string) => {
+      const message = withAttachments(shown, files);
       setBusy(true);
       setError(null);
       setText('');
+      setFiles([]);
       setTurns(prev => [
         ...prev,
-        { role: 'user', content: message },
+        { role: 'user', content: shown },
         { role: 'assistant', content: '' },
       ]);
       const controller = new AbortController();
@@ -116,8 +139,31 @@ export const AgentSideChat = ({
         if (!controller.signal.aborted) setBusy(false);
       }
     },
-    [start]
+    [start, files]
   );
+
+  const attach = useCallback(async (list: FileList | null) => {
+    if (!list) return;
+    const added: Attachment[] = [];
+    for (const file of Array.from(list)) {
+      if (
+        file.type &&
+        !file.type.startsWith('text/') &&
+        !/json|xml|yaml|markdown|javascript/.test(file.type)
+      ) {
+        setError(
+          `${file.name} is not a text file; only text files can be attached.`
+        );
+        continue;
+      }
+      const text = await file.text();
+      added.push({
+        name: file.name,
+        text: text.slice(0, MAX_ATTACHMENT_CHARS),
+      });
+    }
+    setFiles(prev => [...prev, ...added]);
+  }, []);
 
   const canSend = text.trim().length > 0 && !busy;
   const onKeyDown = useCallback(
@@ -168,13 +214,54 @@ export const AgentSideChat = ({
         value={text}
         onChange={e => setText(e.target.value)}
         onKeyDown={onKeyDown}
+        onPaste={e => {
+          if (e.clipboardData.files.length > 0) {
+            e.preventDefault();
+            attach(e.clipboardData.files).catch(() => {});
+          }
+        }}
         placeholder={placeholder}
         rows={2}
         disabled={busy}
         autoFocus
         data-testid={`${testId}-input`}
       />
+      {files.length > 0 ? (
+        <div className={styles.attachRow}>
+          {files.map((f, i) => (
+            <span key={i} className={styles.attachChip}>
+              {f.name}
+              <button
+                className={styles.linkButton}
+                onClick={() => setFiles(prev => prev.filter((_, n) => n !== i))}
+                aria-label={`Remove ${f.name}`}
+              >
+                ×
+              </button>
+            </span>
+          ))}
+        </div>
+      ) : null}
       <div className={styles.sessionActions}>
+        <input
+          ref={picker}
+          type="file"
+          multiple
+          hidden
+          onChange={e => {
+            attach(e.target.files).catch(() => {});
+            e.target.value = '';
+          }}
+          data-testid={`${testId}-file`}
+        />
+        <Button
+          variant="plain"
+          disabled={busy}
+          onClick={() => picker.current?.click()}
+          data-testid={`${testId}-attach`}
+        >
+          Attach file
+        </Button>
         <Button
           disabled={!canSend}
           onClick={() => {
