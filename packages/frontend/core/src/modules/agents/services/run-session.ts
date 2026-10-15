@@ -45,6 +45,8 @@ export interface AgentRunFinished {
   sessionId: string;
   agentName: string;
   targetLabel: string;
+  /** The note the run was on; the Agents panel lives on that note's page. */
+  docId: string;
   /** What the agent said, or why it failed. */
   output: string;
   failed: boolean;
@@ -509,6 +511,7 @@ export class AgentRunSessionService extends Service {
       sessionId,
       agentName: agent.name,
       targetLabel: session.targetLabel,
+      docId: target.docId,
       output: session.error ?? session.output,
       failed: !!session.error,
       undoable: !!this.snapshots.get(key),
