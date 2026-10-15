@@ -218,7 +218,7 @@ describe('running a job', () => {
       signal: new AbortController().signal,
     });
 
-    expect(outcome).toEqual({ result: 'Bluey', steps: 3 });
+    expect(outcome).toEqual({ result: 'Bluey', steps: 3, costUsd: 0.01 });
     // The note item leads as the task; the agent's instructions say how.
     expect(seen.prompt).toBe(
       'THE TASK - the note item this run was started on:\nnote text\n\n' +
@@ -351,6 +351,53 @@ describe('serving', () => {
     expect(end).toBe('error');
     expect(ng.reports.at(-1)!.fields).toMatchObject({ status: 'error' });
     expect(ng.reports.at(-1)!.fields.error).toMatch(/Mac device only/);
+  });
+
+  test('a run reports what it cost, and its cap reaches the SDK', async () => {
+    const seen: { options?: Options } = {};
+    const priced = {
+      ...(success('Bluey') as object),
+      total_cost_usd: 0.42,
+      modelUsage: {
+        'claude-x': { inputTokens: 100, outputTokens: 20, cacheReadInputTokens: 5, cacheCreationInputTokens: 0 },
+      },
+    } as unknown as SDKMessage;
+    const opts = {
+      api: api(),
+      workspaces: ['ws-1'],
+      deviceKey: 'cloud',
+      runnerId: 'r1',
+      settings: settings(),
+      query: fakeQuery([init, priced], seen),
+      tickMs: 5,
+    };
+    expect(await runClaimed(opts, 'ws-1', job({ maxCostUsd: 2 }))).toBe('done');
+    expect(seen.options?.maxBudgetUsd).toBe(2);
+    expect(ng.reports.at(-1)!.fields).toMatchObject({ status: 'done', costUsd: 0.42, tokens: 125 });
+  });
+
+  test('a run stopped at its cost cap is an error that still says what it spent', async () => {
+    const capped = {
+      type: 'result',
+      subtype: 'error_max_budget_usd',
+      is_error: true,
+      num_turns: 7,
+      total_cost_usd: 2.01,
+      errors: [],
+    } as unknown as SDKMessage;
+    const opts = {
+      api: api(),
+      workspaces: ['ws-1'],
+      deviceKey: 'cloud',
+      runnerId: 'r1',
+      settings: settings(),
+      query: fakeQuery([init, capped]),
+      tickMs: 5,
+    };
+    expect(await runClaimed(opts, 'ws-1', job({ maxCostUsd: 2 }))).toBe('error');
+    const final = ng.reports.at(-1)!.fields;
+    expect(final).toMatchObject({ status: 'error', costUsd: 2.01 });
+    expect(final.error).toMatch(/cost cap \(\$2\.01 spent\)/);
   });
 });
 

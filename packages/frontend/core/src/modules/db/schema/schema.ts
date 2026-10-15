@@ -70,6 +70,16 @@ const agentTable = {
   output: f.string(),
   /** Tool-loop budget. */
   maxSteps: f.number(),
+  /**
+   * For a device or cloud run: the most one run may spend, in USD. Unset
+   * means no cap.
+   */
+  maxCostUsd: f.number().optional(),
+  /**
+   * For a device or cloud run: what it may do without asking. 'read' |
+   * 'write' | 'manage' | 'full'; unset is 'write'.
+   */
+  access: f.string().optional(),
   /** Hidden from menus without being deleted. */
   enabled: f.boolean(),
   createdAt: f.number(),
@@ -319,6 +329,10 @@ export const NotesGraph_WORKSPACE_USERDATA_DB_SCHEMA = {
     durationMs: f.number().optional(),
     /** Tool-loop steps actually consumed. */
     steps: f.number().optional(),
+    /** What a device or cloud run cost in USD, when its runner reported it. */
+    costUsd: f.number().optional(),
+    /** Tokens a device or cloud run used, when its runner reported them. */
+    tokens: f.number().optional(),
     /** Short excerpt of the result, for the run list. */
     summary: f.string().optional(),
     error: f.string().optional(),

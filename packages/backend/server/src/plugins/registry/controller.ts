@@ -384,6 +384,30 @@ export class RegistryController {
     return { job };
   }
 
+  @Get('/workspaces/:workspaceId/agent-budget')
+  async getAgentBudget(
+    @CurrentUser() user: CurrentUserType,
+    @Param('workspaceId') workspaceId: string
+  ) {
+    this.assertEnabled();
+    await this.ac.user(user.id).workspace(workspaceId).assert('Workspace.Read');
+    return { budget: await this.jobs.budget(workspaceId) };
+  }
+
+  @Post('/workspaces/:workspaceId/agent-budget')
+  async setAgentBudget(
+    @CurrentUser() user: CurrentUserType,
+    @Param('workspaceId') workspaceId: string,
+    @Body() body: Record<string, unknown>
+  ) {
+    this.assertEnabled();
+    await this.ac
+      .user(user.id)
+      .workspace(workspaceId)
+      .assert('Workspace.Settings.Update');
+    return { budget: await this.jobs.setBudget(workspaceId, user.id, body ?? {}) };
+  }
+
   @Get('/workspaces/:workspaceId/jobs')
   async listJobs(
     @CurrentUser() user: CurrentUserType,

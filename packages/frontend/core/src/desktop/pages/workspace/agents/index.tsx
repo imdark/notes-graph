@@ -33,6 +33,7 @@ import {
 } from '../detail-page/tabs/use-run-questions';
 import { useRunActions } from '../detail-page/tabs/use-run-actions';
 import * as styles from './agents-page.css';
+import { BudgetLine } from './budget-line';
 import { MonitorsSection } from './monitors-section';
 
 type RunFilter = 'all' | 'waiting' | 'running' | 'error' | 'done';
@@ -223,6 +224,11 @@ const AgentsPage = () => {
   );
 
   const selectedAgent = agents.find(agent => agent.id === agentId);
+  // The month's spend moves when a run ends and reports its cost.
+  const endedRuns = useMemo(
+    () => runs.filter(run => run.status !== 'running').length,
+    [runs]
+  );
 
   return (
     <>
@@ -284,6 +290,7 @@ const AgentsPage = () => {
                 Agents
                 <span className={styles.sectionCount}>{agents.length}</span>
               </div>
+              <BudgetLine refreshKey={endedRuns} />
               {agents.length === 0 ? (
                 <div className={styles.empty}>
                   No agents yet. An agent is a saved instruction you can run on

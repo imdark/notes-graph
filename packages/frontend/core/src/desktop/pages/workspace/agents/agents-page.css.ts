@@ -68,6 +68,23 @@ export const empty = style({
   textAlign: 'center',
 });
 
+export const budget = style({
+  display: 'flex',
+  flexWrap: 'wrap',
+  alignItems: 'center',
+  gap: 8,
+  fontSize: 13,
+  color: cssVarV2('text/secondary'),
+});
+
+export const budgetOver = style({
+  color: cssVarV2('status/error'),
+});
+
+export const budgetInput = style({
+  width: 120,
+});
+
 export const agentGrid = style({
   display: 'grid',
   gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))',

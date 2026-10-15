@@ -3,6 +3,7 @@ export { AgentIcon, agentIconData } from './views/agent-icon';
 export { AgentsService, DEFAULT_AGENT_TOOLS } from './services/agents';
 export {
   AGENT_SKILLS,
+  type AgentBudget,
   defaultSkillsFor,
   CLAUDE_CODE_MODEL,
   deviceHarnessName,
@@ -112,6 +113,7 @@ export {
   type AgentRun,
   type AgentRunStatus,
   AgentRunsStore,
+  formatRunCost,
 } from './stores/agent-runs';
 export { AgentRunLogsStore } from './stores/agent-run-logs';
 export {
@@ -145,6 +147,8 @@ export {
 } from './services/target';
 export {
   type Agent,
+  AGENT_ACCESS_LEVELS,
+  type AgentAccess,
   type AgentDraft,
   type AgentHarness,
   type AgentKind,
