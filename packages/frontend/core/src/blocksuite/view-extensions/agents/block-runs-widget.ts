@@ -160,18 +160,15 @@ export class BlockAgentRunsWidget extends WidgetComponent {
     this._disposables.add(monitorsService.watch());
 
     // Where the text ends moves with edits and with the editor's width.
-    const editor = this._lineEditor();
-    if (editor) {
-      const observer = new ResizeObserver(this._schedulePlace);
-      observer.observe(editor);
-      this._disposables.add(() => observer.disconnect());
-    }
     const yText = this.model.text?.yText;
     if (yText) {
       yText.observe(this._schedulePlace);
       this._disposables.add(() => yText.unobserve(this._schedulePlace));
     }
-    this._disposables.add(() => this._reserveLine(0));
+    this._disposables.add(() => {
+      this._watchLineWidth(false);
+      this._reserveLine(0);
+    });
   }
 
   override updated() {
@@ -183,10 +180,35 @@ export class BlockAgentRunsWidget extends WidgetComponent {
   /** Whether the last placement moved the chips or reserved room for them. */
   private _placed = false;
 
+  /** Whether the last render drew any chips. */
+  private _hasChips = false;
+
+  private _lineResizeObserver: ResizeObserver | null = null;
+
+  /**
+   * Follow the line's width only while there are chips on it. The
+   * ResizeObserver polyfill re-measures every observed element on each frame
+   * after any key press, so one observer per block made typing in a long note
+   * lag behind every key.
+   */
+  private _watchLineWidth(on: boolean) {
+    if (!on) {
+      this._lineResizeObserver?.disconnect();
+      this._lineResizeObserver = null;
+      return;
+    }
+    if (this._lineResizeObserver) return;
+    const editor = this._lineEditor();
+    if (!editor) return;
+    this._lineResizeObserver = new ResizeObserver(this._schedulePlace);
+    this._lineResizeObserver.observe(editor);
+  }
+
   private readonly _schedulePlace = () => {
     // Most blocks show no chips: nothing to measure, and nothing to undo
-    // unless an earlier placement did something.
-    if (!this.offsetWidth && !this._placed) return;
+    // unless an earlier placement did something. Checked without touching
+    // layout, since this runs inside the edit's own Y.Text observer.
+    if (!this._hasChips && !this._placed) return;
     // The line's text re-renders on its own schedule after an edit; measure
     // once it has, not against the text as it was.
     cancelAnimationFrame(this._placeFrame);
@@ -234,10 +256,12 @@ export class BlockAgentRunsWidget extends WidgetComponent {
     if (!parent || !editor || !width) {
       this.style.transform = '';
       this._reserveLine(0);
+      this._watchLineWidth(false);
       this._placed = false;
       return;
     }
     this._placed = true;
+    this._watchLineWidth(true);
 
     // Text boxes only: selecting the editor's contents also returns the boxes
     // of its wrapper elements, which span the full width and make every line
@@ -349,7 +373,8 @@ export class BlockAgentRunsWidget extends WidgetComponent {
   override render() {
     const runs = this.blockRuns;
     const monitors = this.monitors;
-    if (runs.length === 0 && monitors.length === 0) return nothing;
+    this._hasChips = runs.length > 0 || monitors.length > 0;
+    if (!this._hasChips) return nothing;
     const running = runs.some(run => run.status === 'running');
     // One run needs no words: the robot in a round bullet, named on hover.
     const single = runs.length === 1;
