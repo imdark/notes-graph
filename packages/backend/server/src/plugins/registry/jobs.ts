@@ -10,6 +10,7 @@ import {
   QUESTION_KINDS,
   type QuestionKind,
 } from '../../models/registry-job';
+import { AgentMemoryService } from './agent-memory';
 import { type AgentProfile, profileFor } from './agent-profiles';
 import { AgentPushService } from './push';
 import { isSessionLimit, sessionLimitRunAfter } from './session-limit';
@@ -279,7 +280,8 @@ export class RegistryJobService {
     private readonly models: Models,
     @Optional() private readonly push?: AgentPushService,
     @Optional() private readonly event?: EventBus,
-    @Optional() private readonly tasks?: JobTaskClaims
+    @Optional() private readonly tasks?: JobTaskClaims,
+    @Optional() private readonly memory?: AgentMemoryService
   ) {}
 
   /** Push without holding up the request it rides on, or failing it. */
@@ -455,7 +457,12 @@ export class RegistryJobService {
     );
     if (!job) return null;
     await this.tasks?.claimed(job);
-    return { ...toJobDto(job), profile: profileFor(job.model, job.skills) };
+    const profile = profileFor(job.model, job.skills);
+    // What earlier runs learned about whoever started this one.
+    return {
+      ...toJobDto(job),
+      profile: this.memory ? await this.memory.withRecall(job, profile) : profile,
+    };
   }
 
   async report(

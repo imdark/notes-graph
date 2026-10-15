@@ -13,6 +13,11 @@ export interface RegistryConfig {
    * questions still wait in the app.
    */
   fcmServiceAccount: string;
+  /**
+   * After an agent run, keep what it learned about the user in the "Agent
+   * memory" notes, and hand those facts to the next run. Needs copilot.
+   */
+  agentMemory: boolean;
 }
 
 declare global {
@@ -21,6 +26,7 @@ declare global {
       enabled: ConfigItem<boolean>;
       maxDevicesPerWorkspace: ConfigItem<number>;
       fcmServiceAccount: ConfigItem<string>;
+      agentMemory: ConfigItem<boolean>;
     };
   }
 }
@@ -62,5 +68,11 @@ defineModuleConfig('registry', {
     default: '',
     schema: z.string(),
     env: ['NOTESGRAPH_FCM_SERVICE_ACCOUNT', 'string'],
+  },
+  agentMemory: {
+    desc: 'Save what agent runs learn about the user into the "Agent memory" notes, and recall it into later runs.',
+    default: true,
+    schema: z.boolean(),
+    env: ['NOTESGRAPH_AGENT_MEMORY', 'boolean'],
   },
 });

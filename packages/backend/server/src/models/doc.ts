@@ -747,5 +747,26 @@ export class DocModel extends BaseModel {
     return rows.map(row => row.docId);
   }
 
+  /**
+   * Docs titled `title` (case-insensitive), most recently edited first. The
+   * title is the one kept from the doc's last snapshot, so a doc created
+   * moments ago may not be found yet.
+   */
+  async findIdsByTitle(workspaceId: string, title: string) {
+    const rows = await this.db.$queryRaw<{ docId: string }[]>`
+      SELECT "workspace_pages"."page_id" as "docId"
+      FROM "workspace_pages"
+      INNER JOIN "snapshots"
+      ON "workspace_pages"."workspace_id" = "snapshots"."workspace_id"
+      AND "workspace_pages"."page_id" = "snapshots"."guid"
+      WHERE
+        "workspace_pages"."workspace_id" = ${workspaceId}
+        AND LOWER("workspace_pages"."title") = LOWER(${title})
+      ORDER BY "snapshots"."updated_at" DESC
+      LIMIT 10
+    `;
+    return rows.map(row => row.docId);
+  }
+
   // #endregion
 }
