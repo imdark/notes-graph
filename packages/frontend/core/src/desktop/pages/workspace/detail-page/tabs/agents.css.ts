@@ -555,3 +555,47 @@ export const questionInput = style({
   fontSize: cssVar('fontSm'),
   fontFamily: 'inherit',
 });
+
+export const mdRoot = style({
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 6,
+  fontSize: cssVar('fontSm'),
+  lineHeight: 1.6,
+  color: cssVarV2('text/primary'),
+  maxWidth: '100%',
+  overflowWrap: 'anywhere',
+});
+
+export const mdParagraph = style({ margin: 0, whiteSpace: 'pre-wrap' });
+
+export const mdHeading = style({ margin: 0, fontWeight: 600 });
+
+export const mdList = style({ margin: 0, paddingLeft: 20 });
+
+export const mdCode = style({
+  margin: 0,
+  padding: '8px 10px',
+  borderRadius: 6,
+  background: cssVarV2('layer/background/secondary'),
+  overflowX: 'auto',
+  fontFamily: cssVar('fontCodeFamily'),
+  fontSize: cssVar('fontXs'),
+});
+
+export const attachRow = style({
+  display: 'flex',
+  flexWrap: 'wrap',
+  alignItems: 'center',
+  gap: 6,
+});
+
+export const attachChip = style({
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 4,
+  padding: '2px 8px',
+  borderRadius: 999,
+  background: cssVarV2('layer/background/secondary'),
+  fontSize: cssVar('fontXs'),
+});
