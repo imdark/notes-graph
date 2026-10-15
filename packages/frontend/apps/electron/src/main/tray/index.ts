@@ -13,6 +13,7 @@ import { isMacOS } from '../../shared/utils';
 import { applicationMenuSubjects } from '../application-menu';
 import { beforeAppQuit } from '../cleanup';
 import { logger } from '../logger';
+import { openQuickAsk, QUICK_ASK_SHORTCUT } from '../quick-ask';
 import {
   appGroups$,
   checkCanRecordMeeting,
@@ -29,6 +30,7 @@ import { getMainWindow } from '../windows-manager';
 import { icons } from './icons';
 export interface TrayMenuConfigItem {
   label: string;
+  accelerator?: string;
   click?: () => void;
   icon?: NativeImage | string | Buffer;
   disabled?: boolean;
@@ -129,6 +131,16 @@ class TrayState implements Disposable {
             logger.info('User action: New Edgeless');
             showMainWindow();
             applicationMenuSubjects.newPageAction$.next('edgeless');
+          },
+        },
+        {
+          label: 'Quick Ask',
+          accelerator: QUICK_ASK_SHORTCUT,
+          click: () => {
+            logger.info('User action: Quick Ask');
+            openQuickAsk().catch(err =>
+              logger.error('Failed to open quick ask:', err)
+            );
           },
         },
       ],
