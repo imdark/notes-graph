@@ -771,7 +771,7 @@ export class DocModel extends BaseModel {
    * title is the one kept from the doc's last snapshot, so a doc created
    * moments ago may not be found yet.
    */
-  async findIdsByTitle(workspaceId: string, title: string) {
+  async findIdsByExactTitle(workspaceId: string, title: string) {
     const rows = await this.db.$queryRaw<{ docId: string }[]>`
       SELECT "workspace_pages"."page_id" as "docId"
       FROM "workspace_pages"

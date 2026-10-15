@@ -35,6 +35,7 @@ async function diagramTool(docs: Record<string, string>) {
     reader as any,
     writer as any,
     {} as any,
+    {} as any,
     {} as any
   );
   const server = await provider.for('user', 'ws');

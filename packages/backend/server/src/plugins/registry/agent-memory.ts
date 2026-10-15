@@ -123,12 +123,17 @@ export class AgentMemoryService {
     try {
       const memory = await this.load(job.workspaceId, job.createdBy);
       if (!memory?.notes.length) return profile;
-      const facts = memory.notes.flatMap(note => parseFacts(note.subject, note.markdown));
+      const facts = memory.notes.flatMap(note =>
+        parseFacts(note.subject, note.markdown)
+      );
       const section = recallSection(
         recallFacts(facts, `${job.title ?? ''}\n${job.instructions}`)
       );
       if (!section) return profile;
-      return { ...profile, systemPrompt: `${profile.systemPrompt}\n${section}` };
+      return {
+        ...profile,
+        systemPrompt: `${profile.systemPrompt}\n${section}`,
+      };
     } catch (err) {
       this.logger.warn(
         `job ${job.id}: couldn't recall agent memory: ${(err as Error).message}`
@@ -160,7 +165,9 @@ export class AgentMemoryService {
       questions,
       result: job.result,
       log: job.log,
-      facts: memory.notes.flatMap(note => parseFacts(note.subject, note.markdown)),
+      facts: memory.notes.flatMap(note =>
+        parseFacts(note.subject, note.markdown)
+      ),
     });
     const output = await runtime.runStructured(
       EXTRACT_PROMPT,
@@ -172,7 +179,13 @@ export class AgentMemoryService {
     );
     const ops = parseExtraction(output.value);
     if (!ops.create.length && !ops.delete.length) return;
-    const { created, deleted } = await this.apply(workspaceId, userId, memory, ops, today);
+    const { created, deleted } = await this.apply(
+      workspaceId,
+      userId,
+      memory,
+      ops,
+      today
+    );
     if (created || deleted) {
       this.logger.log(
         `job ${jobId}: agent memory +${created} -${deleted} fact(s)`
@@ -190,7 +203,9 @@ export class AgentMemoryService {
     let created = 0;
     let deleted = 0;
     for (const [key, group] of groupBySubject(ops)) {
-      const note = memory.notes.find(n => n.subject.trim().toLowerCase() === key);
+      const note = memory.notes.find(
+        n => n.subject.trim().toLowerCase() === key
+      );
       if (note) {
         const can = await this.ac
           .user(userId)
@@ -200,7 +215,12 @@ export class AgentMemoryService {
         if (!can) continue;
         const next = applyMemoryOps(note.markdown, note.subject, group, today);
         if (!next.created && !next.deleted) continue;
-        await this.writer.updateDoc(workspaceId, note.docId, next.markdown, userId);
+        await this.writer.updateDoc(
+          workspaceId,
+          note.docId,
+          next.markdown,
+          userId
+        );
         note.markdown = next.markdown;
         created += next.created;
         deleted += next.deleted;
@@ -208,9 +228,15 @@ export class AgentMemoryService {
       }
 
       // Nothing to delete from a subject with no note.
-      const next = applyMemoryOps('', group.subject, { create: group.create, delete: [] }, today);
+      const next = applyMemoryOps(
+        '',
+        group.subject,
+        { create: group.create, delete: [] },
+        today
+      );
       if (!next.created) continue;
-      const rootId = memory.rootId ?? (await this.createRoot(workspaceId, userId));
+      const rootId =
+        memory.rootId ?? (await this.createRoot(workspaceId, userId));
       if (!rootId) return { created, deleted };
       memory.rootId = rootId;
       const { docId } = await this.writer.createDoc(
@@ -220,7 +246,11 @@ export class AgentMemoryService {
         userId
       );
       await this.writer.linkDoc(workspaceId, rootId, docId, userId);
-      memory.notes.push({ docId, subject: group.subject, markdown: next.markdown });
+      memory.notes.push({
+        docId,
+        subject: group.subject,
+        markdown: next.markdown,
+      });
       created += next.created;
     }
     return { created, deleted };
@@ -246,10 +276,17 @@ export class AgentMemoryService {
    * The "Agent memory" note and the subject notes linked from it. Null when
    * there is one but `userId` may not read it; no root when there is none yet.
    */
-  private async load(workspaceId: string, userId: string): Promise<Memory | null> {
-    const found = await this.models.doc.findIdsByTitle(workspaceId, MEMORY_ROOT_TITLE);
+  private async load(
+    workspaceId: string,
+    userId: string
+  ): Promise<Memory | null> {
+    const found = await this.models.doc.findIdsByExactTitle(
+      workspaceId,
+      MEMORY_ROOT_TITLE
+    );
     const created = this.createdRoots.get(workspaceId);
-    if (created && found.includes(created)) this.createdRoots.delete(workspaceId);
+    if (created && found.includes(created))
+      this.createdRoots.delete(workspaceId);
     const rootId = this.createdRoots.get(workspaceId) ?? found[0];
     if (!rootId) return { rootId: null, notes: [] };
 
@@ -264,13 +301,17 @@ export class AgentMemoryService {
 
     const ids = linkedDocIds(root.markdown, rootId).slice(0, MAX_NOTES);
     const readable = ids.length
-      ? await access.docs(ids.map(docId => ({ docId })), 'Doc.Read')
+      ? await access.docs(
+          ids.map(docId => ({ docId })),
+          'Doc.Read'
+        )
       : [];
     const notes: Memory['notes'] = [];
     for (const { docId } of readable) {
       const doc = await this.reader.getDocMarkdown(workspaceId, docId, false);
       const subject = doc?.title.trim();
-      if (doc && subject) notes.push({ docId, subject, markdown: doc.markdown });
+      if (doc && subject)
+        notes.push({ docId, subject, markdown: doc.markdown });
     }
     return { rootId, notes };
   }
@@ -288,7 +329,10 @@ export class AgentMemoryService {
     if (!this.contract) {
       const { responseSchemaJson, schemaHash } =
         buildStructuredResponseFromSchemaJson(EXTRACTION_SCHEMA);
-      this.contract = { responseSchemaJson: responseSchemaJson!, schemaHash: schemaHash! };
+      this.contract = {
+        responseSchemaJson: responseSchemaJson!,
+        schemaHash: schemaHash!,
+      };
     }
     return this.contract;
   }
