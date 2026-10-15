@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   parseToolCall,
+  parseToolCalls,
   stripToolBlocks,
 } from '../modules/agents/services/tool-protocol';
 import {
@@ -85,6 +86,21 @@ describe('agent tool protocol', () => {
   it('throws on a malformed block so the model can retry', () => {
     expect(() => parseToolCall('```tool\nnot json\n```')).toThrow(/valid JSON/);
     expect(() => parseToolCall('```tool\n{"args": {}}\n```')).toThrow(/"tool"/);
+  });
+
+  it('parses every call in a reply, in order', () => {
+    expect(
+      parseToolCalls(
+        'two at once\n```tool\n{"tool": "a", "args": {"q": 1}}\n```\n```tool\n{"tool": "b"}\n```'
+      )
+    ).toEqual([
+      { name: 'a', args: { q: 1 } },
+      { name: 'b', args: {} },
+    ]);
+    expect(parseToolCalls('Just an answer.')).toEqual([]);
+    expect(() =>
+      parseToolCalls('```tool\n{"tool": "a"}\n```\n```tool\nnope\n```')
+    ).toThrow(/valid JSON/);
   });
 
   it('strips tool blocks out of an answer', () => {

@@ -102,6 +102,55 @@ function toInputError(error: z.ZodError) {
   return toolError(`Invalid arguments: ${details || 'Invalid input'}`);
 }
 
+/** The diagram types Mermaid draws, as a diagram's first word. */
+const MERMAID_DIAGRAMS = [
+  'graph',
+  'flowchart',
+  'sequenceDiagram',
+  'classDiagram',
+  'stateDiagram',
+  'stateDiagram-v2',
+  'erDiagram',
+  'gantt',
+  'pie',
+  'mindmap',
+  'timeline',
+  'journey',
+  'quadrantChart',
+  'gitGraph',
+  'xychart-beta',
+];
+
+/**
+ * The Mermaid source an agent passed, ready for a ```mermaid fence, or why
+ * it can't be drawn. Only the shape is checked: a fence it was wrapped in is
+ * taken off, and its first word must name a diagram type.
+ */
+export function mermaidSource(input: string): string | { error: string } {
+  const source = input
+    .trim()
+    .replace(/^```\s*mermaid[^\n]*\n/i, '')
+    .replace(/\n?```\s*$/, '')
+    .trim();
+  if (!source) return { error: 'The Mermaid source is empty.' };
+  if (/^```/m.test(source)) {
+    return { error: 'The Mermaid source cannot contain a ``` fence.' };
+  }
+  // Front matter (---) and %% directives may come before the diagram type.
+  const first = source
+    .replace(/^---\n[\s\S]*?\n---\n/, '')
+    .split('\n')
+    .map(line => line.trim())
+    .find(line => line && !line.startsWith('%%'));
+  const keyword = first?.split(/[\s:;{]/)[0] ?? '';
+  if (!MERMAID_DIAGRAMS.includes(keyword)) {
+    return {
+      error: `The Mermaid source must start with a diagram type (${MERMAID_DIAGRAMS.slice(0, 12).join(', ')}); it starts with "${keyword.slice(0, 40)}".`,
+    };
+  }
+  return source;
+}
+
 function abortIfNeeded(
   signal: AbortSignal
 ): WorkspaceMcpToolResult | undefined {
@@ -383,9 +432,7 @@ export class WorkspaceMcpProvider {
               trail: first(node.fields.todoTrail) || undefined,
             };
           })
-          .filter(
-            block => block.text && (!docId || block.docId === docId)
-          );
+          .filter(block => block.text && (!docId || block.docId === docId));
 
         // permission filter by owning doc
         const docIds = [...new Set(candidates.map(block => block.docId))];
@@ -475,7 +522,7 @@ export class WorkspaceMcpProvider {
       name: 'list_blocks',
       title: 'List Task Blocks',
       description:
-        'Query individual task blocks (todo list items) across the whole workspace by their inline #tags, #key:value properties and org status — the block-level equivalent of list_documents. Returns each task\'s docId/blockId, text, status (todo | in-progress | done | custom keyword), tags, properties and org planning timestamps. To act on a task, read_document its docId and update_document the task line (see update_document for the org-mode workflow).',
+        "Query individual task blocks (todo list items) across the whole workspace by their inline #tags, #key:value properties and org status — the block-level equivalent of list_documents. Returns each task's docId/blockId, text, status (todo | in-progress | done | custom keyword), tags, properties and org planning timestamps. To act on a task, read_document its docId and update_document the task line (see update_document for the org-mode workflow).",
       parser: z.object({
         tags: z.array(z.string()).optional(),
         props: z.array(z.string()).optional(),
@@ -520,7 +567,10 @@ export class WorkspaceMcpProvider {
         },
         additionalProperties: false,
       },
-      execute: async ({ tags, props, status, docId, limit, cursor }, options) => {
+      execute: async (
+        { tags, props, status, docId, limit, cursor },
+        options
+      ) => {
         const result = await this.indexer.search({
           table: SearchTable.block,
           query: {
@@ -634,7 +684,7 @@ export class WorkspaceMcpProvider {
       name: 'get_board',
       title: 'Get Board',
       description:
-        'Read the virtual kanban/table boards defined in a document: each board is a saved query (scope) over task blocks — inline #tags, #key:value props, org status slice, and an optional due-within-days bound. Combine the scope with list_blocks to fetch the board\'s tasks, then act on a task with update_task (pull into in-progress, add notes, move it through committed → merged → deployed → done as it ships). Find board documents with keyword_search or list_documents first.',
+        "Read the virtual kanban/table boards defined in a document: each board is a saved query (scope) over task blocks — inline #tags, #key:value props, org status slice, and an optional due-within-days bound. Combine the scope with list_blocks to fetch the board's tasks, then act on a task with update_task (pull into in-progress, add notes, move it through committed → merged → deployed → done as it ships). Find board documents with keyword_search or list_documents first.",
       parser: z.object({ docId: z.string() }),
       inputSchema: {
         type: 'object',
@@ -665,7 +715,7 @@ export class WorkspaceMcpProvider {
               boards,
               usage:
                 boards.length > 0
-                  ? 'Fetch tasks with list_blocks using each board\'s tags/props (and status to slice by column); update a task with update_task.'
+                  ? "Fetch tasks with list_blocks using each board's tags/props (and status to slice by column); update a task with update_task."
                   : 'No query boards in this document. Boards are created in the editor via /query board, /query table or /task report.',
             })
           );
@@ -681,7 +731,7 @@ export class WorkspaceMcpProvider {
       name: 'get_backlinks',
       title: 'Get Backlinks',
       description:
-        "List documents that link to the given document (its \"parents\" in the graph — NotesGraph has no single fixed parent, a doc can have several). Use this to understand where a document sits in the graph before you decide where to file something new.",
+        'List documents that link to the given document (its "parents" in the graph — NotesGraph has no single fixed parent, a doc can have several). Use this to understand where a document sits in the graph before you decide where to file something new.',
       parser: z.object({ docId: z.string() }),
       inputSchema: {
         type: 'object',
@@ -729,7 +779,10 @@ export class WorkspaceMcpProvider {
           .user(userId)
           .workspace(workspaceId)
           .docs(candidates, 'Doc.Read');
-        const titled = await this.titlesFor(workspaceId, readable.map(d => d.docId));
+        const titled = await this.titlesFor(
+          workspaceId,
+          readable.map(d => d.docId)
+        );
 
         const abortedAfterFilter = abortIfNeeded(options.signal);
         if (abortedAfterFilter) return abortedAfterFilter;
@@ -800,7 +853,10 @@ export class WorkspaceMcpProvider {
           .user(userId)
           .workspace(workspaceId)
           .docs(candidates, 'Doc.Read');
-        const titled = await this.titlesFor(workspaceId, readable.map(d => d.docId));
+        const titled = await this.titlesFor(
+          workspaceId,
+          readable.map(d => d.docId)
+        );
 
         const abortedAfterFilter = abortIfNeeded(options.signal);
         if (abortedAfterFilter) return abortedAfterFilter;
@@ -926,7 +982,7 @@ export class WorkspaceMcpProvider {
         title: 'Update Document',
         description:
           'Update an existing document with new markdown content (body only). Uses structural diffing to apply minimal changes, preserving document history and enabling real-time collaboration. Every update is stamped "Edited via MCP by <agent>". ' +
-          'Task workflow: task lists use org-mode annotations at the start of each list item — `[ ]` todo, `[-]` in progress, `[X]` done, or an UPPERCASE keyword — which kanban boards mirroring the list group by, plus planning annotations like `SCHEDULED: <date>`, `DEADLINE: <date>`, `STARTED: [date]`, `CLOSED: [date]` at the end of the line. To pick up a task, rewrite its annotation to `[-]` and append ` @<your-agent-name>` to the task line to claim it; mark it `[X]` when finished. A task that ships code only becomes `[X]` once it is deployed and verified live — until then it climbs `COMMITTED` → `MERGED` → `DEPLOYED`. Keep working memory and documentation in the task\'s own linked note (see link_document). ' +
+          "Task workflow: task lists use org-mode annotations at the start of each list item — `[ ]` todo, `[-]` in progress, `[X]` done, or an UPPERCASE keyword — which kanban boards mirroring the list group by, plus planning annotations like `SCHEDULED: <date>`, `DEADLINE: <date>`, `STARTED: [date]`, `CLOSED: [date]` at the end of the line. To pick up a task, rewrite its annotation to `[-]` and append ` @<your-agent-name>` to the task line to claim it; mark it `[X]` when finished. A task that ships code only becomes `[X]` once it is deployed and verified live — until then it climbs `COMMITTED` → `MERGED` → `DEPLOYED`. Keep working memory and documentation in the task's own linked note (see link_document). " +
           'This does NOT update the document title. This tool not support insert or update database block and image yet.' +
           firstPersonGuidance,
         parser: z.object({
@@ -1197,7 +1253,7 @@ export class WorkspaceMcpProvider {
         name: 'link_document',
         title: 'Link Document',
         description:
-          'Link a document under another as a real, first-class graph reference (the same relationship the app\'s own backlinks/graph view are built from) — not a plain-text link. A doc can have several parents; this only adds a link, it never removes or replaces existing ones. Use this to file a newly created or existing document into the graph, e.g. under a topic note.',
+          "Link a document under another as a real, first-class graph reference (the same relationship the app's own backlinks/graph view are built from) — not a plain-text link. A doc can have several parents; this only adds a link, it never removes or replaces existing ones. Use this to file a newly created or existing document into the graph, e.g. under a topic note.",
         parser: z.object({
           parentDocId: z.string(),
           childDocId: z.string(),
@@ -1261,13 +1317,150 @@ export class WorkspaceMcpProvider {
         },
       });
 
+      const createDiagram = defineTool({
+        name: 'create_diagram',
+        title: 'Create Diagram',
+        description:
+          'Add a Mermaid diagram (flowchart, sequence, class, state, ER, gantt, pie, mindmap, timeline, journey) to the notes; it shows as the drawing, not its source. With docId it is appended to the end of that document, leaving the rest as it is; without, a new document is created (title required) and its ID returned. Pass only the Mermaid source, without the ``` fence.',
+        parser: z.object({
+          docId: z.string().optional(),
+          title: z.string().optional(),
+          mermaid: z.string(),
+          caption: z.string().optional(),
+          agent: z.string().optional(),
+        }),
+        inputSchema: {
+          type: 'object',
+          properties: {
+            docId: {
+              type: 'string',
+              description:
+                'The document to append the diagram to. Omit to create a new document.',
+            },
+            title: {
+              type: 'string',
+              description: 'Title of the new document, when no docId is given.',
+            },
+            mermaid: {
+              type: 'string',
+              description:
+                "The Mermaid source, starting with its diagram type, e.g. 'flowchart TD\\n  A --> B'.",
+            },
+            caption: {
+              type: 'string',
+              description: 'A line of text placed above the diagram.',
+            },
+            agent: agentInputSchema,
+          },
+          required: ['mermaid'],
+          additionalProperties: false,
+        },
+        execute: async ({ docId, title, mermaid, caption, agent }, options) => {
+          const source = mermaidSource(mermaid);
+          if (typeof source !== 'string') return toolError(source.error);
+          const block = [
+            ...(caption?.trim()
+              ? [caption.replace(/[\r\n]+/g, ' ').trim(), '']
+              : []),
+            '```mermaid',
+            source,
+            '```',
+          ].join('\n');
+
+          if (!docId) {
+            const sanitizedTitle = (title ?? '')
+              .replace(/[\r\n]+/g, ' ')
+              .trim();
+            if (!sanitizedTitle) {
+              return toolError(
+                'Give a title for the new document, or a docId to add the diagram to.'
+              );
+            }
+            try {
+              await this.ac
+                .user(userId)
+                .workspace(workspaceId)
+                .assert('Workspace.CreateDoc');
+              const aborted = abortIfNeeded(options.signal);
+              if (aborted) return aborted;
+              const result = await this.writer.createDoc(
+                workspaceId,
+                sanitizedTitle,
+                stampAttribution(block, agent),
+                userId
+              );
+              return toolText(
+                JSON.stringify({
+                  success: true,
+                  docId: result.docId,
+                  message: `Diagram created in new document "${sanitizedTitle}"`,
+                })
+              );
+            } catch (error) {
+              return toolError(
+                `Failed to create diagram: ${error instanceof Error ? error.message : 'Unknown error'}`
+              );
+            }
+          }
+
+          const notFoundError = toolError(`Doc with id ${docId} not found.`);
+          const accessible = await this.ac
+            .user(userId)
+            .workspace(workspaceId)
+            .doc(docId)
+            .can('Doc.Update');
+          if (!accessible) return notFoundError;
+
+          const aborted = abortIfNeeded(options.signal);
+          if (aborted) return aborted;
+
+          try {
+            // The doc as it is now, plus the diagram: the writer's structural
+            // diff leaves every existing block untouched and adds the new one.
+            const current = await this.reader.getDocMarkdown(
+              workspaceId,
+              docId,
+              false
+            );
+            if (!current) return notFoundError;
+            // This agent's last stamp moves below the diagram rather than
+            // staying above it; another agent's stays, as update_document does.
+            const name =
+              (agent ?? '').replace(/[\r\n]+/g, ' ').trim() || 'AI agent';
+            const trimmed = current.markdown.replace(/\s+$/, '');
+            const lastLine = trimmed.split('\n').at(-1) ?? '';
+            const body = lastLine.startsWith(`> Edited via MCP by ${name} — `)
+              ? trimmed.slice(0, trimmed.length - lastLine.length).trimEnd()
+              : trimmed;
+            await this.writer.updateDoc(
+              workspaceId,
+              docId,
+              stampAttribution(body ? `${body}\n\n${block}` : block, agent),
+              userId
+            );
+            return toolText(
+              JSON.stringify({
+                success: true,
+                docId,
+                message: 'Diagram added to the end of the document',
+              })
+            );
+          } catch (error) {
+            return toolError(
+              `Failed to add diagram: ${error instanceof Error ? error.message : 'Unknown error'}`
+            );
+          }
+        },
+      });
+
       tools.push(
         createDocument,
         updateDocument,
         updateDocumentMeta,
         linkDocument,
         updateTask,
-        updateBlock
+        updateBlock,
+        createDiagram
       );
     }
 
@@ -1309,7 +1502,10 @@ export class WorkspaceMcpProvider {
       },
     });
     const titleByDocId = new Map(
-      result.nodes.map(node => [first(node.fields.docId), first(node.fields.title)])
+      result.nodes.map(node => [
+        first(node.fields.docId),
+        first(node.fields.title),
+      ])
     );
     return docIds.map(docId => ({
       docId,

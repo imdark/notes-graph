@@ -18,6 +18,7 @@ import {
   parseToolLoopStreamEvent,
 } from '../../plugins/copilot/runtime/contracts';
 import {
+  createDedupingToolExecutionCallback,
   createToolExecutionCallback,
   createToolLoopBridge,
 } from '../../plugins/copilot/runtime/tool/bridge';
@@ -230,6 +231,32 @@ test('createNativeToolExecutionCallback should preserve tool execution ABI', asy
     rawArgumentsText: '{"doc_id":"a1"}',
     argumentParseError: undefined,
     output: { markdown: '# a1' },
+  });
+});
+
+test('a repeated identical search within one loop is answered from memory', async t => {
+  const queries: string[] = [];
+  const callback = createDedupingToolExecutionCallback({
+    doc_keyword_search: {
+      inputSchema: z.object({ query: z.string() }),
+      execute: async args => {
+        queries.push(String(args.query));
+        return [{ docId: 'd1' }];
+      },
+    },
+  });
+  const search = (callId: string, query: string) =>
+    callback({ callId, name: 'doc_keyword_search', args: { query } });
+
+  await search('c1', 'Cosmo');
+  await search('c2', 'cosmo age');
+  const repeat = await search('c3', '  COSMO ');
+
+  t.deepEqual(queries, ['Cosmo', 'cosmo age']);
+  t.is(repeat.callId, 'c3');
+  t.falsy(repeat.isError);
+  t.deepEqual(repeat.output, {
+    message: 'Already searched for "COSMO" — see the earlier result.',
   });
 });
 
