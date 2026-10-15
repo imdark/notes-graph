@@ -15,6 +15,7 @@ import {
 import { AiIconGenerator } from '@notesgraph/core/blocksuite/block-suite-editor/doc-banner';
 import {
   type Agent,
+  type AgentAccess,
   AGENT_SKILLS,
   agentIconData,
   type AgentDraft,
@@ -33,6 +34,7 @@ import {
   RESEARCH_MODEL,
   CLOUD_DEVICE_KEY,
   savedPlacement,
+  type SkillNote,
   WORKFLOW_MODEL,
 } from '@notesgraph/core/modules/agents';
 import {
@@ -60,6 +62,7 @@ const READ_TOOLS: { name: string; desc: string }[] = [
   { name: 'get_board', desc: 'Read a task board' },
   { name: 'get_backlinks', desc: 'What links here' },
   { name: 'get_links', desc: 'What this links to' },
+  { name: 'notes_health', desc: 'Orphans, broken links, stubs, stale facts' },
 ];
 
 interface ToolChoice {
@@ -164,6 +167,38 @@ const KINDS: { value: AgentKind; label: string; note: string }[] = [
   },
 ];
 
+/** What a device or cloud run may do without asking, saved as `access`. */
+const ACCESS_LEVELS: { value: AgentAccess; label: string; note: string }[] = [
+  {
+    value: 'read',
+    label: 'Read only',
+    note: 'reads notes, files and the web; refuses anything else',
+  },
+  {
+    value: 'write',
+    label: 'Write notes',
+    note: 'also writes notes; asks before shell commands and file edits',
+  },
+  {
+    value: 'manage',
+    label: 'Edit files',
+    note: 'also edits files without asking; asks before shell commands',
+  },
+  {
+    value: 'full',
+    label: 'Everything',
+    note: 'as if you pressed Allow all at the start',
+  },
+];
+
+/** A cost cap typed into the editor: a positive number, or blank for none. */
+const parseCostCap = (text: string): number | undefined | null => {
+  const trimmed = text.trim().replace(/^\$/, '');
+  if (!trimmed) return undefined;
+  const value = Number(trimmed);
+  return Number.isFinite(value) && value > 0 ? value : null;
+};
+
 const TARGETS: { kind: AgentTargetKind; label: string }[] = [
   { kind: 'block', label: 'A single block' },
   { kind: 'selection', label: 'A selection' },
@@ -226,6 +261,14 @@ export const AgentEditor = ({
   // The server's own runner (tools/agent-runner), registered as `cloud`.
   const onCloud =
     (harness === 'remote' && deviceKey === CLOUD_DEVICE_KEY) || claudeOnCloud;
+  // Permission level and cost cap go with the job a device or the server's
+  // runner claims; the in-browser and copilot runtimes have neither.
+  const runsAsJob = harness === 'remote' || claudeOnCloud;
+  const [access, setAccess] = useState<AgentAccess | undefined>(seed?.access);
+  const [costCapText, setCostCapText] = useState(
+    seed?.maxCostUsd ? String(seed.maxCostUsd) : ''
+  );
+  const costCap = parseCostCap(costCapText);
   const modelService = useService(AIModelService);
   const remoteRunner = useService(RemoteAgentRunnerService);
   const workspaceService = useService(WorkspaceService);
@@ -233,6 +276,23 @@ export const AgentEditor = ({
     { key: string; name: string; state: string; kind: string }[]
   >([]);
   const [devicesError, setDevicesError] = useState<string | undefined>();
+  // The workspace's "Skill: <name>" notes, offered beside the catalog.
+  const [skillNotes, setSkillNotes] = useState<SkillNote[]>([]);
+  useEffect(() => {
+    if (!claudeHarness) return;
+    const workspaceId = workspaceService.workspace?.id;
+    if (!workspaceId) return;
+    let cancelled = false;
+    remoteRunner
+      .skillNotes(workspaceId)
+      .then(list => {
+        if (!cancelled) setSkillNotes(list);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [claudeHarness, remoteRunner, workspaceService]);
 
   // Load the fleet only once "Remote device" is actually chosen: most agents
   // never are, and this is a network call.
@@ -291,7 +351,8 @@ export const AgentEditor = ({
   const canSave =
     name.trim().length > 0 &&
     targets.length > 0 &&
-    (harness !== 'remote' || !!deviceKey);
+    (harness !== 'remote' || !!deviceKey) &&
+    (!runsAsJob || costCap !== null);
 
   const handleSubmit = useCallback(() => {
     if (!canSave) return;
@@ -306,13 +367,18 @@ export const AgentEditor = ({
       targets,
       output: 'panel',
       maxSteps,
+      maxCostUsd: runsAsJob ? (costCap ?? undefined) : undefined,
+      access: runsAsJob ? access : undefined,
       enabled: agent?.enabled ?? true,
     });
     onOpenChange(false);
   }, [
+    access,
     agent,
     canSave,
     claudeHarness,
+    costCap,
+    runsAsJob,
     deviceKey,
     harness,
     icon,
@@ -674,11 +740,29 @@ export const AgentEditor = ({
                       </label>
                     );
                   })}
+                  {skillNotes.map(({ ref, name: skill, title }) => {
+                    const current = skills ?? defaultSkillsFor(model);
+                    return (
+                      <label
+                        key={ref}
+                        className={styles.check}
+                        title={`From the note “${title}”`}
+                      >
+                        <Checkbox
+                          checked={current.includes(ref)}
+                          onChange={() => setSkills(toggle(current, ref))}
+                          data-testid={`agent-editor-skill-${ref}`}
+                        />
+                        {skill} (note)
+                      </label>
+                    );
+                  })}
                 </div>
                 <span className={styles.hint}>
                   {skills
                     ? 'Only these skills are loaded for the run.'
-                    : 'Following the default set for this model; tick or untick to choose your own.'}
+                    : 'Following the default set for this model; tick or untick to choose your own.'}{' '}
+                  A note titled “Skill: &lt;name&gt;” is offered here as a skill too.
                 </span>
               </div>
             ) : null}
@@ -706,6 +790,47 @@ export const AgentEditor = ({
                 </span>
               </div>
             )}
+
+            {runsAsJob ? (
+              <div className={styles.field}>
+                <span className={styles.label}>Permission level</span>
+                <select
+                  className={styles.select}
+                  value={access ?? 'write'}
+                  onChange={e => setAccess(e.target.value as AgentAccess)}
+                  data-testid="agent-editor-access"
+                >
+                  {ACCESS_LEVELS.map(level => (
+                    <option key={level.value} value={level.value}>
+                      {level.label} · {level.note}
+                    </option>
+                  ))}
+                </select>
+                <span className={styles.hint}>
+                  What a run may do without asking you. Deploying, spending
+                  money and deleting always ask, at any level.
+                </span>
+              </div>
+            ) : null}
+
+            {runsAsJob ? (
+              <div className={styles.field}>
+                <span className={styles.label}>Cost cap per run ($)</span>
+                <Input
+                  value={costCapText}
+                  onChange={setCostCapText}
+                  inputMode="decimal"
+                  placeholder="No cap"
+                  status={costCap === null ? 'error' : 'default'}
+                  data-testid="agent-editor-max-cost"
+                />
+                <span className={styles.hint}>
+                  {costCap === null
+                    ? 'Enter an amount above zero, like 2.50, or leave it blank.'
+                    : 'A run stops once it has spent this much. Leave blank for no cap.'}
+                </span>
+              </div>
+            ) : null}
           </Scrollable.Viewport>
           <Scrollable.Scrollbar />
         </Scrollable.Root>

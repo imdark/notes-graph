@@ -31,7 +31,32 @@ export interface AgentRun {
   folder?: string;
   /** The start of the context the run read, clipped to INPUT_CHARS. */
   input?: string;
+  /** What a device or cloud run cost in USD, when its runner reported it. */
+  costUsd?: number;
+  /** Tokens a device or cloud run used, when its runner reported them. */
+  tokens?: number;
 }
+
+/** What a run used, as its runner reported it; absent parts are unknown. */
+export interface AgentRunUsage {
+  costUsd?: number | null;
+  tokens?: number | null;
+}
+
+/** A run's cost for run lists: "$0.42", or "<$0.01" for less than a cent. */
+export const formatRunCost = (costUsd: number): string =>
+  costUsd < 0.01 ? '<$0.01' : `$${costUsd.toFixed(2)}`;
+
+const usagePatch = (usage: AgentRunUsage | undefined) => {
+  const patch: { costUsd?: number; tokens?: number } = {};
+  if (typeof usage?.costUsd === 'number' && Number.isFinite(usage.costUsd)) {
+    patch.costUsd = usage.costUsd;
+  }
+  if (typeof usage?.tokens === 'number' && Number.isFinite(usage.tokens)) {
+    patch.tokens = usage.tokens;
+  }
+  return patch;
+};
 
 /** What a run was set up with, recorded as it learns each part. */
 export type AgentRunDetails = Partial<
@@ -134,6 +159,19 @@ export class AgentRunsStore extends Store {
     if (Object.keys(patch).length) this.table.update(runId, patch);
   }
 
+  /**
+   * Record what a run has used so far. Only reported parts are written, and
+   * only when they changed: rows sync, and a run is polled every few seconds.
+   */
+  setUsage(runId: string, usage: AgentRunUsage): void {
+    const row = this.table.get(runId);
+    if (!row) return;
+    const patch = usagePatch(usage);
+    if (patch.costUsd === row.costUsd) delete patch.costUsd;
+    if (patch.tokens === row.tokens) delete patch.tokens;
+    if (Object.keys(patch).length) this.table.update(runId, patch);
+  }
+
   /** Rows that say they are running, whoever is (or was) running them. */
   runningRuns(): AgentRun[] {
     return (this.table.find() as AgentRun[]).filter(
@@ -143,16 +181,18 @@ export class AgentRunsStore extends Store {
 
   finish(
     runId: string,
-    outcome:
+    outcome: (
       | { status: 'done'; steps: number; output: string }
       | { status: 'cancelled'; steps: number }
-      | { status: 'error'; steps: number; error: string },
+      | { status: 'error'; steps: number; error: string }
+    ) & { usage?: AgentRunUsage },
     /** When it ended, if not now — a run settled after the fact. */
     endedAt = Date.now()
   ): void {
     const row = this.table.get(runId);
     if (!row) return;
     this.table.update(runId, {
+      ...usagePatch(outcome.usage),
       status: outcome.status,
       durationMs: Math.max(0, endedAt - row.startedAt),
       steps: outcome.steps,

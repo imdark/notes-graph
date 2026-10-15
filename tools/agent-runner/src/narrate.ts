@@ -94,6 +94,7 @@ export class Narrator {
   error: string | null = null;
   steps = 0;
   cost: number | null = null;
+  tokens: number | null = null;
   private started = false;
   /** NotesGraph searches awaiting their result, by tool_use id. */
   private readonly searches = new Map<string, string>();
@@ -157,6 +158,19 @@ export class Narrator {
     } else if (event.type === 'result' && !sub) {
       this.steps = event.num_turns || this.steps;
       this.cost = typeof event.total_cost_usd === 'number' ? event.total_cost_usd : this.cost;
+      // modelUsage covers subagents too; `usage` is the main loop only.
+      const usage = Object.values(event.modelUsage ?? {});
+      if (usage.length) {
+        this.tokens = usage.reduce(
+          (sum, model) =>
+            sum +
+            (model.inputTokens ?? 0) +
+            (model.outputTokens ?? 0) +
+            (model.cacheReadInputTokens ?? 0) +
+            (model.cacheCreationInputTokens ?? 0),
+          0
+        );
+      }
       if (event.subtype === 'error_max_turns') {
         this.result = null;
         const limit = this.maxTurns ?? this.steps;
@@ -169,7 +183,10 @@ export class Narrator {
           ('result' in event && typeof event.result === 'string' && event.result) ||
           ('errors' in event && Array.isArray(event.errors) && event.errors.join('; ')) ||
           event.subtype;
-        this.error = String(reason || 'failed');
+        this.error =
+          event.subtype === 'error_max_budget_usd'
+            ? `stopped at its cost cap ($${this.cost?.toFixed(2) ?? '?'} spent)`
+            : String(reason || 'failed');
       } else {
         this.result = event.result;
         this.error = null;

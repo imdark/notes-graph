@@ -147,7 +147,9 @@ the evidence graph, and close with the gap ledger: what you did not find and
 why. Back every claim with its source URL.
 
 Write the findings and the gap ledger into the note you were started from, or
-a new note linked from it, with mcp__notesgraph, so they outlast the run.
+a new note linked from it, with mcp__notesgraph, so they outlast the run. If
+the agent's own instructions say when or where to save (for example, only
+after the user accepts the report), follow those instead.
 `;
 
 /** OmniSeek's deep-investigation method (Apache-2.0), from its own repo. */
@@ -360,18 +362,124 @@ const PROFILES: Record<string, AgentProfile> = {
 };
 
 /**
+ * How much an agent may do without asking, coarsest first:
+ *
+ *   read    reads notes, files and the web; anything else is refused without
+ *           asking (jobs.ts)
+ *   write   also writes notes; shell and file edits ask (the profiles' default)
+ *   manage  also edits files; shell asks
+ *   full    everything, as if "Allow all" were pressed when it started
+ *
+ * Whatever the level, a tool call that deploys, spends or deletes still asks
+ * (alwaysAsks).
+ */
+export const ACCESS_LEVELS = ['read', 'write', 'manage', 'full'] as const;
+export type AccessLevel = (typeof ACCESS_LEVELS)[number];
+
+export const parseAccess = (value: unknown): AccessLevel | null =>
+  (ACCESS_LEVELS as readonly unknown[]).includes(value) ? (value as AccessLevel) : null;
+
+const NOTESGRAPH_READ_TOOLS = [
+  'keyword_search',
+  'semantic_search',
+  'search_blocks',
+  'list_documents',
+  'list_blocks',
+  'read_document',
+  'get_links',
+  'get_backlinks',
+  'get_board',
+  'doc_outline',
+  'read_section',
+].map(name => `mcp__notesgraph__${name}`);
+
+const FILE_EDIT_TOOLS = ['Edit', 'MultiEdit', 'Write', 'NotebookEdit'];
+
+/** A profile's tools narrowed or widened to a level. */
+function withAccess(profile: AgentProfile, access: AccessLevel): AgentProfile {
+  // The profile's own extras (OmniSeek for research) only read, so they stay.
+  const extras = profile.allowedTools.filter(
+    tool => !CLAUDE_CODE_ALLOWED_TOOLS.includes(tool)
+  );
+  const read = [
+    ...NOTESGRAPH_READ_TOOLS,
+    ...CLAUDE_CODE_ALLOWED_TOOLS.filter(tool => tool !== 'mcp__notesgraph'),
+    ...extras,
+  ];
+  const allowedTools =
+    access === 'read'
+      ? read
+      : access === 'write'
+        ? profile.allowedTools
+        : [...profile.allowedTools, ...FILE_EDIT_TOOLS];
+  return { ...profile, allowedTools };
+}
+
+/**
  * The profile for a job's model; null for one that isn't a Claude agent. A
  * list of skill names replaces the model's default skills; names outside the
  * catalog are dropped, so a job can't point a runner at an arbitrary URL.
+ * The one other kind it may name is a skill note (`note:<docId>`), and only
+ * those in `noteSkills`: the job's own workspace's, looked up by the server
+ * (skill-notes.ts).
  */
 export function profileFor(
   model: string | null | undefined,
-  skills?: unknown
+  skills?: unknown,
+  access?: string | null,
+  noteSkills: ReadonlyArray<{ ref: string; skill: AgentSkill }> = []
 ): AgentProfile | null {
-  const profile = (model && PROFILES[model]) || null;
-  if (!profile || !Array.isArray(skills)) return profile;
+  let profile = (model && PROFILES[model]) || null;
+  if (!profile) return null;
+  const level = parseAccess(access);
+  if (level) profile = withAccess(profile, level);
+  if (!Array.isArray(skills)) return profile;
   return {
     ...profile,
-    skills: SKILL_CATALOG.filter(skill => skills.includes(skill.name)),
+    skills: [
+      ...SKILL_CATALOG.filter(skill => skills.includes(skill.name)),
+      ...noteSkills.filter(note => skills.includes(note.ref)).map(note => note.skill),
+    ],
   };
+}
+
+// Shell commands that deploy, spend money or delete. Pushing a branch is not
+// among them: a run that ships its work ends with `wf done`, and the person
+// chose (2026-10-14) to let that through once they press "Allow all".
+const ALWAYS_ASK_COMMANDS: RegExp[] = [
+  /\bdeploy/i,
+  /\bwf\s+(release|ship)\b/,
+  /\bgh\s+(pr\s+merge|release\s+create|repo\s+delete)\b/,
+  /\b(npm|yarn|pnpm)\s+publish\b/,
+  /\bdocker\s+push\b/,
+  /\bkubectl\s+(apply|delete|rollout)\b/,
+  /\bterraform\s+(apply|destroy)\b/,
+  /\bfly\s+deploy\b/,
+  /\brm\s+(-\w*[rf]\w*\s+)+/,
+  /\bgit\s+push\b[^\n]*(--force\b|-f\b|--delete\b|\s:)/,
+  /\bgit\s+(reset\s+--hard|clean\s+-\w*f|branch\s+-D)\b/,
+  /\b(drop\s+(table|database)|truncate\s+table)\b/i,
+  /\bcurl\b[^\n]*(-X\s*(DELETE|POST|PUT|PATCH)\b|--data\b|-d\s)/,
+];
+
+// Tools whose every call deletes or spends, whatever their input.
+const ALWAYS_ASK_TOOL = /(delete|remove|destroy|purchase|checkout|payment|transfer|deploy)/i;
+
+/**
+ * Whether a permission (its "Allow <tool>?" text and the tool input as JSON)
+ * deploys, spends or deletes, so "Allow all" and the full level don't cover it.
+ */
+export function alwaysAsks(text: string, detail: string | null | undefined): boolean {
+  const tool = /^Allow (\S+)\?$/.exec(text.trim())?.[1] ?? '';
+  if (!tool) return false;
+  if (tool === 'Bash') {
+    let command = detail ?? '';
+    try {
+      command = String((JSON.parse(command) as { command?: unknown }).command ?? '');
+    } catch {
+      // Not JSON: look at it as it came.
+    }
+    return ALWAYS_ASK_COMMANDS.some(pattern => pattern.test(command));
+  }
+  return tool.startsWith('mcp__') && ALWAYS_ASK_TOOL.test(tool.split('__').pop() ?? '');
 }

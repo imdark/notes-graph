@@ -7,6 +7,7 @@ import { DocStorageModule } from '../../core/doc';
 import { PermissionModule } from '../../core/permission';
 import { WorkspaceModule } from '../../core/workspaces';
 import { AgentMemoryService } from './agent-memory';
+import { AgentRules } from './agent-rules';
 import { RegistryController } from './controller';
 import { RegistryHealthService } from './health';
 import { RegistryJobService } from './jobs';
@@ -14,6 +15,7 @@ import { MonitoringAgentService } from './monitoring-agent';
 import { AgentPushService } from './push';
 import { RegistryService } from './service';
 import { RegistryJobShareController, RegistryJobShareService } from './share';
+import { SkillNoteService } from './skill-notes';
 import { JobTaskClaims } from './task-claims';
 
 /**
@@ -33,6 +35,8 @@ import { JobTaskClaims } from './task-claims';
     JobTaskClaims,
     AgentMemoryService,
     RegistryJobShareService,
+    AgentRules,
+    SkillNoteService,
   ],
   controllers: [RegistryController, RegistryJobShareController],
   // Monitors queue device jobs and push alerts through these.

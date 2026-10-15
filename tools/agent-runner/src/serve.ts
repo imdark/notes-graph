@@ -5,7 +5,7 @@
 import type { query as sdkQuery } from '@anthropic-ai/claude-agent-sdk';
 
 import { type Job, type NotesGraphApi, NotesGraphError } from './api';
-import { type RunnerSettings, runJob } from './run-job';
+import { type RunnerSettings, RunFailed, runJob } from './run-job';
 import { JobCancelled } from './run-tools';
 
 export const LEASE_SECONDS = 300;
@@ -107,6 +107,8 @@ export async function runClaimed(
       status: 'done',
       result: outcome.result,
       steps: outcome.steps,
+      ...(outcome.costUsd === undefined ? {} : { costUsd: outcome.costUsd }),
+      ...(outcome.tokens === undefined ? {} : { tokens: outcome.tokens }),
       ...(logAppend ? { logAppend } : {}),
     });
     return 'done';
@@ -124,6 +126,7 @@ export async function runClaimed(
       .report(workspaceId, job.id, {
         status: 'error',
         error: String(err instanceof Error ? err.message : err).slice(0, 2000),
+        ...(err instanceof RunFailed ? err.usage : {}),
         ...(logAppend ? { logAppend } : {}),
       })
       .catch(() => {});

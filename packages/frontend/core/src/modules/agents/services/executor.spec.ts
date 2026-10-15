@@ -8,6 +8,7 @@ import { LocalLLMService } from '../../ai-local';
 import { WorkspaceService } from '../../workspace';
 import { AgentRunLogsStore } from '../stores/agent-run-logs';
 import { type AgentRun, AgentRunsStore } from '../stores/agent-runs';
+import { AgentRulesService } from './agent-rules';
 import { CloudAgentRunnerService } from './cloud-runner';
 import { AgentContextService } from './context';
 import { AgentExecutorService, countFound, foundLine } from './executor';
@@ -54,12 +55,15 @@ const setup = (
     cloudRunner?: object;
     researchTools?: object;
     remoteRunner?: object;
+    agentRules?: object;
   } = {}
 ) => {
   const finished: { runId: string; outcome: any; endedAt?: number }[] = [];
   const titles: { runId: string; title: string }[] = [];
   const described: Record<string, unknown>[] = [];
+  const usages: { runId: string; usage: unknown }[] = [];
   const runsStore = {
+    setUsage: (runId: string, usage: unknown) => usages.push({ runId, usage }),
     runningRuns: () => runs.filter(run => run.status === 'running'),
     start: () => 'run-1',
     describe: (_runId: string, details: Record<string, unknown>) =>
@@ -87,6 +91,7 @@ const setup = (
     .service(CloudAgentRunnerService, (fakes.cloudRunner ?? {}) as any)
     .service(ResearchToolsService, (fakes.researchTools ?? {}) as any)
     .service(WorkspaceService, { workspace: { id: 'ws' } } as any)
+    .service(AgentRulesService, (fakes.agentRules ?? {}) as any)
     .service(AgentExecutorService, [
       AgentContextService,
       AgentRunsStore,
@@ -97,9 +102,10 @@ const setup = (
       CloudAgentRunnerService,
       ResearchToolsService,
       WorkspaceService,
+      AgentRulesService,
     ]);
   const executor = framework.provider().get(AgentExecutorService);
-  return { executor, finished, titles, described };
+  return { executor, finished, titles, described, usages };
 };
 
 describe('AgentExecutorService device runs', () => {
@@ -126,6 +132,91 @@ describe('AgentExecutorService device runs', () => {
       if (event.type === 'log') logs.push(event.text);
     }
     expect(logs.join('')).toMatch(/⏸ Session limit reached on laptop; waiting to run again at/);
+  });
+
+  test('a device run is queued with its cost cap and permission level, and records its cost', async () => {
+    const enqueued: any[] = [];
+    const { executor, usages } = setup([], {}, {
+      context: { build: async () => ({ text: 'x', label: 'a block', title: 'x' }) },
+      remoteRunner: {
+        enqueue: async (_ws: string, input: any) => {
+          enqueued.push(input);
+          return job({ id: 'j9', status: 'queued' });
+        },
+        agentTargets: async () => [],
+        watch: async function* () {
+          yield { job: job({ id: 'j9', status: 'running' }), logDelta: '' };
+          yield {
+            job: job({ id: 'j9', status: 'done', result: 'ok', costUsd: 0.42, tokens: 1234 }),
+            logDelta: '',
+          };
+        },
+      },
+    });
+    (executor as any).runsStore.attachRemote = () => {};
+    for await (const _ of executor.run(
+      { id: 'a1', name: 'W', harness: 'remote', deviceKey: 'laptop', model: 'claude-code', tools: [], instructions: 'go', maxSteps: 4, maxCostUsd: 2.5, access: 'manage' } as any,
+      { kind: 'block', docId: 'doc', blockId: 'b1' },
+      new AbortController().signal
+    )) {
+      // drain
+    }
+    expect(enqueued[0]).toMatchObject({ maxCostUsd: 2.5, access: 'manage' });
+    expect(usages.at(-1)).toEqual({
+      runId: 'run-1',
+      usage: { costUsd: 0.42, tokens: 1234 },
+    });
+  });
+
+  test('an agent with no cap or level leaves both off the job', async () => {
+    const enqueued: any[] = [];
+    const { executor } = setup([], {}, {
+      context: { build: async () => ({ text: 'x', label: 'a block', title: 'x' }) },
+      remoteRunner: {
+        enqueue: async (_ws: string, input: any) => {
+          enqueued.push(input);
+          return job({ id: 'j9', status: 'queued' });
+        },
+        agentTargets: async () => [],
+        watch: async function* () {
+          yield { job: job({ id: 'j9', status: 'done', result: 'ok' }), logDelta: '' };
+        },
+      },
+    });
+    (executor as any).runsStore.attachRemote = () => {};
+    for await (const _ of executor.run(
+      { id: 'a1', name: 'W', harness: 'remote', deviceKey: 'laptop', model: 'claude-code', tools: [], instructions: 'go', maxSteps: 4 } as any,
+      { kind: 'block', docId: 'doc', blockId: 'b1' },
+      new AbortController().signal
+    )) {
+      // drain
+    }
+    expect(enqueued[0].maxCostUsd).toBeUndefined();
+    expect(enqueued[0].access).toBeUndefined();
+  });
+
+  test('a refused enqueue fails the run with the server’s reason', async () => {
+    const { executor, finished } = setup([], {}, {
+      context: { build: async () => ({ text: 'x', label: 'a block', title: 'x' }) },
+      remoteRunner: {
+        enqueue: async () => {
+          throw new Error('This workspace has used its monthly agent budget.');
+        },
+      },
+    });
+    const errors: string[] = [];
+    for await (const event of executor.run(
+      { id: 'a1', name: 'W', harness: 'remote', deviceKey: 'laptop', model: 'claude-code', tools: [], instructions: 'go', maxSteps: 4 } as any,
+      { kind: 'block', docId: 'doc', blockId: 'b1' },
+      new AbortController().signal
+    )) {
+      if (event.type === 'error') errors.push(event.message);
+    }
+    expect(errors).toEqual(['This workspace has used its monthly agent budget.']);
+    expect(finished[0].outcome).toMatchObject({
+      status: 'error',
+      error: 'This workspace has used its monthly agent budget.',
+    });
   });
 });
 
@@ -351,6 +442,64 @@ describe('countFound', () => {
   });
 });
 
+describe('AgentExecutorService agent rules', () => {
+  const runCloud = async (agentRules: object, withTools: boolean) => {
+    const prompts: string[] = [];
+    const { executor, finished } = setup([], {}, {
+      context: { build: async () => ({ text: 'x', label: 'a block', title: 'x' }) },
+      fileTools: { available: false },
+      cloudRunner: {
+        open: async () =>
+          async function* (messages: { content: string }[]) {
+            prompts.push(messages[0].content);
+            yield 'Done.';
+          },
+      },
+      researchTools: {
+        specs: async () =>
+          withTools ? [{ name: 'omniseek_search', desc: 's', args: {}, mutates: false }] : [],
+      },
+      agentRules,
+    });
+    for await (const _ of executor.run(
+      { id: 'a1', name: 'R', harness: withTools ? 'research' : 'cloud', tools: [], instructions: 'Do it', maxSteps: 2 } as any,
+      { kind: 'block', docId: 'doc', blockId: 'b1' },
+      new AbortController().signal
+    )) {
+      // drain
+    }
+    return { prompt: prompts[0], finished };
+  };
+
+  test('an in-tab run is told the rules note, with tools or without', async () => {
+    for (const withTools of [true, false]) {
+      const { prompt } = await runCloud(
+        { read: async () => 'Research notes go under "Research".' },
+        withTools
+      );
+      expect(prompt).toContain('Do it');
+      expect(prompt).toContain(
+        '<agent-rules>\nResearch notes go under "Research".\n</agent-rules>'
+      );
+    }
+  });
+
+  test('no note, or one that fails to read, and the run goes without', async () => {
+    for (const agentRules of [
+      { read: async () => null },
+      {
+        read: async () => {
+          throw new Error('boom');
+        },
+      },
+    ]) {
+      const { prompt, finished } = await runCloud(agentRules, false);
+      expect(prompt).not.toContain('agent-rules');
+      expect(finished[0].outcome).toMatchObject({ status: 'done' });
+    }
+  });
+});
+
 describe('AgentExecutorService.reconcileRuns', () => {
   test('a device run whose job finished takes the job’s end', async () => {
     const startedAt = Date.now() - 5 * MINUTE;
@@ -372,6 +521,19 @@ describe('AgentExecutorService.reconcileRuns', () => {
         endedAt: startedAt + 2 * MINUTE,
       },
     ]);
+  });
+
+  test('a settled device run keeps what its job cost', async () => {
+    const { executor, finished } = setup([row({ remoteJobId: 'j1' })], {
+      j1: job({ status: 'error', error: 'Over the cost cap', costUsd: 2.51, tokens: 90000, finishedAt: 1 }),
+    });
+    await executor.reconcileRuns();
+    expect(finished[0].outcome).toEqual({
+      status: 'error',
+      steps: 3,
+      error: 'Over the cost cap',
+      usage: { costUsd: 2.51, tokens: 90000 },
+    });
   });
 
   test('a device run takes the title its agent gave it', async () => {

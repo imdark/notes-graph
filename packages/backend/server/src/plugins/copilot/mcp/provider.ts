@@ -7,7 +7,11 @@ import { PermissionAccess } from '../../../core/permission';
 import { clearEmbeddingChunk, Models } from '../../../models';
 import { IndexerService } from '../../indexer';
 import { SearchTable } from '../../indexer/tables';
-import { SearchQueryOccur, SearchQueryType } from '../../indexer/types';
+import {
+  type SearchInput,
+  SearchQueryOccur,
+  SearchQueryType,
+} from '../../indexer/types';
 import { CopilotContextService } from '../context/service';
 import {
   filterDocIdsByDates,
@@ -22,6 +26,18 @@ import {
   parseSearchQuery,
   searchText,
 } from '../search-query';
+import { findSecret, guardSecrets, secretRefusal } from './secret-guard';
+import {
+  DEFAULT_STALE_DAYS,
+  DEFAULT_STUB_CHARS,
+  notesHealth,
+} from './notes-health';
+import {
+  buildOutline,
+  loadOutlineSource,
+  type OutlineSource,
+  readSection,
+} from './outline';
 
 function first(value: unknown): string {
   const item = Array.isArray(value) ? value[0] : value;
@@ -918,8 +934,196 @@ export class WorkspaceMcpProvider {
       },
     });
 
+    const notesHealthTool = defineTool({
+      name: 'notes_health',
+      title: 'Notes Health',
+      description:
+        'Check the whole workspace for the problems a person tidying their notes would look for, computed from the search index rather than guessed: orphans (notes no other note links to; journal days excluded), brokenLinks (links to notes that no longer exist), duplicateTitles (notes whose titles have the same words, candidates to merge on the Duplicates page at duplicatesPath), stubs (notes with almost no body), and staleFacts (blocks stamped "as of <date>" longer ago than staleDays). It only reads; nothing is changed. Contradictions between notes need reading, so they are not in here.',
+      parser: z.object({
+        staleDays: z.number().int().min(1).max(3650).optional(),
+        stubChars: z.number().int().min(1).max(2000).optional(),
+      }),
+      inputSchema: {
+        type: 'object',
+        properties: {
+          staleDays: {
+            type: 'number',
+            description: `An "as of" fact older than this many days is stale (default ${DEFAULT_STALE_DAYS}).`,
+          },
+          stubChars: {
+            type: 'number',
+            description: `A note whose body is shorter than this many characters is a stub (default ${DEFAULT_STUB_CHARS}).`,
+          },
+        },
+        additionalProperties: false,
+      },
+      execute: async ({ staleDays, stubChars }, options) => {
+        const inWorkspace = {
+          type: SearchQueryType.match,
+          field: 'workspaceId',
+          match: workspaceId,
+        };
+        const docNodes = await this.searchAll({
+          table: SearchTable.doc,
+          query: inWorkspace,
+          options: { fields: ['docId', 'title', 'summary', 'journal'] },
+        });
+        const linkNodes = await this.searchAll({
+          table: SearchTable.block,
+          query: {
+            type: SearchQueryType.boolean,
+            occur: SearchQueryOccur.must,
+            queries: [inWorkspace, { type: SearchQueryType.exists, field: 'refDocId' }],
+          },
+          options: { fields: ['docId', 'refDocId'] },
+        });
+        // Narrowed by the index to blocks with both words; the date itself
+        // is read from the text afterwards.
+        const factNodes = await this.searchAll({
+          table: SearchTable.block,
+          query: {
+            type: SearchQueryType.boolean,
+            occur: SearchQueryOccur.must,
+            queries: [
+              inWorkspace,
+              { type: SearchQueryType.match, field: 'content', match: 'as' },
+              { type: SearchQueryType.match, field: 'content', match: 'of' },
+            ],
+          },
+          options: { fields: ['docId', 'blockId', 'content'] },
+        });
+
+        const abortedAfterSearch = abortIfNeeded(options.signal);
+        if (abortedAfterSearch) return abortedAfterSearch;
+
+        const allDocs = docNodes.map(node => ({
+          docId: first(node.fields.docId),
+          title: first(node.fields.title),
+          summary: first(node.fields.summary),
+          journal: !!first(node.fields.journal),
+        }));
+        // Every indexed note counts as existing, so a link to one the user
+        // can't read isn't reported as broken; only readable ones are reported.
+        const readable = new Set(
+          (
+            await this.ac.user(userId).workspace(workspaceId).docs(allDocs, 'Doc.Read')
+          ).map(doc => doc.docId)
+        );
+        const links = linkNodes.flatMap(node =>
+          tokenList(node.fields.refDocId).map(toDocId => ({
+            fromDocId: first(node.fields.docId),
+            toDocId,
+          }))
+        );
+        const report = notesHealth(
+          {
+            docs: allDocs,
+            links,
+            blocks: factNodes.map(node => ({
+              docId: first(node.fields.docId),
+              blockId: first(node.fields.blockId),
+              text: first(node.fields.content),
+            })),
+          },
+          { now: new Date(), staleDays, stubChars }
+        );
+        const canRead = (item: { docId: string }) => readable.has(item.docId);
+
+        return toolText(
+          JSON.stringify({
+            orphans: report.orphans.filter(canRead),
+            brokenLinks: report.brokenLinks.filter(link => readable.has(link.fromDocId)),
+            duplicateTitles: report.duplicateTitles
+              .map(group => ({ ...group, docs: group.docs.filter(canRead) }))
+              .filter(group => group.docs.length > 1),
+            stubs: report.stubs.filter(canRead),
+            staleFacts: report.staleFacts.filter(canRead),
+            duplicatesPath: `/workspace/${workspaceId}/duplicates`,
+            notesChecked: readable.size,
+          })
+        );
+      },
+    });
+
+    const loadOutline = async (
+      docId: string,
+      signal: AbortSignal
+    ): Promise<OutlineSource | WorkspaceMcpToolResult> => {
+      const notFoundError = toolError(`Doc with id ${docId} not found.`);
+      const accessible = await this.ac
+        .user(userId)
+        .workspace(workspaceId)
+        .doc(docId)
+        .can('Doc.Read');
+      if (!accessible) return notFoundError;
+      const aborted = abortIfNeeded(signal);
+      if (aborted) return aborted;
+      const source = await loadOutlineSource(this.reader, workspaceId, docId);
+      if (!source) return notFoundError;
+      return abortIfNeeded(signal) ?? source;
+    };
+
+    const docOutline = defineTool({
+      name: 'doc_outline',
+      title: 'Document Outline',
+      description:
+        "Return a document's heading tree without its body: for each heading its blockId, level (1-6), title, parentBlockId (the enclosing heading) and the section's size (characters and top-level blocks, sub-sections included), plus the size of any intro before the first heading. Use it to skim a long note by structure, then read_section the parts that matter instead of loading the whole document with read_document. Heading blockIds also work with update_block.",
+      parser: z.object({ docId: z.string() }),
+      inputSchema: {
+        type: 'object',
+        properties: { docId: { type: 'string' } },
+        required: ['docId'],
+        additionalProperties: false,
+      },
+      execute: async ({ docId }, options) => {
+        const loaded = await loadOutline(docId, options.signal);
+        if (!('markdown' in loaded)) return loaded;
+        return toolText(
+          JSON.stringify({
+            docId,
+            title: loaded.title,
+            ...buildOutline(loaded.markdown, loaded.headings),
+          })
+        );
+      },
+    });
+
+    const readDocSection = defineTool({
+      name: 'read_section',
+      title: 'Read Document Section',
+      description:
+        "Read one section of a document as markdown: the heading at blockId (from doc_outline) with its text and sub-sections, up to the next heading of the same or a higher level. Pass the outline's intro blockId to read the content before the first heading. Each block is preceded by a `<!-- block_id=… flavour=… -->` comment, so you can target a block with update_block / update_task.",
+      parser: z.object({ docId: z.string(), blockId: z.string() }),
+      inputSchema: {
+        type: 'object',
+        properties: {
+          docId: { type: 'string' },
+          blockId: {
+            type: 'string',
+            description:
+              "A heading's blockId from doc_outline (or its intro blockId)",
+          },
+        },
+        required: ['docId', 'blockId'],
+        additionalProperties: false,
+      },
+      execute: async ({ docId, blockId }, options) => {
+        const loaded = await loadOutline(docId, options.signal);
+        if (!('markdown' in loaded)) return loaded;
+        const section = readSection(loaded.markdown, loaded.headings, blockId);
+        if (!section) {
+          return toolError(
+            `Doc ${docId} has no top-level block ${blockId}; get heading blockIds from doc_outline.`
+          );
+        }
+        return toolText(section.markdown);
+      },
+    });
+
     const tools = [
       readDocument,
+      docOutline,
+      readDocSection,
       semanticSearch,
       keywordSearch,
       searchBlocks,
@@ -928,6 +1132,7 @@ export class WorkspaceMcpProvider {
       getBoard,
       getBacklinks,
       getLinks,
+      notesHealthTool,
     ];
 
     if (env.dev || env.namespaces.canary || env.mcpWriteToolsEnabled) {
@@ -993,6 +1198,11 @@ export class WorkspaceMcpProvider {
           additionalProperties: false,
         },
         execute: async ({ title, content, agent }, options) => {
+          // A secret written into a synced note stays in its history on
+          // every device, so refuse before the write rather than after.
+          const secret = guardSecrets(title, content, agent);
+          if (secret) return toolError(secret);
+
           try {
             await this.ac
               .user(userId)
@@ -1070,6 +1280,14 @@ export class WorkspaceMcpProvider {
             .can('Doc.Update');
           if (!accessible) return notFoundError;
 
+          // The whole body comes back on every update, so a secret the user
+          // wrote into the note themselves isn't the agent's to answer for.
+          if (guardSecrets(content, agent)) {
+            const current = await this.reader.getDocMarkdown(workspaceId, docId, false);
+            const label = findSecret(`${content}\n${agent ?? ''}`, current?.markdown ?? '');
+            if (label) return toolError(secretRefusal(label));
+          }
+
           const abortedBeforeWrite = abortIfNeeded(options.signal);
           if (abortedBeforeWrite) return abortedBeforeWrite;
 
@@ -1119,6 +1337,9 @@ export class WorkspaceMcpProvider {
           additionalProperties: false,
         },
         execute: async ({ docId, title }, options) => {
+          const secret = guardSecrets(title);
+          if (secret) return toolError(secret);
+
           const notFoundError = toolError(`Doc with id ${docId} not found.`);
 
           const accessible = await this.ac
@@ -1204,6 +1425,9 @@ export class WorkspaceMcpProvider {
           if (!status && !note) {
             return toolError('Provide a status and/or a note to update.');
           }
+          const secret = guardSecrets(note, status, agent);
+          if (secret) return toolError(secret);
+
           const accessible = await this.ac
             .user(userId)
             .workspace(workspaceId)
@@ -1274,6 +1498,9 @@ export class WorkspaceMcpProvider {
           additionalProperties: false,
         },
         execute: async ({ docId, blockId, text, agent }, options) => {
+          const secret = guardSecrets(text, agent);
+          if (secret) return toolError(secret);
+
           const accessible = await this.ac
             .user(userId)
             .workspace(workspaceId)
@@ -1522,6 +1749,29 @@ export class WorkspaceMcpProvider {
       version: '1.0.1',
       tools,
     };
+  }
+
+  /**
+   * Every row a search matches, page by page, up to a cap so one huge
+   * workspace can't hold a tool call for minutes.
+   */
+  private async searchAll(
+    input: Omit<SearchInput, 'options'> & { options: { fields: string[] } },
+    max = 20_000
+  ) {
+    const nodes: Awaited<ReturnType<IndexerService['search']>>['nodes'] = [];
+    let cursor: string | undefined;
+    do {
+      const result = await this.indexer.search({
+        ...input,
+        options: { ...input.options, pagination: { limit: 5000, cursor } },
+      });
+      nodes.push(...result.nodes);
+      // Manticore can hand back the same cursor at the end (see listDocIds).
+      if (!result.nodes.length || result.nextCursor === cursor) break;
+      cursor = result.nextCursor;
+    } while (cursor && nodes.length < max);
+    return nodes;
   }
 
   /** Best-effort title lookup for a batch of docIds (used to annotate link results). */

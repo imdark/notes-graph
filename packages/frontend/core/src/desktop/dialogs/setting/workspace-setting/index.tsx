@@ -61,7 +61,7 @@ export const WorkspaceSetting = ({
     case 'workspace:embedding':
       return <EmbeddingSettings />;
     case 'workspace:agents':
-      return <WorkspaceSettingAgents />;
+      return <WorkspaceSettingAgents onCloseSetting={onCloseSetting} />;
     case 'workspace:folder-sync':
       return <WorkspaceSettingFolderSync />;
     default:

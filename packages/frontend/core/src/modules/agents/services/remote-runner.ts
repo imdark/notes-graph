@@ -2,6 +2,7 @@ import { UserFriendlyError } from '@notesgraph/error';
 import { Service } from '@notesgraph/infra';
 
 import { FetchService, type WorkspaceServerService } from '../../cloud';
+import type { AgentAccess } from '../stores/agents';
 
 /**
  * Runs an agent on a registered device instead of in this browser.
@@ -28,6 +29,23 @@ export const AGENT_SKILLS: { name: string; desc: string }[] = [
   { name: 'antislop-code', desc: 'Code comment hygiene' },
   { name: 'omniseek-investigate', desc: 'Deep multi-source research method' },
 ];
+
+/**
+ * A note titled "Skill: <name>", offered as a skill beside the catalog's
+ * (the server's plugins/registry/skill-notes.ts). An agent names it by
+ * `ref` ("note:<docId>"); the server only hands a run the ones in its own
+ * workspace.
+ */
+export interface SkillNote {
+  ref: string;
+  name: string;
+  title: string;
+  docId: string;
+}
+
+/** Whether a note's title makes it a skill note. */
+export const isSkillNoteTitle = (title: string | undefined | null) =>
+  /^\s*skill\s*:\s*\S/i.test(title ?? '');
 
 /** The skills a Claude model gets when the agent doesn't choose. */
 export const defaultSkillsFor = (model: string | undefined): string[] =>
@@ -191,6 +209,14 @@ export interface RemoteJob {
    * Absent from older servers.
    */
   allowAllTools?: boolean;
+  /** What the run cost in USD, once its runner reports it. Absent from older servers. */
+  costUsd?: number | null;
+  /** Tokens the run used, once its runner reports them. Absent from older servers. */
+  tokens?: number | null;
+  /** The cost cap the run was queued with, in USD. */
+  maxCostUsd?: number | null;
+  /** The permission level the run was queued with; unset is `write`. */
+  access?: AgentAccess | null;
   /** Transcript from absolute offset `logFrom` to `logEnd`. */
   log?: string;
   logFrom?: number;
@@ -213,6 +239,15 @@ export interface RemoteSteer {
   createdAt: number;
   /** When the runner took it; null while it waits. */
   deliveredAt: number | null;
+}
+
+/** A workspace's agent spend this month, against its budget if it has one. */
+export interface AgentBudget {
+  /** Unset when there is no budget. */
+  monthlyUsd: number | null;
+  spentUsd: number;
+  /** 'YYYY-MM' */
+  month: string;
 }
 
 export const openQuestions = (job: RemoteJob): RemoteQuestion[] =>
@@ -257,6 +292,10 @@ export interface EnqueueRemoteJob {
   /** Skills the run gets, by name; unset for the model's default set. */
   skills?: string[];
   maxSteps?: number;
+  /** The most the run may spend, in USD; unset is no cap. */
+  maxCostUsd?: number;
+  /** What the run may do without asking; unset is `write`. */
+  access?: AgentAccess;
   /** What the run starts out called; the agent may rename it. */
   title?: string;
   targetKind?: string;
@@ -306,6 +345,11 @@ export class RemoteAgentRunnerService extends Service {
    */
   private get fetchService(): FetchService | undefined {
     return this.workspaceServerService.server?.scope.get(FetchService);
+  }
+
+  /** False for a local workspace, which has no server to run jobs on. */
+  get hasServer(): boolean {
+    return !!this.fetchService;
   }
 
   private base(workspaceId: string) {
@@ -396,6 +440,62 @@ export class RemoteAgentRunnerService extends Service {
       }[];
     }>(`${this.base(workspaceId)}/devices?agentTarget=true`);
     return data.devices;
+  }
+
+  /** This month's agent spend in the workspace, and its budget if one is set. */
+  async budget(workspaceId: string): Promise<AgentBudget> {
+    const data = await this.json<{ budget: AgentBudget }>(
+      `${this.base(workspaceId)}/agent-budget`
+    );
+    return data.budget;
+  }
+
+  /** Set the monthly budget in USD, or clear it with null. */
+  async setBudget(
+    workspaceId: string,
+    monthlyUsd: number | null
+  ): Promise<AgentBudget> {
+    const data = await this.json<{ budget: AgentBudget }>(
+      `${this.base(workspaceId)}/agent-budget`,
+      { method: 'POST', body: JSON.stringify({ monthlyUsd }) }
+    );
+    return data.budget;
+  }
+
+  /**
+   * The workspace's skill notes ("Skill: <name>"), which an agent can be
+   * given beside the catalog's skills by their `ref`. Empty on a server
+   * that predates them.
+   */
+  async skillNotes(workspaceId: string): Promise<SkillNote[]> {
+    try {
+      const data = await this.json<{ skills?: SkillNote[] }>(
+        `${this.base(workspaceId)}/skills`
+      );
+      return data.skills ?? [];
+    } catch {
+      return [];
+    }
+  }
+
+  /** A skill note rendered as a Claude Code SKILL.md, as a runner gets it. */
+  async skillNoteMd(workspaceId: string, docId: string): Promise<string> {
+    const fetchService = this.fetchService;
+    if (!fetchService) {
+      throw new Error('This workspace is local, so there is no server to ask.');
+    }
+    const response = await fetchService.fetch(
+      `${this.base(workspaceId)}/skills/${encodeURIComponent(docId)}/SKILL.md`
+    );
+    const text = await response.text();
+    if (!response.ok || text.trimStart().startsWith('<')) {
+      throw new Error(
+        response.status === 404
+          ? 'Only a note titled “Skill: <name>” can be exported as a skill.'
+          : `Could not export the skill (${response.status}).`
+      );
+    }
+    return text;
   }
 
   async enqueue(

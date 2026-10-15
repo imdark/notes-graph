@@ -12,9 +12,16 @@ import {
   STEER_KIND,
 } from '../../models/registry-job';
 import { AgentMemoryService } from './agent-memory';
-import { type AgentProfile, profileFor } from './agent-profiles';
+import {
+  type AgentProfile,
+  alwaysAsks,
+  parseAccess,
+  profileFor,
+} from './agent-profiles';
+import { AgentRules, withAgentRules } from './agent-rules';
 import { AgentPushService } from './push';
 import { isSessionLimit, sessionLimitRunAfter } from './session-limit';
+import { SkillNoteService } from './skill-notes';
 import { JobTaskClaims } from './task-claims';
 
 declare global {
@@ -52,6 +59,13 @@ export interface JobDto {
   result: string | null;
   error: string | null;
   steps: number;
+  /** What the run cost (USD) and the tokens it used, once its runner says. */
+  costUsd: number | null;
+  tokens: number | null;
+  /** The run stops once it has spent this much (USD); null for no cap. */
+  maxCostUsd: number | null;
+  /** The agent's permission level; null for its profile's own tool list. */
+  access: string | null;
   /** Device-side tmux session the run is in, for `tmux attach -t`. */
   tmuxSession: string | null;
   claimedBy: string | null;
@@ -156,6 +170,10 @@ export function toJobDto(job: RegistryJob, options: JobDtoOptions = {}): JobDto 
     result: job.result,
     error: job.error,
     steps: job.steps,
+    costUsd: job.costUsd,
+    tokens: job.tokens,
+    maxCostUsd: job.maxCostUsd,
+    access: job.access,
     tmuxSession: job.tmuxSession,
     claimedBy: job.claimedBy,
     runAfter: job.runAfter ? job.runAfter.getTime() / 1000 : null,
@@ -287,6 +305,28 @@ function parseTaskIds(value: unknown): string[] {
   return [...new Set(ids)].slice(0, MAX_TASKS);
 }
 
+/** A positive amount of dollars, or null for none. */
+function parseUsd(value: unknown): number | null {
+  const usd = Number(value);
+  return value !== null && value !== undefined && value !== '' && Number.isFinite(usd) && usd > 0
+    ? Math.round(usd * 10_000) / 10_000
+    : null;
+}
+
+/** The first moment of the current calendar month, UTC. */
+export function monthStart(now = new Date()): Date {
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+}
+
+export interface AgentBudgetDto {
+  /** Null: no budget, runs are never refused for cost. */
+  monthlyUsd: number | null;
+  /** What this month's runs have cost so far. */
+  spentUsd: number;
+  /** The month counted, as YYYY-MM (UTC). */
+  month: string;
+}
+
 /** A run title on one line, or null when there is nothing left of it. */
 function parseTitle(value: unknown): string | null {
   const title = String(value ?? '')
@@ -312,6 +352,8 @@ export class RegistryJobService {
     @Optional() private readonly push?: AgentPushService,
     @Optional() private readonly event?: EventBus,
     @Optional() private readonly tasks?: JobTaskClaims,
+    @Optional() private readonly rules?: AgentRules,
+    @Optional() private readonly skillNotes?: SkillNoteService,
     @Optional() private readonly memory?: AgentMemoryService
   ) {}
 
@@ -354,6 +396,9 @@ export class RegistryJobService {
       throw new BadRequest(`context exceeds ${MAX_CONTEXT} characters`);
     }
 
+    await this.checkBudget(workspaceId);
+    const access = parseAccess(body.access);
+
     // A device that hit its session limit can't run anything until it
     // resets, so a job asked for meanwhile waits with the others.
     const runAfter = await this.models.registryJob.heldUntil(workspaceId, deviceKey);
@@ -379,7 +424,14 @@ export class RegistryJobService {
       skills: Array.isArray(body.skills) ? body.skills.map(String) : null,
       createdBy: userId,
       runAfter,
+      maxCostUsd: parseUsd(body.maxCostUsd),
+      access,
     });
+    // Full access is "Allow all" from the start.
+    if (access === 'full') {
+      await this.models.registryJob.allowAllTools(job.id, userId);
+      job.allowAllTools = true;
+    }
 
     this.logger.log(
       `queued job ${job.id} for ${workspaceId}/${deviceKey}` +
@@ -488,12 +540,30 @@ export class RegistryJobService {
     );
     if (!job) return null;
     await this.tasks?.claimed(job);
-    const profile = profileFor(job.model, job.skills);
+    const profile = await this.profile(job);
     // What earlier runs learned about whoever started this one.
     return {
       ...toJobDto(job),
       profile: this.memory ? await this.memory.withRecall(job, profile) : profile,
     };
+  }
+
+  /**
+   * How the runner is to run a claimed job: its model's profile, with the
+   * skill notes it names (looked up in the job's own workspace only) and
+   * the workspace's "Agent rules" note (see agent-rules.ts), both read
+   * now, at the start of the run, so the user's latest edits are the ones
+   * it follows.
+   */
+  private async profile(job: RegistryJob): Promise<AgentProfile | null> {
+    const noteSkills =
+      (await this.skillNotes?.forJob(job.workspaceId, job.skills, job.createdBy)) ?? [];
+    const profile = profileFor(job.model, job.skills, job.access, noteSkills);
+    if (!profile || !this.rules) return profile;
+    return withAgentRules(
+      profile,
+      await this.rules.read(job.workspaceId, job.createdBy)
+    );
   }
 
   async report(
@@ -545,6 +615,12 @@ export class RegistryJobService {
       result,
       error,
       steps: body.steps === undefined ? undefined : Number(body.steps),
+      costUsd: body.costUsd == null || !Number.isFinite(Number(body.costUsd))
+        ? undefined
+        : Math.max(0, Number(body.costUsd)),
+      tokens: body.tokens == null || !Number.isFinite(Number(body.tokens))
+        ? undefined
+        : Math.max(0, Math.round(Number(body.tokens))),
       logAppend,
       tmuxSession: body.tmuxSession ? String(body.tmuxSession).slice(0, 200) : undefined,
       leaseSeconds: body.leaseSeconds === undefined ? undefined : Number(body.leaseSeconds),
@@ -603,23 +679,34 @@ export class RegistryJobService {
     if (!text) {
       throw new BadRequest('text is required');
     }
+    const detail = body.detail ? String(body.detail).slice(0, MAX_DETAIL) : null;
+    const ownTool = kind === 'permission' && ALWAYS_ALLOWED_PERMISSIONS.has(text);
+    // A read-level agent is refused anything its tool list doesn't cover,
+    // without asking anyone.
+    const refused =
+      kind === 'permission' && !ownTool && job.access === 'read'
+        ? 'This agent can only read (its permission level is "read"); it may not use this tool.'
+        : undefined;
     // After "Allow all" a permission is recorded as allowed by whoever
-    // started the run, rather than waiting on them again. So is one of the
-    // run's own tools.
+    // started the run, rather than waiting on them again, unless it deploys,
+    // spends or deletes. So is one of the run's own tools.
     const allowAll =
       kind === 'permission' &&
-      (job.allowAllTools || ALWAYS_ALLOWED_PERMISSIONS.has(text));
+      !refused &&
+      (ownTool || (job.allowAllTools && !alwaysAsks(text, detail)));
     const question = await this.models.registryJob.ask(jobId, {
       kind,
       text: text.slice(0, MAX_QUESTION),
-      detail: body.detail ? String(body.detail).slice(0, MAX_DETAIL) : null,
+      detail,
       options: kind === 'question' ? parseOptions(body.options) : [],
       ...(allowAll ? { allowedBy: job.createdBy } : {}),
+      ...(refused ? { refused } : {}),
     });
     this.logger.log(
-      `job ${jobId} asked a ${kind}${allowAll ? ' (allowed: allow all)' : ''}`
+      `job ${jobId} asked a ${kind}` +
+        (allowAll ? ' (allowed: allow all)' : refused ? ' (refused: read only)' : '')
     );
-    if (!allowAll) {
+    if (!allowAll && !refused) {
       this.notify(push => push.questionAsked(job, question));
     }
     return toQuestionDto(question);
@@ -693,16 +780,10 @@ export class RegistryJobService {
     const closed = [questionId];
     if (allowAll && question.kind === 'permission') {
       // The permissions still open beside this one are allowed with it, so
-      // their notifications go too.
-      if (this.push) {
-        const open = await this.models.registryJob.listQuestions(jobId);
-        closed.push(
-          ...open
-            .filter(q => q.kind === 'permission' && !q.answeredAt && q.id !== questionId)
-            .map(q => q.id)
-        );
-      }
-      await this.models.registryJob.allowAllTools(jobId, userId);
+      // their notifications go too; those that deploy, spend or delete stay.
+      const { allowed, kept } = await this.openPermissions(jobId, questionId);
+      closed.push(...allowed);
+      await this.models.registryJob.allowAllTools(jobId, userId, kept);
       this.logger.log(`job ${jobId}: allow all tools`);
     }
     this.notify(push => push.questionsClosed(job, closed));
@@ -780,18 +861,64 @@ export class RegistryJobService {
     if ((JOB_TERMINAL as readonly string[]).includes(job.status)) {
       throw new BadRequest(`Job '${jobId}' is ${job.status}; there is nothing left to allow.`);
     }
-    // Any permission already waiting is allowed with it, so its notification goes.
-    const open = this.push
-      ? (await this.models.registryJob.listQuestions(jobId))
-          .filter(q => q.kind === 'permission' && !q.answeredAt)
-          .map(q => q.id)
-      : [];
-    await this.models.registryJob.allowAllTools(jobId, userId);
+    // Any permission already waiting is allowed with it, so its notification
+    // goes, unless it deploys, spends or deletes.
+    const { allowed: open, kept } = await this.openPermissions(jobId);
+    await this.models.registryJob.allowAllTools(jobId, userId, kept);
     this.logger.log(`job ${jobId}: allow all tools (up front)`);
     if (open.length) {
       this.notify(push => push.questionsClosed(job, open));
     }
     return toJobDto({ ...job, allowAllTools: true });
+  }
+
+  /** A job's open permissions, split by whether "Allow all" covers them. */
+  private async openPermissions(jobId: string, except?: string) {
+    const open = (await this.models.registryJob.listQuestions(jobId)).filter(
+      q => q.kind === 'permission' && !q.answeredAt && q.id !== except
+    );
+    return {
+      allowed: open.filter(q => !alwaysAsks(q.text, q.detail)).map(q => q.id),
+      kept: open.filter(q => alwaysAsks(q.text, q.detail)).map(q => q.id),
+    };
+  }
+
+  /** Refuse a new run once this month's runs have used the budget. */
+  private async checkBudget(workspaceId: string) {
+    const { monthlyUsd, spentUsd, month } = await this.budget(workspaceId);
+    if (monthlyUsd !== null && spentUsd >= monthlyUsd) {
+      throw new BadRequest(
+        `This workspace's agent runs have used their $${monthlyUsd.toFixed(2)} ` +
+          `budget for ${month} ($${spentUsd.toFixed(2)} spent). Raise the budget ` +
+          'on the Agents page, or wait for next month.'
+      );
+    }
+  }
+
+  async budget(workspaceId: string): Promise<AgentBudgetDto> {
+    const since = monthStart();
+    const [monthlyUsd, spentUsd] = await Promise.all([
+      this.models.registryJob.getBudget(workspaceId),
+      this.models.registryJob.spentSince(workspaceId, since),
+    ]);
+    return {
+      monthlyUsd,
+      spentUsd: Math.round(spentUsd * 10_000) / 10_000,
+      month: since.toISOString().slice(0, 7),
+    };
+  }
+
+  async setBudget(
+    workspaceId: string,
+    userId: string,
+    body: Record<string, unknown>
+  ): Promise<AgentBudgetDto> {
+    const monthlyUsd = body.monthlyUsd === null ? null : parseUsd(body.monthlyUsd);
+    if (body.monthlyUsd !== null && monthlyUsd === null) {
+      throw new BadRequest('monthlyUsd must be a positive number of dollars, or null for no budget');
+    }
+    await this.models.registryJob.setBudget(workspaceId, monthlyUsd, userId);
+    return this.budget(workspaceId);
   }
 
   async cancel(workspaceId: string, id: string): Promise<JobDto | null> {

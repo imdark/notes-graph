@@ -125,7 +125,7 @@ export class AgentContextService extends Service {
       const taskList = this.taskList(store, target);
 
       if (target.kind === 'doc') {
-        const markdown = await this.docMarkdown(store);
+        const markdown = await storeMarkdown(store);
         const clipped = markdown.length > MAX_DOC_CHARS;
         return {
           label: `note "${title}"`,
@@ -237,7 +237,8 @@ export class AgentContextService extends Service {
     const trail = this.ancestorTrail(store, model);
     if (trail) lines.push(`Under: ${trail}`);
     const project = projectOf(store, docId, model, projects);
-    if (project) lines.push(`Project: ${project.name} (projectId: ${project.id})`);
+    if (project)
+      lines.push(`Project: ${project.name} (projectId: ${project.id})`);
 
     // The chip, a typed annotation, or the native checkbox.
     const status = readTaskStatus(model);
@@ -292,30 +293,30 @@ export class AgentContextService extends Service {
     }
     return { tags: [...tags], properties: [...properties] };
   }
+}
 
-  /**
-   * Whole-note markdown, via the same adapter path the mobile bridge uses, so
-   * an agent sees a note the way an export would render it.
-   */
-  private async docMarkdown(store: Store): Promise<string> {
-    const transformer = store.getTransformer([
-      docLinkBaseURLMiddleware(store.workspace.id),
-      titleMiddleware(store.workspace.meta.docMetas),
-    ]);
-    const snapshot = transformer.docToSnapshot(store);
-    if (!snapshot) return '';
+/**
+ * Whole-note markdown, via the same adapter path the mobile bridge uses, so
+ * an agent sees a note the way an export would render it.
+ */
+export async function storeMarkdown(store: Store): Promise<string> {
+  const transformer = store.getTransformer([
+    docLinkBaseURLMiddleware(store.workspace.id),
+    titleMiddleware(store.workspace.meta.docMetas),
+  ]);
+  const snapshot = transformer.docToSnapshot(store);
+  if (!snapshot) return '';
 
-    const container = new Container();
-    getStoreManager()
-      .config.init()
-      .value.get('store')
-      .forEach(ext => ext.setup(container));
+  const container = new Container();
+  getStoreManager()
+    .config.init()
+    .value.get('store')
+    .forEach(ext => ext.setup(container));
 
-    const adapter = new MarkdownAdapter(transformer, container.provider());
-    const result = await adapter.fromDocSnapshot({
-      snapshot,
-      assets: transformer.assetsManager,
-    });
-    return result.file;
-  }
+  const adapter = new MarkdownAdapter(transformer, container.provider());
+  const result = await adapter.fromDocSnapshot({
+    snapshot,
+    assets: transformer.assetsManager,
+  });
+  return result.file;
 }

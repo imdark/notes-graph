@@ -515,7 +515,7 @@ export class DocModel extends BaseModel {
    * Ids of docs whose title contains `title` (case-insensitive), or whose id
    * is `title`.
    */
-  async findIdsByTitle(workspaceId: string, title: string, limit = 200) {
+  async findIdsByTitleMatch(workspaceId: string, title: string, limit = 200) {
     const rows = await this.db.workspaceDoc.findMany({
       where: {
         workspaceId,
@@ -526,6 +526,23 @@ export class DocModel extends BaseModel {
       },
       select: { docId: true },
       take: limit,
+    });
+    return rows.map(row => row.docId);
+  }
+
+  /**
+   * The ids of the workspace's docs titled `title`, ignoring case and the
+   * spaces around it, as last synced into the doc metas. A title the user
+   * has just typed may take a moment to show up here.
+   */
+  async findIdsByTitle(workspaceId: string, title: string) {
+    const rows = await this.db.workspaceDoc.findMany({
+      where: {
+        workspaceId,
+        title: { equals: title.trim(), mode: 'insensitive' },
+      },
+      select: { docId: true },
+      orderBy: { docId: 'asc' },
     });
     return rows.map(row => row.docId);
   }
@@ -751,6 +768,26 @@ export class DocModel extends BaseModel {
     `;
 
     return [count, rows] as const;
+  }
+
+  /**
+   * Docs whose title starts with `prefix`, ignoring case; only those in
+   * `docIds` when given.
+   */
+  async findByTitlePrefix(
+    workspaceId: string,
+    prefix: string,
+    docIds?: string[]
+  ) {
+    return await this.db.workspaceDoc.findMany({
+      where: {
+        workspaceId,
+        title: { startsWith: prefix, mode: 'insensitive' },
+        ...(docIds ? { docId: { in: docIds } } : {}),
+      },
+      select: { docId: true, title: true },
+      take: 500,
+    });
   }
 
   async findEmptySummaryDocIds(workspaceId: string) {

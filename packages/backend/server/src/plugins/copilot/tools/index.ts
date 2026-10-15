@@ -3,6 +3,7 @@ export * from './code-artifact';
 export * from './conversation-summary';
 export * from './doc-compose';
 export * from './doc-keyword-search';
+export * from './doc-outline';
 export * from './doc-read';
 export * from './doc-semantic-search';
 export * from './doc-write';

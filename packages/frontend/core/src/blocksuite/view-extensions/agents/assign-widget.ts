@@ -17,6 +17,7 @@ import {
   AgentsService,
   type AgentTarget,
   isOpenTask,
+  isPlainBlock,
 } from '@notesgraph/core/modules/agents';
 import { WorkspaceDialogService } from '@notesgraph/core/modules/dialogs';
 import { WorkbenchService } from '@notesgraph/core/modules/workbench';
@@ -156,7 +157,14 @@ export class AgentAssignWidget extends WidgetComponent {
   private _shouldShow(): boolean {
     if (!this._framework || this.store.readonly) return false;
     if (!this._hovered && !this._caretIn && !this._menuOpen) return false;
-    if (!isOpenTask(this.model)) return false;
+    if (isPlainBlock(this.model)) {
+      // A plain block (a long paragraph, say) is not a task, so hovering past
+      // it must not litter the note with buttons: offer one only where the
+      // caret is, which is what tapping into it does on a phone.
+      if (!this._caretIn && !this._menuOpen) return false;
+    } else if (!isOpenTask(this.model)) {
+      return false;
+    }
     return !this._framework.get(AgentRunSessionService).isBusyOn(this._target);
   }
 

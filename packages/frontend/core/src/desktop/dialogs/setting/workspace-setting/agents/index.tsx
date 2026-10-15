@@ -13,11 +13,13 @@ import {
   type AgentTemplate,
   AgentIcon,
   type AgentDraft,
+  AgentRulesService,
   type AgentScope,
   AgentsService,
   deviceHarnessName,
   isDeviceClaudeModel,
 } from '@notesgraph/core/modules/agents';
+import { WorkbenchService } from '@notesgraph/core/modules/workbench';
 import { WorkspaceService } from '@notesgraph/core/modules/workspace';
 import { FrameworkScope, useLiveData, useService } from '@notesgraph/infra';
 import { MoreHorizontalIcon } from '@blocksuite/icons/rc';
@@ -140,7 +142,50 @@ const AgentList = ({
   </div>
 );
 
-const WorkspaceSettingAgentsMain = () => {
+/**
+ * The way into the workspace's "Agent rules" note, which every run reads
+ * when it starts. Opens the note, creating it first, seeded with the
+ * conventions agents follow now, when there isn't one.
+ */
+const AgentRules = ({ onCloseSetting }: { onCloseSetting?: () => void }) => {
+  const agentRules = useService(AgentRulesService);
+  const workbench = useService(WorkbenchService).workbench;
+  const [opening, setOpening] = useState(false);
+
+  const open = useCallback(() => {
+    setOpening(true);
+    agentRules
+      .openOrCreate()
+      .then(docId => {
+        workbench.openDoc(docId);
+        onCloseSetting?.();
+      })
+      .catch(err => console.error('Failed to open the agent rules', err))
+      .finally(() => setOpening(false));
+  }, [agentRules, workbench, onCloseSetting]);
+
+  return (
+    <div>
+      <div className={styles.groupTitle}>Agent rules</div>
+      <div className={styles.listHeader}>
+        <div className={styles.groupDesc}>
+          A note every agent reads when a run starts: where things are filed,
+          how notes are named, which tags to use. Change it to change how agents
+          work, from the next run on.
+        </div>
+        <Button onClick={open} loading={opening} data-testid="edit-agent-rules">
+          Edit agent rules
+        </Button>
+      </div>
+    </div>
+  );
+};
+
+const WorkspaceSettingAgentsMain = ({
+  onCloseSetting,
+}: {
+  onCloseSetting?: () => void;
+}) => {
   const agentsService = useService(AgentsService);
   const personal = useLiveData(agentsService.personalAgents$);
   const shared = useLiveData(agentsService.workspaceAgents$);
@@ -219,6 +264,8 @@ const WorkspaceSettingAgentsMain = () => {
         </Menu>
       </div>
 
+      <AgentRules onCloseSetting={onCloseSetting} />
+
       <AgentList
         title="My agents"
         desc="Private to you, synced to your own devices."
@@ -272,7 +319,11 @@ const WorkspaceSettingAgentsMain = () => {
   );
 };
 
-export const WorkspaceSettingAgents = () => {
+export const WorkspaceSettingAgents = ({
+  onCloseSetting,
+}: {
+  onCloseSetting?: () => void;
+}) => {
   const workspace = useService(WorkspaceService).workspace;
   const workspaceInfo = useWorkspaceInfo(workspace);
 
@@ -286,7 +337,7 @@ export const WorkspaceSettingAgents = () => {
         title="Agents"
         subtitle={`Agents in ${workspaceInfo?.name || 'this workspace'}`}
       />
-      <WorkspaceSettingAgentsMain />
+      <WorkspaceSettingAgentsMain onCloseSetting={onCloseSetting} />
     </FrameworkScope>
   );
 };

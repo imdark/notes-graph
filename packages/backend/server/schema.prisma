@@ -177,6 +177,7 @@ model Workspace {
   projects                   Project[]
   registryDevices           RegistryDevice[]
   registryJobs              RegistryJob[]
+  registryAgentBudget       RegistryAgentBudget?
   monitors                   Monitor[]
   monitoringAgent            MonitoringAgent?
   monitoringBaselines        MonitoringBaseline[]
@@ -1770,6 +1771,15 @@ model RegistryJob {
   result         String?   @db.Text
   error          String?   @db.Text
   steps          Int       @default(0)
+  /// What the run cost, as Claude Code estimates it (USD), and the tokens it
+  /// used; null until a runner that measures them reports its end.
+  costUsd        Float?    @map("cost_usd")
+  tokens         Int?
+  /// The run stops once it has spent this much (USD); null for no cap.
+  maxCostUsd     Float?    @map("max_cost_usd")
+  /// The agent's permission level (see agent-profiles.ts ACCESS_LEVELS);
+  /// null for the profile's own tool list.
+  access         String?   @db.VarChar
   /// Tail of the runner's transcript; older text is dropped past a cap.
   log            String    @default("") @db.Text
   /// Characters dropped from the head of `log`, so offsets stay absolute.
@@ -1851,6 +1861,20 @@ model RegistryJobShare {
 
   @@index([workspaceId])
   @@map("registry_job_shares")
+}
+
+/// What a workspace lets its agent runs spend in a calendar month (UTC).
+/// Once the month's runs have cost this much, new runs are refused until the
+/// next month or a higher budget.
+model RegistryAgentBudget {
+  workspaceId String   @id @map("workspace_id") @db.VarChar
+  monthlyUsd  Float    @map("monthly_usd")
+  updatedBy   String?  @map("updated_by") @db.VarChar
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@map("registry_agent_budgets")
 }
 
 /// A phone that wants a push when an agent run is waiting on its owner. The

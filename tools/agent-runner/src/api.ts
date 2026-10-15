@@ -47,6 +47,8 @@ export interface Job {
   title: string | null;
   /** The agent's step limit; see turnLimit in run-job.ts for how it caps a run. */
   maxSteps?: number;
+  /** Stop the run once it has spent this much (USD). */
+  maxCostUsd?: number | null;
   profile?: AgentProfile | null;
 }
 

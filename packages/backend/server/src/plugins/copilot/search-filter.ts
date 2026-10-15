@@ -140,7 +140,7 @@ export async function resolveSearchScope(
     const ids = new Set<string>();
     for (const doc of filters.docs) {
       ids.add(doc);
-      for (const id of await models.doc.findIdsByTitle(workspaceId, doc)) {
+      for (const id of await models.doc.findIdsByTitleMatch(workspaceId, doc)) {
         ids.add(id);
       }
     }

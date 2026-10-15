@@ -63,10 +63,31 @@ export interface RunDeps {
   fetchImpl?: typeof fetch;
 }
 
-export interface RunOutcome {
+/** What a run spent, reported with its end whichever way it ended. */
+export interface RunUsage {
+  costUsd?: number;
+  tokens?: number;
+}
+
+export interface RunOutcome extends RunUsage {
   result: string;
   steps: number;
 }
+
+/** A run that ended in an error, with what it spent getting there. */
+export class RunFailed extends Error {
+  constructor(
+    message: string,
+    readonly usage: RunUsage
+  ) {
+    super(message);
+  }
+}
+
+const usageOf = (narrator: Narrator): RunUsage => ({
+  ...(narrator.cost === null ? {} : { costUsd: narrator.cost }),
+  ...(narrator.tokens === null ? {} : { tokens: narrator.tokens }),
+});
 
 /**
  * What a job asks, as wf words it (jobs.py _prompt). The note item the run
@@ -169,7 +190,7 @@ export async function runJob(job: Job, deps: RunDeps): Promise<RunOutcome> {
   try {
     await runSteps('setup', automation.setup, values, shell, say);
     const handed = await handedOver(workdir.path);
-    const skills = await skillsPlugin(profile.skills ?? [], workdir.path, fetchImpl, say);
+    const skills = await skillsPlugin(profile.skills ?? [], workdir.path, fetchImpl, say, api);
     const plugins = [...(handed.plugins ?? []), ...(skills ? [skills] : [])];
     const cwd = handed.cwd ?? render(automation.cwd ?? '{job_dir}', values);
     // Tools and teardown work where the agent does.
@@ -219,6 +240,7 @@ export async function runJob(job: Job, deps: RunDeps): Promise<RunOutcome> {
       // Nothing from the runner's own settings or CLAUDE.md files; the profile is the agent.
       settingSources: [],
       abortController,
+      ...(job.maxCostUsd ? { maxBudgetUsd: job.maxCostUsd } : {}),
       ...(plugins.length
         ? { plugins: plugins.map(path => ({ type: 'local' as const, path })) }
         : {}),
@@ -237,8 +259,10 @@ export async function runJob(job: Job, deps: RunDeps): Promise<RunOutcome> {
       narrator.feed(message);
     }
     narrator.finish();
-    if (narrator.result !== null) return { result: narrator.result, steps: narrator.steps };
-    throw new Error(narrator.error ?? 'the run ended without a result');
+    if (narrator.result !== null) {
+      return { result: narrator.result, steps: narrator.steps, ...usageOf(narrator) };
+    }
+    throw new RunFailed(narrator.error ?? 'the run ended without a result', usageOf(narrator));
   } finally {
     await runSteps(
       'teardown', automation.teardown, values, { ...shell, signal: undefined }, say
