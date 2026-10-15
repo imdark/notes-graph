@@ -1,4 +1,5 @@
 import { PlusIcon } from '@blocksuite/icons/rc';
+import { saveAnswerAsDoc } from '@notesgraph/core/blocksuite/ai/utils/save-answer-as-doc';
 import { Button, notify, Scrollable } from '@notesgraph/component';
 import {
   type Agent,
@@ -12,6 +13,7 @@ import {
 import { WorkspaceDialogService } from '@notesgraph/core/modules/dialogs';
 import { DocService } from '@notesgraph/core/modules/doc';
 import { WorkbenchService } from '@notesgraph/core/modules/workbench';
+import { WorkspaceService } from '@notesgraph/core/modules/workspace';
 import { useLiveData, useService } from '@notesgraph/infra';
 import { useCallback, useMemo, useState } from 'react';
 
@@ -53,6 +55,40 @@ export const SessionCard = ({
       .then(() => notify.success({ title: 'Copied' }))
       .catch(() => notify.error({ title: "Couldn't copy" }));
   }, [session.output]);
+
+  const workspace = useService(WorkspaceService).workspace;
+  const workbench = useService(WorkbenchService).workbench;
+  const [saving, setSaving] = useState(false);
+  // Keep the answer as a note of its own, linked back to the note (or block)
+  // it was asked on and to what it cites, so it joins the notes graph.
+  const saveOutput = useCallback(() => {
+    if (!session.output) return;
+    const { target } = session;
+    setSaving(true);
+    saveAnswerAsDoc(workspace.docCollection, session.output, {
+      sources: [
+        { docId: target.docId, blockId: agentTargetBlockIds(target)[0] },
+      ],
+    })
+      .then(docId => {
+        if (!docId) throw new Error('No doc was created');
+        notify.success({
+          title: 'Saved as a note',
+          actions: [
+            {
+              key: 'open',
+              label: 'Open',
+              onClick: () => workbench.openDoc(docId),
+            },
+          ],
+        });
+      })
+      .catch(err => {
+        console.error(err);
+        notify.error({ title: "Couldn't save the answer" });
+      })
+      .finally(() => setSaving(false));
+  }, [session, workspace, workbench]);
 
   const status = running
     ? session.questions.length > 0
@@ -135,7 +171,9 @@ export const SessionCard = ({
             onClick={() => sessionService.cancel(session.id)}
             data-testid="cancel-agent"
             title={
-              queued > 0 ? 'Stop this run; the next queued one starts' : undefined
+              queued > 0
+                ? 'Stop this run; the next queued one starts'
+                : undefined
             }
           >
             Stop
@@ -149,6 +187,17 @@ export const SessionCard = ({
                 data-testid="copy-agent-output"
               >
                 Copy answer
+              </Button>
+            ) : null}
+            {answers && session.output ? (
+              <Button
+                onClick={saveOutput}
+                loading={saving}
+                disabled={saving}
+                title="Save the answer as a new note, linked to this one and to what it cites"
+                data-testid="save-agent-output"
+              >
+                Save as note
               </Button>
             ) : null}
             <Button onClick={() => sessionService.dismiss(session.id)}>
@@ -179,7 +228,8 @@ export const SessionCard = ({
 
       {!running && answers && session.output ? (
         <span className={styles.hint}>
-          Nothing is written to the note — copy what you want to keep.
+          Nothing is written to the note — copy it, or save it as a note of its
+          own.
         </span>
       ) : null}
       {!running && !answers ? (
