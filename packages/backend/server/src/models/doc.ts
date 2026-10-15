@@ -734,6 +734,26 @@ export class DocModel extends BaseModel {
     return [count, rows] as const;
   }
 
+  /**
+   * Docs whose title starts with `prefix`, ignoring case; only those in
+   * `docIds` when given.
+   */
+  async findByTitlePrefix(
+    workspaceId: string,
+    prefix: string,
+    docIds?: string[]
+  ) {
+    return await this.db.workspaceDoc.findMany({
+      where: {
+        workspaceId,
+        title: { startsWith: prefix, mode: 'insensitive' },
+        ...(docIds ? { docId: { in: docIds } } : {}),
+      },
+      select: { docId: true, title: true },
+      take: 500,
+    });
+  }
+
   async findEmptySummaryDocIds(workspaceId: string) {
     const rows = await this.db.workspaceDoc.findMany({
       where: {

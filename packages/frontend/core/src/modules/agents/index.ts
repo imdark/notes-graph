@@ -10,6 +10,7 @@ export {
   CLOUD_DEVICE_KEY,
   editorHarness,
   isDeviceClaudeModel,
+  isSkillNoteTitle,
   openQuestions,
   RESEARCH_MODEL,
   type DeployInfo,
@@ -18,6 +19,7 @@ export {
   type RemoteQuestion,
   RemoteAgentRunnerService,
   savedPlacement,
+  type SkillNote,
   WORKFLOW_MODEL,
 } from './services/remote-runner';
 export {

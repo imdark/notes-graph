@@ -13,6 +13,7 @@ import {
 import { type AgentProfile, profileFor } from './agent-profiles';
 import { AgentPushService } from './push';
 import { isSessionLimit, sessionLimitRunAfter } from './session-limit';
+import { SkillNoteService } from './skill-notes';
 import { JobTaskClaims } from './task-claims';
 
 declare global {
@@ -279,7 +280,8 @@ export class RegistryJobService {
     private readonly models: Models,
     @Optional() private readonly push?: AgentPushService,
     @Optional() private readonly event?: EventBus,
-    @Optional() private readonly tasks?: JobTaskClaims
+    @Optional() private readonly tasks?: JobTaskClaims,
+    @Optional() private readonly skillNotes?: SkillNoteService
   ) {}
 
   /** Push without holding up the request it rides on, or failing it. */
@@ -455,7 +457,10 @@ export class RegistryJobService {
     );
     if (!job) return null;
     await this.tasks?.claimed(job);
-    return { ...toJobDto(job), profile: profileFor(job.model, job.skills) };
+    // Skill notes are looked up in the job's own workspace only.
+    const noteSkills =
+      (await this.skillNotes?.forJob(job.workspaceId, job.skills, job.createdBy)) ?? [];
+    return { ...toJobDto(job), profile: profileFor(job.model, job.skills, noteSkills) };
   }
 
   async report(

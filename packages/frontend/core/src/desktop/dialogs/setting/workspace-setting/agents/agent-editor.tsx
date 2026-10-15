@@ -33,6 +33,7 @@ import {
   RESEARCH_MODEL,
   CLOUD_DEVICE_KEY,
   savedPlacement,
+  type SkillNote,
   WORKFLOW_MODEL,
 } from '@notesgraph/core/modules/agents';
 import {
@@ -233,6 +234,23 @@ export const AgentEditor = ({
     { key: string; name: string; state: string; kind: string }[]
   >([]);
   const [devicesError, setDevicesError] = useState<string | undefined>();
+  // The workspace's "Skill: <name>" notes, offered beside the catalog.
+  const [skillNotes, setSkillNotes] = useState<SkillNote[]>([]);
+  useEffect(() => {
+    if (!claudeHarness) return;
+    const workspaceId = workspaceService.workspace?.id;
+    if (!workspaceId) return;
+    let cancelled = false;
+    remoteRunner
+      .skillNotes(workspaceId)
+      .then(list => {
+        if (!cancelled) setSkillNotes(list);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [claudeHarness, remoteRunner, workspaceService]);
 
   // Load the fleet only once "Remote device" is actually chosen: most agents
   // never are, and this is a network call.
@@ -674,11 +692,29 @@ export const AgentEditor = ({
                       </label>
                     );
                   })}
+                  {skillNotes.map(({ ref, name: skill, title }) => {
+                    const current = skills ?? defaultSkillsFor(model);
+                    return (
+                      <label
+                        key={ref}
+                        className={styles.check}
+                        title={`From the note “${title}”`}
+                      >
+                        <Checkbox
+                          checked={current.includes(ref)}
+                          onChange={() => setSkills(toggle(current, ref))}
+                          data-testid={`agent-editor-skill-${ref}`}
+                        />
+                        {skill} (note)
+                      </label>
+                    );
+                  })}
                 </div>
                 <span className={styles.hint}>
                   {skills
                     ? 'Only these skills are loaded for the run.'
-                    : 'Following the default set for this model; tick or untick to choose your own.'}
+                    : 'Following the default set for this model; tick or untick to choose your own.'}{' '}
+                  A note titled “Skill: &lt;name&gt;” is offered here as a skill too.
                 </span>
               </div>
             ) : null}

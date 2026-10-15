@@ -380,6 +380,35 @@ describe('skills', () => {
     expect(lines).toContain('⚙ skill · good ✓');
     expect(lines.some(l => /skill · gone ✗ couldn't fetch it/.test(l))).toBe(true);
   });
+
+  test('a skill note is fetched from NotesGraph with the token; no other host gets it', async () => {
+    const calls: Array<{ url: string; auth?: string }> = [];
+    const fetchImpl = (async (url: string, init?: RequestInit) => {
+      calls.push({
+        url,
+        auth: (init?.headers as Record<string, string> | undefined)?.Authorization,
+      });
+      return new Response('---\nname: x\n---\n');
+    }) as unknown as typeof fetch;
+    const skills = [
+      { name: 'deploy', url: '/api/registry/workspaces/ws-1/skills/d1/SKILL.md' },
+      { name: 'other', url: 'https://example.com/other/SKILL.md' },
+    ];
+    await runJob(job({ profile: profile({ skills }) }), {
+      api: api(),
+      workspaceId: 'ws-1',
+      settings: settings(),
+      query: fakeQuery([success('done')], {}),
+      say: () => {},
+      signal: new AbortController().signal,
+      fetchImpl,
+    });
+    const skillCalls = calls.filter(c => c.url.endsWith('SKILL.md'));
+    expect(skillCalls).toEqual([
+      { url: `${ng.url}/api/registry/workspaces/ws-1/skills/d1/SKILL.md`, auth: 'Bearer pat' },
+      { url: 'https://example.com/other/SKILL.md', auth: undefined },
+    ]);
+  });
 });
 
 describe('signing in to Claude', () => {
