@@ -6,10 +6,22 @@ import type { Options, SDKMessage } from '@anthropic-ai/claude-agent-sdk';
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 
 import { type AgentProfile, type Job, NotesGraphApi } from '../api';
-import { argVar, jobPlaceholders, render, runSteps, runTool } from '../automation';
+import {
+  argVar,
+  jobPlaceholders,
+  render,
+  runSteps,
+  runTool,
+} from '../automation';
 import { Narrator } from '../narrate';
 import { runJob, turnLimit } from '../run-job';
-import { ask, JobCancelled, permissionPrompt } from '../run-tools';
+import {
+  ask,
+  JobCancelled,
+  permissionPrompt,
+  steerHooks,
+  steerNote,
+} from '../run-tools';
 import { runClaimed } from '../serve';
 import { FakeNotesGraph, until } from './fake-notesgraph';
 
@@ -51,7 +63,10 @@ const job = (over: Partial<Job> = {}): Job => ({
 });
 
 /** A stand-in for the SDK's query: says what it was given, then these messages. */
-function fakeQuery(messages: SDKMessage[], seen: { options?: Options; prompt?: string } = {}) {
+function fakeQuery(
+  messages: SDKMessage[],
+  seen: { options?: Options; prompt?: string } = {}
+) {
   return ((params: { prompt: string; options?: Options }) => {
     seen.options = params.options;
     seen.prompt = params.prompt;
@@ -61,20 +76,41 @@ function fakeQuery(messages: SDKMessage[], seen: { options?: Options; prompt?: s
   }) as any;
 }
 
-const init = { type: 'system', subtype: 'init', model: 'claude-x', cwd: '/w' } as unknown as SDKMessage;
+const init = {
+  type: 'system',
+  subtype: 'init',
+  model: 'claude-x',
+  cwd: '/w',
+} as unknown as SDKMessage;
 const said = (text: string) =>
-  ({ type: 'assistant', message: { content: [{ type: 'text', text }] } }) as unknown as SDKMessage;
+  ({
+    type: 'assistant',
+    message: { content: [{ type: 'text', text }] },
+  }) as unknown as SDKMessage;
 const success = (result: string) =>
-  ({ type: 'result', subtype: 'success', is_error: false, result, num_turns: 3, total_cost_usd: 0.01 }) as unknown as SDKMessage;
+  ({
+    type: 'result',
+    subtype: 'success',
+    is_error: false,
+    result,
+    num_turns: 3,
+    total_cost_usd: 0.01,
+  }) as unknown as SDKMessage;
 
-const settings = () => ({ workRoot: root, anthropicApiKey: 'sk-test', repo: undefined });
+const settings = () => ({
+  workRoot: root,
+  anthropicApiKey: 'sk-test',
+  repo: undefined,
+});
 
 describe('automation', () => {
   test('fills in known placeholders and leaves the shell its own braces', () => {
-    expect(render('cd {job_dir} && echo ${HOME} {other}', { job_dir: '/w/j' })).toBe(
-      'cd /w/j && echo ${HOME} {other}'
-    );
-    expect(jobPlaceholders('abcdef123456', '/w/j', '/c', 'r', 'main')).toMatchObject({
+    expect(
+      render('cd {job_dir} && echo ${HOME} {other}', { job_dir: '/w/j' })
+    ).toBe('cd /w/j && echo ${HOME} {other}');
+    expect(
+      jobPlaceholders('abcdef123456', '/w/j', '/c', 'r', 'main')
+    ).toMatchObject({
       job_short: 'abcdef12',
       branch: 'cloud/abcdef12',
       cache: '/c',
@@ -108,7 +144,13 @@ describe('automation', () => {
   test('a step that runs too long is stopped', async () => {
     const shell = { cwd: root, env: { PATH: process.env.PATH } };
     await expect(
-      runSteps('setup', [{ name: 'slow', run: 'sleep 5', timeout: 0.2 }], {}, shell, () => {})
+      runSteps(
+        'setup',
+        [{ name: 'slow', run: 'sleep 5', timeout: 0.2 }],
+        {},
+        shell,
+        () => {}
+      )
     ).rejects.toThrow(/timed out after 0.2s/);
   });
 
@@ -121,7 +163,13 @@ describe('automation', () => {
       params: { path: { description: 'p', required: true } },
     };
     const sneaky = 'x"; touch hacked; echo "';
-    const { text, ok } = await runTool(spec, { path: sneaky }, { job_dir: root }, shell, () => {});
+    const { text, ok } = await runTool(
+      spec,
+      { path: sneaky },
+      { job_dir: root },
+      shell,
+      () => {}
+    );
     expect(ok).toBe(true);
     expect(text).toBe('exit code 0\ndone');
     expect(await readFile(join(root, 'out.txt'), 'utf8')).toBe(sneaky);
@@ -139,14 +187,26 @@ describe('narrating', () => {
       message: {
         content: [
           { type: 'text', text: 'Looking for Cosmo' },
-          { type: 'tool_use', name: 'mcp__run__ask_user', input: { question: 'Who is Cosmo?' } },
-          { type: 'tool_use', name: 'mcp__notesgraph__keyword_search', input: { query: 'Cosmo' } },
+          {
+            type: 'tool_use',
+            name: 'mcp__run__ask_user',
+            input: { question: 'Who is Cosmo?' },
+          },
+          {
+            type: 'tool_use',
+            name: 'mcp__notesgraph__keyword_search',
+            input: { query: 'Cosmo' },
+          },
         ],
       },
     } as unknown as SDKMessage);
     narrator.feed({
       type: 'user',
-      message: { content: [{ type: 'tool_result', content: [{ type: 'text', text: 'none' }] }] },
+      message: {
+        content: [
+          { type: 'tool_result', content: [{ type: 'text', text: 'none' }] },
+        ],
+      },
     } as unknown as SDKMessage);
     narrator.feed(success('Bluey'));
     narrator.finish();
@@ -164,7 +224,12 @@ describe('narrating', () => {
   test('says how many notes a NotesGraph search found, across how many docs', () => {
     const lines: string[] = [];
     const narrator = new Narrator(line => lines.push(line));
-    const search = (id: string, name: string) => ({ type: 'tool_use', id, name, input: { query: 'Cosmo' } });
+    const search = (id: string, name: string) => ({
+      type: 'tool_use',
+      id,
+      name,
+      input: { query: 'Cosmo' },
+    });
     const result = (id: string, texts: string[]) => ({
       type: 'tool_result',
       tool_use_id: id,
@@ -185,7 +250,10 @@ describe('narrating', () => {
       type: 'user',
       message: {
         content: [
-          result('k', ['{"docId":"d1","title":"Cosmo"}', '{"docId":"d2","title":"Family"}']),
+          result('k', [
+            '{"docId":"d1","title":"Cosmo"}',
+            '{"docId":"d2","title":"Family"}',
+          ]),
           result('b', [
             JSON.stringify({
               blocks: [
@@ -219,8 +287,12 @@ describe('narrating', () => {
     } as unknown as SDKMessage);
     narrator.finish();
     expect(narrator.result).toBeNull();
-    expect(narrator.error).toMatch(/^stopped at the 40-turn limit without a final answer/);
-    expect(lines.at(-1)).toMatch(/^✗ failed after 41 turns: stopped at the 40-turn limit/);
+    expect(narrator.error).toMatch(
+      /^stopped at the 40-turn limit without a final answer/
+    );
+    expect(lines.at(-1)).toMatch(
+      /^✗ failed after 41 turns: stopped at the 40-turn limit/
+    );
   });
 });
 
@@ -228,7 +300,9 @@ describe('turn limit', () => {
   test("raises the agent's step limit to a floor, and caps nothing without one", () => {
     expect(turnLimit(job({ maxSteps: 8 }))).toBe(40);
     expect(turnLimit(job({ maxSteps: 60 }))).toBe(60);
-    expect(turnLimit(job({ maxSteps: 8, profile: profile({ workdir: 'repo' }) }))).toBe(200);
+    expect(
+      turnLimit(job({ maxSteps: 8, profile: profile({ workdir: 'repo' }) }))
+    ).toBe(200);
     expect(turnLimit(job({ maxSteps: undefined }))).toBeUndefined();
   });
 });
@@ -236,9 +310,14 @@ describe('turn limit', () => {
 describe('asking the person', () => {
   test('a question waits for its answer', async () => {
     const ctx = { api: api(), workspaceId: 'ws-1', jobId: 'j1', pollMs: 5 };
-    const answer = ask(ctx, 'question', 'Who is Cosmo?', { options: ['My son'] });
+    const answer = ask(ctx, 'question', 'Who is Cosmo?', {
+      options: ['My son'],
+    });
     await until(() => ng.questions.length === 1);
-    expect(ng.questions[0]).toMatchObject({ kind: 'question', options: ['My son'] });
+    expect(ng.questions[0]).toMatchObject({
+      kind: 'question',
+      options: ['My son'],
+    });
     ng.answer(0, { answer: 'My son, 7' });
     expect((await answer).answer).toBe('My son, 7');
   });
@@ -252,8 +331,15 @@ describe('asking the person', () => {
   });
 
   test('a tool not pre-approved is put to the person, with its input', async () => {
-    const prompt = permissionPrompt({ api: api(), workspaceId: 'ws-1', jobId: 'j1', pollMs: 5 });
-    const denied = prompt('Bash', { command: 'rm -rf /' }, { signal: new AbortController().signal } as any);
+    const prompt = permissionPrompt({
+      api: api(),
+      workspaceId: 'ws-1',
+      jobId: 'j1',
+      pollMs: 5,
+    });
+    const denied = prompt('Bash', { command: 'rm -rf /' }, {
+      signal: new AbortController().signal,
+    } as any);
     await until(() => ng.questions.length === 1);
     expect(ng.questions[0]).toMatchObject({
       kind: 'permission',
@@ -261,12 +347,73 @@ describe('asking the person', () => {
       detail: '{"command":"rm -rf /"}',
     });
     ng.answer(0, { allowed: false, answer: 'not that' });
-    expect(await denied).toEqual({ behavior: 'deny', message: 'The user denied this. They said: not that' });
+    expect(await denied).toEqual({
+      behavior: 'deny',
+      message: 'The user denied this. They said: not that',
+    });
 
-    const allowed = prompt('Bash', { command: 'ls' }, { signal: new AbortController().signal } as any);
+    const allowed = prompt('Bash', { command: 'ls' }, {
+      signal: new AbortController().signal,
+    } as any);
     await until(() => ng.questions.length === 2);
     ng.answer(1, { allowed: true });
-    expect(await allowed).toEqual({ behavior: 'allow', updatedInput: { command: 'ls' } });
+    expect(await allowed).toEqual({
+      behavior: 'allow',
+      updatedInput: { command: 'ls' },
+    });
+  });
+});
+
+describe('steering a run', () => {
+  const ctx = () => ({
+    api: api(),
+    workspaceId: 'ws-1',
+    jobId: 'j1',
+    pollMs: 5,
+  });
+  const signal = { signal: new AbortController().signal };
+
+  test('an instruction sent mid-run reaches the model after its next tool call, once', async () => {
+    const hook = steerHooks(ctx())!.PostToolUse![0].hooks[0];
+    expect(await hook({} as any, 't1', signal)).toEqual({});
+    ng.steers.push({ id: 's1', text: 'Use the staging DB', createdAt: 1 });
+    expect(await hook({} as any, 't2', signal)).toEqual({
+      hookSpecificOutput: {
+        hookEventName: 'PostToolUse',
+        additionalContext: steerNote([
+          { id: 's1', text: 'Use the staging DB', createdAt: 1 },
+        ]),
+      },
+    });
+    expect(await hook({} as any, 't3', signal)).toEqual({});
+  });
+
+  test('one sent as the agent finishes sends it back to work', async () => {
+    const stop = steerHooks(ctx())!.Stop![0].hooks[0];
+    expect(await stop({} as any, undefined, signal)).toEqual({});
+    ng.steers.push({ id: 's1', text: 'Also update the README', createdAt: 1 });
+    const out = (await stop({} as any, undefined, signal)) as {
+      decision?: string;
+      reason?: string;
+    };
+    expect(out.decision).toBe('block');
+    expect(out.reason).toContain('Also update the README');
+  });
+
+  test('the server being away delivers nothing and fails nothing', async () => {
+    const hook = steerHooks({
+      ...ctx(),
+      api: new NotesGraphApi('http://127.0.0.1:1', 'pat'),
+    })!.PostToolUse![0].hooks[0];
+    expect(await hook({} as any, 't1', signal)).toEqual({});
+  });
+
+  test('several instructions are listed together', () => {
+    const note = steerNote([
+      { id: 's1', text: 'Skip tests', createdAt: 1 },
+      { id: 's2', text: 'Open a draft PR', createdAt: 2 },
+    ]);
+    expect(note).toContain('- Skip tests\n- Open a draft PR');
   });
 });
 
@@ -275,7 +422,12 @@ describe('running a job', () => {
     const seen: { options?: Options; prompt?: string } = {};
     const lines: string[] = [];
     const automation = {
-      setup: [{ name: 'prepare', run: 'mkdir -p {job_dir}/repo && echo ready > {job_dir}/repo/state' }],
+      setup: [
+        {
+          name: 'prepare',
+          run: 'mkdir -p {job_dir}/repo && echo ready > {job_dir}/repo/state',
+        },
+      ],
       tools: [{ name: 'run_tests', description: 'tests', run: 'echo ok' }],
       teardown: [{ name: 'note', run: 'echo bye > {cache}/teardown' }],
       cwd: '{job_dir}/repo',
@@ -299,9 +451,21 @@ describe('running a job', () => {
     );
     const options = seen.options!;
     expect(options.cwd).toBe(join(root, 'jobs', 'job-1234abcd-ffff', 'repo'));
-    expect(options.systemPrompt).toEqual({ type: 'preset', preset: 'claude_code', append: 'Be the agent.' });
-    expect(options.allowedTools).toEqual(['mcp__notesgraph', 'mcp__run__ask_user', 'mcp__automation']);
-    expect(Object.keys(options.mcpServers!).sort()).toEqual(['automation', 'notesgraph', 'run']);
+    expect(options.systemPrompt).toEqual({
+      type: 'preset',
+      preset: 'claude_code',
+      append: 'Be the agent.',
+    });
+    expect(options.allowedTools).toEqual([
+      'mcp__notesgraph',
+      'mcp__run__ask_user',
+      'mcp__automation',
+    ]);
+    expect(Object.keys(options.mcpServers!).sort()).toEqual([
+      'automation',
+      'notesgraph',
+      'run',
+    ]);
     expect(options.mcpServers!.notesgraph).toMatchObject({
       type: 'http',
       url: `${ng.url}/api/workspaces/ws-1/mcp`,
@@ -310,16 +474,25 @@ describe('running a job', () => {
     expect(options.env!.ANTHROPIC_API_KEY).toBe('sk-test');
     expect(options.env!.CLAUDE_CODE_OAUTH_TOKEN).toBeUndefined();
     expect(options.settingSources).toEqual([]);
+    expect(Object.keys(options.hooks!).sort()).toEqual(['PostToolUse', 'Stop']);
     expect(lines.some(l => /^⚙ setup · prepare ✓/.test(l))).toBe(true);
     expect(lines.at(-2)).toMatch(/^✓ finished in 3 turns/);
     expect(lines.at(-1)).toMatch(/^⚙ teardown · note ✓/);
-    expect(await readFile(join(root, 'cache', 'teardown'), 'utf8')).toBe('bye\n');
-    await expect(stat(join(root, 'jobs', 'job-1234abcd-ffff'))).rejects.toThrow();
+    expect(await readFile(join(root, 'cache', 'teardown'), 'utf8')).toBe(
+      'bye\n'
+    );
+    await expect(
+      stat(join(root, 'jobs', 'job-1234abcd-ffff'))
+    ).rejects.toThrow();
   });
 
   test('a failed setup stops the run before any model runs', async () => {
     const seen: { options?: Options } = {};
-    const automation = { setup: [{ name: 'clone', run: 'exit 1' }], tools: [], teardown: [] };
+    const automation = {
+      setup: [{ name: 'clone', run: 'exit 1' }],
+      tools: [],
+      teardown: [],
+    };
     await expect(
       runJob(job({ profile: profile({ automation }) }), {
         api: api(),
@@ -350,19 +523,30 @@ describe('running a job', () => {
     };
     // The ticket is named after the note item (title.txt), as
     // `wf agent prepare-task` does, not after the agent's instructions.
-    await runJob(job({ model: 'workflow', title: 'Plan movie night', profile: profile({ automation }) }), {
-      api: api(),
-      workspaceId: 'ws-1',
-      settings: settings(),
-      query: fakeQuery([success('done')], seen),
-      say: () => {},
-      signal: new AbortController().signal,
-    });
+    await runJob(
+      job({
+        model: 'workflow',
+        title: 'Plan movie night',
+        profile: profile({ automation }),
+      }),
+      {
+        api: api(),
+        workspaceId: 'ws-1',
+        settings: settings(),
+        query: fakeQuery([success('done')], seen),
+        say: () => {},
+        signal: new AbortController().signal,
+      }
+    );
     const dir = join(root, 'jobs', 'job-1234abcd-ffff');
     expect(seen.options!.cwd).toBe(join(dir, 'wt'));
     expect(seen.prompt).toBe('TASK: CLOUD-1 Plan movie night');
-    expect(seen.options!.plugins).toEqual([{ type: 'local', path: join(dir, 'skills') }]);
-    expect(await readFile(join(root, 'cache', 'last-cwd'), 'utf8')).toBe(`${join(dir, 'wt')}\n`);
+    expect(seen.options!.plugins).toEqual([
+      { type: 'local', path: join(dir, 'skills') },
+    ]);
+    expect(await readFile(join(root, 'cache', 'last-cwd'), 'utf8')).toBe(
+      `${join(dir, 'wt')}\n`
+    );
   });
 
   test('refuses what only a Mac can run, and research without OmniSeek', async () => {
@@ -374,10 +558,20 @@ describe('running a job', () => {
       say: () => {},
       signal: new AbortController().signal,
     };
-    await expect(runJob(job({ model: 'workflow', profile: null }), deps)).rejects.toThrow(/Mac device only/);
-    await expect(runJob(job({ model: 'command', profile: null }), deps)).rejects.toThrow(/Mac device only/);
     await expect(
-      runJob(job({ model: 'research', profile: profile({ mcpServers: ['notesgraph', 'run', 'omniseek'] }) }), deps)
+      runJob(job({ model: 'workflow', profile: null }), deps)
+    ).rejects.toThrow(/Mac device only/);
+    await expect(
+      runJob(job({ model: 'command', profile: null }), deps)
+    ).rejects.toThrow(/Mac device only/);
+    await expect(
+      runJob(
+        job({
+          model: 'research',
+          profile: profile({ mcpServers: ['notesgraph', 'run', 'omniseek'] }),
+        }),
+        deps
+      )
     ).rejects.toThrow(/OmniSeek isn't set up/);
   });
 });
@@ -449,7 +643,9 @@ describe('skills', () => {
     const plugin = join(root, 'jobs', 'job-1234abcd-ffff', '.skills-plugin');
     expect(seen.options!.plugins).toEqual([{ type: 'local', path: plugin }]);
     expect(lines).toContain('⚙ skill · good ✓');
-    expect(lines.some(l => /skill · gone ✗ couldn't fetch it/.test(l))).toBe(true);
+    expect(lines.some(l => /skill · gone ✗ couldn't fetch it/.test(l))).toBe(
+      true
+    );
   });
 });
 

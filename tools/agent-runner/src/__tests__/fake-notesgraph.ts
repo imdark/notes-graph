@@ -23,6 +23,8 @@ export class FakeNotesGraph {
   reports: Array<{ jobId: string; fields: Record<string, any> }> = [];
   questions: StoredQuestion[] = [];
   titles: string[] = [];
+  /** Instructions sent to the run and not yet taken. */
+  steers: Array<{ id: string; text: string; createdAt: number }> = [];
   devices: Record<string, any>[] = [];
   /** What a report hears back as the job's status (a stopped run says cancelled). */
   status = 'running';
@@ -57,6 +59,9 @@ export class FakeNotesGraph {
         if ((m = path.match(/\/jobs\/([^/]+)\/title$/))) {
           this.titles.push(data.title);
           return reply({ job: { id: m[1], title: data.title } });
+        }
+        if (req.method === 'POST' && path.endsWith('/steer/take')) {
+          return reply({ steers: this.steers.splice(0), jobStatus: this.status });
         }
         if (req.method === 'POST' && path.endsWith('/questions')) {
           const question: StoredQuestion = {

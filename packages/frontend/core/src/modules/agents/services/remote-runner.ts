@@ -199,10 +199,28 @@ export interface RemoteJob {
   finishedAt: number | null;
   /** Present on single-job reads. */
   questions?: RemoteQuestion[];
+  /** What the starter sent the run while it worked. Single-job reads only. */
+  steers?: RemoteSteer[];
+}
+
+/**
+ * An instruction sent to a running job. Its runner takes it on its next
+ * step, and the server writes it into the transcript then.
+ */
+export interface RemoteSteer {
+  id: string;
+  text: string;
+  createdAt: number;
+  /** When the runner took it; null while it waits. */
+  deliveredAt: number | null;
 }
 
 export const openQuestions = (job: RemoteJob): RemoteQuestion[] =>
   (job.questions ?? []).filter(q => !q.answeredAt);
+
+/** Messages sent to the job that its runner hasn't taken yet. */
+export const waitingSteers = (job: RemoteJob): RemoteSteer[] =>
+  (job.steers ?? []).filter(s => !s.deliveredAt);
 
 /** One step of {@link RemoteAgentRunnerService.watch}. */
 export interface RemoteJobUpdate {
@@ -430,6 +448,22 @@ export class RemoteAgentRunnerService extends Service {
     return data.job;
   }
 
+  /**
+   * Send a running job a new instruction; its runner takes it on its next
+   * step. Only its starter is allowed to, and only before it ends.
+   */
+  async steer(
+    workspaceId: string,
+    jobId: string,
+    text: string
+  ): Promise<RemoteSteer> {
+    const data = await this.json<{ steer: RemoteSteer }>(
+      `${this.base(workspaceId)}/jobs/${encodeURIComponent(jobId)}/steer`,
+      { method: 'POST', body: JSON.stringify({ text }) }
+    );
+    return data.steer;
+  }
+
   async cancel(workspaceId: string, jobId: string): Promise<void> {
     await this.json(
       `${this.base(workspaceId)}/jobs/${encodeURIComponent(jobId)}/cancel`,
@@ -458,6 +492,7 @@ export class RemoteAgentRunnerService extends Service {
   ): AsyncIterable<RemoteJobUpdate> {
     let lastStatus = '';
     let lastOpen = '';
+    let lastWaiting = '';
     let lastTitle: string | null | undefined;
     let lastAllowAll: boolean | undefined;
     let logFrom = 0;
@@ -488,15 +523,20 @@ export class RemoteAgentRunnerService extends Service {
         const open = openQuestions(job)
           .map(q => q.id)
           .join(',');
+        const waiting = waitingSteers(job)
+          .map(s => s.id)
+          .join(',');
         if (
           job.status !== lastStatus ||
           logDelta ||
           open !== lastOpen ||
+          waiting !== lastWaiting ||
           job.title !== lastTitle ||
           job.allowAllTools !== lastAllowAll
         ) {
           lastStatus = job.status;
           lastOpen = open;
+          lastWaiting = waiting;
           lastTitle = job.title;
           lastAllowAll = job.allowAllTools;
           yield { job, logDelta };
