@@ -49,6 +49,11 @@ export const topLevelRoutes = [
         lazy: () => import('./pages/workspace/index'),
       },
       {
+        // Ranks above SHARE_ROUTE_PATH: a static segment beats a param.
+        path: '/share/run/:token',
+        lazy: () => import('./pages/share-run'),
+      },
+      {
         path: SHARE_ROUTE_PATH,
         loader: ({ params }) => {
           return redirect(

@@ -141,6 +141,30 @@ export interface RemoteQuestion {
   answeredAt: number | null;
 }
 
+/** A run's public read-only link (see the server's registry/share.ts). */
+export interface RunShare {
+  token: string;
+  url: string;
+  /** When the snapshot it shows was taken, epoch seconds. */
+  sharedAt: number;
+}
+
+/** What a share link shows: a snapshot, not the live run. */
+export interface SharedRun {
+  title: string | null;
+  status: string;
+  log: string;
+  result: string | null;
+  error: string | null;
+  questions: {
+    kind: string;
+    text: string;
+    answer: string | null;
+    allowed: boolean | null;
+  }[];
+  sharedAt: number;
+}
+
 export interface RemoteJob {
   id: string;
   deviceKey: string;
@@ -307,6 +331,30 @@ export class RemoteAgentRunnerService extends Service {
     } catch {
       throw new Error(`Unexpected response from ${url}`);
     }
+  }
+
+  /** The run's public link, if it has one. */
+  async getShare(workspaceId: string, jobId: string): Promise<RunShare | null> {
+    const data = await this.json<{ share: RunShare | null }>(
+      `${this.base(workspaceId)}/jobs/${encodeURIComponent(jobId)}/share`
+    );
+    return data.share;
+  }
+
+  /** Make the run's public link, or refresh what it shows. */
+  async share(workspaceId: string, jobId: string): Promise<RunShare> {
+    const data = await this.json<{ share: RunShare }>(
+      `${this.base(workspaceId)}/jobs/${encodeURIComponent(jobId)}/share`,
+      { method: 'POST' }
+    );
+    return data.share;
+  }
+
+  async unshare(workspaceId: string, jobId: string): Promise<void> {
+    await this.json(
+      `${this.base(workspaceId)}/jobs/${encodeURIComponent(jobId)}/share`,
+      { method: 'DELETE' }
+    );
   }
 
   /** List the devices in this workspace that accept agent work. */
