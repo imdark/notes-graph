@@ -10,8 +10,7 @@ import { WorkspaceService } from '@notesgraph/core/modules/workspace';
 import { useService } from '@notesgraph/infra';
 import { useCallback } from 'react';
 
-import { AgentSideChat } from './agent-side-chat';
-import * as styles from './agents.css';
+import { AgentSideChat, ChatReplyText } from './agent-side-chat';
 
 /**
  * A chat beside a question a run is waiting on, to talk it through before
@@ -43,11 +42,11 @@ export const AgentQuestionFork = ({
   }, [jobId, question, remoteRunner, workspaceService]);
 
   const renderReply = useCallback(
-    (content: string) => {
+    (content: string, streaming: boolean) => {
       const { text: reply, suggestion } = splitSuggestion(content);
       return (
         <>
-          <p className={styles.output}>{reply || '…'}</p>
+          <ChatReplyText text={reply} streaming={streaming} />
           {suggestion && onUseAnswer ? (
             <Button
               onClick={() => onUseAnswer(suggestion)}
