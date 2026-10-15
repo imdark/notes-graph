@@ -3,7 +3,7 @@ use y_octo::{TextDeltaOp, TextInsert};
 use super::{
   super::schema::{
     PROP_CAPTION, PROP_CELLS_PREFIX, PROP_CHECKED, PROP_COLUMNS_PREFIX, PROP_HEIGHT, PROP_LANGUAGE, PROP_ORDER,
-    PROP_ROWS_PREFIX, PROP_SOURCE_ID, PROP_TEXT, PROP_TYPE, PROP_URL, PROP_VIDEO_ID, PROP_WIDTH, SYS_CHILDREN,
+    PROP_PREVIEW, PROP_ROWS_PREFIX, PROP_SOURCE_ID, PROP_TEXT, PROP_TYPE, PROP_URL, PROP_VIDEO_ID, PROP_WIDTH, SYS_CHILDREN,
     SYS_FLAVOUR, SYS_ID, SYS_VERSION, table_cell_text_key, table_column_id_key, table_column_order_key,
     table_row_id_key, table_row_order_key,
   },
@@ -148,6 +148,11 @@ pub(super) fn apply_text_block_props(
   match props.language {
     Some(language) => {
       block.insert(PROP_LANGUAGE.to_string(), Any::String(language.to_string()))?;
+      // A diagram reads as the drawing, not its source. Only when unset, so a
+      // block the user switched back to source stays that way.
+      if language.eq_ignore_ascii_case("mermaid") && block.get(PROP_PREVIEW).is_none() {
+        block.insert(PROP_PREVIEW.to_string(), Any::True)?;
+      }
     }
     None => {
       if clear_missing && block.get(PROP_LANGUAGE).is_some() {
