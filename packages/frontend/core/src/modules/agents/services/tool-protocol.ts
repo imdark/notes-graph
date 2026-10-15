@@ -22,6 +22,7 @@ export interface ParsedToolCall {
 
 /** ```tool ... ``` — tolerant of the whitespace small models sprinkle in. */
 const TOOL_BLOCK_RE = /```tool\s*\n([\s\S]*?)```/i;
+const TOOL_BLOCKS_RE = /```tool\s*\n([\s\S]*?)```/gi;
 
 /** What the model is told about the folder tools, when it has them. */
 export const FILE_TOOL_RULES = [
@@ -65,6 +66,9 @@ export function buildToolPrompt(
     exampleCall,
     '```',
     '',
+    'Several calls that do not depend on each other can go in one reply, one',
+    'block each; they run together. Do not repeat a search you already ran:',
+    'refine it instead.',
     'You will then be given the result and can use another tool or answer.',
     'When you are ready to answer, reply normally with no tool block.',
     ...rules,
@@ -81,13 +85,24 @@ export function buildToolPrompt(
 export function parseToolCall(text: string): ParsedToolCall | null {
   const match = TOOL_BLOCK_RE.exec(text);
   if (!match) return null;
+  return parseBlock(match[1]);
+}
 
+/**
+ * Every tool call in `text`, in the order written; empty when the model is
+ * answering. Throws, like parseToolCall, on any block that is unusable.
+ */
+export function parseToolCalls(text: string): ParsedToolCall[] {
+  return [...text.matchAll(TOOL_BLOCKS_RE)].map(match => parseBlock(match[1]));
+}
+
+function parseBlock(body: string): ParsedToolCall {
   let payload: unknown;
   try {
-    payload = JSON.parse(match[1].trim());
+    payload = JSON.parse(body.trim());
   } catch {
     throw new Error(
-      'That tool block was not valid JSON. Reply with a single ```tool block containing only JSON.'
+      'That tool block was not valid JSON. Each ```tool block must contain only JSON.'
     );
   }
 

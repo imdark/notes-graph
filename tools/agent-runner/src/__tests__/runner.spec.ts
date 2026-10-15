@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 import { type AgentProfile, type Job, NotesGraphApi } from '../api';
 import { argVar, jobPlaceholders, render, runSteps, runTool } from '../automation';
 import { Narrator } from '../narrate';
-import { runJob } from '../run-job';
+import { runJob, turnLimit } from '../run-job';
 import { ask, JobCancelled, permissionPrompt } from '../run-tools';
 import { runClaimed } from '../serve';
 import { FakeNotesGraph, until } from './fake-notesgraph';
@@ -159,6 +159,77 @@ describe('narrating', () => {
       '✓ finished in 3 turns · $0.0100',
     ]);
     expect(narrator.result).toBe('Bluey');
+  });
+
+  test('says how many notes a NotesGraph search found, across how many docs', () => {
+    const lines: string[] = [];
+    const narrator = new Narrator(line => lines.push(line));
+    const search = (id: string, name: string) => ({ type: 'tool_use', id, name, input: { query: 'Cosmo' } });
+    const result = (id: string, texts: string[]) => ({
+      type: 'tool_result',
+      tool_use_id: id,
+      content: texts.map(text => ({ type: 'text', text })),
+    });
+    narrator.feed({
+      type: 'assistant',
+      message: {
+        content: [
+          search('k', 'mcp__notesgraph__keyword_search'),
+          search('b', 'mcp__notesgraph__search_blocks'),
+          search('s', 'mcp__notesgraph__semantic_search'),
+          search('r', 'mcp__notesgraph__read_document'),
+        ],
+      },
+    } as unknown as SDKMessage);
+    narrator.feed({
+      type: 'user',
+      message: {
+        content: [
+          result('k', ['{"docId":"d1","title":"Cosmo"}', '{"docId":"d2","title":"Family"}']),
+          result('b', [
+            JSON.stringify({
+              blocks: [
+                { docId: 'd1', blockId: 'a', text: 'Cosmo is 7' },
+                { docId: 'd1', blockId: 'b', text: 'Cosmo likes Bluey' },
+                { docId: 'd3', blockId: 'c', text: 'Cosmo at school' },
+              ],
+            }),
+          ]),
+          result('s', ['a passage\nover two lines', 'another passage']),
+          result('r', ['# Cosmo']),
+        ],
+      },
+    } as unknown as SDKMessage);
+    expect(lines.filter(l => l.includes('Found'))).toEqual([
+      '  Found 2 notes across 2 docs',
+      '  Found 3 notes across 2 docs',
+      '  Found 2 notes',
+    ]);
+  });
+
+  test('a run stopped at its turn limit says so', () => {
+    const lines: string[] = [];
+    const narrator = new Narrator(line => lines.push(line), 40);
+    narrator.feed({
+      type: 'result',
+      subtype: 'error_max_turns',
+      is_error: true,
+      num_turns: 41,
+      errors: [],
+    } as unknown as SDKMessage);
+    narrator.finish();
+    expect(narrator.result).toBeNull();
+    expect(narrator.error).toMatch(/^stopped at the 40-turn limit without a final answer/);
+    expect(lines.at(-1)).toMatch(/^✗ failed after 41 turns: stopped at the 40-turn limit/);
+  });
+});
+
+describe('turn limit', () => {
+  test("raises the agent's step limit to a floor, and caps nothing without one", () => {
+    expect(turnLimit(job({ maxSteps: 8 }))).toBe(40);
+    expect(turnLimit(job({ maxSteps: 60 }))).toBe(60);
+    expect(turnLimit(job({ maxSteps: 8, profile: profile({ workdir: 'repo' }) }))).toBe(200);
+    expect(turnLimit(job({ maxSteps: undefined }))).toBeUndefined();
   });
 });
 

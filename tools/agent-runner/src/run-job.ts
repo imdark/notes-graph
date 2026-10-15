@@ -87,6 +87,20 @@ export const jobPrompt = (job: Job) => {
   );
 };
 
+/**
+ * The most turns a run may take. The agent editor hides the step limit for
+ * Claude agents, so most jobs carry its default (8): far too few for Claude
+ * Code, where each round of tool calls is a turn. The limit is kept as a
+ * floor-raised cap, a guard against a run that loops, not a budget: a code
+ * task gets at least 200 turns, anything else (research) at least 40.
+ */
+export const turnLimit = (job: Job): number | undefined => {
+  const steps = job.maxSteps;
+  if (typeof steps !== 'number' || !Number.isFinite(steps) || steps <= 0) return undefined;
+  const floor = job.profile?.workdir === 'repo' ? 200 : 40;
+  return Math.max(Math.floor(steps), floor);
+};
+
 async function omniseek(settings: RunnerSettings, fetchImpl: typeof fetch) {
   const url = settings.omniseekUrl?.replace(/\/$/, '');
   if (!url || !settings.omniseekToken) {
@@ -191,8 +205,10 @@ export async function runJob(job: Job, deps: RunDeps): Promise<RunOutcome> {
 
     const abortController = new AbortController();
     deps.signal.addEventListener('abort', () => abortController.abort());
+    const maxTurns = turnLimit(job);
     const options: Options = {
       cwd,
+      ...(maxTurns ? { maxTurns } : {}),
       systemPrompt: { type: 'preset', preset: 'claude_code', append: profile.systemPrompt },
       allowedTools,
       canUseTool: permissionPrompt(ctx),
@@ -213,7 +229,7 @@ export async function runJob(job: Job, deps: RunDeps): Promise<RunOutcome> {
       },
     };
 
-    const narrator = new Narrator(say);
+    const narrator = new Narrator(say, maxTurns);
     const prompt = handed.prompt ?? jobPrompt(job);
     for await (const message of deps.query({ prompt, options })) {
       narrator.feed(message);

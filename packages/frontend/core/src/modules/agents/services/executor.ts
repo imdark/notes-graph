@@ -37,7 +37,7 @@ import {
   buildToolPrompt,
   FILE_TOOL_RULES,
   type ParsedToolCall,
-  parseToolCall,
+  parseToolCalls,
   stripToolBlocks,
 } from './tool-protocol';
 
@@ -145,6 +145,101 @@ const CHAT_ON_DEVICE_STEPS = 8;
 
 const clip = (text: string, limit: number) =>
   text.length > limit ? `${text.slice(0, limit - 1)}…` : text;
+
+/** NotesGraph's tools that find notes, bare or as an MCP tool name. */
+const NOTE_SEARCH_TOOLS = new Set([
+  'semantic_search',
+  'keyword_search',
+  'search_blocks',
+  'list_blocks',
+]);
+const isNoteSearch = (name: string) =>
+  NOTE_SEARCH_TOOLS.has(name.replace(/^mcp__notesgraph__/, ''));
+
+/** A tool that looks something up, whose repeat with the same args is skipped. */
+const isSearch = (name: string) =>
+  isNoteSearch(name) || /search|gather/i.test(name);
+
+const normalizeArg = (value: unknown): unknown =>
+  typeof value === 'string'
+    ? value.trim().toLowerCase().replace(/\s+/g, ' ')
+    : Array.isArray(value)
+      ? value.map(normalizeArg)
+      : value && typeof value === 'object'
+        ? Object.fromEntries(
+            Object.entries(value)
+              .sort(([a], [b]) => a.localeCompare(b))
+              .map(([key, item]) => [key, normalizeArg(item)])
+          )
+        : value;
+
+/** The same search, however it is cased or spaced; null for any other tool. */
+const searchKey = (call: ParsedToolCall) =>
+  isSearch(call.name)
+    ? `${call.name}:${JSON.stringify(normalizeArg(call.args))}`
+    : null;
+
+const searchLabel = (call: ParsedToolCall) => {
+  const query = call.args.query ?? call.args.q;
+  return typeof query === 'string' && query.trim()
+    ? `"${clip(query.trim(), 80)}"`
+    : clip(JSON.stringify(call.args), 80);
+};
+
+function collectDocIds(value: unknown, into: Set<string>) {
+  if (Array.isArray(value)) {
+    for (const item of value) collectDocIds(item, into);
+  } else if (value && typeof value === 'object') {
+    for (const [key, item] of Object.entries(value)) {
+      if (key === 'docId' && typeof item === 'string' && item) into.add(item);
+      else collectDocIds(item, into);
+    }
+  }
+}
+
+/**
+ * How many notes a NotesGraph search found and in how many docs, from its
+ * result text: a JSON listing (`{blocks}`, `{tasks}`), JSON lines of
+ * `{docId, title}`, or plain passages, one hit each. A passage names no doc.
+ */
+export function countFound(text: string): { notes: number; docs: number } {
+  const trimmed = text.trim();
+  if (!trimmed || /^No matching/i.test(trimmed)) return { notes: 0, docs: 0 };
+  const docIds = new Set<string>();
+  const parts = (() => {
+    try {
+      return [JSON.parse(trimmed) as unknown];
+    } catch {
+      return trimmed.split('\n').filter(line => line.trim());
+    }
+  })();
+  let notes = 0;
+  for (const part of parts) {
+    let parsed = part;
+    if (typeof part === 'string') {
+      try {
+        parsed = JSON.parse(part);
+      } catch {
+        notes += 1;
+        continue;
+      }
+    }
+    collectDocIds(parsed, docIds);
+    const list =
+      parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+        ? Object.values(parsed).find(Array.isArray)
+        : parsed;
+    notes += Array.isArray(list) ? list.length : 1;
+  }
+  return { notes, docs: docIds.size };
+}
+
+export const foundLine = ({ notes, docs }: { notes: number; docs: number }) => {
+  const n = `${notes} ${notes === 1 ? 'note' : 'notes'}`;
+  return docs
+    ? `Found ${n} across ${docs} ${docs === 1 ? 'doc' : 'docs'}`
+    : `Found ${n}`;
+};
 
 /**
  * Offered alongside an agent's own tools in the tool loop. It changes no
@@ -315,6 +410,8 @@ export class AgentExecutorService extends Service implements AgentExecutor {
     ];
 
     const maxSteps = Math.max(1, agent.maxSteps || DEFAULT_MAX_STEPS);
+    /** The searches this run has made, as searchKey words them. */
+    const searched = new Set<string>();
 
     for (let step = 0; step < maxSteps; step++) {
       if (signal.aborted) return;
@@ -327,9 +424,9 @@ export class AgentExecutorService extends Service implements AgentExecutor {
       }
       if (signal.aborted) return;
 
-      let call: ParsedToolCall | null;
+      let calls: ParsedToolCall[];
       try {
-        call = parseToolCall(reply);
+        calls = parseToolCalls(reply);
       } catch (err) {
         yield logLine(
           `✗ couldn't read the tool call: ${(err as Error).message}`
@@ -342,7 +439,7 @@ export class AgentExecutorService extends Service implements AgentExecutor {
       }
 
       // No tool block: this is the answer.
-      if (!call) {
+      if (!calls.length) {
         const answer = stripToolBlocks(reply);
         yield logLine(answer);
         yield { type: 'text', delta: answer };
@@ -352,30 +449,82 @@ export class AgentExecutorService extends Service implements AgentExecutor {
 
       const thinking = stripToolBlocks(reply).trim();
       if (thinking) yield logLine(thinking);
-      yield { type: 'tool', name: call.name, args: call.args };
-      yield logLine(`→ ${call.name}  ${clip(JSON.stringify(call.args), 160)}`);
+      for (const call of calls) {
+        yield { type: 'tool', name: call.name, args: call.args };
+        yield logLine(
+          `→ ${call.name}  ${clip(JSON.stringify(call.args), 160)}`
+        );
+      }
 
-      let result: string;
-      if (call.name === SET_TITLE_TOOL.name) {
-        const title = String(
-          (call.args as { title?: unknown } | null)?.title ?? ''
-        ).trim();
-        if (title) yield { type: 'title', title };
-        result = title ? 'Title set.' : 'Error: title is required';
-      } else {
+      const runOne = async (call: ParsedToolCall): Promise<string> => {
+        if (call.name === SET_TITLE_TOOL.name) {
+          const title = String(
+            (call.args as { title?: unknown } | null)?.title ?? ''
+          ).trim();
+          return title ? 'Title set.' : 'Error: title is required';
+        }
         try {
-          result = await dispatch(call.name, call.args, signal);
+          return await dispatch(call.name, call.args, signal);
         } catch (err) {
-          result = `Error: ${err instanceof Error ? err.message : String(err)}`;
+          return `Error: ${err instanceof Error ? err.message : String(err)}`;
+        }
+      };
+      // A search already run this run is answered from memory, not re-run;
+      // marked before anything runs, so a repeat within one reply counts too.
+      const repeats = calls.map(call => {
+        const key = searchKey(call);
+        if (!key) return false;
+        if (searched.has(key)) return true;
+        searched.add(key);
+        return false;
+      });
+      const pending = calls.map((call, i) => (repeats[i] ? null : call));
+      // Independent reads run together; a call that changes something keeps
+      // the order the model wrote, so a read after a write sees the write.
+      const parallel = pending.every(
+        call => !call || !specs.find(spec => spec.name === call.name)?.mutates
+      );
+      const results: string[] = [];
+      if (parallel) {
+        results.push(
+          ...(await Promise.all(
+            pending.map(call => (call ? runOne(call) : Promise.resolve('')))
+          ))
+        );
+      } else {
+        for (const call of pending) {
+          results.push(call ? await runOne(call) : '');
         }
       }
-      yield logLine(
-        `  ${result.startsWith('Error:') ? '✗' : '←'} ${clip(result.replace(/\s+/g, ' '), LOG_TOOL_RESULT_CHARS)}`
-      );
+      if (signal.aborted) return;
+
+      const answers: string[] = [];
+      for (const [i, call] of calls.entries()) {
+        const result = repeats[i]
+          ? `Already searched for ${searchLabel(call)} — see the earlier result.`
+          : results[i];
+        if (call.name === SET_TITLE_TOOL.name && result === 'Title set.') {
+          const title = String(
+            (call.args as { title?: unknown } | null)?.title ?? ''
+          ).trim();
+          yield { type: 'title', title };
+        }
+        yield logLine(
+          `  ${result.startsWith('Error:') ? '✗' : '←'} ${clip(result.replace(/\s+/g, ' '), LOG_TOOL_RESULT_CHARS)}`
+        );
+        if (
+          !repeats[i] &&
+          isNoteSearch(call.name) &&
+          !result.startsWith('Error:')
+        ) {
+          yield logLine(`  ${foundLine(countFound(result))}`);
+        }
+        answers.push(`Result of ${call.name}:\n${result}`);
+      }
 
       messages.push(
         { role: 'assistant', content: reply },
-        { role: 'user', content: `Result of ${call.name}:\n${result}` }
+        { role: 'user', content: answers.join('\n\n') }
       );
     }
 
