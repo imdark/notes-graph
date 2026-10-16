@@ -556,39 +556,140 @@ export const questionInput = style({
   fontFamily: 'inherit',
 });
 
-export const mdRoot = style({
+// The side chat's reply and composer follow the main AI chat panel
+// (ai-chat-input): a rounded box with the files above the text and the
+// attach and send buttons below it.
+export const forkReplyText = style({
+  width: '100%',
+  minWidth: 0,
+  fontSize: cssVar('fontSm'),
+  color: cssVarV2('text/primary'),
+});
+
+export const forkUserFiles = style({
+  alignSelf: 'flex-end',
+  display: 'flex',
+  flexWrap: 'wrap',
+  justifyContent: 'flex-end',
+  gap: 4,
+  maxWidth: '85%',
+});
+
+export const chatComposer = style({
   display: 'flex',
   flexDirection: 'column',
-  gap: 6,
-  fontSize: cssVar('fontSm'),
-  lineHeight: 1.6,
+  gap: 4,
+  padding: '8px 6px 6px 8px',
+  borderRadius: 12,
+  background: cssVarV2('input/background'),
+  boxShadow: `0 0 0 0.5px ${cssVarV2('layer/insideBorder/border')}, 0 2px 3px rgba(0, 0, 0, 0.05)`,
+  transition: 'box-shadow 0.23s ease',
+  selectors: {
+    '&:focus-within': {
+      boxShadow: `0 0 0 0.5px ${cssVarV2('layer/insideBorder/border')}, 0 4px 6px rgba(0, 0, 0, 0.05)`,
+    },
+    '&[data-dragging="true"]': {
+      boxShadow: `0 0 0 1px ${cssVarV2('icon/activated')}`,
+    },
+  },
+});
+
+export const chatComposerInput = style({
+  width: '100%',
+  minHeight: 44,
+  maxHeight: 160,
+  resize: 'none',
+  border: 'none',
+  outline: 'none',
+  padding: 0,
+  background: 'transparent',
   color: cssVarV2('text/primary'),
-  maxWidth: '100%',
-  overflowWrap: 'anywhere',
+  fontSize: cssVar('fontSm'),
+  lineHeight: '22px',
+  fontFamily: 'inherit',
+  selectors: {
+    '&::placeholder': { color: cssVarV2('text/placeholder') },
+  },
 });
 
-export const mdParagraph = style({ margin: 0, whiteSpace: 'pre-wrap' });
-
-export const mdHeading = style({ margin: 0, fontWeight: 600 });
-
-export const mdList = style({ margin: 0, paddingLeft: 20 });
-
-export const mdCode = style({
-  margin: 0,
-  padding: '8px 10px',
-  borderRadius: 6,
-  background: cssVarV2('layer/background/secondary'),
-  overflowX: 'auto',
-  fontFamily: cssVar('fontCodeFamily'),
-  fontSize: cssVar('fontXs'),
+export const chatComposerActions = style({
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  gap: 8,
 });
 
-export const attachChip = style({
+export const chatIconButton = style({
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  padding: 2,
+  border: 'none',
+  borderRadius: 4,
+  background: 'transparent',
+  color: cssVarV2('icon/primary'),
+  fontSize: 20,
+  cursor: 'pointer',
+  selectors: {
+    '&:hover': { background: cssVarV2('layer/background/hoverOverlay') },
+    '&:disabled': { cursor: 'not-allowed', opacity: 0.5 },
+  },
+});
+
+export const chatSendButton = style({
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  width: 28,
+  height: 28,
+  flexShrink: 0,
+  padding: 0,
+  border: 'none',
+  borderRadius: '50%',
+  fontSize: 20,
+  background: cssVarV2('icon/activated'),
+  color: cssVarV2('layer/pureWhite'),
+  cursor: 'pointer',
+  selectors: {
+    '&[aria-disabled="true"]': {
+      cursor: 'not-allowed',
+      background: cssVarV2('button/disable'),
+    },
+  },
+});
+
+export const chatChips = style({
+  display: 'flex',
+  flexWrap: 'wrap',
+  gap: 4,
+});
+
+export const chatChip = style({
   display: 'inline-flex',
   alignItems: 'center',
   gap: 4,
-  padding: '2px 8px',
-  borderRadius: 999,
-  background: cssVarV2('layer/background/secondary'),
+  maxWidth: 200,
+  height: 24,
+  padding: '0 4px 0 6px',
+  borderRadius: 4,
+  border: `0.5px solid ${cssVarV2('layer/insideBorder/border')}`,
+  background: cssVarV2('layer/background/primary'),
   fontSize: cssVar('fontXs'),
+  color: cssVarV2('text/primary'),
+});
+
+export const chatChipName = style({
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap',
+});
+
+export const chatChipRemove = style({
+  display: 'flex',
+  padding: 0,
+  border: 'none',
+  background: 'transparent',
+  color: cssVarV2('icon/secondary'),
+  fontSize: 14,
+  cursor: 'pointer',
 });
