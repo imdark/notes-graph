@@ -54,12 +54,12 @@ export const DebugConsole = () => {
         // eruda keeps every console row as DOM by default ("infinite"); on a
         // phone that alone grew past 1.5 GB and got the renderer killed.
         eruda.get('console')?.config.set('maxLogNum', String(MAX_LOG_ROWS));
-        // Top right, under the status bar and app header, instead of eruda's
-        // bottom-right default where it sits on the tab bar.
+        // Top left, on the app name row just under the status bar, instead of
+        // eruda's bottom-right default where it sits on the tab bar.
         const place = () =>
           eruda.position({
-            x: window.innerWidth - ENTRY_BUTTON_SIZE - EDGE_GAP,
-            y: safeAreaTop() + HEADER_HEIGHT + EDGE_GAP,
+            x: EDGE_GAP,
+            y: safeAreaTop() + (HEADER_HEIGHT - ENTRY_BUTTON_SIZE) / 2,
           });
         place();
         // eruda resets the button to its bottom-right default on every window
