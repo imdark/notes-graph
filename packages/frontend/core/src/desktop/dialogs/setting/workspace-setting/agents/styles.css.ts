@@ -117,7 +117,9 @@ export const empty = style({
 export const editor = style({
   display: 'flex',
   flexDirection: 'column',
-  minWidth: 480,
+  // 480 is a desktop floor; on a narrow screen the modal is capped at the
+  // viewport width and a fixed minimum would push the form off the side.
+  minWidth: 'min(480px, calc(100dvw - 68px))',
   maxWidth: 560,
 });
 
@@ -142,7 +144,7 @@ export const editorBody = style({
    * overflow:hidden, and reports no overflow - leaving the scrollbar stuck at
    * data-state="hidden" no matter how long the form is.
    */
-  maxHeight: 'min(58vh, 520px)',
+  maxHeight: 'min(58dvh, 520px)',
   // Keep the scrollbar clear of the inputs.
   paddingRight: 8,
 });
