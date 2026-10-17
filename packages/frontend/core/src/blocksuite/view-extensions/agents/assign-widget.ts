@@ -11,6 +11,7 @@ import {
   WidgetViewExtension,
 } from '@blocksuite/notesgraph/std';
 import type { ExtensionType } from '@blocksuite/notesgraph/store';
+import { IconType } from '@notesgraph/component';
 import {
   type Agent,
   AgentRunSessionService,
@@ -29,6 +30,25 @@ import { literal, unsafeStatic } from 'lit/static-html.js';
 import { AgentsFrameworkIdentifier } from './framework';
 
 const WIDGET_TAG = 'notesgraph-agent-assign-widget';
+
+/**
+ * The agent's own icon for the menu: its emoji or generated image. Built-in
+ * named icons have no lit renderer here, so those keep the generic one.
+ */
+const agentMenuIcon = (agent: Agent) => {
+  const icon = agent.icon;
+  if (icon?.type === IconType.Emoji && icon.unicode) {
+    return html`<span>${icon.unicode}</span>`;
+  }
+  if (icon?.type === IconType.Blob && icon.url) {
+    return html`<img
+      src=${icon.url}
+      alt=""
+      style="width:1em;height:1em;border-radius:0.15em;object-fit:cover"
+    />`;
+  }
+  return agent.emoji ? html`<span>${agent.emoji}</span>` : AiIcon();
+};
 
 /** Gap between the bottom of the line's text and the button. */
 const GAP_PX = 2;
@@ -232,9 +252,7 @@ export class AgentAssignWidget extends WidgetComponent {
             items: agents.map(agent =>
               menu.action({
                 name: agent.name,
-                prefix: agent.emoji
-                  ? html`<span>${agent.emoji}</span>`
-                  : AiIcon(),
+                prefix: agentMenuIcon(agent),
                 select: () => this._assign(agent),
               })
             ),
