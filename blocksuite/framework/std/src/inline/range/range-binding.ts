@@ -4,6 +4,7 @@ import throttle from 'lodash-es/throttle';
 import { TextSelection } from '../../selection/index.js';
 import { EditorHost } from '../../view/index.js';
 import { isActiveInEditor } from './active.js';
+import { INLINE_ROOT_ATTR } from '../consts.js';
 import { RANGE_SYNC_EXCLUDE_ATTR } from './consts.js';
 import type { RangeManager } from './range-manager.js';
 /**
@@ -229,6 +230,11 @@ export class RangeBinding {
 
     // if neither start nor end is in a v-text, the range is invalid
     if (!hasInlineEndpoint) {
+      // Dragging the caret to a line start can land it on the inline root
+      // itself; removing the range there blurs the editor and closes the
+      // mobile keyboard, so keep it and wait for the next selection change.
+      if (range.collapsed && el.closest(`[${INLINE_ROOT_ATTR}]`)) return;
+
       this._prevTextSelection = null;
       this.selectionManager.clear(['text']);
 
