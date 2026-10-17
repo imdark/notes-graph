@@ -158,6 +158,11 @@ export const Component = () => {
   );
 
   const transitionBack = useCallback(() => {
+    // Snapshotting a long result list for the view transition makes Cancel lag.
+    if (searchInput$.value) {
+      history.back();
+      return;
+    }
     startScopedViewTransition(searchVTScope, async () => {
       history.back();
       await sleep(10);
