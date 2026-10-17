@@ -97,7 +97,7 @@
     </tr>
   </table>
 
-  <h2>Google Calendar integration</h2>
+  <h2 id="google-calendar">Google Calendar integration</h2>
 
   <p>
     Connecting a Google account is entirely optional. NotesGraph works fully
@@ -107,8 +107,12 @@
   <h3>What we ask for, and why</h3>
   <table>
     <tr>
-      <th><code>calendar.readonly</code></th>
-      <td>Read your calendars and their events, so the day's events can be shown on the matching journal page. <strong>Read-only:</strong> this permission cannot create, change or delete anything in your Google Calendar.</td>
+      <th><code>calendar.calendarlist.readonly</code></th>
+      <td>List your calendars, so you can pick in settings which ones to show. <strong>Read-only.</strong></td>
+    </tr>
+    <tr>
+      <th><code>calendar.events.readonly</code></th>
+      <td>Read the events of the calendars you picked, so the day's events can be shown on the matching journal page. <strong>Read-only:</strong> this permission cannot create, change or delete anything in your Google Calendar.</td>
     </tr>
     <tr>
       <th><code>userinfo.email</code></th>

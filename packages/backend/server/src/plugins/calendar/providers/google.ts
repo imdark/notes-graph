@@ -92,8 +92,11 @@ export class GoogleCalendarProvider extends CalendarProvider {
       access_type: 'offline',
       prompt: 'consent',
       include_granted_scopes: 'true',
+      // The narrowest scopes for what the sync calls: calendarList.list, and
+      // events.list/watch. They must match the consent screen's scope list.
       scope: [
-        'https://www.googleapis.com/auth/calendar.readonly',
+        'https://www.googleapis.com/auth/calendar.calendarlist.readonly',
+        'https://www.googleapis.com/auth/calendar.events.readonly',
         'https://www.googleapis.com/auth/userinfo.email',
         'https://www.googleapis.com/auth/userinfo.profile',
       ].join(' '),
