@@ -8,4 +8,7 @@
     <string name="app_lock_prompt_subtitle">Use your fingerprint, face or screen lock</string>
     <string name="app_lock_locked">NotesGraph is locked</string>
     <string name="app_lock_unlock">Unlock</string>
+    <string name="hype_notification_content_title">NotesGraph</string>
+    <string name="hype_notification_channel_name">NotesGraph debug menu</string>
+    <string name="hype_notification_channel_description">Channel used for displaying the NotesGraph debug menu notification.</string>
 </resources>
