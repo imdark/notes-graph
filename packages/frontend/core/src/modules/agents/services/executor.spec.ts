@@ -381,6 +381,36 @@ describe('AgentExecutorService research runs', () => {
     expect(finished[0].outcome).toMatchObject({ status: 'done' });
   });
 
+  test('a server with no model but its own runner hands research to that runner', async () => {
+    const enqueued: any[] = [];
+    const logs: string[] = [];
+    const { executor, finished } = setup([], {}, {
+      context: { build: async () => ({ text: 'Survey graph RAG', label: 'a block', title: 'x' }) },
+      cloudRunner: { available: false },
+      remoteRunner: {
+        agentTargets: async () => [{ key: 'cloud', name: 'Cloud (server)', state: 'online', kind: 'server' }],
+        enqueue: async (_ws: string, input: any) => {
+          enqueued.push(input);
+          return job({ id: 'j1', status: 'queued' });
+        },
+        watch: async function* () {
+          yield { job: job({ id: 'j1', status: 'done', result: 'GraphRAG' }), logDelta: '' };
+        },
+      },
+    });
+    (executor as any).runsStore.attachRemote = () => {};
+    for await (const event of executor.run(
+      { id: 'a1', name: 'R', harness: 'research', tools: ['omniseek_search'], instructions: '', maxSteps: 4 } as any,
+      { kind: 'block', docId: 'doc', blockId: 'b1' },
+      new AbortController().signal
+    )) {
+      if (event.type === 'log') logs.push(event.text);
+    }
+    expect(enqueued[0]).toMatchObject({ deviceKey: 'cloud', model: 'research', tools: [] });
+    expect(logs.join('')).toContain("runs on the server's runner");
+    expect(finished[0].outcome).toMatchObject({ status: 'done' });
+  });
+
   test('a tool the run was not given is refused, not dispatched', async () => {
     const replies = [
       '```tool\n{"tool": "omniseek_curator_act", "args": {}}\n```',

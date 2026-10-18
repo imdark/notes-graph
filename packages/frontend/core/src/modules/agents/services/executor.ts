@@ -19,10 +19,12 @@ import {
 } from './file-tools';
 import type { WorkspaceService } from '../../workspace';
 import {
+  CLOUD_DEVICE_KEY,
   openQuestions,
   RemoteAgentRunnerService,
   type RemoteJob,
   type RemoteQuestion,
+  RESEARCH_MODEL,
 } from './remote-runner';
 import { stampLines } from './log-lines';
 import {
@@ -308,9 +310,44 @@ export class AgentExecutorService extends Service implements AgentExecutor {
   }
 
   /**
+   * Research reasons with the server's model. A server with none may still
+   * have its own runner (tools/agent-runner, device `cloud`), which runs
+   * Research as Claude Code with OmniSeek, so the run is handed to it: the
+   * same agent, still in the cloud, and it carries on with this tab closed.
+   */
+  private async placeRun(agent: Agent): Promise<Agent> {
+    const workspaceId = this.workspaceId;
+    if (
+      this.harnessFor(agent) !== 'research' ||
+      this.cloudRunner.available ||
+      !workspaceId
+    ) {
+      return agent;
+    }
+    try {
+      const devices = await this.remoteRunner.agentTargets(workspaceId);
+      if (!devices.some(device => device.key === CLOUD_DEVICE_KEY)) {
+        return agent;
+      }
+    } catch {
+      return agent;
+    }
+    // The in-tab research tools are named for this loop; the runner's
+    // research profile brings OmniSeek itself.
+    return {
+      ...agent,
+      harness: 'remote',
+      deviceKey: CLOUD_DEVICE_KEY,
+      model: RESEARCH_MODEL,
+      tools: [],
+    };
+  }
+
+  /**
    * Research's tools are OmniSeek, set up on the server apart from Copilot,
    * so a server with OmniSeek and no model still runs research: it reasons
-   * with the browser's model instead of failing before it starts.
+   * with the browser's model instead of failing before it starts. Only when
+   * the server has no runner to hand it to either (placeRun).
    */
   private researchOnDevice(harness: AgentHarness): boolean {
     return harness === 'research' && !this.cloudRunner.available;
@@ -689,11 +726,12 @@ export class AgentExecutorService extends Service implements AgentExecutor {
    * tasks in several notes, whose target only says where its record sits.
    */
   async *run(
-    agent: Agent,
+    requested: Agent,
     target: AgentTarget,
     signal: AbortSignal,
     brief?: AgentContext
   ): AsyncIterable<AgentEvent> {
+    const agent = await this.placeRun(requested);
     const key = `${agent.id}:${agentTargetKey(target)}`;
     if (this.inFlight.has(key)) {
       throw new AgentAlreadyRunningError();
@@ -751,6 +789,13 @@ export class AgentExecutorService extends Service implements AgentExecutor {
       return event;
     };
     yield { type: 'started', runId };
+    if (agent !== requested) {
+      yield record(
+        logLine(
+          "This server has no AI model set up, so the research runs on the server's runner (Claude Code + OmniSeek)."
+        )
+      );
+    }
     try {
       const context = brief ?? (await this.contextService.build(target));
       this.runsStore.describe(runId, { input: context.text });
