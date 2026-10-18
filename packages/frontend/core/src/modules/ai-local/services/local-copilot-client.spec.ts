@@ -13,9 +13,7 @@ describe('LocalCopilotClient context', () => {
     // The chat composer keeps a context chip loading, and the chat waiting,
     // until the context lists the item with a final status.
     const local = client();
-    const { id: contextId } = (await local.createContext('ws', 's')) as {
-      id: string;
-    };
+    const contextId = await local.createContext();
     await local.addContextDoc({ contextId, docId: 'doc-1' });
 
     const context = (await local.getContextDocsAndFiles(
@@ -38,9 +36,7 @@ describe('LocalCopilotClient context', () => {
 
   test('a file added as context is finished at once', async () => {
     const local = client();
-    const { id: contextId } = (await local.createContext('ws', 's')) as {
-      id: string;
-    };
+    const contextId = await local.createContext();
     const file = (await local.addContextFile(new File(['x'], 'a.txt'), {
       contextId,
     })) as { id: string; name: string; status: string };
@@ -56,6 +52,6 @@ describe('LocalCopilotClient context', () => {
         LocalCopilotClient['updateSession']
       >[0])
     ).resolves.toBe('s1');
-    await expect(local.getSession('ws', 's1')).resolves.toBeUndefined();
+    await expect(local.getSession()).resolves.toBeUndefined();
   });
 });
