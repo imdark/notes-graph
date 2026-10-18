@@ -195,7 +195,7 @@ const CACHE_PREFIX = 'discover:image:v3:';
 const inflight = new Map<string, Promise<string | null>>();
 
 /**
- * The article's preview image. The heavy lifting (searching for the real URL,
+ * The article's preview image. The heavy lifting (decoding the real URL,
  * reading its og:image, throttling and a shared cross-client cache) lives on
  * the sidecar's /clip/news-image; here we just call it and keep a thin
  * per-client GlobalCache so a repeat visit doesn't even round-trip. Only
@@ -215,7 +215,7 @@ export async function fetchCardImage(
     pending = (async () => {
       try {
         const res = await fetch(
-          linkCardNewsImageEndpoint(item.title, item.source)
+          linkCardNewsImageEndpoint(item.title, item.source, item.link)
         );
         if (!res.ok) return null;
         const data = (await res.json()) as { image?: string | null };
