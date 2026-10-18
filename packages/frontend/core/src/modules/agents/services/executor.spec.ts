@@ -56,6 +56,7 @@ const setup = (
     researchTools?: object;
     remoteRunner?: object;
     agentRules?: object;
+    localLLM?: object;
   } = {}
 ) => {
   const finished: { runId: string; outcome: any; endedAt?: number }[] = [];
@@ -85,7 +86,7 @@ const setup = (
     .service(AgentContextService, (fakes.context ?? {}) as any)
     .store(AgentRunsStore, runsStore as any)
     .store(AgentRunLogsStore, { put: async () => {} } as any)
-    .service(LocalLLMService, {} as any)
+    .service(LocalLLMService, (fakes.localLLM ?? {}) as any)
     .service(AgentFileToolsService, (fakes.fileTools ?? {}) as any)
     .service(RemoteAgentRunnerService, remoteRunner as any)
     .service(CloudAgentRunnerService, (fakes.cloudRunner ?? {}) as any)
@@ -295,6 +296,7 @@ describe('AgentExecutorService research runs', () => {
       context: { build: async () => ({ text: 'Survey graph RAG', label: 'a block', title: 'Survey graph RAG' }) },
       fileTools: { available: false },
       cloudRunner: {
+        available: true,
         open: async () =>
           async function* (messages: { content: string }[]) {
             prompts.push(messages[0].content);
@@ -335,6 +337,50 @@ describe('AgentExecutorService research runs', () => {
     });
   });
 
+  test('a server with no model still runs research, on the device’s model', async () => {
+    const replies = [
+      '```tool\n{"tool": "omniseek_search", "args": {"query": "graph RAG"}}\n```',
+      'GraphRAG [https://arxiv.org/abs/2404.16130].',
+    ];
+    const calls: unknown[] = [];
+    const logs: string[] = [];
+    const { executor, finished, described } = setup([], {}, {
+      context: { build: async () => ({ text: 'Survey graph RAG', label: 'a block', title: 'x' }) },
+      fileTools: { available: false },
+      cloudRunner: {
+        available: false,
+        open: async () => {
+          throw new Error('no copilot');
+        },
+      },
+      localLLM: {
+        chatStream: async function* () {
+          yield replies.shift() ?? '';
+        },
+      },
+      researchTools: {
+        specs: async () => [
+          { name: 'omniseek_search', desc: 'Search widely', args: { query: 'what to look for' }, mutates: false },
+        ],
+        call: async (_ws: string, name: string) => {
+          calls.push(name);
+          return '1. arxiv.org/abs/2404.16130';
+        },
+      },
+    });
+    for await (const event of executor.run(
+      { id: 'a1', name: 'R', harness: 'research', tools: [], instructions: '', maxSteps: 4 } as any,
+      { kind: 'block', docId: 'doc', blockId: 'b1' },
+      new AbortController().signal
+    )) {
+      if (event.type === 'log') logs.push(event.text);
+    }
+    expect(calls).toEqual(['omniseek_search']);
+    expect(described[0]).toMatchObject({ harness: 'research', model: expect.stringMatching(/-MLC \+ OmniSeek$/) });
+    expect(logs.join('')).toContain('no AI model set up');
+    expect(finished[0].outcome).toMatchObject({ status: 'done' });
+  });
+
   test('a tool the run was not given is refused, not dispatched', async () => {
     const replies = [
       '```tool\n{"tool": "omniseek_curator_act", "args": {}}\n```',
@@ -345,6 +391,7 @@ describe('AgentExecutorService research runs', () => {
       context: { build: async () => ({ text: 'x', label: 'a block', title: 'x' }) },
       fileTools: { available: false },
       cloudRunner: {
+        available: true,
         open: async () =>
           async function* () {
             yield replies.shift() ?? '';
@@ -385,6 +432,7 @@ describe('AgentExecutorService research runs', () => {
       context: { build: async () => ({ text: 'x', label: 'a block', title: 'x' }) },
       fileTools: { available: false },
       cloudRunner: {
+        available: true,
         open: async () =>
           async function* (messages: { role: string; content: string }[]) {
             userTurns.push(messages.at(-1)!.content);
@@ -449,6 +497,7 @@ describe('AgentExecutorService agent rules', () => {
       context: { build: async () => ({ text: 'x', label: 'a block', title: 'x' }) },
       fileTools: { available: false },
       cloudRunner: {
+        available: true,
         open: async () =>
           async function* (messages: { content: string }[]) {
             prompts.push(messages[0].content);
