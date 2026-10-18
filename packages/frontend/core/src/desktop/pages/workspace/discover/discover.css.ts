@@ -35,6 +35,44 @@ export const feed = style({
   margin: '0 auto',
 });
 
+export const interests = style({
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 8,
+  maxWidth: 1200,
+  margin: '0 auto 16px',
+  fontSize: 13,
+  color: cssVarV2('text/secondary'),
+});
+
+export const interestsToggle = style({
+  display: 'flex',
+  alignItems: 'center',
+  gap: 6,
+  cursor: 'pointer',
+  width: 'fit-content',
+});
+
+export const interestsGroup = style({
+  display: 'flex',
+  flexWrap: 'wrap',
+  alignItems: 'center',
+  gap: 6,
+});
+
+export const interestsLabel = style({
+  fontWeight: 600,
+  marginRight: 2,
+});
+
+export const interestChip = style({
+  padding: '2px 10px',
+  borderRadius: 999,
+  background: cssVarV2('layer/background/secondary'),
+  color: cssVarV2('text/primary'),
+  whiteSpace: 'nowrap',
+});
+
 export const loadMore = style({
   display: 'flex',
   justifyContent: 'center',
