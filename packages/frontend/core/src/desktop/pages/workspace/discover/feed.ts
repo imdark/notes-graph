@@ -15,8 +15,12 @@ export interface DiscoverItem {
   snippet?: string;
   /** Epoch ms, if the feed gave a date. */
   publishedAt?: number;
-  /** The interest topic this item came from. */
+  /** The interest topic this item came from (for records, the folder type). */
   topic: string;
+  /** 'record' for an item from a virtual folder (email, Slack…); news otherwise. */
+  origin?: 'news' | 'record';
+  /** A record's own preview image, if its source has one (e.g. YouTube). */
+  thumbnail?: string;
 }
 
 const TOPICS_KEY = 'notesgraph:discover:topics';
