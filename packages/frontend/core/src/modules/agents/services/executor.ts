@@ -123,13 +123,17 @@ const onDeviceModel = (agent: Agent) =>
  * The model a run asks, for its details. A cloud run takes whatever the
  * server's copilot is set to, which this tab doesn't know.
  */
-const modelLabel = (agent: Agent, harness: AgentHarness) =>
+const modelLabel = (
+  agent: Agent,
+  harness: AgentHarness,
+  researchOnDevice: boolean
+) =>
   harness === 'on-device'
     ? (onDeviceModel(agent) ?? DEFAULT_LOCAL_MODEL)
     : harness === 'cloud'
       ? 'server default'
       : harness === 'research'
-        ? 'server default + OmniSeek'
+        ? `${researchOnDevice ? (onDeviceModel(agent) ?? DEFAULT_LOCAL_MODEL) : 'server default'} + OmniSeek`
         : agent.model || 'device default';
 
 const CHAT_ON_DEVICE_INSTRUCTIONS = [
@@ -304,14 +308,23 @@ export class AgentExecutorService extends Service implements AgentExecutor {
   }
 
   /**
+   * Research's tools are OmniSeek, set up on the server apart from Copilot,
+   * so a server with OmniSeek and no model still runs research: it reasons
+   * with the browser's model instead of failing before it starts.
+   */
+  private researchOnDevice(harness: AgentHarness): boolean {
+    return harness === 'research' && !this.cloudRunner.available;
+  }
+
+  /**
    * The model an in-tab run asks each step: the browser's, or the server's
-   * (for cloud and research alike).
+   * (for cloud, and research when the server has one).
    */
   private async modelFor(
     agent: Agent,
     harness: Exclude<AgentHarness, 'remote'>
   ): Promise<ChatModel> {
-    if (harness === 'on-device') {
+    if (harness === 'on-device' || this.researchOnDevice(harness)) {
       return (messages, signal) =>
         this.localLLM.chatStream(messages, {
           signal,
@@ -690,9 +703,10 @@ export class AgentExecutorService extends Service implements AgentExecutor {
     const runId = this.runsStore.start(agent, target);
     this.liveRuns.add(runId);
     const harness = this.harnessFor(agent);
+    const researchOnDevice = this.researchOnDevice(harness);
     this.runsStore.describe(runId, {
       harness,
-      model: modelLabel(agent, harness),
+      model: modelLabel(agent, harness, researchOnDevice),
     });
     // Cancellation has two sources — the caller's signal and the wall clock —
     // funnelled into one controller so the stream and the run record only ever
@@ -804,6 +818,13 @@ export class AgentExecutorService extends Service implements AgentExecutor {
             `▶ ${agent.name} ${harness}, with ${tools.map(t => t.name).join(', ')}`
           )
         );
+        if (researchOnDevice) {
+          yield record(
+            logLine(
+              "This server has no AI model set up, so the research runs on this device's model."
+            )
+          );
+        }
         for await (const event of this.runWithTools(
           agent,
           model,
