@@ -1,11 +1,14 @@
-import { Button, Input, notify } from '@notesgraph/component';
+import { Button, Checkbox, Input, notify } from '@notesgraph/component';
 import { DocsService } from '@notesgraph/core/modules/doc';
 import { GlobalCacheService } from '@notesgraph/core/modules/storage';
+import { TagService } from '@notesgraph/core/modules/tag';
 import { VirtualViewsService } from '@notesgraph/core/modules/virtual-views';
 import { WorkbenchService } from '@notesgraph/core/modules/workbench';
+import { WorkspaceService } from '@notesgraph/core/modules/workspace';
 import { useI18n } from '@notesgraph/i18n';
 import { LiveData, useLiveData, useService } from '@notesgraph/infra';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { combineLatest, firstValueFrom } from 'rxjs';
 
 import {
   ViewBody,
@@ -25,7 +28,50 @@ import {
   saveCachedFeed,
   saveTopics,
 } from './feed';
+import {
+  deriveInterests,
+  interestSearchTopics,
+  INTERESTS_MAX_AGE_MS,
+  loadInterests,
+  loadUseInterests,
+  type NotesSnapshot,
+  saveInterests,
+  saveUseInterests,
+  type UserInterests,
+} from './interests';
 import { interleaveFeed, virtualItemsToFeed } from './records';
+
+/** One read of the titles, tags and edit dates of every note not in the trash. */
+async function readNotesSnapshot(
+  docsService: DocsService,
+  tagService: TagService
+): Promise<NotesSnapshot> {
+  const [ids, titles, tags, updated] = await firstValueFrom(
+    combineLatest([
+      docsService.allNonTrashDocIds$(),
+      docsService.allDocTitle$(),
+      docsService.allDocsTagIds$(),
+      docsService.allDocsUpdatedDate$(),
+    ])
+  );
+  const live = new Set(ids);
+  const tagsById = new Map(tags.map(d => [d.id, d.tags]));
+  const updatedById = new Map(updated.map(d => [d.id, d.updatedDate]));
+  const tagNames = new Map(
+    tagService.tagList.tagMetas$.value.map(m => [m.id, m.name])
+  );
+  return {
+    tagNames,
+    docs: titles
+      .filter(d => live.has(d.id))
+      .map(d => ({
+        id: d.id,
+        title: d.title,
+        tagIds: tagsById.get(d.id) ?? [],
+        updatedDate: updatedById.get(d.id),
+      })),
+  };
+}
 
 function timeAgo(ms?: number): string {
   if (!ms) return '';
@@ -131,18 +177,129 @@ const FeedCard = ({
   );
 };
 
+/**
+ * The interests read from the user's notes that the feed is searching, with
+ * a switch to leave them out. Each topic is grouped by kind so it's clear
+ * which come straight from the notes and which are there to branch out.
+ */
+const InterestsRow = ({
+  enabled,
+  onToggle,
+  interests,
+  topics,
+}: {
+  enabled: boolean;
+  onToggle: () => void;
+  interests: UserInterests | null;
+  topics: string[];
+}) => {
+  const t = useI18n();
+  const groups = useMemo(() => {
+    const general = new Set(interests?.general.map(i => i.label));
+    const discover = new Set(interests?.discover);
+    return [
+      {
+        kind: 'specific',
+        label: t['com.notesgraph.discover.interests.specific'](),
+        topics: topics.filter(x => !general.has(x) && !discover.has(x)),
+      },
+      {
+        kind: 'general',
+        label: t['com.notesgraph.discover.interests.general'](),
+        topics: topics.filter(x => general.has(x)),
+      },
+      {
+        kind: 'discover',
+        label: t['com.notesgraph.discover.interests.discover'](),
+        topics: topics.filter(x => discover.has(x)),
+      },
+    ];
+  }, [interests, topics, t]);
+
+  return (
+    <div className={styles.interests}>
+      <label className={styles.interestsToggle}>
+        <Checkbox checked={enabled} onChange={onToggle} />
+        {t['com.notesgraph.discover.interests.toggle']()}
+      </label>
+      {enabled
+        ? groups.map(group =>
+            group.topics.length ? (
+              <div key={group.kind} className={styles.interestsGroup}>
+                <span className={styles.interestsLabel}>{group.label}</span>
+                {group.topics.map(topic => (
+                  <span key={topic} className={styles.interestChip}>
+                    {topic}
+                  </span>
+                ))}
+              </div>
+            ) : null
+          )
+        : null}
+    </div>
+  );
+};
+
 const DiscoverPage = () => {
   const t = useI18n();
   const docsService = useService(DocsService);
   const workbench = useService(WorkbenchService).workbench;
   const globalCache = useService(GlobalCacheService).globalCache;
+  const tagService = useService(TagService);
+  const workspaceId = useService(WorkspaceService).workspace.id;
 
-  const [topics, setTopics] = useState<string[]>(() => loadTopics());
+  const [manualTopics, setManualTopics] = useState<string[]>(() =>
+    loadTopics()
+  );
   const [draft, setDraft] = useState<string>(() => loadTopics().join(', '));
   const [items, setItems] = useState<DiscoverItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState(false);
+  const [useInterests, setUseInterests] = useState(() => loadUseInterests());
+  const [interests, setInterests] = useState<UserInterests | null>(() =>
+    loadInterests(globalCache, workspaceId)
+  );
+
+  // Re-read the notes for interests when there are none stored yet or the
+  // stored ones are more than a day old.
+  useEffect(() => {
+    const stored = loadInterests(globalCache, workspaceId);
+    setInterests(stored);
+    if (stored && Date.now() - stored.computedAt <= INTERESTS_MAX_AGE_MS) {
+      return;
+    }
+    let cancelled = false;
+    readNotesSnapshot(docsService, tagService)
+      .then(snapshot => {
+        const derived = deriveInterests(snapshot);
+        saveInterests(globalCache, workspaceId, derived);
+        if (!cancelled) setInterests(derived);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [docsService, tagService, globalCache, workspaceId]);
+
+  const interestTopics = useMemo(
+    () =>
+      useInterests && interests
+        ? interestSearchTopics(interests, manualTopics)
+        : [],
+    [useInterests, interests, manualTopics]
+  );
+  const topics = useMemo(
+    () => [...manualTopics, ...interestTopics],
+    [manualTopics, interestTopics]
+  );
+
+  const toggleInterests = useCallback(() => {
+    setUseInterests(prev => {
+      saveUseInterests(!prev);
+      return !prev;
+    });
+  }, []);
 
   const topicsKey = useMemo(() => topics.join('|'), [topics]);
 
@@ -229,7 +386,7 @@ const DiscoverPage = () => {
   const applyTopics = useCallback(() => {
     const parsed = parseTopicsInput(draft);
     saveTopics(parsed);
-    setTopics(parsed);
+    setManualTopics(parsed);
     setDraft(parsed.join(', '));
   }, [draft]);
 
@@ -245,7 +402,9 @@ const DiscoverPage = () => {
           notify.success({ title: t['com.notesgraph.discover.saved']() });
           workbench.openDoc(docId, { at: 'active' });
         })
-        .catch(() => notify.error({ title: t['com.notesgraph.discover.saveFailed']() }));
+        .catch(() =>
+          notify.error({ title: t['com.notesgraph.discover.saveFailed']() })
+        );
     },
     [docsService, workbench, t]
   );
@@ -270,6 +429,12 @@ const DiscoverPage = () => {
       </ViewHeader>
       <ViewBody>
         <div className={styles.body}>
+          <InterestsRow
+            enabled={useInterests}
+            onToggle={toggleInterests}
+            interests={interests}
+            topics={interestTopics}
+          />
           {feed.length === 0 ? (
             <div className={styles.status}>
               {topics.length === 0

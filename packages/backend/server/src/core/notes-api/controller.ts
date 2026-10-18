@@ -158,6 +158,32 @@ export class NotesApiController {
     return { ok: true, folderId };
   }
 
+  /**
+   * Link a doc under this one as a real reference, the relationship the
+   * sidebar's note tree and backlinks are built from. A markdown link in a
+   * doc body is only a hyperlink, so a doc linked that way stays parentless
+   * and lands in the Inbox. Additive: existing links are left alone.
+   */
+  @Post('/workspaces/:workspaceId/docs/:docId/links')
+  async linkDoc(
+    @CurrentUser() user: CurrentUserType,
+    @Param('workspaceId') workspaceId: string,
+    @Param('docId') docId: string,
+    @Body() body: { childDocId?: string }
+  ) {
+    const childDocId =
+      typeof body.childDocId === 'string' ? body.childDocId.trim() : '';
+    if (!childDocId) throw new BadRequestException('childDocId is required');
+    await this.ac.user(user.id).doc(workspaceId, docId).assert('Doc.Update');
+    await this.ac
+      .user(user.id)
+      .doc(workspaceId, childDocId)
+      .assert('Doc.Read');
+    await this.docWriter.linkDoc(workspaceId, docId, childDocId, user.id);
+    this.logger.log(`linked ${childDocId} under ${workspaceId}/${docId}`);
+    return { ok: true };
+  }
+
   private async fileInFolder(
     workspaceId: string,
     docId: string,

@@ -63,6 +63,13 @@ export class CloudAgentRunnerService extends Service {
     super();
   }
 
+  /** Whether the workspace's server has a model set up to run on. */
+  get available(): boolean {
+    return !!this.workspaceServerService.server?.config$.value.features.includes(
+      ServerFeature.Copilot
+    );
+  }
+
   /**
    * GraphQL and EventSource live in the server scope, not the workspace scope
    * this service is registered in, so they are reached through the
