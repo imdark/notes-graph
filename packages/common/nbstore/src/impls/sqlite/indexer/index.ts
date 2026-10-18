@@ -21,6 +21,7 @@ import { queryRaw } from './query';
 import { getText, tryParseArrayField } from './utils';
 
 const JS_INDEX_REVISION = 1;
+const NODE_BATCH_SIZE = 50;
 
 export class SqliteIndexerStorage extends IndexerStorageBase {
   static readonly identifier = 'SqliteIndexerStorage';
@@ -51,17 +52,26 @@ export class SqliteIndexerStorage extends IndexerStorageBase {
     const ids = match.toArray();
     const pagedIds = ids.slice(skip, skip + limit);
 
+    // Built a batch at a time: every node is a few native round trips, and a
+    // task query can page in hundreds of hits, which done one by one took long
+    // enough on mobile for the journal's task lists to give up waiting.
     const nodes = [];
-    for (const id of pagedIds) {
-      const node = await createNode(
-        this.connection,
-        table,
-        id,
-        match.getScore(id),
-        options ?? {},
-        query
+    for (let i = 0; i < pagedIds.length; i += NODE_BATCH_SIZE) {
+      const batch = pagedIds.slice(i, i + NODE_BATCH_SIZE);
+      nodes.push(
+        ...(await Promise.all(
+          batch.map(id =>
+            createNode(
+              this.connection,
+              table,
+              id,
+              match.getScore(id),
+              options ?? {},
+              query
+            )
+          )
+        ))
       );
-      nodes.push(node);
     }
 
     return {
