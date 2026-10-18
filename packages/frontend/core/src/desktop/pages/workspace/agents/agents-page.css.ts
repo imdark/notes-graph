@@ -213,3 +213,46 @@ export const waitingCard = style({
 export const showMore = style({
   alignSelf: 'center',
 });
+
+export const spendScroll = style({
+  overflowX: 'auto',
+});
+
+export const spendTable = style({
+  width: '100%',
+  borderCollapse: 'collapse',
+  fontSize: 13,
+  fontVariantNumeric: 'tabular-nums',
+  color: cssVarV2('text/primary'),
+  selectors: {
+    '& th, & td': {
+      padding: '6px 10px',
+      textAlign: 'right',
+      whiteSpace: 'nowrap',
+      borderBottom: `1px solid ${cssVarV2('layer/insideBorder/border')}`,
+    },
+    '& th:first-child': { textAlign: 'left', fontWeight: 600 },
+    '& thead th': {
+      fontWeight: 500,
+      color: cssVarV2('text/secondary'),
+    },
+  },
+});
+
+/** Week columns are secondary to the totals: quieter, and the first to go on a phone. */
+export const spendWeek = style({
+  color: cssVarV2('text/secondary'),
+  '@media': {
+    'screen and (max-width: 640px)': { display: 'none' },
+  },
+});
+
+export const spendNone = style({
+  fontWeight: 400,
+  color: cssVarV2('text/secondary'),
+});
+
+export const spendNote = style({
+  fontSize: cssVar('fontXs'),
+  color: cssVarV2('text/tertiary'),
+});

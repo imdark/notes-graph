@@ -24,6 +24,7 @@ export {
   savedPlacement,
   type SharedRun,
   type SkillNote,
+  type SpentRun,
   waitingSteers,
   WORKFLOW_MODEL,
 } from './services/remote-runner';
@@ -136,6 +137,12 @@ export {
   formatRunCost,
 } from './stores/agent-runs';
 export { AgentRunLogsStore } from './stores/agent-run-logs';
+export {
+  type ProjectSpend,
+  projectFromProps,
+  spendByProject,
+  weekStarts,
+} from './services/run-spend';
 export {
   type AgentRunSession,
   AgentRunSessionService,

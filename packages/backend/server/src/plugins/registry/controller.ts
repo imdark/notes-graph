@@ -412,6 +412,17 @@ export class RegistryController {
     return { budget: await this.jobs.setBudget(workspaceId, user.id, body ?? {}) };
   }
 
+  @Get('/workspaces/:workspaceId/agent-spend')
+  async getAgentSpend(
+    @CurrentUser() user: CurrentUserType,
+    @Param('workspaceId') workspaceId: string,
+    @Query('days') days?: string
+  ) {
+    this.assertEnabled();
+    await this.ac.user(user.id).workspace(workspaceId).assert('Workspace.Read');
+    return this.jobs.spend(workspaceId, Number(days) || 28);
+  }
+
   @Get('/workspaces/:workspaceId/jobs')
   async listJobs(
     @CurrentUser() user: CurrentUserType,

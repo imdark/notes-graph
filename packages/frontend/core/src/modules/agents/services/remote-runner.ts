@@ -250,7 +250,18 @@ export interface AgentBudget {
   month: string;
 }
 
-export const openQuestions = (job: RemoteJob): RemoteQuestion[] =>
+/** What one ended device or cloud run used; null parts went unreported. */
+export interface SpentRun {
+  docId: string | null;
+  status: string;
+  /** ISO time the run was queued. */
+  createdAt: string;
+  durationMs: number | null;
+  costUsd: number | null;
+  tokens: number | null;
+}
+
+export const openQuestions =(job: RemoteJob): RemoteQuestion[] =>
   (job.questions ?? []).filter(q => !q.answeredAt);
 
 /** Messages sent to the job that its runner hasn't taken yet. */
@@ -460,6 +471,14 @@ export class RemoteAgentRunnerService extends Service {
       { method: 'POST', body: JSON.stringify({ monthlyUsd }) }
     );
     return data.budget;
+  }
+
+  /** Device and cloud runs that ended in the last `days` days, newest first. */
+  async spend(workspaceId: string, days: number): Promise<SpentRun[]> {
+    const data = await this.json<{ runs: SpentRun[] }>(
+      `${this.base(workspaceId)}/agent-spend?days=${days}`
+    );
+    return data.runs;
   }
 
   /**
