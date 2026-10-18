@@ -34,6 +34,10 @@ function orElse<T>(fallback: T) {
   });
 }
 
+// A note titled with a bare date is a daily note even when it lacks the
+// `journal` property — `ngraph capture` and agents create these by title alone.
+const DATE_TITLE = /^\d{4}-\d{2}-\d{2}$/;
+
 export interface ParentCandidate {
   docId: string;
   title: string;
@@ -173,7 +177,8 @@ export function useSuggestedParents(
             ),
             // Journal (daily) pages are a poor parent — a note doesn't belong
             // "under" a calendar day — so exclude every journal doc from the
-            // suggestions. Uses the app's first-class journal marker.
+            // suggestions. Uses the app's first-class journal marker; date-titled
+            // notes without it are dropped by DATE_TITLE below.
             journalService.allJournalDocIds$,
           ]).pipe(
             map(([titleIds, bodyMatches, parents, children, journalIds]) => {
@@ -193,7 +198,9 @@ export function useSuggestedParents(
                 seen.add(id);
                 const record = docsService.list.doc$(id).value;
                 if (!record) continue; // not a real/loaded doc
-                out.push({ docId: id, title: record.title$.value || 'Untitled' });
+                const title = (record.title$.value ?? '').trim();
+                if (DATE_TITLE.test(title)) continue;
+                out.push({ docId: id, title: title || 'Untitled' });
                 if (out.length >= limit) break;
               }
               return out;
