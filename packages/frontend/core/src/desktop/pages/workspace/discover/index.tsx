@@ -2,10 +2,11 @@ import { Button, Checkbox, Input, notify } from '@notesgraph/component';
 import { DocsService } from '@notesgraph/core/modules/doc';
 import { GlobalCacheService } from '@notesgraph/core/modules/storage';
 import { TagService } from '@notesgraph/core/modules/tag';
+import { VirtualViewsService } from '@notesgraph/core/modules/virtual-views';
 import { WorkbenchService } from '@notesgraph/core/modules/workbench';
 import { WorkspaceService } from '@notesgraph/core/modules/workspace';
 import { useI18n } from '@notesgraph/i18n';
-import { useService } from '@notesgraph/infra';
+import { LiveData, useLiveData, useService } from '@notesgraph/infra';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { combineLatest, firstValueFrom } from 'rxjs';
 
@@ -38,6 +39,7 @@ import {
   saveUseInterests,
   type UserInterests,
 } from './interests';
+import { interleaveFeed, virtualItemsToFeed } from './records';
 
 /** One read of the titles, tags and edit dates of every note not in the trash. */
 async function readNotesSnapshot(
@@ -102,6 +104,12 @@ const FeedCard = ({
   // so every row gets an image (not only the first 8) while the fetches
   // "prepopulate in the background" ahead of the user instead of all at once.
   useEffect(() => {
+    // A record brings its own image or none: its title is an email subject or
+    // a Slack message, which must not go to the news-image web search.
+    if (item.origin === 'record') {
+      setImage(item.thumbnail ?? null);
+      return;
+    }
     const el = cardRef.current;
     if (!el) return;
     let cancelled = false;
@@ -295,6 +303,26 @@ const DiscoverPage = () => {
 
   const topicsKey = useMemo(() => topics.join('|'), [topics]);
 
+  // Records from the virtual folders (email, Slack…), mixed in with the news.
+  // They are already stored locally, so they come from the store, not the
+  // news cache, and update live as the folders re-crawl.
+  const virtualViewsService = useService(VirtualViewsService);
+  const views = useLiveData(virtualViewsService.views.views$);
+  const virtualItems = useLiveData(
+    useMemo(
+      () => LiveData.from(virtualViewsService.watchAllItems(), []),
+      [virtualViewsService]
+    )
+  );
+  const records = useMemo(
+    () => virtualItemsToFeed(virtualItems ?? [], views ?? []),
+    [virtualItems, views]
+  );
+  const feed = useMemo(
+    () => interleaveFeed(topics.length ? items : [], records),
+    [items, records, topics.length]
+  );
+
   const refresh = useCallback(
     async (activeTopics: string[], showLoading = true) => {
       if (activeTopics.length === 0) {
@@ -407,22 +435,18 @@ const DiscoverPage = () => {
             interests={interests}
             topics={interestTopics}
           />
-          {loading ? (
+          {feed.length === 0 ? (
             <div className={styles.status}>
-              {t['com.notesgraph.discover.loading']()}
-            </div>
-          ) : topics.length === 0 ? (
-            <div className={styles.status}>
-              {t['com.notesgraph.discover.empty']()}
-            </div>
-          ) : error ? (
-            <div className={styles.status}>
-              {t['com.notesgraph.discover.error']()}
+              {topics.length === 0
+                ? t['com.notesgraph.discover.empty']()
+                : error && !loading
+                  ? t['com.notesgraph.discover.error']()
+                  : t['com.notesgraph.discover.loading']()}
             </div>
           ) : (
             <>
               <div className={styles.feed}>
-                {items.map(item => (
+                {feed.map(item => (
                   <FeedCard
                     key={item.id}
                     item={item}
