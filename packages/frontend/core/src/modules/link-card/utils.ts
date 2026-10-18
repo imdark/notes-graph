@@ -71,16 +71,17 @@ export function linkCardFetchEndpoint(url: string): string {
 }
 
 /**
- * Resolve a news article's preview image on the sidecar: it searches for the
- * headline + source, reads the resulting article's og:image, and caches the
- * result server-side (shared across clients). Used by the Discover feed, where
- * the aggregator (Google News) hides the real article URL.
+ * Resolve a news article's preview image on the sidecar: it decodes the
+ * aggregator link (Google News hides the real article URL), falling back to a
+ * search for the headline + source, reads the article's og:image, and caches
+ * the result server-side (shared across clients). Used by the Discover feed.
  */
 export function linkCardNewsImageEndpoint(
   title: string,
-  source: string
+  source: string,
+  link: string
 ): string {
   return `${getLinkCardBaseUrl()}/clip/news-image?title=${encodeURIComponent(
     title
-  )}&source=${encodeURIComponent(source)}`;
+  )}&source=${encodeURIComponent(source)}&url=${encodeURIComponent(link)}`;
 }
