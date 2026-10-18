@@ -20,6 +20,40 @@ export const DEFAULT_LIST_PAGE_SIZE = 8;
 // Options offered by the page-size picker in the list footer.
 export const LIST_PAGE_SIZE_OPTIONS = [8, 15, 25, 50, 100];
 
+/** The note a row's task lives in, as a data source reports it. */
+export type ListRowNote = { id: string; title: string; breadcrumb: string[] };
+
+/**
+ * Gather root rows under the note each one lives in, notes in the order their
+ * first row appears and rows in their own order within a note. A row whose
+ * note is unknown comes back on its own (`note: null`), so it still renders,
+ * flat, where it was.
+ */
+export const groupRowsByNote = <T extends { rowId: string }>(
+  rows: T[],
+  noteOf: (rowId: string) => ListRowNote | null
+): ({ note: ListRowNote; rows: T[] } | { note: null; row: T })[] => {
+  const groups: ({ note: ListRowNote; rows: T[] } | { note: null; row: T })[] =
+    [];
+  const byNote = new Map<string, { note: ListRowNote; rows: T[] }>();
+  for (const row of rows) {
+    const note = noteOf(row.rowId);
+    if (!note) {
+      groups.push({ note: null, row });
+      continue;
+    }
+    const group = byNote.get(note.id);
+    if (group) {
+      group.rows.push(row);
+      continue;
+    }
+    const created = { note, rows: [row] };
+    byNote.set(note.id, created);
+    groups.push(created);
+  }
+  return groups;
+};
+
 /**
  * A read-only list view: rows are the data source's rows, narrowed by the
  * generic data-view filter and ordered by the generic sort. Search and the

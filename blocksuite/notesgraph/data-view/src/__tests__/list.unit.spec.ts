@@ -2,7 +2,10 @@ import { signal } from '@preact/signals-core';
 import { describe, expect, it } from 'vitest';
 
 import type { DataSource } from '../core/data-source/base.js';
-import { ListSingleView } from '../view-presets/list/list-view-manager.js';
+import {
+  groupRowsByNote,
+  ListSingleView,
+} from '../view-presets/list/list-view-manager.js';
 import type { ListStoredViewData } from '../view-presets/list/types.js';
 
 type Task = { title: string; status: string; children?: string[] };
@@ -83,6 +86,39 @@ const createListView = (
 };
 
 const ids = (rows: { rowId: string }[]) => rows.map(row => row.rowId);
+
+describe('groupRowsByNote', () => {
+  const note = (id: string) => ({ id, title: id, breadcrumb: [] });
+
+  it('roots rows under their note, notes in first-seen order', () => {
+    const noteOf: Record<string, string> = { a: 'n1', b: 'n2', c: 'n1' };
+    const groups = groupRowsByNote(
+      [{ rowId: 'a' }, { rowId: 'b' }, { rowId: 'c' }],
+      rowId => note(noteOf[rowId] ?? '')
+    );
+
+    expect(
+      groups.map(g => (g.note ? [g.note.id, ids(g.rows)] : g.row))
+    ).toEqual([
+      ['n1', ['a', 'c']],
+      ['n2', ['b']],
+    ]);
+  });
+
+  it('leaves a row with no known note flat, in place', () => {
+    const groups = groupRowsByNote(
+      [{ rowId: 'a' }, { rowId: 'x' }, { rowId: 'b' }],
+      rowId => (rowId === 'x' ? null : note('n1'))
+    );
+
+    expect(
+      groups.map(g => (g.note ? [g.note.id, ids(g.rows)] : [null, g.row.rowId]))
+    ).toEqual([
+      ['n1', ['a', 'b']],
+      [null, 'x'],
+    ]);
+  });
+});
 
 describe('ListSingleView tree', () => {
   it('keeps a done parent while one of its subtasks is still open', () => {
