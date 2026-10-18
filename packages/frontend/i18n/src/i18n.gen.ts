@@ -10496,6 +10496,22 @@ export function useNotesGraphI18N(): {
       */
     ["com.notesgraph.discover.loadMore"](): string;
     /**
+      * `Include interests from my notes`
+      */
+    ["com.notesgraph.discover.interests.toggle"](): string;
+    /**
+      * `From your notes`
+      */
+    ["com.notesgraph.discover.interests.specific"](): string;
+    /**
+      * `Broader areas`
+      */
+    ["com.notesgraph.discover.interests.general"](): string;
+    /**
+      * `Something new`
+      */
+    ["com.notesgraph.discover.interests.discover"](): string;
+    /**
       * `Sync`
       */
     ["com.notesgraph.mobile.setting.sync.title"](): string;
