@@ -15,11 +15,15 @@ export async function createNode(
 
   if (options.fields) {
     const fields: Record<string, any> = {};
-    for (const field of options.fields) {
-      const text = await connection.apis.ftsGetDocument(
-        `${table}:${field as string}`,
-        id
-      );
+    // Each read is a native round trip (on mobile: worker → page → Capacitor),
+    // so issue them together rather than one after another.
+    const texts = await Promise.all(
+      options.fields.map(field =>
+        connection.apis.ftsGetDocument(`${table}:${field as string}`, id)
+      )
+    );
+    options.fields.forEach((field, i) => {
+      const text = texts[i];
       // The native indexer returns `undefined` (Rust None) for a missing field,
       // not `null` — guard against both so we never call String methods on it.
       if (text != null) {
@@ -32,7 +36,7 @@ export async function createNode(
       } else {
         fields[field as string] = '';
       }
-    }
+    });
     node.fields = fields;
   }
 

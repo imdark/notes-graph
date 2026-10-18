@@ -16,10 +16,13 @@ import {
   catchError,
   combineLatest,
   filter as filterOp,
+  defer,
   map,
+  merge,
   of,
   startWith,
-  timeout,
+  tap,
+  timer,
 } from 'rxjs';
 
 /**
@@ -56,8 +59,6 @@ export function patchBlockTaskIndexService(
         return of({ hits: [], complete: true });
       }
       const wantedDocIds = filter.docIds ? new Set(filter.docIds) : null;
-
-
 
       // Status scope: incomplete checkboxes only, any checkbox, or (legacy,
       // for query boards) any block carrying an org status.
@@ -187,23 +188,33 @@ export function patchBlockTaskIndexService(
       // proof the query came back, and an emission it never asked for would
       // make an empty board claim "No results." before either index replied.
       const hits$ = (prefer?: 'remote') =>
-        docsSearchService.indexer
-          .search$(
-            'block',
-            query,
-            prefer ? { ...searchOptions, prefer } : searchOptions
-          )
-          .pipe(
-            map(toHits),
-            // An index that never answers at all (remote while offline —
-            // search$ waits on the connection) would otherwise leave the
-            // query permanently incomplete, and its spinner up for good.
-            // Treat prolonged silence as "answered with nothing"; a later
-            // real answer still comes through and adds its rows.
-            timeout({ first: 15_000, with: () => of<BlockTaskHit[]>([]) }),
-            catchError(() => of<BlockTaskHit[]>([])),
-            startWith<BlockTaskHit[] | null>(null)
+        defer(() => {
+          let answered = false;
+          const answer$ = docsSearchService.indexer
+            .search$(
+              'block',
+              query,
+              prefer ? { ...searchOptions, prefer } : searchOptions
+            )
+            .pipe(
+              map(toHits),
+              catchError(() => of<BlockTaskHit[]>([])),
+              tap(() => (answered = true))
+            );
+          // An index that never answers at all (remote while offline —
+          // search$ waits on the connection) would otherwise leave the query
+          // permanently incomplete, and its spinner up for good. Treat
+          // prolonged silence as "answered with nothing", but keep listening:
+          // the phone's local index often answers after this mark (every
+          // hit's fields cross the worker and native bridges), and
+          // `timeout({ with })` would unsubscribe and drop that answer,
+          // leaving the journal's task lists empty there.
+          const silence$ = timer(15_000).pipe(
+            filterOp(() => !answered),
+            map(() => [] as BlockTaskHit[])
           );
+          return merge(answer$, silence$);
+        }).pipe(startWith<BlockTaskHit[] | null>(null));
 
       return combineLatest([hits$(), hits$('remote')]).pipe(
         // Both still unanswered → stay silent rather than emit a hollow [].
