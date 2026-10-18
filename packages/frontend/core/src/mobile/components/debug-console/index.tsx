@@ -8,7 +8,6 @@ let erudaInitialized = false;
 // eruda's entry button is 40px; the mobile page header is 44px tall.
 const ENTRY_BUTTON_SIZE = 40;
 const HEADER_HEIGHT = 44;
-const EDGE_GAP = 8;
 const MAX_LOG_ROWS = 500;
 
 function safeAreaTop() {
@@ -54,11 +53,11 @@ export const DebugConsole = () => {
         // eruda keeps every console row as DOM by default ("infinite"); on a
         // phone that alone grew past 1.5 GB and got the renderer killed.
         eruda.get('console')?.config.set('maxLogNum', String(MAX_LOG_ROWS));
-        // Top left, on the app name row just under the status bar, instead of
-        // eruda's bottom-right default where it sits on the tab bar.
+        // Top centre, on the app name row just under the status bar, instead
+        // of eruda's bottom-right default where it sits on the tab bar.
         const place = () =>
           eruda.position({
-            x: EDGE_GAP,
+            x: (window.innerWidth - ENTRY_BUTTON_SIZE) / 2,
             y: safeAreaTop() + (HEADER_HEIGHT - ENTRY_BUTTON_SIZE) / 2,
           });
         place();
