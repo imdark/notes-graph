@@ -161,20 +161,20 @@ export class QueryListDataSource extends OrgTaskRowsDataSource {
    * Returns [] when nothing can be resolved, so the view simply renders no
    * breadcrumb rather than an empty chevron trail.
    */
-  rowBreadcrumb(rowId: string): string[] {
+  rowBreadcrumb(rowId: string, options?: { underNote?: boolean }): string[] {
     const model = this.getModelById(rowId);
     if (!model) return [];
 
     const segments: string[] = [];
-    const docId = model.store.id;
-
-    const project = this.projects$.value.find(p => p.docIds.includes(docId));
-    if (project?.name) segments.push(project.name);
-
-    const docTitle = model.store.workspace.meta.docMetas.find(
-      meta => meta.id === docId
-    )?.title;
-    if (docTitle) segments.push(docTitle);
+    // A row drawn under its note's own row already has project and note one
+    // line up, so only the sections inside the note are left to say.
+    if (!options?.underNote) {
+      const note = this.rowNote(rowId);
+      if (note) {
+        segments.push(...note.breadcrumb);
+        if (note.title) segments.push(note.title);
+      }
+    }
 
     // The ancestor chain the indexer already computed for exactly this
     // purpose (BlockTaskHit.trail, "for display"), rather than re-walking
@@ -186,6 +186,39 @@ export class QueryListDataSource extends OrgTaskRowsDataSource {
     segments.push(...trailSections(trail));
 
     return segments;
+  }
+
+  /**
+   * The note a row's task lives in, so the list view can root each tree at
+   * it. `breadcrumb` is what sits above the note (its project, when the doc
+   * belongs to one). `title` is '' for an untitled note.
+   */
+  rowNote(
+    rowId: string
+  ): { id: string; title: string; breadcrumb: string[] } | null {
+    const model = this.getModelById(rowId);
+    if (!model) return null;
+    const docId = model.store.id;
+    const project = this.projects$.value.find(p => p.docIds.includes(docId));
+    const title =
+      model.store.workspace.meta.docMetas.find(meta => meta.id === docId)
+        ?.title ?? '';
+    return {
+      id: docId,
+      title,
+      breadcrumb: project?.name ? [project.name] : [],
+    };
+  }
+
+  /** Open a note from its row in the list. False if there is no editor. */
+  openNote(docId: string): boolean {
+    const host = this.serviceGet(EditorHostKey);
+    if (!host) return false;
+    host.std.getOptional(RefNodeSlotsProvider)?.docLinkClicked.next({
+      pageId: docId,
+      host,
+    });
+    return true;
   }
 
   openRowSource(rowId: string): boolean {

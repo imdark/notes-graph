@@ -12,7 +12,9 @@ import {
 } from '../../../core/view/data-view-base.js';
 import type { Row } from '../../../core/view-manager/row.js';
 import {
+  groupRowsByNote,
   LIST_PAGE_SIZE_OPTIONS,
+  type ListRowNote,
   type ListSingleView,
 } from '../list-view-manager.js';
 import { listViewStyles } from './styles.js';
@@ -107,11 +109,33 @@ export class ListViewUI extends DataViewUIBase<ListViewUILogic> {
    * Duck-typed like openRowSource: a plain database has no cross-doc context
    * to offer, so it simply doesn't implement this and rows render bare.
    */
-  private rowBreadcrumb(rowId: string): string[] {
+  private rowBreadcrumb(rowId: string, underNote: boolean): string[] {
     const dataSource = this.logic.view.manager.dataSource as {
-      rowBreadcrumb?: (id: string) => string[];
+      rowBreadcrumb?: (
+        id: string,
+        options?: { underNote?: boolean }
+      ) => string[];
     };
-    return dataSource.rowBreadcrumb?.(rowId) ?? [];
+    return dataSource.rowBreadcrumb?.(rowId, { underNote }) ?? [];
+  }
+
+  /**
+   * The source's note lookup, when it pulls rows from more than one note.
+   * Duck-typed like rowBreadcrumb: a plain database has every row in itself,
+   * so it has no notes to root its trees at.
+   */
+  private noteLookup(): ((rowId: string) => ListRowNote | null) | undefined {
+    const dataSource = this.logic.view.manager.dataSource as {
+      rowNote?: (id: string) => ListRowNote | null;
+    };
+    return dataSource.rowNote?.bind(dataSource);
+  }
+
+  private openNote(noteId: string) {
+    const dataSource = this.logic.view.manager.dataSource as {
+      openNote?: (id: string) => boolean;
+    };
+    dataSource.openNote?.(noteId);
   }
 
   private openRow(rowId: string) {
@@ -165,7 +189,8 @@ export class ListViewUI extends DataViewUIBase<ListViewUILogic> {
   private renderRow(
     row: Row,
     depth: number,
-    showToggle: boolean
+    showToggle: boolean,
+    root: { underNote: boolean } | null
   ): TemplateResult {
     const view = this.logic.view;
     const dataSource = view.manager.dataSource;
@@ -176,7 +201,7 @@ export class ListViewUI extends DataViewUIBase<ListViewUILogic> {
       : '';
     // A subtask sits right under its parent, so the trail would only repeat
     // what is one line up.
-    const crumbs = depth === 0 ? this.rowBreadcrumb(row.rowId) : [];
+    const crumbs = root ? this.rowBreadcrumb(row.rowId, root.underNote) : [];
     const done = dataSource.taskDoneGet?.(row.rowId) ?? false;
     const children = view.childRows(row.rowId);
     const expanded = !this.collapsed$.value.has(row.rowId);
@@ -212,25 +237,85 @@ export class ListViewUI extends DataViewUIBase<ListViewUILogic> {
           <span class="dv-list-text" ?data-done=${done}
             >${title || 'Untitled'}</span
           >
-          ${crumbs.length
-            ? html`<span class="dv-list-breadcrumb" title=${crumbs.join(' › ')}
-                >${crumbs.map(
-                  (crumb, i) =>
-                    html`${i > 0
-                        ? html`<span class="dv-list-crumb-sep">›</span>`
-                        : nothing}<span class="dv-list-crumb">${crumb}</span>`
-                )}</span
-              >`
-            : nothing}
+          ${crumbs.length ? this.renderBreadcrumb(crumbs) : nothing}
         </span>
       </div>
       ${expanded
         ? repeat(
             children,
             child => child.rowId,
-            child => this.renderRow(child, depth + 1, showToggle)
+            child => this.renderRow(child, depth + 1, showToggle, null)
           )
         : nothing}`;
+  }
+
+  private renderBreadcrumb(crumbs: string[]) {
+    return html`<span class="dv-list-breadcrumb" title=${crumbs.join(' › ')}
+      >${crumbs.map(
+        (crumb, i) =>
+          html`${i > 0
+              ? html`<span class="dv-list-crumb-sep">›</span>`
+              : nothing}<span class="dv-list-crumb">${crumb}</span>`
+      )}</span
+    >`;
+  }
+
+  /**
+   * A note's row, rooting the tree of its tasks below it. Folds like a task
+   * with subtasks; its key is prefixed so it can't collide with a row id in
+   * collapsed$.
+   */
+  private renderNote(note: ListRowNote, rows: Row[]): TemplateResult {
+    const key = `note:${note.id}`;
+    const expanded = !this.collapsed$.value.has(key);
+    return html`<div
+        class="dv-list-row dv-list-note"
+        data-testid="dv-list-note"
+        @click=${() => this.openNote(note.id)}
+      >
+        <button
+          class="dv-list-toggle"
+          type="button"
+          aria-expanded=${expanded ? 'true' : 'false'}
+          aria-label=${expanded ? 'Hide tasks' : 'Show tasks'}
+          @click=${(e: Event) => this.toggleCollapsed(e, key)}
+        ></button>
+        <span class="dv-list-main">
+          <span class="dv-list-text">${note.title || 'Untitled'}</span>
+          ${note.breadcrumb.length
+            ? this.renderBreadcrumb(note.breadcrumb)
+            : nothing}
+        </span>
+      </div>
+      ${expanded
+        ? repeat(
+            rows,
+            row => row.rowId,
+            row => this.renderRow(row, 1, true, { underNote: true })
+          )
+        : nothing}`;
+  }
+
+  private renderRows(rows: Row[]): unknown {
+    const view = this.logic.view;
+    const noteOf = this.noteLookup();
+    if (!noteOf) {
+      const showToggle = rows.some(row => view.childRows(row.rowId).length > 0);
+      return repeat(
+        rows,
+        row => row.rowId,
+        row => this.renderRow(row, 0, showToggle, { underNote: false })
+      );
+    }
+    // Every note row folds, so the chevron column is always there.
+    return repeat(
+      groupRowsByNote(rows, noteOf),
+      group => (group.note ? `note:${group.note.id}` : group.row.rowId),
+      group =>
+        group.note
+          ? this.renderNote(group.note, group.rows)
+          : this.renderRow(group.row, 0, true, { underNote: false })
+    );
   }
 
   override render(): TemplateResult {
@@ -245,9 +330,6 @@ export class ListViewUI extends DataViewUIBase<ListViewUILogic> {
     const page = Math.min(Math.max(this.page$.value, 0), pageCount - 1);
     const visibleRows = rows.slice(page * pageSize, page * pageSize + pageSize);
     const needsPager = total > pageSize;
-    const showToggle = visibleRows.some(
-      row => view.childRows(row.rowId).length > 0
-    );
 
     return html`
       ${this.logic.headerWidget
@@ -266,11 +348,7 @@ export class ListViewUI extends DataViewUIBase<ListViewUILogic> {
                 <span>Loading tasks…</span>
               </div>`
             : html`<div class="dv-list-empty">No results.</div>`
-          : repeat(
-              visibleRows,
-              row => row.rowId,
-              row => this.renderRow(row, 0, showToggle)
-            )}
+          : this.renderRows(visibleRows)}
         ${total > 0 && view.rowsLoading$.value
           ? html`<div class="dv-list-loading dv-list-loading-more">
               <span class="dv-list-spinner"></span>

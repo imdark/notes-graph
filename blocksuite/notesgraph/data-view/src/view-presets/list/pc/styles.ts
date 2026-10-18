@@ -171,6 +171,11 @@ export const listViewStyles = css`
     text-decoration: line-through;
   }
 
+  /* A note rooting the tasks under it: a heading for them, not a task. */
+  .dv-list-note .dv-list-text {
+    font-weight: 600;
+  }
+
   /* Where the task lives: project › note › parent task. Secondary and small -
      it is orientation, not content, and must not make rows twice as tall. */
   .dv-list-breadcrumb {
