@@ -116,6 +116,10 @@ class LocalChatEventSource extends EventTarget {
  */
 export class LocalCopilotClient extends CopilotClient {
   private readonly sessions = new Map<string, LocalChatMessage[]>();
+  private readonly contexts = new Map<
+    string,
+    { docs: Map<string, object>; files: Map<string, object> }
+  >();
 
   constructor(
     private readonly llm: LocalLLMService,
@@ -231,26 +235,138 @@ export class LocalCopilotClient extends CopilotClient {
     return { total: 0, embedded: 0 };
   }
 
+  // Sessions live only in memory, so there is nothing to rebind to a doc or to
+  // fetch back; the chat carries on with the session it already has.
+  override async updateSession(
+    options: Parameters<CopilotClient['updateSession']>[0]
+  ): ReturnType<CopilotClient['updateSession']> {
+    return options.sessionId as Awaited<
+      ReturnType<CopilotClient['updateSession']>
+    >;
+  }
+  override async getSession(): ReturnType<CopilotClient['getSession']> {
+    return undefined as Awaited<ReturnType<CopilotClient['getSession']>>;
+  }
+  override async cleanupSessions(
+    input: Parameters<CopilotClient['cleanupSessions']>[0]
+  ): ReturnType<CopilotClient['cleanupSessions']> {
+    for (const id of input.sessionIds) this.sessions.delete(id);
+    return input.sessionIds as Awaited<
+      ReturnType<CopilotClient['cleanupSessions']>
+    >;
+  }
+
   // Context (RAG) isn't available locally yet — degrade gracefully so adding a
   // doc/file as context is simply ignored instead of throwing a network error.
+  // Added items are still listed back, as already embedded: the composer shows
+  // a chip as loading (and holds the chat) until the context reports it done.
   override async getContextId(): Promise<undefined> {
     return undefined;
   }
   override async createContext(): ReturnType<CopilotClient['createContext']> {
-    return { id: nanoid() } as unknown as Awaited<
+    const id = nanoid();
+    this.contexts.set(id, { docs: new Map(), files: new Map() });
+    return { id } as unknown as Awaited<
       ReturnType<CopilotClient['createContext']>
     >;
   }
-  override async addContextDoc(): ReturnType<CopilotClient['addContextDoc']> {
-    return [] as unknown as Awaited<ReturnType<CopilotClient['addContextDoc']>>;
+  override async addContextDoc(options: {
+    contextId: string;
+    docId: string;
+  }): ReturnType<CopilotClient['addContextDoc']> {
+    const doc = {
+      id: options.docId,
+      status: 'finished',
+      error: null,
+      createdAt: Date.now(),
+    };
+    this.contextOf(options.contextId).docs.set(options.docId, doc);
+    return [doc] as unknown as Awaited<
+      ReturnType<CopilotClient['addContextDoc']>
+    >;
   }
-  override async addContextFile(): ReturnType<CopilotClient['addContextFile']> {
-    return [] as unknown as Awaited<
+  override async removeContextDoc(options: {
+    contextId: string;
+    docId: string;
+  }): ReturnType<CopilotClient['removeContextDoc']> {
+    this.contexts.get(options.contextId)?.docs.delete(options.docId);
+    return true as Awaited<ReturnType<CopilotClient['removeContextDoc']>>;
+  }
+  override async addContextFile(
+    file: File,
+    options: { contextId: string }
+  ): ReturnType<CopilotClient['addContextFile']> {
+    const entry = {
+      id: nanoid(),
+      blobId: nanoid(),
+      name: file.name,
+      status: 'finished',
+      error: null,
+      createdAt: Date.now(),
+      chunkSize: 0,
+    };
+    this.contextOf(options.contextId).files.set(entry.id, entry);
+    return entry as unknown as Awaited<
       ReturnType<CopilotClient['addContextFile']>
     >;
   }
-  override async getContextDocsAndFiles(): Promise<undefined> {
-    return undefined;
+  override async removeContextFile(options: {
+    contextId: string;
+    fileId: string;
+  }): ReturnType<CopilotClient['removeContextFile']> {
+    this.contexts.get(options.contextId)?.files.delete(options.fileId);
+    return true as Awaited<ReturnType<CopilotClient['removeContextFile']>>;
+  }
+  override async addContextCategory(): ReturnType<
+    CopilotClient['addContextCategory']
+  > {
+    return { docs: [] } as unknown as Awaited<
+      ReturnType<CopilotClient['addContextCategory']>
+    >;
+  }
+  override async removeContextCategory(): ReturnType<
+    CopilotClient['removeContextCategory']
+  > {
+    return true as Awaited<ReturnType<CopilotClient['removeContextCategory']>>;
+  }
+  override async addContextBlob(): ReturnType<
+    CopilotClient['addContextBlob']
+  > {
+    return { status: 'finished', createdAt: Date.now() } as unknown as Awaited<
+      ReturnType<CopilotClient['addContextBlob']>
+    >;
+  }
+  override async removeContextBlob(): ReturnType<
+    CopilotClient['removeContextBlob']
+  > {
+    return true as Awaited<ReturnType<CopilotClient['removeContextBlob']>>;
+  }
+  override async getContextDocsAndFiles(
+    _workspaceId: string,
+    _sessionId: string,
+    contextId: string
+  ): ReturnType<CopilotClient['getContextDocsAndFiles']> {
+    const context = this.contexts.get(contextId);
+    if (!context) return undefined;
+    return {
+      id: contextId,
+      docs: [...context.docs.values()],
+      files: [...context.files.values()],
+      tags: [],
+      collections: [],
+      blobs: [],
+    } as unknown as Awaited<
+      ReturnType<CopilotClient['getContextDocsAndFiles']>
+    >;
+  }
+
+  private contextOf(contextId: string) {
+    let context = this.contexts.get(contextId);
+    if (!context) {
+      context = { docs: new Map(), files: new Map() };
+      this.contexts.set(contextId, context);
+    }
+    return context;
   }
   override async matchContext(): ReturnType<CopilotClient['matchContext']> {
     return { files: [], docs: [] } as unknown as Awaited<
