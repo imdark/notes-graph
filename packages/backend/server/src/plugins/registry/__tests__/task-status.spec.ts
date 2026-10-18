@@ -1,7 +1,12 @@
 import test from 'ava';
 import * as Y from 'yjs';
 
-import { queueTasks, releaseTasks, startTasks } from '../task-status';
+import {
+  queueTasks,
+  readStatuses,
+  releaseTasks,
+  startTasks,
+} from '../task-status';
 
 /** A doc of list blocks, as the editor stores them. */
 function makeDoc(
@@ -99,4 +104,17 @@ test('an ended job hands back what it left, not what the agent moved on', t => {
   t.is(status(doc, 'ours'), '[ ]');
   t.is(status(doc, 'agents'), '[-]');
   t.is(status(doc, 'done'), '[X]');
+});
+
+test('reads where tasks ended, skipping blocks that are not tasks', t => {
+  const doc = makeDoc({
+    review: { text: ' shipped to a branch', chip: 'COMMITTED' },
+    typed: { text: 'DEPLOYED live now' },
+    box: { text: 'tick me', checkbox: true },
+    plain: { text: 'just a line' },
+  });
+  t.deepEqual(
+    readStatuses(Y.encodeStateAsUpdate(doc), ['review', 'typed', 'box', 'plain', 'missing']),
+    { review: 'COMMITTED', typed: 'DEPLOYED', box: '[ ]' }
+  );
 });

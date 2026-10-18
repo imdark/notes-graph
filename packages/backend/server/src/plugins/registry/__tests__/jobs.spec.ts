@@ -1081,3 +1081,44 @@ test('pressing "Allow all" leaves an open deploy waiting', async t => {
   await service.answer(workspaceId, 'job-1', 'q1', userId, { allowed: true, allowAll: true });
   t.deepEqual(kept, [['q2']]);
 });
+
+/** A service whose model's report returns `after`, with a push and task stub. */
+function reportService(after: any, taskStatuses: Record<string, string> = {}) {
+  const finished: Array<{ job: any; statuses: Record<string, string> }> = [];
+  const models: any = {
+    registryJob: { report: async () => after },
+  };
+  const push: any = {
+    runFinished: async (job: any, statuses: Record<string, string>) => {
+      finished.push({ job, statuses });
+    },
+  };
+  const tasks: any = { finished: async () => taskStatuses };
+  return { service: new RegistryJobService(models, push, undefined, tasks), finished };
+}
+
+test("a run's end pushes where its tasks ended", async t => {
+  const { service, finished } = reportService(
+    storedJob({ createdBy: userId, status: 'done', result: 'PR #1' }),
+    { b1: 'COMMITTED' }
+  );
+  await service.report(workspaceId, 'job-1', { status: 'done', result: 'PR #1' });
+  await new Promise(resolve => setImmediate(resolve));
+  t.is(finished.length, 1);
+  t.deepEqual(finished[0].statuses, { b1: 'COMMITTED' });
+});
+
+test('a late report on a cancelled run pushes nothing', async t => {
+  const { service, finished } = reportService(
+    storedJob({ createdBy: userId, status: 'cancelled' })
+  );
+  await service.report(workspaceId, 'job-1', { status: 'done', result: 'too late' });
+  await new Promise(resolve => setImmediate(resolve));
+  t.is(finished.length, 0);
+});
+
+test('a running report pushes nothing', async t => {
+  const { service, finished } = reportService(storedJob({ createdBy: userId }));
+  await service.report(workspaceId, 'job-1', { status: 'running', logAppend: 'x' });
+  t.is(finished.length, 0);
+});

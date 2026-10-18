@@ -4,7 +4,12 @@ import type { RegistryJob } from '@prisma/client';
 import { DocWriter } from '../../core/doc';
 import { PermissionAccess } from '../../core/permission';
 import { Models } from '../../models';
-import { queueTasks, releaseTasks, startTasks } from './task-status';
+import {
+  queueTasks,
+  readStatuses,
+  releaseTasks,
+  startTasks,
+} from './task-status';
 
 /**
  * The automation around a device job that is on tasks in a note: the tasks
@@ -50,7 +55,13 @@ export class JobTaskClaims {
     });
   }
 
-  async finished(job: RegistryJob): Promise<void> {
+  /**
+   * Hand back what the run left, and say where its tasks ended: the status
+   * of each, by block id, as the agent left it (empty when it had none, or
+   * they couldn't be read).
+   */
+  async finished(job: RegistryJob): Promise<Record<string, string>> {
+    let statuses: Record<string, string> = {};
     await this.edit(job, 'release', async (docId, ids) => {
       const elsewhere = await this.models.registryJob.tasksClaimedElsewhere(
         job.workspaceId,
@@ -63,10 +74,14 @@ export class JobTaskClaims {
       await this.writer.editDoc(
         job.workspaceId,
         docId,
-        binary => releaseTasks(binary, mine, job.startedTaskIds ?? []),
+        binary => {
+          statuses = readStatuses(binary, mine);
+          return releaseTasks(binary, mine, job.startedTaskIds ?? []);
+        },
         job.createdBy ?? undefined
       );
     });
+    return statuses;
   }
 
   private async edit(

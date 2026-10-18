@@ -51,6 +51,48 @@ export function questionPushData(
   return data;
 }
 
+export type RunOutcome = 'done' | 'review' | 'deployed' | 'blocked' | 'failed';
+
+/**
+ * Where a run ended, as the user would act on it: what still needs them
+ * (blocked, review) outranks what shipped, so a run that left one task
+ * blocked reads as blocked even if another deployed.
+ */
+export function runOutcome(
+  jobStatus: string,
+  taskStatuses: Record<string, string>
+): RunOutcome {
+  if (jobStatus === 'error') return 'failed';
+  const statuses = new Set(Object.values(taskStatuses).map(s => s.toUpperCase()));
+  if (statuses.has('BLOCKED')) return 'blocked';
+  if (statuses.has('COMMITTED') || statuses.has('MERGED')) return 'review';
+  if (statuses.has('DEPLOYED')) return 'deployed';
+  return 'done';
+}
+
+/** A run ended: enough for the phone to say how, and open its note. */
+export function finishedPushData(
+  serverBaseUrl: string,
+  job: Pick<
+    RegistryJob,
+    'id' | 'workspaceId' | 'agentName' | 'docId' | 'title' | 'result' | 'error'
+  >,
+  outcome: RunOutcome
+): Record<string, string> {
+  const text = outcome === 'failed' ? job.error : job.result;
+  return {
+    type: 'agent-finished',
+    server: serverBaseUrl,
+    workspaceId: job.workspaceId,
+    jobId: job.id,
+    docId: job.docId ?? '',
+    agentName: job.agentName,
+    title: clip(job.title ?? '', 200),
+    outcome,
+    text: clip((text ?? '').trim(), MAX_PUSH_DETAIL),
+  };
+}
+
 /**
  * Tells the phones of whoever started an agent run that it is waiting on
  * them, through Firebase Cloud Messaging.
@@ -116,6 +158,28 @@ export class AgentPushService {
       jobId: job.id,
       questionIds: questionIds.join(','),
     });
+  }
+
+  /**
+   * A run ended, done or failed: tell its starter's phones, saying whether
+   * its tasks wait on a review, shipped, or got stuck. A cancelled run was
+   * the user's own doing and pushes nothing; a monitor's check runs on a
+   * schedule and has its own alert push for what it finds.
+   */
+  async runFinished(
+    job: RegistryJob,
+    taskStatuses: Record<string, string>
+  ): Promise<void> {
+    if (!job.createdBy || job.status === 'cancelled') return;
+    if (job.agentId.startsWith('monitor:')) return;
+    await this.send(
+      job.createdBy,
+      finishedPushData(
+        this.url.baseUrl,
+        job,
+        runOutcome(job.status, taskStatuses)
+      )
+    );
   }
 
   /** A monitor's alert, to its owner's phones; opening it goes to the block. */

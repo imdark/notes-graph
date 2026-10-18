@@ -12,10 +12,10 @@ import org.json.JSONArray
 import timber.log.Timber
 
 /**
- * Receives "an agent run is waiting on you" from the server, whether or not
- * the app is open. Messages are data-only, so this runs for every one and
- * builds the notification itself (with its answer buttons) rather than
- * leaving a plain one to the system.
+ * Receives "an agent run is waiting on you" (and "it ended") from the
+ * server, whether or not the app is open. Messages are data-only, so this
+ * runs for every one and builds the notification itself (with its answer
+ * buttons) rather than leaving a plain one to the system.
  */
 class AgentPushService : FirebaseMessagingService() {
 
@@ -34,15 +34,16 @@ class AgentPushService : FirebaseMessagingService() {
                 .split(',')
                 .filter { it.isNotEmpty() }
                 .forEach { AgentNotifications.cancel(this, it) }
-            "monitor-alert" -> {
-                // Same rule as questions: only from servers this phone is signed in to.
-                val server = data["server"].orEmpty()
-                val known = runBlocking { servers(this@AgentPushService) }
-                if (known.any { canonicalEndpoint(it) == canonicalEndpoint(server) }) {
-                    MonitorNotifications.show(this, data)
-                }
-            }
+            "monitor-alert" -> if (fromKnownServer(data)) MonitorNotifications.show(this, data)
+            "agent-finished" -> if (fromKnownServer(data)) RunNotifications.show(this, data)
         }
+    }
+
+    /** Same rule as questions: only from servers this phone is signed in to. */
+    private fun fromKnownServer(data: Map<String, String>): Boolean {
+        val server = data["server"].orEmpty()
+        val known = runBlocking { servers(this@AgentPushService) }
+        return known.any { canonicalEndpoint(it) == canonicalEndpoint(server) }
     }
 
     /**

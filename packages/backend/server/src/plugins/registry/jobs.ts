@@ -627,7 +627,12 @@ export class RegistryJobService {
     });
     // Whoever queued the job may be waiting on its end (a monitor, say).
     if (job && (JOB_TERMINAL as readonly string[]).includes(job.status)) {
-      await this.tasks?.finished(job);
+      const taskStatuses = (await this.tasks?.finished(job)) ?? {};
+      // Only on the report that ended it: a cancelled job answers later
+      // reports with itself, and the user cancelled it anyway.
+      if (status === job.status) {
+        this.notify(push => push.runFinished(job, taskStatuses));
+      }
       this.event?.emit('registry.job.finished', {
         workspaceId,
         jobId: job.id,
