@@ -102,6 +102,24 @@ function editStatuses(
   };
 }
 
+/** The status of each of `blockIds` that is a task, by block id. */
+export function readStatuses(
+  binary: Uint8Array,
+  blockIds: string[]
+): Record<string, string> {
+  const doc = new Y.Doc();
+  Y.applyUpdate(doc, binary);
+  const blocks = doc.getMap<Y.Map<unknown>>('blocks');
+  const statuses: Record<string, string> = {};
+  for (const id of new Set(blockIds)) {
+    const block = blocks.get(id);
+    if (!(block instanceof Y.Map)) continue;
+    const status = readStatus(block);
+    if (status) statuses[id] = status.text;
+  }
+  return statuses;
+}
+
 /** To-do tasks become queued; anything else is left as it is. */
 export const queueTasks = (binary: Uint8Array, blockIds: string[]) =>
   editStatuses(binary, blockIds, (_, status) =>
