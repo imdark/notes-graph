@@ -266,9 +266,7 @@ export class LocalCopilotClient extends CopilotClient {
   override async createContext(): ReturnType<CopilotClient['createContext']> {
     const id = nanoid();
     this.contexts.set(id, { docs: new Map(), files: new Map() });
-    return { id } as unknown as Awaited<
-      ReturnType<CopilotClient['createContext']>
-    >;
+    return id;
   }
   override async addContextDoc(options: {
     contextId: string;
