@@ -1,6 +1,6 @@
 import { cssVar } from '@toeverything/theme';
 import { cssVarV2 } from '@toeverything/theme/v2';
-import { style } from '@vanilla-extract/css';
+import { globalStyle, style } from '@vanilla-extract/css';
 
 export const headerBar = style({
   display: 'flex',
@@ -224,19 +224,22 @@ export const spendTable = style({
   fontSize: 13,
   fontVariantNumeric: 'tabular-nums',
   color: cssVarV2('text/primary'),
-  selectors: {
-    '& th, & td': {
-      padding: '6px 10px',
-      textAlign: 'right',
-      whiteSpace: 'nowrap',
-      borderBottom: `1px solid ${cssVarV2('layer/insideBorder/border')}`,
-    },
-    '& th:first-child': { textAlign: 'left', fontWeight: 600 },
-    '& thead th': {
-      fontWeight: 500,
-      color: cssVarV2('text/secondary'),
-    },
-  },
+});
+// vanilla-extract only lets a style's own selectors target the element
+// itself, so its cells are styled with globalStyle.
+globalStyle(`${spendTable} th, ${spendTable} td`, {
+  padding: '6px 10px',
+  textAlign: 'right',
+  whiteSpace: 'nowrap',
+  borderBottom: `1px solid ${cssVarV2('layer/insideBorder/border')}`,
+});
+globalStyle(`${spendTable} th:first-child`, {
+  textAlign: 'left',
+  fontWeight: 600,
+});
+globalStyle(`${spendTable} thead th`, {
+  fontWeight: 500,
+  color: cssVarV2('text/secondary'),
 });
 
 /** Week columns are secondary to the totals: quieter, and the first to go on a phone. */
