@@ -125,7 +125,12 @@ const WorkbenchSidebar = () => {
 
   const views = useLiveData(workbench.views$);
   const activeView = useLiveData(workbench.activeView$);
-  const sidebarOpen = useLiveData(workbench.sidebarOpen$);
+  // A page with nothing for the sidebar (the feed, the Agents page) shows
+  // none, rather than an empty panel; the reader's open/closed choice is
+  // kept for the next page that has tabs.
+  const activeTabs = useLiveData(activeView.sidebarTabs$);
+  const sidebarOpen =
+    useLiveData(workbench.sidebarOpen$) && activeTabs.length > 0;
   const [floating, setFloating] = useState(false);
 
   const onWidthChanged = useCallback(

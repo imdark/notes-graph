@@ -394,6 +394,7 @@ export class AIChatContent extends SignalWatcher(
         .host=${this.host}
         .workspaceId=${this.workspaceId}
         .docId=${this.docId}
+        .includeOpenDoc=${!this.independentMode}
         .session=${this.session}
         .runtime=${this.runtime}
         .runtimeSnapshot=${this.runtimeSnapshot}

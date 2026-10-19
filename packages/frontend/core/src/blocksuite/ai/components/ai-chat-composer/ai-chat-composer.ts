@@ -56,6 +56,13 @@ import {
 import type { AIChatInputContext, AIReasoningConfig } from '../ai-chat-input';
 import { MAX_IMAGE_COUNT } from '../ai-chat-input/const';
 
+/**
+ * Open pages the reader took out of a chat's context, as `<session>:<doc>`,
+ * so the chat doesn't keep putting them back. Kept for the app's lifetime,
+ * across the composer being re-created as the panel opens and closes.
+ */
+const declinedDocs = new Set<string>();
+
 export class AIChatComposer extends SignalWatcher(
   WithDisposable(ShadowlessElement)
 ) {
@@ -82,6 +89,10 @@ export class AIChatComposer extends SignalWatcher(
 
   @property({ attribute: false })
   accessor docId: string | undefined;
+
+  /** Start the chat with the open page (`docId`) as context; the side panel's chat. */
+  @property({ attribute: false })
+  accessor includeOpenDoc = false;
 
   @property({ attribute: false })
   accessor session!: CopilotChatHistoryFragment | null | undefined;
@@ -160,7 +171,7 @@ export class AIChatComposer extends SignalWatcher(
         .independentMode=${this.independentMode}
         .addChip=${this.addChip}
         .updateChip=${this.updateChip}
-        .removeChip=${this.removeChip}
+        .removeChip=${this.removeChipByReader}
         .toggleCollapse=${this.toggleChipsCollapse}
         .docDisplayConfig=${this.docDisplayConfig}
         .portalContainer=${this.portalContainer}
@@ -214,7 +225,15 @@ export class AIChatComposer extends SignalWatcher(
     this._disposables.add(
       AIAppEvents.requestSendWithChat.subscribe(this.beforeChatContextSend)
     );
-    this.initComposer().catch(console.error);
+    // Typing in a new chat brings the open page along (see addOpenDocChip).
+    this._disposables.addFromEvent(this, 'input', this.onTyping);
+    this.initComposer()
+      .catch(console.error)
+      // After the chat's own context has loaded, so it doesn't replace it.
+      .finally(() => {
+        this.composerReady = true;
+        this.addOpenDocChip().catch(console.error);
+      });
   }
 
   override disconnectedCallback() {
@@ -241,7 +260,68 @@ export class AIChatComposer extends SignalWatcher(
     if (changedProperties.has('runtimeSnapshot')) {
       this.syncChipsFromRuntimeSnapshot();
     }
+    // Another page opened, or a new chat started: bring the open page along.
+    if (
+      this.composerReady &&
+      (changedProperties.has('docId') ||
+        changedProperties.has('session') ||
+        changedProperties.has('runtime'))
+    ) {
+      this.addOpenDocChip().catch(console.error);
+    }
   }
+
+  /** Set once the chat's saved context has loaded. */
+  private composerReady = false;
+
+  /** The open page's chip, when this composer added it rather than the reader. */
+  private autoDocId: string | null = null;
+
+  private readonly declineKey = (docId: string) =>
+    `${this.session?.sessionId ?? 'new'}:${docId}`;
+
+  /**
+   * The chat starts with the open page as context, as if the reader had
+   * added it with "+". Removing its chip (×) keeps it out of this chat; on
+   * another page, the chip this added follows to the new page.
+   */
+  private readonly addOpenDocChip = async (startChat = false) => {
+    const docId = this.docId;
+    if (!this.includeOpenDoc || this.independentMode || !docId || !this.runtime) {
+      return;
+    }
+    // Adding context starts a chat on the server. A new chat isn't started
+    // just by opening the panel, so wait until the reader starts typing.
+    if (!this.session && !startChat) return;
+    if (this.chips.some(chip => isDocChip(chip) && chip.docId === docId)) {
+      return;
+    }
+    const previous = this.autoDocId;
+    if (previous && previous !== docId) {
+      const stale = this.chips.find(
+        chip => isDocChip(chip) && chip.docId === previous
+      );
+      if (stale) await this.removeChip(stale);
+      this.autoDocId = null;
+    }
+    if (declinedDocs.has(this.declineKey(docId))) return;
+    this.autoDocId = docId;
+    await this.addChip({ docId, state: 'processing' }, true);
+  };
+
+  private readonly onTyping = () => {
+    if (!this.composerReady || this.session) return;
+    this.addOpenDocChip(true).catch(console.error);
+  };
+
+  /** A chip the reader removed with its ×. */
+  private readonly removeChipByReader = async (chip: ChatChip) => {
+    if (isDocChip(chip)) {
+      declinedDocs.add(this.declineKey(chip.docId));
+      if (chip.docId === this.autoDocId) this.autoDocId = null;
+    }
+    await this.removeChip(chip);
+  };
 
   private readonly beforeChatContextSend = (
     params: AISendParams | AIChatParams | null
