@@ -49,7 +49,37 @@ export const SessionCard = ({
   onShowTarget: (target: AgentRunSession['target']) => void;
 }) => {
   const sessionService = useService(AgentRunSessionService);
+  const agentsService = useService(AgentsService);
   const { running } = session;
+
+  // Start the same agent on the same target afresh, stopping this run first
+  // when it is still going; the old card makes way for the new run's.
+  const [restarting, setRestarting] = useState(false);
+  const restart = useCallback(() => {
+    const agent = agentsService.agents$.value.find(
+      ({ id }) => id === session.agentId
+    );
+    if (!agent) {
+      notify.error({
+        title: "Can't restart it",
+        message: `${session.agentName} has been deleted.`,
+      });
+      return;
+    }
+    setRestarting(true);
+    (session.running ? sessionService.stop(session.id) : Promise.resolve())
+      .then(() => {
+        sessionService.dismiss(session.id);
+        return sessionService.start(agent, session.target);
+      })
+      .catch(err =>
+        notify.error({
+          title: "Couldn't restart it",
+          message: err instanceof Error ? err.message : String(err),
+        })
+      )
+      .finally(() => setRestarting(false));
+  }, [agentsService, session, sessionService]);
   // A worker's result is the note it changed; what it says at the end is a
   // report on that, so there's no answer to copy.
   const answers = session.agentKind === 'answer';
@@ -206,11 +236,32 @@ export const SessionCard = ({
                 Save as note
               </Button>
             ) : null}
-            <Button onClick={() => sessionService.dismiss(session.id)}>
-              Dismiss
-            </Button>
           </>
         )}
+        <Button
+          onClick={restart}
+          loading={restarting}
+          disabled={restarting}
+          tooltip={
+            running
+              ? 'Stop this run and start it again from the beginning'
+              : 'Run it again on the same target'
+          }
+          data-testid="restart-agent"
+        >
+          Restart
+        </Button>
+        <Button
+          onClick={() => sessionService.dismiss(session.id)}
+          tooltip={
+            running
+              ? 'Stop this run and take it off the panel'
+              : 'Take it off the panel; it stays in the run history'
+          }
+          data-testid="remove-agent-session"
+        >
+          Remove
+        </Button>
         {session.runId ? (
           <Button
             variant="plain"
