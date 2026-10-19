@@ -211,6 +211,20 @@ export const logDialogBody = style({
   minHeight: 0,
 });
 
+/**
+ * A run's Changes tab: the dialog doesn't scroll on its own, and a run's
+ * answer plus its diffs runs long, so the tab scrolls within the dialog.
+ */
+export const changesScroll = style({
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 10,
+  maxHeight: '65vh',
+  overflowY: 'auto',
+  overflowX: 'hidden',
+  paddingRight: 4,
+});
+
 export const runDetails = style({
   display: 'grid',
   gridTemplateColumns: 'max-content 1fr',

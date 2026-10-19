@@ -1,4 +1,9 @@
 import {
+  LitTextRenderer,
+  type TextRendererOptions,
+} from '@notesgraph/core/blocksuite/ai/components/text-renderer';
+import { useAISpecs } from '@notesgraph/core/components/hooks/notesgraph/use-ai-specs';
+import {
   type AgentRun,
   changesAreEmpty,
   type PatchFile,
@@ -6,6 +11,7 @@ import {
   type RunChanges,
 } from '@notesgraph/core/modules/agents';
 import { DocDisplayMetaService } from '@notesgraph/core/modules/doc-display-meta';
+import { AppThemeService } from '@notesgraph/core/modules/theme';
 import { WorkbenchService } from '@notesgraph/core/modules/workbench';
 import { useLiveData, useService } from '@notesgraph/infra';
 import { useCallback, useMemo, useState } from 'react';
@@ -14,8 +20,14 @@ import * as styles from './agents.css';
 import * as diffStyles from './edit-diff.css';
 import { EditDiffView } from './edit-diff-view';
 
-/** Lines of a file's diff shown before "Show all". */
-const FILE_LINES = 80;
+/**
+ * Lines of a file's diff shown before "Show all": the diff grows to its
+ * content, so only a very long one is held back.
+ */
+const FILE_LINES = 400;
+
+/** Sections line their items up at the start; a diff takes the full width. */
+const STRETCH = { alignItems: 'stretch' } as const;
 
 const NoteLink = ({
   docId,
@@ -85,7 +97,7 @@ const PatchFileView = ({
           Binary file
         </div>
       ) : (
-        <div className={diffStyles.body}>
+        <div className={diffStyles.bodyFull}>
           <div className={diffStyles.lines}>
             {shown.map(row =>
               'header' in row ? (
@@ -141,7 +153,7 @@ const GitChanges = ({ git }: { git: NonNullable<RunChanges['git']> }) => {
         </div>
       ) : null}
       {git.stat.length > 0 || files.length > 0 ? (
-        <div className={styles.section}>
+        <div className={styles.section} style={STRETCH}>
           <span className={styles.sectionLabel}>
             Files changed ({Math.max(git.stat.length, files.length)}){' '}
             <span className={diffStyles.added}>+{added}</span>{' '}
@@ -195,6 +207,18 @@ export const AgentRunChanges = ({
   onClose: () => void;
 }) => {
   const workbench = useService(WorkbenchService).workbench;
+  const themeService = useService(AppThemeService);
+  const specs = useAISpecs();
+  // The answer is Markdown; render it as the AI chat does.
+  const markdownOptions = useMemo<TextRendererOptions>(
+    () => ({
+      customHeading: true,
+      extensions: specs,
+      theme: themeService.appTheme.themeSignal,
+      scrollable: false,
+    }),
+    [specs, themeService]
+  );
   const openNote = useCallback(
     (docId: string) => {
       onClose();
@@ -213,15 +237,25 @@ export const AgentRunChanges = ({
   const showFileEdits = files.length > 0 && !git?.patch;
 
   return (
-    <div className={styles.logDialogBody} data-testid="agent-run-changes">
-      <div className={styles.section}>
+    <div className={styles.changesScroll} data-testid="agent-run-changes">
+      <div className={styles.section} style={STRETCH}>
         <span className={styles.sectionLabel}>Summary</span>
         {run.status === 'error' && run.error ? (
           <p className={styles.error}>{run.error}</p>
         ) : null}
-        <p className={styles.output} data-testid="agent-changes-summary">
-          {summary?.trim() || 'It finished without saying what it did.'}
-        </p>
+        <div className={styles.forkReplyText} data-testid="agent-changes-summary">
+          {summary?.trim() ? (
+            <LitTextRenderer
+              answer={summary.trim()}
+              options={markdownOptions}
+              state="finished"
+            />
+          ) : (
+            <p className={styles.output}>
+              It finished without saying what it did.
+            </p>
+          )}
+        </div>
       </div>
 
       {loading ? (
@@ -289,11 +323,16 @@ export const AgentRunChanges = ({
       {git ? <GitChanges git={git} /> : null}
 
       {showFileEdits ? (
-        <div className={styles.section} data-testid="agent-changes-edits">
+        <div
+          className={styles.section}
+          style={STRETCH}
+          data-testid="agent-changes-edits"
+        >
           <span className={styles.sectionLabel}>
             File edits ({files.length})
           </span>
           <EditDiffView
+            full
             preview={{
               tool: 'Edit',
               edits: files.map(file => ({
