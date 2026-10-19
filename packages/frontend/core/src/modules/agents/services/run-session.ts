@@ -529,6 +529,14 @@ export class AgentRunSessionService extends Service {
     if (session) this.discardSnapshot(runKey(session.agentId, session.target));
   }
 
+  /** Whether this tab still holds the note as it was before the run. */
+  canUndo(sessionId: string): boolean {
+    const session = this.sessions$.value.find(s => s.id === sessionId);
+    return (
+      !!session && !!this.snapshots.get(runKey(session.agentId, session.target))
+    );
+  }
+
   /** The reader denied a run's work: put the note back as it was before. */
   async undo(sessionId: string): Promise<boolean> {
     const session = this.sessions$.value.find(s => s.id === sessionId);

@@ -20,6 +20,7 @@ import { useLiveData, useService } from '@notesgraph/infra';
 import { useCallback, useMemo, useState } from 'react';
 
 import { AgentQuestionCard } from '../detail-page/tabs/agent-question';
+import { AgentReviewCard } from '../detail-page/tabs/agent-review-card';
 import { AgentRunLogDialog } from '../detail-page/tabs/agent-run-log';
 import {
   relativeTime,
@@ -128,6 +129,15 @@ const AgentsPage = () => {
   const [agentId, setAgentId] = useState<string | null>(null);
   const [limit, setLimit] = useState(PAGE_SIZE);
   const [logRunId, setLogRunId] = useState<string | null>(null);
+  const [askRun, setAskRun] = useState(false);
+  const openLog = useCallback((runId: string) => {
+    setAskRun(false);
+    setLogRunId(runId);
+  }, []);
+  const askAbout = useCallback((runId: string) => {
+    setAskRun(true);
+    setLogRunId(runId);
+  }, []);
   const closeLog = useCallback(() => setLogRunId(null), []);
 
   const openSettings = useCallback(() => {
@@ -222,6 +232,9 @@ const AgentsPage = () => {
       ),
     [runs, remote]
   );
+  // Finished runs waiting to be approved sit beside them.
+  const toReview = useMemo(() => runs.filter(run => run.reviewPending), [runs]);
+  const needsYou = waiting.length + toReview.length;
 
   const selectedAgent = agents.find(agent => agent.id === agentId);
   // The month's spend moves when a run ends and reports its cost.
@@ -252,14 +265,14 @@ const AgentsPage = () => {
       <ViewBody>
         <div className={styles.body}>
           <div className={styles.content}>
-            {waiting.length > 0 ? (
+            {needsYou > 0 ? (
               <section
                 className={styles.section}
                 data-testid="agents-page-waiting"
               >
                 <div className={styles.sectionTitle}>
                   Needs you
-                  <span className={styles.sectionCount}>{waiting.length}</span>
+                  <span className={styles.sectionCount}>{needsYou}</span>
                 </div>
                 {waiting.map(run => (
                   <div key={run.id} className={styles.waitingCard}>
@@ -268,7 +281,7 @@ const AgentsPage = () => {
                         run={run}
                         status="waiting"
                         now={now}
-                        onOpen={setLogRunId}
+                        onOpen={openLog}
                         onOpenDoc={openDoc}
                         onShowTarget={runActions.showRunTarget}
                       />
@@ -280,6 +293,25 @@ const AgentsPage = () => {
                         question={question}
                       />
                     ))}
+                  </div>
+                ))}
+                {toReview.map(run => (
+                  <div key={run.id} className={styles.waitingCard}>
+                    <div className={styles.runs}>
+                      <RunRow
+                        run={run}
+                        status="done"
+                        now={now}
+                        onOpen={openLog}
+                        onOpenDoc={openDoc}
+                        onShowTarget={runActions.showRunTarget}
+                      />
+                    </div>
+                    <AgentReviewCard
+                      run={run}
+                      onReview={openLog}
+                      onAsk={askAbout}
+                    />
                   </div>
                 ))}
               </section>
@@ -377,7 +409,7 @@ const AgentsPage = () => {
                       run={run}
                       status={statuses.get(run.id)}
                       now={now}
-                      onOpen={setLogRunId}
+                      onOpen={openLog}
                       onOpenDoc={openDoc}
                       onShowTarget={runActions.showRunTarget}
                       onRetry={runActions.retry}
@@ -399,7 +431,7 @@ const AgentsPage = () => {
           </div>
         </div>
       </ViewBody>
-      <AgentRunLogDialog runId={logRunId} onClose={closeLog} />
+      <AgentRunLogDialog runId={logRunId} ask={askRun} onClose={closeLog} />
     </>
   );
 };

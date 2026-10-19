@@ -23,6 +23,7 @@ import { useLiveData, useService } from '@notesgraph/infra';
 import { useCallback, useMemo, useState } from 'react';
 
 import { AgentQuestionCard } from './agent-question';
+import { AgentReviewCard } from './agent-review-card';
 import { AgentRunLogDialog } from './agent-run-log';
 import { RunRow, RunStatusBadge, useMinuteTick } from './agent-run-row';
 import * as styles from './agents.css';
@@ -262,6 +263,10 @@ export const EditorAgentsPanel = () => {
   const runs = useLiveData(
     useMemo(() => runsStore.watchRunsForDoc(doc.id), [runsStore, doc.id])
   );
+  const toReview = useMemo(
+    () => runs.filter(run => run.reviewPending),
+    [runs]
+  );
 
   const runOnDoc = useCallback(
     (agent: Agent) => {
@@ -346,6 +351,22 @@ export const EditorAgentsPanel = () => {
     <Scrollable.Root className={styles.root}>
       <Scrollable.Viewport>
         <div className={styles.body}>
+          {toReview.length > 0 ? (
+            <div className={styles.section} data-testid="agent-review-list">
+              <span className={styles.sectionLabel}>
+                Needs you ({toReview.length})
+              </span>
+              {toReview.map(run => (
+                <AgentReviewCard
+                  key={run.id}
+                  run={run}
+                  onReview={openLog}
+                  onAsk={askAbout}
+                />
+              ))}
+            </div>
+          ) : null}
+
           {source ? (
             <div className={styles.section} data-testid="compile-source">
               <span className={styles.sectionLabel}>
