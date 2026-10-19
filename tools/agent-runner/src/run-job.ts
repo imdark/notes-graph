@@ -29,7 +29,13 @@ import {
   runSteps,
   type ShellEnv,
 } from './automation';
-import { ChangeRecorder, collectChanges, gitBase, type RunChanges } from './changes';
+import { healthReading, isHealthCheck } from './health';
+import {
+  ChangeRecorder,
+  collectChanges,
+  gitBase,
+  type RunChanges,
+} from './changes';
 import { Narrator } from './narrate';
 import { permissionPrompt, runServer, steerHooks } from './run-tools';
 import { skillsPlugin } from './skills';
@@ -121,7 +127,8 @@ export const jobPrompt = (job: Job) => {
  */
 export const turnLimit = (job: Job): number | undefined => {
   const steps = job.maxSteps;
-  if (typeof steps !== 'number' || !Number.isFinite(steps) || steps <= 0) return undefined;
+  if (typeof steps !== 'number' || !Number.isFinite(steps) || steps <= 0)
+    return undefined;
   const floor = job.profile?.workdir === 'repo' ? 200 : 40;
   return Math.max(Math.floor(steps), floor);
 };
@@ -129,19 +136,30 @@ export const turnLimit = (job: Job): number | undefined => {
 async function omniseek(settings: RunnerSettings, fetchImpl: typeof fetch) {
   const url = settings.omniseekUrl?.replace(/\/$/, '');
   if (!url || !settings.omniseekToken) {
-    throw new Error("OmniSeek isn't set up on the cloud runner (OMNISEEK_URL and OMNISEEK_TOKEN).");
+    throw new Error(
+      "OmniSeek isn't set up on the cloud runner (OMNISEEK_URL and OMNISEEK_TOKEN)."
+    );
   }
   try {
-    const health = await fetchImpl(`${url}/healthz`, { signal: AbortSignal.timeout(5000) });
+    const health = await fetchImpl(`${url}/healthz`, {
+      signal: AbortSignal.timeout(5000),
+    });
     if (!health.ok) throw new Error(`HTTP ${health.status}`);
   } catch (err) {
-    throw new Error(`OmniSeek isn't running for the cloud runner (${url}: ${err}).`);
+    throw new Error(
+      `OmniSeek isn't running for the cloud runner (${url}: ${err}).`
+    );
   }
   return { url, token: settings.omniseekToken };
 }
 
 export async function runJob(job: Job, deps: RunDeps): Promise<RunOutcome> {
   const { api, workspaceId, settings, say } = deps;
+  // A health check is answered from here; its script is never run.
+  if (isHealthCheck(job)) {
+    say('$ health check (read by the cloud runner)');
+    return { result: await healthReading(settings.workRoot), steps: 0 };
+  }
   const profile = job.profile;
   if (!profile) {
     throw new Error(
@@ -154,18 +172,29 @@ export async function runJob(job: Job, deps: RunDeps): Promise<RunOutcome> {
   const seek = profile.mcpServers.includes('omniseek')
     ? await omniseek(settings, fetchImpl)
     : null;
-  if (automation.setup.some(step => step.run.includes('{repo}')) && !settings.repo) {
+  if (
+    automation.setup.some(step => step.run.includes('{repo}')) &&
+    !settings.repo
+  ) {
     throw new Error('The cloud runner has no repo to work in (RUNNER_REPO).');
   }
 
   say(`$ claude … (${job.model}, job ${job.id}, cloud)`);
-  say('  Claude can read and write your notes, and will ask you in NotesGraph when it needs something.');
+  say(
+    '  Claude can read and write your notes, and will ask you in NotesGraph when it needs something.'
+  );
 
   const workdir = await jobDir(settings.workRoot, job.id);
   const cache = join(settings.workRoot, 'cache');
   await mkdir(cache, { recursive: true });
   const values = {
-    ...jobPlaceholders(job.id, workdir.path, cache, settings.repo, settings.repoBranch ?? 'main'),
+    ...jobPlaceholders(
+      job.id,
+      workdir.path,
+      cache,
+      settings.repo,
+      settings.repoBranch ?? 'main'
+    ),
     // What the job asks, for a step that turns it into something (a ticket).
     prompt_file: join(workdir.path, 'prompt.md'),
   };
@@ -194,7 +223,13 @@ export async function runJob(job: Job, deps: RunDeps): Promise<RunOutcome> {
   try {
     await runSteps('setup', automation.setup, values, shell, say);
     const handed = await handedOver(workdir.path);
-    const skills = await skillsPlugin(profile.skills ?? [], workdir.path, fetchImpl, say, api);
+    const skills = await skillsPlugin(
+      profile.skills ?? [],
+      workdir.path,
+      fetchImpl,
+      say,
+      api
+    );
     const plugins = [...(handed.plugins ?? []), ...(skills ? [skills] : [])];
     const cwd = handed.cwd ?? render(automation.cwd ?? '{job_dir}', values);
     // Tools and teardown work where the agent does.
@@ -226,7 +261,12 @@ export async function runJob(job: Job, deps: RunDeps): Promise<RunOutcome> {
     // without asking, like NotesGraph's.
     const allowedTools = [...profile.allowedTools];
     if (automation.tools.length) {
-      mcpServers.automation = automationServer(automation.tools, values, shell, say);
+      mcpServers.automation = automationServer(
+        automation.tools,
+        values,
+        shell,
+        say
+      );
       allowedTools.push('mcp__automation');
     }
 
@@ -236,7 +276,11 @@ export async function runJob(job: Job, deps: RunDeps): Promise<RunOutcome> {
     const options: Options = {
       cwd,
       ...(maxTurns ? { maxTurns } : {}),
-      systemPrompt: { type: 'preset', preset: 'claude_code', append: profile.systemPrompt },
+      systemPrompt: {
+        type: 'preset',
+        preset: 'claude_code',
+        append: profile.systemPrompt,
+      },
       allowedTools,
       canUseTool: permissionPrompt(ctx),
       // What the person sends the run from NotesGraph while it works.
@@ -283,7 +327,11 @@ export async function runJob(job: Job, deps: RunDeps): Promise<RunOutcome> {
     );
   } finally {
     await runSteps(
-      'teardown', automation.teardown, values, { ...shell, signal: undefined }, say
+      'teardown',
+      automation.teardown,
+      values,
+      { ...shell, signal: undefined },
+      say
     ).catch(() => {});
     await workdir.dispose().catch(() => {});
   }
@@ -310,7 +358,12 @@ async function handedOver(jobDir: string): Promise<HandOver> {
   const data = JSON.parse(raw) as Record<string, unknown>;
   return {
     cwd: typeof data.cwd === 'string' && data.cwd ? data.cwd : undefined,
-    prompt: typeof data.prompt === 'string' && data.prompt.trim() ? data.prompt : undefined,
-    plugins: Array.isArray(data.plugins) ? data.plugins.filter((p): p is string => typeof p === 'string') : undefined,
+    prompt:
+      typeof data.prompt === 'string' && data.prompt.trim()
+        ? data.prompt
+        : undefined,
+    plugins: Array.isArray(data.plugins)
+      ? data.plugins.filter((p): p is string => typeof p === 'string')
+      : undefined,
   };
 }

@@ -574,6 +574,42 @@ describe('running a job', () => {
       )
     ).rejects.toThrow(/OmniSeek isn't set up/);
   });
+
+  test('answers a health check itself and never runs the script it was sent', async () => {
+    const lines: string[] = [];
+    const outcome = await runJob(
+      job({
+        model: 'command',
+        agentId: 'health:cloud',
+        instructions: `touch ${join(root, 'ran')}`,
+        profile: null,
+      }),
+      {
+        api: api(),
+        workspaceId: 'ws-1',
+        settings: settings(),
+        query: fakeQuery([]),
+        say: line => lines.push(line),
+        signal: new AbortController().signal,
+      }
+    );
+    const keys = outcome.result.split('\n').map(line => line.split('=')[0]);
+    expect(keys).toEqual(
+      expect.arrayContaining([
+        'host',
+        'os',
+        'cpus',
+        'load',
+        'disk',
+        'mem',
+        'uptime',
+      ])
+    );
+    expect(outcome.result).toMatch(/^disk=\d+$/m);
+    expect(outcome.result).toMatch(/^mem=\d+$/m);
+    await expect(stat(join(root, 'ran'))).rejects.toThrow();
+    expect(lines[0]).toMatch(/health check/);
+  });
 });
 
 describe('serving', () => {
@@ -621,7 +657,9 @@ describe('serving', () => {
             {
               type: 'tool_result',
               tool_use_id: 'tu1',
-              content: [{ type: 'text', text: '{"success":true,"docId":"d1"}' }],
+              content: [
+                { type: 'text', text: '{"success":true,"docId":"d1"}' },
+              ],
             },
           ],
         },
@@ -636,17 +674,33 @@ describe('serving', () => {
       query: fakeQuery(messages),
       tickMs: 5,
     });
-    expect(await runClaimed(opts([init, ...created, success('Bluey')]), 'ws-1', job())).toBe('done');
+    expect(
+      await runClaimed(
+        opts([init, ...created, success('Bluey')]),
+        'ws-1',
+        job()
+      )
+    ).toBe('done');
     expect(ng.reports.at(-1)!.fields).toMatchObject({
       status: 'done',
       changes: {
-        notes: { created: [{ docId: 'd1', title: 'Movie night' }], edited: [], linked: [] },
+        notes: {
+          created: [{ docId: 'd1', title: 'Movie night' }],
+          edited: [],
+          linked: [],
+        },
         files: [],
       },
     });
     expect(ng.reports.at(-1)!.fields.changes.git).toBeUndefined();
 
-    expect(await runClaimed(opts([init, said('Hi'), success('Bluey')]), 'ws-1', job())).toBe('done');
+    expect(
+      await runClaimed(
+        opts([init, said('Hi'), success('Bluey')]),
+        'ws-1',
+        job()
+      )
+    ).toBe('done');
     expect(ng.reports.at(-1)!.fields).toMatchObject({ status: 'done' });
     expect(ng.reports.at(-1)!.fields).not.toHaveProperty('changes');
   });
@@ -676,7 +730,12 @@ describe('serving', () => {
       ...(success('Bluey') as object),
       total_cost_usd: 0.42,
       modelUsage: {
-        'claude-x': { inputTokens: 100, outputTokens: 20, cacheReadInputTokens: 5, cacheCreationInputTokens: 0 },
+        'claude-x': {
+          inputTokens: 100,
+          outputTokens: 20,
+          cacheReadInputTokens: 5,
+          cacheCreationInputTokens: 0,
+        },
       },
     } as unknown as SDKMessage;
     const opts = {
@@ -690,7 +749,11 @@ describe('serving', () => {
     };
     expect(await runClaimed(opts, 'ws-1', job({ maxCostUsd: 2 }))).toBe('done');
     expect(seen.options?.maxBudgetUsd).toBe(2);
-    expect(ng.reports.at(-1)!.fields).toMatchObject({ status: 'done', costUsd: 0.42, tokens: 125 });
+    expect(ng.reports.at(-1)!.fields).toMatchObject({
+      status: 'done',
+      costUsd: 0.42,
+      tokens: 125,
+    });
   });
 
   test('a run stopped at its cost cap is an error that still says what it spent', async () => {
@@ -711,7 +774,9 @@ describe('serving', () => {
       query: fakeQuery([init, capped]),
       tickMs: 5,
     };
-    expect(await runClaimed(opts, 'ws-1', job({ maxCostUsd: 2 }))).toBe('error');
+    expect(await runClaimed(opts, 'ws-1', job({ maxCostUsd: 2 }))).toBe(
+      'error'
+    );
     const final = ng.reports.at(-1)!.fields;
     expect(final).toMatchObject({ status: 'error', costUsd: 2.01 });
     expect(final.error).toMatch(/cost cap \(\$2\.01 spent\)/);
@@ -752,12 +817,16 @@ describe('skills', () => {
     const fetchImpl = (async (url: string, init?: RequestInit) => {
       calls.push({
         url,
-        auth: (init?.headers as Record<string, string> | undefined)?.Authorization,
+        auth: (init?.headers as Record<string, string> | undefined)
+          ?.Authorization,
       });
       return new Response('---\nname: x\n---\n');
     }) as unknown as typeof fetch;
     const skills = [
-      { name: 'deploy', url: '/api/registry/workspaces/ws-1/skills/d1/SKILL.md' },
+      {
+        name: 'deploy',
+        url: '/api/registry/workspaces/ws-1/skills/d1/SKILL.md',
+      },
       { name: 'other', url: 'https://example.com/other/SKILL.md' },
     ];
     await runJob(job({ profile: profile({ skills }) }), {
@@ -771,7 +840,10 @@ describe('skills', () => {
     });
     const skillCalls = calls.filter(c => c.url.endsWith('SKILL.md'));
     expect(skillCalls).toEqual([
-      { url: `${ng.url}/api/registry/workspaces/ws-1/skills/d1/SKILL.md`, auth: 'Bearer pat' },
+      {
+        url: `${ng.url}/api/registry/workspaces/ws-1/skills/d1/SKILL.md`,
+        auth: 'Bearer pat',
+      },
       { url: 'https://example.com/other/SKILL.md', auth: undefined },
     ]);
   });
