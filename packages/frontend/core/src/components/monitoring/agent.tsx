@@ -380,6 +380,45 @@ export const MonitoringAgentPanel = ({
                 Relearn
               </Button>
             </div>
+            {agent.alerts.push && machines.length > 0 ? (
+              <div
+                className={styles.settings}
+                data-testid="monitoring-agent-push-machines"
+              >
+                <span className={styles.meta}>Phone alerts for:</span>
+                {machines.map(machine => {
+                  const muted = agent.alerts.mutedDevices ?? [];
+                  const on = !muted.includes(machine.key);
+                  return (
+                    <label
+                      key={machine.key}
+                      className={styles.setting}
+                      title={
+                        on
+                          ? `Stop pushing ${machine.name}'s alerts — say, a laptop that is often asleep. They are still recorded here.`
+                          : `Push ${machine.name}'s alerts to your phone again`
+                      }
+                    >
+                      <Checkbox
+                        checked={on}
+                        disabled={busy}
+                        onChange={() =>
+                          configure({
+                            alerts: {
+                              mutedDevices: on
+                                ? [...muted, machine.key]
+                                : muted.filter(key => key !== machine.key),
+                            },
+                          })
+                        }
+                        data-testid="monitoring-agent-push-machine"
+                      />
+                      {machine.name}
+                    </label>
+                  );
+                })}
+              </div>
+            ) : null}
             <LogPatterns nameOf={nameOf} />
             {decisions.length > 0 ? (
               <div className={styles.decisions}>
