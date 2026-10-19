@@ -496,7 +496,11 @@ export const createSaveAsDocAction = (openDoc?: (docId: string) => void) => ({
   handler: async (host: EditorHost, content: string) => {
     reportResponse('result:add-page', host);
     try {
-      const docId = await saveAnswerAsDoc(host.store.workspace, content);
+      // The note the chat was in is a source too, so the saved answer shows
+      // in its backlinks like the notes the answer cites.
+      const docId = await saveAnswerAsDoc(host.store.workspace, content, {
+        sources: [{ docId: host.store.id }],
+      });
       if (!docId) return false;
       if (openDoc) {
         openDoc(docId);
