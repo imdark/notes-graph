@@ -50,6 +50,8 @@ export const RouteContainer = () => {
   const workbench = useService(WorkbenchService).workbench;
   const view = useService(ViewService).view;
   const sidebarOpen = useLiveData(workbench.sidebarOpen$);
+  // Nothing to open on a page without sidebar tabs (see WorkbenchSidebar).
+  const hasSidebarTabs = useLiveData(view.sidebarTabs$).length > 0;
   const handleToggleSidebar = useCallback(() => {
     workbench.toggleSidebar();
   }, [workbench]);
@@ -75,7 +77,7 @@ export const RouteContainer = () => {
         {viewPosition.isLast && <HeaderNotificationButton />}
         {!BUILD_CONFIG.isElectron && viewPosition.isLast && (
           <ToggleButton
-            show={!sidebarOpen}
+            show={!sidebarOpen && hasSidebarTabs}
             className={styles.rightSidebarButton}
             onToggle={handleToggleSidebar}
           />
