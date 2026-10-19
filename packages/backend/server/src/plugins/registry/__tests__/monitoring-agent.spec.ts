@@ -8,10 +8,29 @@ import {
   isRepeat,
   judge,
   learn,
+  pushesFor,
+  readAlerts,
   readChecks,
   triageInstructions,
   WARMUP,
 } from '../monitoring-agent';
+
+test('alert settings read safely from what is stored', t => {
+  t.deepEqual(readAlerts(null), { push: false, mutedDevices: [] });
+  t.deepEqual(readAlerts({ push: true }), { push: true, mutedDevices: [] });
+  t.deepEqual(
+    readAlerts({ push: true, mutedDevices: ['laptop', 'laptop', 3, ''] }),
+    { push: true, mutedDevices: ['laptop'] }
+  );
+});
+
+test('a muted machine gets no phone alert; the others still do', t => {
+  const alerts = { push: true, mutedDevices: ['laptop'] };
+  t.false(pushesFor(alerts, 'laptop'));
+  t.true(pushesFor(alerts, 'server'));
+  // With phone alerts off, nothing pushes, muted or not.
+  t.false(pushesFor({ push: false, mutedDevices: [] }, 'server'));
+});
 
 const linux = (disk: number, mem: number, load: number) =>
   healthStatus(

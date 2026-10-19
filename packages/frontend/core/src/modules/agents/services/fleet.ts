@@ -152,7 +152,12 @@ export interface MonitoringAgent {
   sensitivity: number;
   intervalMinutes: number;
   autoTriage: boolean;
-  alerts: { push: boolean };
+  /**
+   * Phone pushes on escalation, and machines kept off the phone (a laptop
+   * that is often away); theirs are still recorded. `mutedDevices` is absent
+   * from older servers.
+   */
+  alerts: { push: boolean; mutedDevices?: string[] };
   lastRunAt: number | null;
   nextRunAt: number | null;
   learning: {
@@ -207,8 +212,11 @@ export interface LogCatalog {
 export const LOG_METRIC_PREFIX = 'log:';
 
 export type AgentSettings = Partial<
-  Pick<MonitoringAgent, 'mode' | 'sensitivity' | 'intervalMinutes' | 'autoTriage' | 'alerts'>
->;
+  Pick<MonitoringAgent, 'mode' | 'sensitivity' | 'intervalMinutes' | 'autoTriage'>
+> & {
+  /** Only the parts given change. */
+  alerts?: Partial<MonitoringAgent['alerts']>;
+};
 
 /** How far along learning is: machines it can judge, of those it has seen. */
 export function agentReadiness(agent: Pick<MonitoringAgent, 'learning'>) {

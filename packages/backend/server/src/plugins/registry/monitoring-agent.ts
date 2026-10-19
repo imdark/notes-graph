@@ -246,12 +246,43 @@ export function triageInstructions(
   ].join('\n');
 }
 
+/**
+ * Who hears about an escalation: phone pushes on or off, and machines whose
+ * escalations stay off the phone (a laptop that is often asleep or away),
+ * still recorded and still triaged.
+ */
+export interface AgentAlerts {
+  push: boolean;
+  mutedDevices: string[];
+}
+
+/** Most machines one workspace can mute; registries are far smaller. */
+const MAX_MUTED_DEVICES = 200;
+
+export function readAlerts(raw: unknown): AgentAlerts {
+  const value = (raw ?? {}) as { push?: unknown; mutedDevices?: unknown };
+  return {
+    push: !!value.push,
+    mutedDevices: Array.isArray(value.mutedDevices)
+      ? [...new Set(value.mutedDevices.filter(key => typeof key === 'string' && key))].slice(
+          0,
+          MAX_MUTED_DEVICES
+        )
+      : [],
+  };
+}
+
+/** Whether an escalation on this machine goes to the phone. */
+export const pushesFor = (alerts: AgentAlerts, deviceKey: string) =>
+  alerts.push && !alerts.mutedDevices.includes(deviceKey);
+
 export interface AgentSettings {
   mode?: string;
   sensitivity?: number;
   intervalMinutes?: number;
   autoTriage?: boolean;
-  alerts?: { push?: boolean };
+  /** Each part given replaces the stored one; parts left out are kept. */
+  alerts?: { push?: boolean; mutedDevices?: string[] };
 }
 
 export interface AgentDto {
@@ -260,7 +291,7 @@ export interface AgentDto {
   sensitivity: number;
   intervalMinutes: number;
   autoTriage: boolean;
-  alerts: { push: boolean };
+  alerts: AgentAlerts;
   /** Epoch seconds. */
   lastRunAt: number | null;
   nextRunAt: number | null;
@@ -342,14 +373,13 @@ export class MonitoringAgentService {
         });
       }
     }
-    const alerts = (agent?.alerts ?? {}) as { push?: boolean };
     return {
       enabled: !!agent,
       mode: asMode(agent?.mode ?? 'training'),
       sensitivity: agent?.sensitivity ?? 3,
       intervalMinutes: agent?.intervalMinutes ?? 60,
       autoTriage: agent?.autoTriage ?? false,
-      alerts: { push: !!alerts.push },
+      alerts: readAlerts(agent?.alerts),
       lastRunAt: agent?.lastRunAt ? agent.lastRunAt.getTime() / 1000 : null,
       nextRunAt: agent && agent.intervalMinutes > 0 ? agent.nextRunAt.getTime() / 1000 : null,
       learning: [...byDevice.values()],
@@ -381,7 +411,14 @@ export class MonitoringAgentService {
       data.nextRunAt = new Date(Date.now() + minutes * 60_000);
     }
     if (body.autoTriage !== undefined) data.autoTriage = !!body.autoTriage;
-    if (body.alerts !== undefined) data.alerts = { push: !!body.alerts.push };
+    if (body.alerts !== undefined) {
+      const current = readAlerts((await this.models.monitoringAgent.get(workspaceId))?.alerts);
+      const next = readAlerts({
+        push: body.alerts.push ?? current.push,
+        mutedDevices: body.alerts.mutedDevices ?? current.mutedDevices,
+      });
+      data.alerts = { push: next.push, mutedDevices: next.mutedDevices };
+    }
     await this.models.monitoringAgent.upsert(workspaceId, data);
     return await this.get(workspaceId);
   }
@@ -488,8 +525,8 @@ export class MonitoringAgentService {
   }
 
   private async escalate(agent: MonitoringAgent, decision: MonitoringDecision) {
-    const alerts = (agent.alerts ?? {}) as { push?: boolean };
-    if (alerts.push) {
+    // A muted machine's escalation is still recorded and triaged, just not pushed.
+    if (pushesFor(readAlerts(agent.alerts), decision.deviceKey)) {
       try {
         const device = await this.models.registryDevice.get(agent.workspaceId, decision.deviceKey);
         // The phone already shows monitor alerts; this rides on the same type.
