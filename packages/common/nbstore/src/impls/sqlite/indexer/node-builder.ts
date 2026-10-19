@@ -3,8 +3,16 @@ import { highlighter } from '../../idb/indexer/highlighter';
 import { type NativeDBConnection } from '../db';
 import { tryParseArrayField } from './utils';
 
+/** One stored field of one document, as ftsGetDocument returns it. */
+export type ReadField = (
+  table: string,
+  field: string,
+  id: string
+) => Promise<string | null | undefined>;
+
 export async function createNode(
   connection: NativeDBConnection,
+  read: ReadField,
   table: string,
   id: string,
   score: number,
@@ -18,9 +26,7 @@ export async function createNode(
     // Each read is a native round trip (on mobile: worker → page → Capacitor),
     // so issue them together rather than one after another.
     const texts = await Promise.all(
-      options.fields.map(field =>
-        connection.apis.ftsGetDocument(`${table}:${field as string}`, id)
-      )
+      options.fields.map(field => read(table, field as string, id))
     );
     options.fields.forEach((field, i) => {
       const text = texts[i];
@@ -45,10 +51,7 @@ export async function createNode(
     const queryStrings = extractQueryStrings(query);
 
     for (const h of options.highlights) {
-      const text = await connection.apis.ftsGetDocument(
-        `${table}:${h.field as string}`,
-        id
-      );
+      const text = await read(table, h.field as string, id);
       if (text) {
         const queryString = Array.from(queryStrings).join(' ');
         const matches = await connection.apis.ftsGetMatches(
