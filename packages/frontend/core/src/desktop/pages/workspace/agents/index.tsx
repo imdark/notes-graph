@@ -35,6 +35,7 @@ import { useRunActions } from '../detail-page/tabs/use-run-actions';
 import * as styles from './agents-page.css';
 import { BudgetLine } from './budget-line';
 import { MonitorsSection } from './monitors-section';
+import { SpendByProject } from './spend-by-project';
 
 type RunFilter = 'all' | 'waiting' | 'running' | 'error' | 'done';
 
@@ -320,6 +321,8 @@ const AgentsPage = () => {
                 </div>
               )}
             </section>
+
+            <SpendByProject refreshKey={endedRuns} />
 
             <MonitorsSection now={now} />
 

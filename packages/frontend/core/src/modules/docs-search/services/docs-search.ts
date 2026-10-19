@@ -225,6 +225,54 @@ export class DocsSearchService extends Service {
       );
   }
 
+  /** The `key:value` props found in each of `docIds`, from the index. */
+  docProps$(
+    docIds: string[],
+    prefer: IndexerPreferOptions = 'remote'
+  ): Observable<Map<string, string[]>> {
+    if (!docIds.length) return of(new Map());
+    return this.indexer
+      .search$(
+        'block',
+        {
+          type: 'boolean',
+          occur: 'must',
+          queries: [
+            {
+              type: 'boolean',
+              occur: 'should',
+              queries: docIds.map(docId => ({
+                type: 'match' as const,
+                field: 'docId' as const,
+                match: docId,
+              })),
+            },
+            { type: 'exists', field: 'props' },
+          ],
+        },
+        {
+          fields: ['docId', 'props'],
+          pagination: { limit: FILTER_SCAN_LIMIT, skip: 0 },
+          prefer,
+        }
+      )
+      .pipe(
+        map(({ nodes }) => {
+          const wanted = new Set(docIds);
+          const props = new Map<string, string[]>();
+          for (const node of nodes) {
+            const docId = indexTokens(node.fields.docId)[0];
+            if (!docId || !wanted.has(docId)) continue;
+            props.set(docId, [
+              ...(props.get(docId) ?? []),
+              ...indexTokens(node.fields.props),
+            ]);
+          }
+          return props;
+        })
+      );
+  }
+
   /**
    * The docs a filtered query may return (undefined: no restriction), and
    * the docs a `-word` rules out.

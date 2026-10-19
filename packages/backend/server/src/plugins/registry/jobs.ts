@@ -327,6 +327,22 @@ export interface AgentBudgetDto {
   month: string;
 }
 
+/** Longest window, in days, a spend report covers. */
+const MAX_SPEND_DAYS = 120;
+/** Ended runs read for one spend report. */
+const MAX_SPEND_RUNS = 5000;
+
+/** What one ended run used, for spend reports grouped on the client. */
+export interface SpentRunDto {
+  docId: string | null;
+  status: string;
+  createdAt: string;
+  /** Claim to end; null when it was never claimed. */
+  durationMs: number | null;
+  costUsd: number | null;
+  tokens: number | null;
+}
+
 /** A run title on one line, or null when there is nothing left of it. */
 function parseTitle(value: unknown): string | null {
   const title = String(value ?? '')
@@ -924,6 +940,34 @@ export class RegistryJobService {
     }
     await this.models.registryJob.setBudget(workspaceId, monthlyUsd, userId);
     return this.budget(workspaceId);
+  }
+
+  /** Ended runs created in the last `days` days, newest first. */
+  async spend(
+    workspaceId: string,
+    days: number
+  ): Promise<{ since: string; runs: SpentRunDto[] }> {
+    const window = Math.min(Math.max(Math.floor(days) || 1, 1), MAX_SPEND_DAYS);
+    const since = new Date(Date.now() - window * 24 * 60 * 60 * 1000);
+    const rows = await this.models.registryJob.endedSince(
+      workspaceId,
+      since,
+      MAX_SPEND_RUNS
+    );
+    return {
+      since: since.toISOString(),
+      runs: rows.map(row => ({
+        docId: row.docId,
+        status: row.status,
+        createdAt: row.createdAt.toISOString(),
+        durationMs:
+          row.startedAt && row.finishedAt
+            ? Math.max(0, row.finishedAt.getTime() - row.startedAt.getTime())
+            : null,
+        costUsd: row.costUsd,
+        tokens: row.tokens,
+      })),
+    };
   }
 
   async cancel(workspaceId: string, id: string): Promise<JobDto | null> {

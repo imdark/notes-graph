@@ -989,6 +989,57 @@ test('a run is refused once the month has used the budget', async t => {
   t.is(under.created.length, 1);
 });
 
+test('a spend report lists ended runs with their claim-to-end time', async t => {
+  const { service } = makeService();
+  let asked: any;
+  service['models'].registryJob.endedSince = async (...args: any[]) => {
+    asked = args;
+    return [
+      {
+        docId: 'doc-1',
+        status: 'done',
+        createdAt: new Date('2026-10-14T10:00:00Z'),
+        startedAt: new Date('2026-10-14T10:01:00Z'),
+        finishedAt: new Date('2026-10-14T10:06:00Z'),
+        costUsd: 0.42,
+        tokens: 1200,
+      },
+      {
+        docId: null,
+        status: 'cancelled',
+        createdAt: new Date('2026-10-14T11:00:00Z'),
+        startedAt: null,
+        finishedAt: new Date('2026-10-14T11:02:00Z'),
+        costUsd: null,
+        tokens: null,
+      },
+    ];
+  };
+  const report = await service.spend(workspaceId, 9999);
+
+  t.is(asked[0], workspaceId);
+  // The window is capped, however many days are asked for.
+  t.true(Date.now() - asked[1].getTime() <= 120 * 24 * 60 * 60 * 1000 + 1000);
+  t.deepEqual(report.runs, [
+    {
+      docId: 'doc-1',
+      status: 'done',
+      createdAt: '2026-10-14T10:00:00.000Z',
+      durationMs: 300_000,
+      costUsd: 0.42,
+      tokens: 1200,
+    },
+    {
+      docId: null,
+      status: 'cancelled',
+      createdAt: '2026-10-14T11:00:00.000Z',
+      durationMs: null,
+      costUsd: null,
+      tokens: null,
+    },
+  ]);
+});
+
 test('a job carries its cost cap and level; full access allows all from the start', async t => {
   const { service, created, allowedAll } = makeService({ device: agentTarget });
   const job = await service.enqueue(workspaceId, userId, 'laptop', {

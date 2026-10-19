@@ -573,6 +573,24 @@ export class RegistryJobModel extends BaseModel {
     return _sum.costUsd ?? 0;
   }
 
+  /** Runs created since `since` that have ended, newest first, for spend reports. */
+  async endedSince(workspaceId: string, since: Date, limit: number) {
+    return this.db.registryJob.findMany({
+      where: { workspaceId, createdAt: { gte: since }, finishedAt: { not: null } },
+      select: {
+        docId: true,
+        status: true,
+        createdAt: true,
+        startedAt: true,
+        finishedAt: true,
+        costUsd: true,
+        tokens: true,
+      },
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+    });
+  }
+
   async getBudget(workspaceId: string): Promise<number | null> {
     const row = await this.db.registryAgentBudget.findUnique({ where: { workspaceId } });
     return row?.monthlyUsd ?? null;
