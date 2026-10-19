@@ -7,7 +7,6 @@
 **Notes. Tasks. Plans.**
 
 A local-first notes app where AI agents work on your notes and tasks with you.
-Built on [AFFiNE](https://github.com/toeverything/AFFiNE).
 
 [Open the web app](https://app.notesgraph.com) · [Download](https://notesgraph.com/download) · [notesgraph.com](https://notesgraph.com)
 
@@ -198,14 +197,12 @@ its schema. Email setup is in [docs/self-host-email.md](docs/self-host-email.md)
 There's no published image yet, so build one from source first. The production build in
 [`scripts/prod/redeploy.sh`](scripts/prod/redeploy.sh) shows how.
 
-## Built on AFFiNE
+## Built with
 
-NotesGraph is a fork of [AFFiNE](https://github.com/toeverything/AFFiNE) by Toeverything, whose editor
-([BlockSuite](https://github.com/toeverything/blocksuite)), local-first storage and sync
-([y-octo](https://github.com/y-crdt/y-octo), [Yjs](https://github.com/yjs/yjs)) and much of the app it builds on.
-Thanks to them, and to the projects underneath: [Electron](https://github.com/electron/electron),
-[React](https://github.com/facebook/react), [napi-rs](https://github.com/napi-rs/napi-rs),
-[Capacitor](https://github.com/ionic-team/capacitor) and the
+Thanks to the open-source projects NotesGraph builds on: [BlockSuite](https://github.com/toeverything/blocksuite),
+[Yjs](https://github.com/yjs/yjs) and [y-octo](https://github.com/y-crdt/y-octo),
+[Electron](https://github.com/electron/electron), [React](https://github.com/facebook/react),
+[napi-rs](https://github.com/napi-rs/napi-rs), [Capacitor](https://github.com/ionic-team/capacitor) and the
 [Claude Agent SDK](https://github.com/anthropics/claude-agent-sdk-typescript).
 
 ## Feedback
