@@ -1,6 +1,11 @@
 import { Text } from '@blocksuite/notesgraph/store';
 import { Button, notify } from '@notesgraph/component';
 import {
+  FixItButton,
+  monitorFailure,
+} from '@notesgraph/core/components/monitoring/fix-it';
+import {
+  FixTaskService,
   formatTrendValue,
   isNotesHealthMonitor,
   type Monitor,
@@ -19,7 +24,7 @@ import { WorkbenchService } from '@notesgraph/core/modules/workbench';
 import { WorkspaceService } from '@notesgraph/core/modules/workspace';
 import { useLiveData, useService } from '@notesgraph/infra';
 import { cssVar } from '@toeverything/theme';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { relativeTime } from '../detail-page/tabs/agent-run-row';
 import * as styles from './agents-page.css';
@@ -168,8 +173,82 @@ const MonitorCard = ({ monitor, now }: { monitor: Monitor; now: number }) => {
         <Button variant="plain" onClick={openBlock}>
           Open
         </Button>
+        {monitor.enabled && monitor.lastError ? (
+          <FixItButton failure={monitorFailure(monitor)} />
+        ) : null}
+        {isNotesHealthMonitor(monitor) ? <FixFindings /> : null}
       </span>
     </div>
+  );
+};
+
+/** Report notes are "Notes health YYYY-MM-DD", so the latest sorts last. */
+const REPORT_TITLE = /^Notes health \d{4}-\d{2}-\d{2}/;
+
+/**
+ * Hand the latest notes health report to the Fix it agent. Its findings are
+ * already to-dos, so the agent works down them one at a time, asking before
+ * it changes a note the user wrote.
+ */
+const FixFindings = () => {
+  const docsService = useService(DocsService);
+  const fixTask = useService(FixTaskService);
+  const workbench = useService(WorkbenchService).workbench;
+  const docs = useLiveData(docsService.list.docs$);
+  const [busy, setBusy] = useState(false);
+
+  const report = useMemo(
+    () =>
+      docs
+        .filter(
+          record =>
+            !record.trash$.value && REPORT_TITLE.test(record.title$.value)
+        )
+        .sort((a, b) => a.title$.value.localeCompare(b.title$.value))
+        .at(-1),
+    [docs]
+  );
+
+  const fix = useCallback(() => {
+    if (!report) return;
+    setBusy(true);
+    fixTask
+      .fixReport(report.id)
+      .then(() =>
+        notify.success({
+          title: 'An agent is working the findings',
+          message: `It goes through the to-dos in "${report.title$.value}" and asks before changing your notes.`,
+          actions: [
+            {
+              key: 'open',
+              label: 'Open the report',
+              onClick: () => workbench.openDoc(report.id, { at: 'active' }),
+              autoClose: true,
+            },
+          ],
+        })
+      )
+      .catch(err =>
+        notify.error({
+          title: "Couldn't start fixing the findings",
+          message: err instanceof Error ? err.message : String(err),
+        })
+      )
+      .finally(() => setBusy(false));
+  }, [fixTask, report, workbench]);
+
+  if (!report) return null;
+  return (
+    <Button
+      variant="plain"
+      onClick={fix}
+      loading={busy}
+      disabled={busy}
+      tooltip={`Start an agent on the to-dos in "${report.title$.value}". It asks before changing your notes.`}
+      data-testid="notes-health-fix-findings"
+    >
+      Fix findings
+    </Button>
   );
 };
 

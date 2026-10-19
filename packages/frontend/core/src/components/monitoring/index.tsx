@@ -19,6 +19,12 @@ import { cssVar } from '@toeverything/theme';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { MonitoringAgentPanel } from './agent';
+import {
+  checkFailure,
+  FixItButton,
+  machineFailure,
+  monitorFailure,
+} from './fix-it';
 import * as styles from './styles.css';
 
 type Filter = 'all' | 'attention' | DeviceState;
@@ -52,7 +58,15 @@ const errorMessage = (err: unknown) =>
   err instanceof Error ? err.message : String(err);
 
 /** A percentage reads best as a bar; anything else as its detail. */
-const CheckRow = ({ check }: { check: DeviceCheck }) => (
+const CheckRow = ({
+  check,
+  device,
+  online,
+}: {
+  check: DeviceCheck;
+  device: RegistryDevice;
+  online: boolean;
+}) => (
   <div className={styles.check} title={check.detail}>
     <span className={styles.dot} data-state={check.status} />
     <span className={styles.checkName}>{check.name}</span>
@@ -72,6 +86,9 @@ const CheckRow = ({ check }: { check: DeviceCheck }) => (
         {check.detail || (check.status === 'ok' ? 'OK' : 'Failed')}
       </span>
     )}
+    {check.status !== 'ok' ? (
+      <FixItButton failure={checkFailure(device, check, online)} />
+    ) : null}
   </div>
 );
 
@@ -154,6 +171,21 @@ const MonitorRow = ({
   );
 };
 
+/** A monitor's row, with "Fix it" beside it while it is failing. */
+const MonitorItem = (props: {
+  monitor: Monitor;
+  now: number;
+  onOpen: (monitor: Monitor) => void;
+}) =>
+  props.monitor.enabled && props.monitor.lastError ? (
+    <div className={styles.monitorItem}>
+      <MonitorRow {...props} />
+      <FixItButton failure={monitorFailure(props.monitor)} />
+    </div>
+  ) : (
+    <MonitorRow {...props} />
+  );
+
 const MachineCard = ({
   device,
   folders,
@@ -219,19 +251,31 @@ const MachineCard = ({
         {device.checkedAt && state === 'unknown' ? ' · too long ago to trust' : ''}
       </span>
       {device.statusDetail && state !== 'online' ? (
-        <span className={styles.problem}>{device.statusDetail}</span>
+        <span className={styles.problem}>
+          {device.statusDetail}
+          {state === 'degraded' || state === 'offline' ? (
+            <FixItButton
+              failure={machineFailure(device, STATE_LABEL[state].toLowerCase(), state !== 'offline')}
+            />
+          ) : null}
+        </span>
       ) : null}
       {checks.length > 0 ? (
         <div className={styles.checks}>
           {checks.map(c => (
-            <CheckRow key={c.name} check={c} />
+            <CheckRow
+              key={c.name}
+              check={c}
+              device={device}
+              online={state !== 'offline'}
+            />
           ))}
         </div>
       ) : null}
       {monitors.length > 0 ? (
         <div className={styles.monitors}>
           {monitors.map(monitor => (
-            <MonitorRow
+            <MonitorItem
               key={monitor.id}
               monitor={monitor}
               now={now}
@@ -466,7 +510,7 @@ export const MonitoringView = () => {
           <div className={styles.card}>
             <div className={styles.checks}>
               {otherMonitors.map(monitor => (
-                <MonitorRow
+                <MonitorItem
                   key={monitor.id}
                   monitor={monitor}
                   now={now}

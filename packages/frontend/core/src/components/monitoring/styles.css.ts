@@ -142,10 +142,21 @@ export const meta = style({
 });
 
 export const problem = style({
+  display: 'flex',
+  flexWrap: 'wrap',
+  alignItems: 'center',
+  gap: 6,
   fontSize: cssVar('fontXs'),
   lineHeight: 1.4,
   color: cssVar('warningColor'),
   wordBreak: 'break-word',
+});
+
+/** A failing monitor's row with "Fix it" beside it. */
+export const monitorItem = style({
+  display: 'flex',
+  alignItems: 'center',
+  gap: 4,
 });
 
 /** A status dot; its colour comes from data-state. */
@@ -186,7 +197,8 @@ export const checks = style({
 
 export const check = style({
   display: 'grid',
-  gridTemplateColumns: '8px 64px 1fr',
+  // The last column holds "Fix it" on a failing check.
+  gridTemplateColumns: '8px 64px 1fr auto',
   alignItems: 'center',
   gap: 8,
   fontSize: 12,
@@ -261,6 +273,9 @@ export const monitorRow = style({
   textAlign: 'left',
   cursor: 'pointer',
   minWidth: 0,
+  selectors: {
+    [`${monitorItem} > &`]: { flex: 1 },
+  },
   ':hover': { background: cssVarV2('layer/background/hoverOverlay') },
 });
 

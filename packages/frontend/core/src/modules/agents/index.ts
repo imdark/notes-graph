@@ -205,6 +205,7 @@ import { AgentContextService } from './services/context';
 import { DeploymentsService } from './services/deployments';
 import { AgentFileToolsService } from './services/file-tools';
 import { AgentExecutorService } from './services/executor';
+import { FixTaskService } from './services/fix-task';
 import { FleetService } from './services/fleet';
 import { RemoteAgentRunnerService } from './services/remote-runner';
 import { MonitorsService } from './services/monitors';
@@ -244,6 +245,11 @@ export function configureAgentsModule(framework: Framework) {
       AgentExecutorService,
       AgentTaskClaimService,
     ])
+    .service(FixTaskService, [
+      DocsService,
+      AgentsService,
+      AgentRunSessionService,
+    ])
     .service(DeploymentsService, [
       DocsSearchService,
       DocsService,
@@ -262,6 +268,12 @@ export {
   COMPILE_SOURCE_TEMPLATE,
   DEAL_MONITOR_TEMPLATE,
 } from './services/agent-templates';
+export {
+  FIX_AGENT_TEMPLATE,
+  FIX_UPS_DOC_TITLE,
+  FixTaskService,
+  type HealthFailure,
+} from './services/fix-task';
 export {
   COMPILE_AGENT_NAME,
   compileBrief,
