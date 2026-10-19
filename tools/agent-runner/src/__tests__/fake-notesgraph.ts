@@ -54,7 +54,7 @@ export class FakeNotesGraph {
         }
         if ((m = path.match(/\/jobs\/([^/]+)\/report$/))) {
           this.reports.push({ jobId: m[1], fields: data });
-          return reply({ job: { id: m[1], status: data.status ?? this.status === 'cancelled' ? 'cancelled' : this.status } });
+          return reply({ job: { id: m[1], status: this.status === 'cancelled' ? 'cancelled' : (data.status ?? this.status) } });
         }
         if ((m = path.match(/\/jobs\/([^/]+)\/title$/))) {
           this.titles.push(data.title);

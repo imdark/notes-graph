@@ -599,6 +599,58 @@ describe('serving', () => {
     expect(ng.log).toContain('✓ finished in 3 turns');
   });
 
+  test('the final report says what the run changed, and nothing when it changed nothing', async () => {
+    const created = [
+      {
+        type: 'assistant',
+        message: {
+          content: [
+            {
+              type: 'tool_use',
+              id: 'tu1',
+              name: 'mcp__notesgraph__create_document',
+              input: { title: 'Movie night' },
+            },
+          ],
+        },
+      },
+      {
+        type: 'user',
+        message: {
+          content: [
+            {
+              type: 'tool_result',
+              tool_use_id: 'tu1',
+              content: [{ type: 'text', text: '{"success":true,"docId":"d1"}' }],
+            },
+          ],
+        },
+      },
+    ] as unknown as SDKMessage[];
+    const opts = (messages: SDKMessage[]) => ({
+      api: api(),
+      workspaces: ['ws-1'],
+      deviceKey: 'cloud',
+      runnerId: 'r1',
+      settings: settings(),
+      query: fakeQuery(messages),
+      tickMs: 5,
+    });
+    expect(await runClaimed(opts([init, ...created, success('Bluey')]), 'ws-1', job())).toBe('done');
+    expect(ng.reports.at(-1)!.fields).toMatchObject({
+      status: 'done',
+      changes: {
+        notes: { created: [{ docId: 'd1', title: 'Movie night' }], edited: [], linked: [] },
+        files: [],
+      },
+    });
+    expect(ng.reports.at(-1)!.fields.changes.git).toBeUndefined();
+
+    expect(await runClaimed(opts([init, said('Hi'), success('Bluey')]), 'ws-1', job())).toBe('done');
+    expect(ng.reports.at(-1)!.fields).toMatchObject({ status: 'done' });
+    expect(ng.reports.at(-1)!.fields).not.toHaveProperty('changes');
+  });
+
   test('a job that fails is reported as an error, with why', async () => {
     const end = await runClaimed(
       {

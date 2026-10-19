@@ -1794,6 +1794,9 @@ model RegistryJob {
   allowAllTools  Boolean   @default(false) @map("allow_all_tools")
   /// Names of the skills the agent chose; null means the model's default set.
   skills         Json?
+  /// What the run changed, as its runner recorded it when it ended: notes
+  /// created/edited/linked, file edits, and the git diff and commits.
+  changes        Json?
   /// A queued job is not handed out before this: set when a run hit the
   /// device's Claude session limit, to when that limit resets.
   runAfter       DateTime? @map("run_after") @db.Timestamptz(3)

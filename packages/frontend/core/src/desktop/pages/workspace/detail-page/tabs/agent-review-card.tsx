@@ -21,7 +21,7 @@ export const AgentReviewCard = ({
   onAsk,
 }: {
   run: AgentRun;
-  /** Show what the run did: its log. */
+  /** Show what the run changed: the run's Changes tab. */
   onReview: (runId: string) => void;
   /** Open a chat about the run (see AgentRunChat). */
   onAsk: (runId: string) => void;
@@ -70,7 +70,7 @@ export const AgentReviewCard = ({
         </Button>
         <Button
           onClick={() => onReview(run.id)}
-          tooltip="Read its log: each step it took and each tool it ran"
+          tooltip="What it did: a summary, the notes it created or edited, and the diff of its project changes"
           data-testid="agent-review-changes"
         >
           Review changes

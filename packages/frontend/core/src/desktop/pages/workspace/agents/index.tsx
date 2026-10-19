@@ -21,7 +21,10 @@ import { useCallback, useMemo, useState } from 'react';
 
 import { AgentQuestionCard } from '../detail-page/tabs/agent-question';
 import { AgentReviewCard } from '../detail-page/tabs/agent-review-card';
-import { AgentRunLogDialog } from '../detail-page/tabs/agent-run-log';
+import {
+  AgentRunLogDialog,
+  type RunLogTab,
+} from '../detail-page/tabs/agent-run-log';
 import {
   relativeTime,
   RunRow,
@@ -130,13 +133,18 @@ const AgentsPage = () => {
   const [agentId, setAgentId] = useState<string | null>(null);
   const [limit, setLimit] = useState(PAGE_SIZE);
   const [logRunId, setLogRunId] = useState<string | null>(null);
-  const [askRun, setAskRun] = useState(false);
+  const [logTab, setLogTab] = useState<RunLogTab | undefined>();
   const openLog = useCallback((runId: string) => {
-    setAskRun(false);
+    setLogTab(undefined);
     setLogRunId(runId);
   }, []);
   const askAbout = useCallback((runId: string) => {
-    setAskRun(true);
+    setLogTab('ask');
+    setLogRunId(runId);
+  }, []);
+  // "Review changes" opens on what the run changed.
+  const openChanges = useCallback((runId: string) => {
+    setLogTab('changes');
     setLogRunId(runId);
   }, []);
   const closeLog = useCallback(() => setLogRunId(null), []);
@@ -310,7 +318,7 @@ const AgentsPage = () => {
                     </div>
                     <AgentReviewCard
                       run={run}
-                      onReview={openLog}
+                      onReview={openChanges}
                       onAsk={askAbout}
                     />
                   </div>
@@ -434,7 +442,11 @@ const AgentsPage = () => {
           </div>
         </div>
       </ViewBody>
-      <AgentRunLogDialog runId={logRunId} ask={askRun} onClose={closeLog} />
+      <AgentRunLogDialog
+        runId={logRunId}
+        initialTab={logTab}
+        onClose={closeLog}
+      />
     </>
   );
 };

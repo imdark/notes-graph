@@ -3,6 +3,7 @@ import { Service } from '@notesgraph/infra';
 
 import { FetchService, type WorkspaceServerService } from '../../cloud';
 import type { AgentAccess } from '../stores/agents';
+import type { RunChanges } from './run-changes';
 
 /**
  * Runs an agent on a registered device instead of in this browser.
@@ -227,6 +228,11 @@ export interface RemoteJob {
   questions?: RemoteQuestion[];
   /** What the starter sent the run while it worked. Single-job reads only. */
   steers?: RemoteSteer[];
+  /**
+   * What the run changed, recorded by its runner as it ended; null when it
+   * recorded nothing (an older runner). Single-job reads only.
+   */
+  changes?: RunChanges | null;
 }
 
 /**

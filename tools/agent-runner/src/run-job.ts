@@ -29,6 +29,7 @@ import {
   runSteps,
   type ShellEnv,
 } from './automation';
+import { ChangeRecorder, collectChanges, gitBase, type RunChanges } from './changes';
 import { Narrator } from './narrate';
 import { permissionPrompt, runServer, steerHooks } from './run-tools';
 import { skillsPlugin } from './skills';
@@ -72,13 +73,16 @@ export interface RunUsage {
 export interface RunOutcome extends RunUsage {
   result: string;
   steps: number;
+  /** What the run changed, when it changed anything. */
+  changes?: RunChanges;
 }
 
 /** A run that ended in an error, with what it spent getting there. */
 export class RunFailed extends Error {
   constructor(
     message: string,
-    readonly usage: RunUsage
+    readonly usage: RunUsage,
+    readonly changes?: RunChanges
   ) {
     super(message);
   }
@@ -195,6 +199,8 @@ export async function runJob(job: Job, deps: RunDeps): Promise<RunOutcome> {
     const cwd = handed.cwd ?? render(automation.cwd ?? '{job_dir}', values);
     // Tools and teardown work where the agent does.
     shell.env.AGENT_CWD = cwd;
+    // Where the run starts from, to say later what it committed and changed.
+    const base = await gitBase(cwd);
 
     const mcpServers: Record<string, McpServerConfig> = {};
     if (profile.mcpServers.includes('notesgraph')) {
@@ -253,16 +259,28 @@ export async function runJob(job: Job, deps: RunDeps): Promise<RunOutcome> {
       },
     };
 
-    const narrator = new Narrator(say, maxTurns);
+    const recorder = new ChangeRecorder(cwd);
+    const narrator = new Narrator(say, maxTurns, recorder);
     const prompt = handed.prompt ?? jobPrompt(job);
     for await (const message of deps.query({ prompt, options })) {
       narrator.feed(message);
     }
     narrator.finish();
+    // Before teardown, which may remove the checkout.
+    const changes = await collectChanges(recorder, cwd, base);
     if (narrator.result !== null) {
-      return { result: narrator.result, steps: narrator.steps, ...usageOf(narrator) };
+      return {
+        result: narrator.result,
+        steps: narrator.steps,
+        ...usageOf(narrator),
+        ...(changes ? { changes } : {}),
+      };
     }
-    throw new RunFailed(narrator.error ?? 'the run ended without a result', usageOf(narrator));
+    throw new RunFailed(
+      narrator.error ?? 'the run ended without a result',
+      usageOf(narrator),
+      changes
+    );
   } finally {
     await runSteps(
       'teardown', automation.teardown, values, { ...shell, signal: undefined }, say

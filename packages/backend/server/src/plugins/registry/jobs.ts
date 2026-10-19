@@ -1,5 +1,5 @@
 import { Injectable, Logger, Optional } from '@nestjs/common';
-import type { RegistryJob, RegistryJobQuestion } from '@prisma/client';
+import type { Prisma, RegistryJob, RegistryJobQuestion } from '@prisma/client';
 
 // See the note in service.ts: a plain HttpException is reported as a 500 by
 // the global filter, so bad input has to be a UserFriendlyError.
@@ -91,6 +91,12 @@ export interface JobDto {
   /** What the person sent the run while it worked. Single-job reads only. */
   steers?: SteerDto[];
   /**
+   * What the run changed (notes, file edits, git diff and commits), as its
+   * runner recorded it; null before it ended or from an older runner.
+   * Single-job reads only: a diff can be large.
+   */
+  changes?: unknown;
+  /**
    * How to run it, for the runner that claimed it (see agent-profiles.ts);
    * null for a model that isn't a Claude agent. Claims only.
    */
@@ -179,7 +185,9 @@ export function toJobDto(job: RegistryJob, options: JobDtoOptions = {}): JobDto 
     runAfter: job.runAfter ? job.runAfter.getTime() / 1000 : null,
     leaseExpiresAt: job.leaseExpiresAt ? job.leaseExpiresAt.getTime() / 1000 : null,
     allowAllTools: job.allowAllTools,
-    ...(options.logFrom === undefined ? {} : sliceLog(job, options.logFrom)),
+    ...(options.logFrom === undefined
+      ? {}
+      : { ...sliceLog(job, options.logFrom), changes: job.changes ?? null }),
     // Steers share the questions table but are no question: anything reading
     // `questions` for what the run waits on must not see them.
     ...(options.questions
@@ -213,6 +221,33 @@ function sliceLog(job: RegistryJob, from: number) {
     logFrom: job.logDropped + start,
     logEnd: job.logDropped + chars.length,
   };
+}
+
+/** Most a run's recorded changes may take, as JSON; runners cap below it. */
+export const MAX_CHANGES_BYTES = 200_000;
+
+const jsonBytes = (value: unknown) =>
+  Buffer.byteLength(JSON.stringify(value), 'utf8');
+
+/**
+ * A runner's `changes`, kept within MAX_CHANGES_BYTES: the patch goes first
+ * (the stat and commits still say what changed), then the file edits.
+ * Anything that isn't an object is dropped.
+ */
+export function capChanges(value: unknown): Record<string, unknown> | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return undefined;
+  }
+  const changes = { ...(value as Record<string, unknown>) };
+  if (jsonBytes(changes) <= MAX_CHANGES_BYTES) return changes;
+  const git = changes.git;
+  if (git && typeof git === 'object' && !Array.isArray(git)) {
+    changes.git = { ...git, patch: '', truncated: true };
+    if (jsonBytes(changes) <= MAX_CHANGES_BYTES) return changes;
+  }
+  changes.files = [];
+  changes.filesDropped = true;
+  return jsonBytes(changes) <= MAX_CHANGES_BYTES ? changes : undefined;
 }
 
 const MAX_INSTRUCTIONS = 20_000;
@@ -640,6 +675,7 @@ export class RegistryJobService {
       logAppend,
       tmuxSession: body.tmuxSession ? String(body.tmuxSession).slice(0, 200) : undefined,
       leaseSeconds: body.leaseSeconds === undefined ? undefined : Number(body.leaseSeconds),
+      changes: capChanges(body.changes) as Prisma.InputJsonValue | undefined,
     });
     // Whoever queued the job may be waiting on its end (a monitor, say).
     if (job && (JOB_TERMINAL as readonly string[]).includes(job.status)) {

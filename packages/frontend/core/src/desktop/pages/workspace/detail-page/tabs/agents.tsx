@@ -24,7 +24,7 @@ import { useCallback, useMemo, useState } from 'react';
 
 import { AgentQuestionCard } from './agent-question';
 import { AgentReviewCard } from './agent-review-card';
-import { AgentRunLogDialog } from './agent-run-log';
+import { AgentRunLogDialog, type RunLogTab } from './agent-run-log';
 import { RunRow, RunStatusBadge, useMinuteTick } from './agent-run-row';
 import * as styles from './agents.css';
 import { useRunActions } from './use-run-actions';
@@ -327,13 +327,18 @@ export const EditorAgentsPanel = () => {
   );
   const runActions = useRunActions({ openDoc: false });
   const [logRunId, setLogRunId] = useState<string | null>(null);
-  const [askRun, setAskRun] = useState(false);
+  const [logTab, setLogTab] = useState<RunLogTab | undefined>();
   const openLog = useCallback((runId: string) => {
-    setAskRun(false);
+    setLogTab(undefined);
     setLogRunId(runId);
   }, []);
   const askAbout = useCallback((runId: string) => {
-    setAskRun(true);
+    setLogTab('ask');
+    setLogRunId(runId);
+  }, []);
+  // "Review changes" opens on what the run changed.
+  const openChanges = useCallback((runId: string) => {
+    setLogTab('changes');
     setLogRunId(runId);
   }, []);
   const closeLog = useCallback(() => setLogRunId(null), []);
@@ -360,7 +365,7 @@ export const EditorAgentsPanel = () => {
                 <AgentReviewCard
                   key={run.id}
                   run={run}
-                  onReview={openLog}
+                  onReview={openChanges}
                   onAsk={askAbout}
                 />
               ))}
@@ -524,7 +529,11 @@ export const EditorAgentsPanel = () => {
         </div>
       </Scrollable.Viewport>
       <Scrollable.Scrollbar />
-      <AgentRunLogDialog runId={logRunId} ask={askRun} onClose={closeLog} />
+      <AgentRunLogDialog
+        runId={logRunId}
+        initialTab={logTab}
+        onClose={closeLog}
+      />
     </Scrollable.Root>
   );
 };

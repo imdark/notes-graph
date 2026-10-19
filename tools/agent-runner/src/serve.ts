@@ -109,6 +109,7 @@ export async function runClaimed(
       steps: outcome.steps,
       ...(outcome.costUsd === undefined ? {} : { costUsd: outcome.costUsd }),
       ...(outcome.tokens === undefined ? {} : { tokens: outcome.tokens }),
+      ...(outcome.changes ? { changes: outcome.changes } : {}),
       ...(logAppend ? { logAppend } : {}),
     });
     return 'done';
@@ -127,6 +128,7 @@ export async function runClaimed(
         status: 'error',
         error: String(err instanceof Error ? err.message : err).slice(0, 2000),
         ...(err instanceof RunFailed ? err.usage : {}),
+        ...(err instanceof RunFailed && err.changes ? { changes: err.changes } : {}),
         ...(logAppend ? { logAppend } : {}),
       })
       .catch(() => {});

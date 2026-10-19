@@ -5,21 +5,14 @@
  */
 import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk';
 
+import { type ChangeRecorder, toolResultText } from './changes';
+
 const TOOL_RESULT_CHARS = 400;
 
 export function short(value: unknown, limit = 160): string {
   const text = typeof value === 'string' ? value : JSON.stringify(value);
   const flat = (text ?? '').split(/\s+/).filter(Boolean).join(' ');
   return flat.length <= limit ? flat : `${flat.slice(0, limit - 1)}…`;
-}
-
-function toolResultText(content: unknown): string {
-  if (Array.isArray(content)) {
-    return content
-      .map(part => (part && typeof part === 'object' && 'text' in part ? String(part.text) : ''))
-      .join('\n');
-  }
-  return String(content ?? '');
 }
 
 type Part = {
@@ -101,7 +94,9 @@ export class Narrator {
 
   constructor(
     private readonly say: (line: string) => void,
-    private readonly maxTurns?: number
+    private readonly maxTurns?: number,
+    /** Told of each tool call and its result, subagents' included. */
+    private readonly changes?: ChangeRecorder
   ) {}
 
   private line(text: string, sub: boolean) {
@@ -140,6 +135,7 @@ export class Narrator {
             this.line(`→ ${name}  ${short(part.input ?? {})}`, sub);
           }
           if (part.id && searchToolName(name)) this.searches.set(part.id, name);
+          this.changes?.onToolUse(part.id, name, part.input);
         }
       }
     } else if (event.type === 'user') {
@@ -148,6 +144,7 @@ export class Narrator {
         if (part.type === 'tool_result') {
           const mark = part.is_error ? '✗' : '←';
           this.line(`  ${mark} ${short(toolResultText(part.content), TOOL_RESULT_CHARS)}`, sub);
+          this.changes?.onToolResult(part.tool_use_id, part.content, part.is_error);
           const search = part.tool_use_id ? this.searches.get(part.tool_use_id) : undefined;
           if (search) {
             this.searches.delete(part.tool_use_id!);
