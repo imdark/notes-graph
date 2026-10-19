@@ -64,6 +64,31 @@ function indexTokens(value: unknown): string[] {
   return [value];
 }
 
+/**
+ * The references a block's `ref` field holds. Each is a JSON object; the
+ * field is one of them, a list of them, or (from the phone's index) that list
+ * as a JSON string, and can be empty. One that doesn't parse is dropped: a
+ * throw here failed the whole lookup ("Unexpected end of JSON input").
+ */
+export function indexRefs(
+  value: unknown
+): ({ docId: string } & ReferenceParams)[] {
+  const parse = (item: unknown): unknown[] => {
+    if (Array.isArray(item)) return item.flatMap(parse);
+    if (typeof item === 'object' && item !== null) return [item];
+    if (typeof item !== 'string' || !item.trim()) return [];
+    try {
+      return parse(JSON.parse(item));
+    } catch {
+      return [];
+    }
+  };
+  return parse(value).filter(
+    (ref): ref is { docId: string } & ReferenceParams =>
+      typeof (ref as { docId?: unknown }).docId === 'string'
+  );
+}
+
 export class DocsSearchService extends Service {
   constructor(
     private readonly workspaceService: WorkspaceService,
@@ -482,12 +507,7 @@ export class DocsSearchService extends Service {
             const refs: ({ docId: string } & ReferenceParams)[] = Array.from(
               new Map(
                 nodes
-                  .flatMap(node => {
-                    const { ref } = node.fields;
-                    return typeof ref === 'string'
-                      ? [JSON.parse(ref)]
-                      : ref.map(item => JSON.parse(item));
-                  })
+                  .flatMap(node => indexRefs(node.fields.ref))
                   .filter(ref => !docIds.includes(ref.docId))
                   .map(ref => [ref.docId, ref])
               ).values()

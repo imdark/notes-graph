@@ -16,12 +16,14 @@ import { IndexerSchema } from '../../../storage/indexer/schema';
 import { fromPromise } from '../../../utils/from-promise';
 import { backoffRetry, exhaustMapWithTrailing } from '../../idb/indexer/utils';
 import { NativeDBConnection, type SqliteNativeDBOptions } from '../db';
-import { createNode } from './node-builder';
+import { createNode, type ReadField } from './node-builder';
 import { queryRaw } from './query';
 import { getText, tryParseArrayField } from './utils';
 
 const JS_INDEX_REVISION = 1;
 const NODE_BATCH_SIZE = 50;
+/** Most stored fields kept read; past it the oldest go first. */
+const FIELD_CACHE_SIZE = 50_000;
 
 export class SqliteIndexerStorage extends IndexerStorageBase {
   static readonly identifier = 'SqliteIndexerStorage';
@@ -29,6 +31,55 @@ export class SqliteIndexerStorage extends IndexerStorageBase {
   readonly connection: NativeDBConnection;
   readonly isReadonly = false;
   private readonly tableUpdate$ = new Subject<string>();
+
+  /**
+   * Stored fields already read, by `table:field` and document id. Every field
+   * of every hit is its own native round trip (on mobile: worker → page →
+   * Capacitor), and the task queries rerun on every index write, so the
+   * journal and its task boards re-read thousands of unchanged blocks each
+   * time: ~14k calls that kept the phone's cores busy and its scrolling
+   * stuck. A document's entries go when it is written or deleted here, the
+   * only way the index changes.
+   */
+  private readonly fields = new Map<string, Map<string, string | null>>();
+  private cachedFields = 0;
+  /** Bumped by every write, so a read that overlapped one isn't kept. */
+  private writes = 0;
+
+  private readonly read: ReadField = async (table, field, id) => {
+    const byId = this.fields.get(id);
+    const key = `${table}:${field}`;
+    if (byId?.has(key)) return byId.get(key);
+    const writes = this.writes;
+    const text = (await this.connection.apis.ftsGetDocument(key, id)) ?? null;
+    if (writes !== this.writes) return text;
+    if (this.cachedFields >= FIELD_CACHE_SIZE) this.dropOldest();
+    let entry = this.fields.get(id);
+    if (!entry) {
+      entry = new Map();
+      this.fields.set(id, entry);
+    }
+    if (!entry.has(key)) this.cachedFields++;
+    entry.set(key, text);
+    return text;
+  };
+
+  private forget(id: string) {
+    this.writes++;
+    const entry = this.fields.get(id);
+    if (!entry) return;
+    this.cachedFields -= entry.size;
+    this.fields.delete(id);
+  }
+
+  private dropOldest() {
+    // Maps keep insertion order: the first documents are the least recent.
+    for (const [id, entry] of this.fields) {
+      this.cachedFields -= entry.size;
+      this.fields.delete(id);
+      if (this.cachedFields < FIELD_CACHE_SIZE * 0.9) return;
+    }
+  }
 
   constructor(options: SqliteNativeDBOptions) {
     super();
@@ -63,6 +114,7 @@ export class SqliteIndexerStorage extends IndexerStorageBase {
           batch.map(id =>
             createNode(
               this.connection,
+              this.read,
               table,
               id,
               match.getScore(id),
@@ -100,10 +152,7 @@ export class SqliteIndexerStorage extends IndexerStorageBase {
     const buckets: any[] = [];
 
     for (const id of ids) {
-      const text = await this.connection.apis.ftsGetDocument(
-        `${table}:${field as string}`,
-        id
-      );
+      const text = await this.read(table, field as string, id);
       if (text) {
         let values: string[] = [text];
         const parsed = tryParseArrayField(text);
@@ -130,6 +179,7 @@ export class SqliteIndexerStorage extends IndexerStorageBase {
             if (bucket.hits.nodes.length < hitLimit) {
               const node = await createNode(
                 this.connection,
+                this.read,
                 table,
                 id,
                 match.getScore(id),
@@ -205,6 +255,7 @@ export class SqliteIndexerStorage extends IndexerStorageBase {
     document: IndexerDocument<T>
   ): Promise<void> {
     const schema = IndexerSchema[table];
+    this.forget(document.id);
     for (const [field, values] of document.fields) {
       const fieldSchema = schema[field];
       // @ts-expect-error -- IndexerSchema uses runtime-keyed fields from each table schema.
@@ -225,6 +276,8 @@ export class SqliteIndexerStorage extends IndexerStorageBase {
         );
       }
     }
+    // Again after: a read in between may have kept a half-written document.
+    this.forget(document.id);
     this.tableUpdate$.next(table);
   }
 
@@ -233,9 +286,11 @@ export class SqliteIndexerStorage extends IndexerStorageBase {
     id: string
   ): Promise<void> {
     const schema = IndexerSchema[table];
+    this.forget(id);
     for (const field of Object.keys(schema)) {
       await this.connection.apis.ftsDeleteDocument(`${table}:${field}`, id);
     }
+    this.forget(id);
     this.tableUpdate$.next(table);
   }
 
