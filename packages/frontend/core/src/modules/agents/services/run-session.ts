@@ -450,6 +450,9 @@ export class AgentRunSessionService extends Service {
           patch(prev => ({ ...prev, error: event.message }));
         } else if (event.type === 'done') {
           answered = true;
+          // A device or cloud run streams only its status ("Queued on
+          // cloud…"); its answer comes with `done`, and replaces that.
+          if (event.output) patch(prev => ({ ...prev, output: event.output }));
         }
       }
     } catch (err) {
