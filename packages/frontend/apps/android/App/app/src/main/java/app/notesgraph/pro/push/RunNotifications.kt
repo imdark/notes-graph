@@ -6,13 +6,11 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
-import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
-import app.notesgraph.pro.MainActivity
 import app.notesgraph.pro.R
 
 /**
@@ -20,7 +18,7 @@ import app.notesgraph.pro.R
  * deployed, blocked, or failed. Its own channel, quieter than questions,
  * since nothing is held up waiting. One notification per run, tagged with
  * its job id, so a repeated report replaces rather than stacks. Tapping it
- * opens the app; the run's note has the full account.
+ * opens the run's note, which has the full account.
  */
 object RunNotifications {
     private const val CHANNEL_ID = "agent-runs"
@@ -62,11 +60,11 @@ object RunNotifications {
         ) return
         ensureChannel(context)
 
+        // Opens the note the run was on, or the Agents page for one on none.
         val open = PendingIntent.getActivity(
             context,
             jobId.hashCode(),
-            Intent(context, MainActivity::class.java)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP),
+            NotificationTarget.intent(context, data["workspaceId"], data["docId"]),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
         fun builder() = NotificationCompat.Builder(context, CHANNEL_ID)
