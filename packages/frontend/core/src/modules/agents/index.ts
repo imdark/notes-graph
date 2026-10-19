@@ -40,10 +40,7 @@ export {
 } from './services/question-fork';
 export { runChatMessages } from './services/run-chat';
 export { AgentContextService } from './services/context';
-export {
-  AGENT_RULES_TITLE,
-  AgentRulesService,
-} from './services/agent-rules';
+export { AGENT_RULES_TITLE, AgentRulesService } from './services/agent-rules';
 export {
   canFixToMerge,
   DeploymentsService,
@@ -279,8 +276,10 @@ export {
 export {
   FIX_AGENT_TEMPLATE,
   FIX_UPS_DOC_TITLE,
+  fixKey,
   FixTaskService,
   type HealthFailure,
+  type StartedFix,
 } from './services/fix-task';
 export {
   COMPILE_AGENT_NAME,

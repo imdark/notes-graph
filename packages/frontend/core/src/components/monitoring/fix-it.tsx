@@ -1,14 +1,17 @@
 import { Button, notify } from '@notesgraph/component';
+import { AgentRunLogDialog } from '@notesgraph/core/desktop/pages/workspace/detail-page/tabs/agent-run-log';
 import {
+  AgentRunsStore,
   type DeviceCheck,
+  fixKey,
   FixTaskService,
   type HealthFailure,
   type Monitor,
   type RegistryDevice,
 } from '@notesgraph/core/modules/agents';
 import { WorkbenchService } from '@notesgraph/core/modules/workbench';
-import { useService } from '@notesgraph/infra';
-import { useCallback, useState } from 'react';
+import { useLiveData, useService } from '@notesgraph/infra';
+import { useCallback, useMemo, useState } from 'react';
 
 const when = (seconds: number | null) =>
   seconds ? new Date(seconds * 1000).toLocaleString() : 'never';
@@ -62,9 +65,10 @@ export const monitorFailure = (monitor: Monitor): HealthFailure => ({
 });
 
 /**
- * A failure's "Fix it": writes it as a to-do in the Fix-ups note and starts
- * the Fix it agent on it. The run asks before anything risky and waits under
- * "Needs you" when it is done.
+ * A failure's "Fix it": writes it as a to-do in the Fix-ups note, starts the
+ * Fix it agent on it and opens the run's window: its log as it goes, the
+ * questions it asks and a box to tell it more. While a fix is on, "Show
+ * agent" beside it opens that window again.
  */
 export const FixItButton = ({
   failure,
@@ -74,14 +78,43 @@ export const FixItButton = ({
   label?: string;
 }) => {
   const fixTask = useService(FixTaskService);
+  const runsStore = useService(AgentRunsStore);
   const workbench = useService(WorkbenchService).workbench;
   const [busy, setBusy] = useState(false);
+  const [open, setOpen] = useState(false);
+
+  // Failures are rebuilt on every render; the same one is the same fix.
+  const key = fixKey(failure);
+  const started = useLiveData(
+    useMemo(() => fixTask.watchFix(key), [fixTask, key])
+  );
+  const run = useLiveData(
+    useMemo(
+      () => (started?.runId ? runsStore.watchRun(started.runId) : null),
+      [runsStore, started?.runId]
+    )
+  );
+  const fixing = run?.status === 'running';
+
+  const openTodo = useCallback(
+    (docId: string, blockId: string) =>
+      workbench.openDoc(
+        { docId, mode: 'page', blockIds: [blockId] },
+        { at: 'active' }
+      ),
+    [workbench]
+  );
 
   const fix = useCallback(() => {
     setBusy(true);
     fixTask
       .fix(failure)
-      .then(({ docId, blockId }) =>
+      .then(({ docId, blockId, runId }) => {
+        if (runId) {
+          setOpen(true);
+          return;
+        }
+        // No record yet to open: say where the work is instead.
         notify.success({
           title: 'An agent is on it',
           message: `"${failure.title}" is a to-do in Fix-ups. It asks before anything risky; the Agents page shows the run.`,
@@ -89,16 +122,12 @@ export const FixItButton = ({
             {
               key: 'open',
               label: 'Open the to-do',
-              onClick: () =>
-                workbench.openDoc(
-                  { docId, mode: 'page', blockIds: [blockId] },
-                  { at: 'active' }
-                ),
+              onClick: () => openTodo(docId, blockId),
               autoClose: true,
             },
           ],
-        })
-      )
+        });
+      })
       .catch(err =>
         notify.error({
           title: "Couldn't start the fix",
@@ -106,22 +135,49 @@ export const FixItButton = ({
         })
       )
       .finally(() => setBusy(false));
-  }, [failure, fixTask, workbench]);
+  }, [failure, fixTask, openTodo]);
 
   return (
-    <Button
-      variant="plain"
-      onClick={e => {
-        // Rows it sits in open on click; the fix is its own action.
-        e.stopPropagation();
-        fix();
-      }}
-      loading={busy}
-      disabled={busy}
-      tooltip="Make this a to-do in Fix-ups and start an agent on it. It asks before anything risky."
-      data-testid="health-fix-it"
+    // Rows it sits in open on click, and React events bubble out of the
+    // window's portal too: the fix and its window are their own actions.
+    <span
+      style={{ display: 'inline-flex', gap: 4 }}
+      onClick={e => e.stopPropagation()}
     >
-      {label}
-    </Button>
+      <Button
+        variant="plain"
+        onClick={fix}
+        loading={busy}
+        disabled={busy || fixing}
+        tooltip={
+          fixing
+            ? 'An agent is already working on this.'
+            : 'Make this a to-do in Fix-ups and start an agent on it. It asks before anything risky.'
+        }
+        data-testid="health-fix-it"
+      >
+        {fixing ? 'Fixing…' : label}
+      </Button>
+      {run ? (
+        <Button
+          variant="plain"
+          onClick={() => setOpen(true)}
+          tooltip={
+            fixing
+              ? 'Watch the agent fixing this, answer it or tell it more.'
+              : 'What the agent found and did.'
+          }
+          data-testid="health-fix-show-agent"
+        >
+          Show agent
+        </Button>
+      ) : null}
+      {started?.runId ? (
+        <AgentRunLogDialog
+          runId={open ? started.runId : null}
+          onClose={() => setOpen(false)}
+        />
+      ) : null}
+    </span>
   );
 };
