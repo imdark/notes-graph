@@ -1,5 +1,6 @@
 import { Button, notify, useThemeColorV2 } from '@notesgraph/component';
 import { AgentQuestionCard } from '@notesgraph/core/desktop/pages/workspace/detail-page/tabs/agent-question';
+import { AgentReviewCard } from '@notesgraph/core/desktop/pages/workspace/detail-page/tabs/agent-review-card';
 import { AgentRunLogDialog } from '@notesgraph/core/desktop/pages/workspace/detail-page/tabs/agent-run-log';
 import {
   RunRow,
@@ -114,17 +115,18 @@ const AgentRuns = () => {
       ),
     [history, remote]
   );
+  // Finished runs waiting to be approved, wherever they ran.
+  const toReview = useMemo(() => runs.filter(run => run.reviewPending), [runs]);
+  const needsYou = waiting.length + toReview.length;
 
   const runningCount = sessions.filter(session => session.running).length;
 
   return (
     <div className={styles.scroll}>
       <div className={styles.body} data-testid="mobile-agent-runs">
-        {waiting.length > 0 ? (
+        {needsYou > 0 ? (
           <section className={styles.section}>
-            <div className={styles.sectionTitle}>
-              Needs you ({waiting.length})
-            </div>
+            <div className={styles.sectionTitle}>Needs you ({needsYou})</div>
             {waiting.map(run => (
               <div key={run.id} className={styles.waitingCard}>
                 <div className={panelStyles.runList}>
@@ -144,6 +146,25 @@ const AgentRuns = () => {
                     question={question}
                   />
                 ))}
+              </div>
+            ))}
+            {toReview.map(run => (
+              <div key={run.id} className={styles.waitingCard}>
+                <div className={panelStyles.runList}>
+                  <RunRow
+                    run={run}
+                    status="done"
+                    now={now}
+                    onOpen={openLog}
+                    onOpenDoc={openDoc}
+                    onShowTarget={showRunTarget}
+                  />
+                </div>
+                <AgentReviewCard
+                  run={run}
+                  onReview={openLog}
+                  onAsk={askAbout}
+                />
               </div>
             ))}
           </section>

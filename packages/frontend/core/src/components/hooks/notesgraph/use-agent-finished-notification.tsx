@@ -8,8 +8,10 @@ import { useEffect } from 'react';
 const PREVIEW_CHARS = 280;
 
 /**
- * Tells the reader when an agent run has ended, with what it said, so they can
- * keep its work, read the whole run and ask the agent more, or undo it.
+ * Tells the reader when an agent run has failed, with what it said, so they
+ * can read the whole run and ask the agent more, or undo it. A run that
+ * finished is announced app-wide instead (useAgentReviewNotification), and
+ * waits under "Needs you" until approved.
  */
 export function useAgentFinishedNotification(active: boolean) {
   const sessions = useService(AgentRunSessionService);
@@ -18,6 +20,7 @@ export function useAgentFinishedNotification(active: boolean) {
   useEffect(() => {
     if (!active) return;
     const subscription = sessions.finished$.subscribe(done => {
+      if (!done.failed) return;
       const text = done.output.trim();
       // The Agents tab is registered by a note's page, so from any other view
       // there is nothing to switch to; open the note the run was on first.

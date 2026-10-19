@@ -14,6 +14,12 @@ const setup = (rows: Record<string, Record<string, unknown>>) => {
       writes++;
       rows[id] = { ...rows[id], ...patch };
     },
+    find: () => Object.values(rows),
+    create: (row: Record<string, unknown>) => {
+      const id = `r${Object.keys(rows).length + 1}`;
+      rows[id] = { ...row, id };
+      return rows[id];
+    },
   };
   const framework = new Framework();
   framework
@@ -50,6 +56,39 @@ describe('AgentRunsStore usage', () => {
     const { store, rows } = setup({ r1: { id: 'r1', startedAt: 0, costUsd: 0.1 } });
     store.finish('r1', { status: 'cancelled', steps: 1, usage: { costUsd: null } }, 1000);
     expect(rows.r1.costUsd).toBe(0.1);
+  });
+
+  test('a run that finishes waits for review until it is approved', () => {
+    const { store, rows } = setup({
+      r1: { id: 'r1', startedAt: 0, status: 'running' },
+      r2: { id: 'r2', startedAt: 0, status: 'running' },
+      r3: { id: 'r3', startedAt: 0, status: 'running' },
+    });
+    store.finish('r1', { status: 'done', steps: 1, output: 'ok' }, 1000);
+    store.finish('r2', { status: 'error', steps: 1, error: 'no' }, 1000);
+    store.finish('r3', { status: 'cancelled', steps: 1 }, 1000);
+    expect(rows.r1.reviewPending).toBe(true);
+    expect(rows.r2.reviewPending).toBe(false);
+    expect(rows.r3.reviewPending).toBe(false);
+
+    store.settleReview('r1');
+    expect(rows.r1.reviewPending).toBe(false);
+  });
+
+  test('a run that ended long ago and is settled again is not put up for review', () => {
+    const { store, rows } = setup({ r1: { id: 'r1', startedAt: 0, status: 'done' } });
+    store.finish('r1', { status: 'done', steps: 1, output: 'ok' }, 1000);
+    expect(rows.r1.reviewPending).toBeFalsy();
+  });
+
+  test('a new run of the agent on the note takes over the earlier review', () => {
+    const { store, rows } = setup({
+      r1: { id: 'r1', agentId: 'a', docId: 'd', startedAt: 0, reviewPending: true },
+      r2: { id: 'r2', agentId: 'b', docId: 'd', startedAt: 0, reviewPending: true },
+    });
+    store.start({ id: 'a', name: 'A' }, { kind: 'doc', docId: 'd' });
+    expect(rows.r1.reviewPending).toBe(false);
+    expect(rows.r2.reviewPending).toBe(true);
   });
 
   test('setUsage writes only when the numbers change', () => {

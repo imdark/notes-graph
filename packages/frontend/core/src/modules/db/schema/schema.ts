@@ -361,6 +361,11 @@ export const NotesGraph_WORKSPACE_USERDATA_DB_SCHEMA = {
     folder: f.string().optional(),
     /** The start of what the run was given to read. */
     input: f.string().optional(),
+    /**
+     * A run that finished and waits for the reader to approve it. Kept on the
+     * row, which syncs, so the card is there after a reload and on every device.
+     */
+    reviewPending: f.boolean().optional(),
   },
 } as const satisfies DBSchemaBuilder;
 export type NotesGraphWorkspaceUserdataDbSchema =

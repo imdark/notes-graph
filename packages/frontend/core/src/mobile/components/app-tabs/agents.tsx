@@ -1,19 +1,26 @@
 import { AiIcon } from '@blocksuite/icons/rc';
-import { AgentRunSessionService } from '@notesgraph/core/modules/agents';
+import {
+  AgentRunSessionService,
+  AgentRunsStore,
+} from '@notesgraph/core/modules/agents';
 import { WorkbenchService } from '@notesgraph/core/modules/workbench';
 import { useLiveData, useService } from '@notesgraph/infra';
-import { useCallback } from 'react';
+import { useCallback, useMemo } from 'react';
 
 import { agentsDot, agentsIcon } from './styles.css';
 import { TabItem } from './tab-item';
 import type { AppTabCustomFCProps } from './type';
 
-/** The agent runs tab; dotted while a run is going or waiting on you. */
+/** The agent runs tab; dotted while a run is going, or one waits to be reviewed. */
 export const AppTabAgents = ({ tab }: AppTabCustomFCProps) => {
   const workbench = useService(WorkbenchService).workbench;
   const sessionService = useService(AgentRunSessionService);
+  const runsStore = useService(AgentRunsStore);
   const sessions = useLiveData(sessionService.sessions$);
-  const busy = sessions.some(session => session.running);
+  const toReview = useLiveData(
+    useMemo(() => runsStore.watchPendingReview(), [runsStore])
+  );
+  const busy = sessions.some(session => session.running) || toReview.length > 0;
 
   const handleOpen = useCallback(() => {
     workbench.open('/agents', { at: 'active', replaceHistory: true });

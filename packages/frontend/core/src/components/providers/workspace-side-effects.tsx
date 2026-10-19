@@ -8,6 +8,7 @@ import {
 // The blocksuite/ai barrel (~9MB) is imported dynamically inside the effects
 // below so this workspace-layout component doesn't pull AI into the route
 // chunk's synchronous execution path.
+import { useAgentReviewNotification } from '@notesgraph/core/components/hooks/notesgraph/use-agent-review-notification';
 import { useRegisterFindInPageCommands } from '@notesgraph/core/components/hooks/notesgraph/use-register-find-in-page-commands';
 import { useRegisterWorkspaceCommands } from '@notesgraph/core/components/hooks/use-register-workspace-commands';
 import { OverCapacityNotification } from '@notesgraph/core/components/over-capacity';
@@ -211,6 +212,7 @@ export const WorkspaceSideEffects = () => {
     authService,
   ]);
 
+  useAgentReviewNotification();
   useRegisterWorkspaceCommands();
   useRegisterNavigationCommands();
   useRegisterFindInPageCommands();

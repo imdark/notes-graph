@@ -35,6 +35,8 @@ export interface AgentRun {
   costUsd?: number;
   /** Tokens a device or cloud run used, when its runner reported them. */
   tokens?: number;
+  /** Finished, and waiting for the reader to approve it. */
+  reviewPending?: boolean;
 }
 
 /** What a run used, as its runner reported it; absent parts are unknown. */
@@ -112,6 +114,17 @@ export class AgentRunsStore extends Store {
   }
 
   start(agent: { id: string; name: string }, target: AgentTarget): string {
+    // A new run of the same agent on the same note (the next pass over a task
+    // list, or a run again) takes over the earlier run's review.
+    for (const run of this.table.find() as AgentRun[]) {
+      if (
+        run.reviewPending &&
+        run.agentId === agent.id &&
+        run.docId === target.docId
+      ) {
+        this.table.update(run.id, { reviewPending: false });
+      }
+    }
     const row = this.table.create({
       agentId: agent.id,
       agentName: agent.name,
@@ -201,7 +214,21 @@ export class AgentRunsStore extends Store {
           ? outcome.output.slice(0, SUMMARY_CHARS)
           : undefined,
       error: outcome.status === 'error' ? outcome.error : undefined,
+      // A run settled again after the fact keeps the review it had.
+      reviewPending:
+        outcome.status === 'done' && (row.status === 'running' || row.reviewPending),
     });
+  }
+
+  /** Runs that finished and wait for the reader, newest first. */
+  watchPendingReview(): LiveData<AgentRun[]> {
+    return this.watchRuns().map(runs => runs.filter(run => run.reviewPending));
+  }
+
+  /** The reader approved the run, or looked at it and moved on. */
+  settleReview(runId: string): void {
+    if (!this.table.get(runId)?.reviewPending) return;
+    this.table.update(runId, { reviewPending: false });
   }
 
   /**
