@@ -201,6 +201,34 @@ describe('AgentRunSessionService', () => {
     await expect(sessions.undo(finished[0].sessionId)).resolves.toBe(false);
   });
 
+  test("a cloud run's answer replaces its queued status", async () => {
+    const executor = {
+      harnessFor: (a: Agent) => a.harness ?? 'on-device',
+      async *run(): AsyncIterable<AgentEvent> {
+        yield { type: 'started', runId: 'run-1' };
+        yield { type: 'text', delta: 'Queued on cloud…\n' };
+        yield { type: 'done', output: 'The answer.' };
+      },
+    };
+    const framework = new Framework();
+    framework.service(AgentExecutorService, executor as any);
+    framework.service(AgentTaskClaimService, fakeClaim().claim as any);
+    framework.service(AgentRunSessionService, [
+      AgentExecutorService,
+      AgentTaskClaimService,
+    ]);
+    const sessions = framework.provider().get(AgentRunSessionService);
+    const finished: AgentRunFinished[] = [];
+    sessions.finished$.subscribe(done => finished.push(done));
+
+    void sessions.start(cloud, block('b1'));
+    await tick();
+    await tick();
+
+    expect(sessions.sessions$.value[0].output).toBe('The answer.');
+    expect(finished[0]).toMatchObject({ output: 'The answer.' });
+  });
+
   test('a stopped run is not announced', async () => {
     const { runs, sessions } = fakeExecutor();
     const finished: AgentRunFinished[] = [];
