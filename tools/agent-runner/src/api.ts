@@ -39,6 +39,8 @@ export interface AgentProfile {
 
 export interface Job {
   id: string;
+  /** The agent that asked; `health:<device>` for a health check. */
+  agentId?: string;
   agentName: string;
   instructions: string;
   context: string;
@@ -85,7 +87,11 @@ export class NotesGraphApi {
     this.url = url.replace(/\/$/, '');
   }
 
-  private async request<T>(method: string, path: string, body?: unknown): Promise<T> {
+  private async request<T>(
+    method: string,
+    path: string,
+    body?: unknown
+  ): Promise<T> {
     let response: Response;
     try {
       response = await this.fetchImpl(`${this.url}${path}`, {
@@ -97,7 +103,9 @@ export class NotesGraphApi {
         body: body === undefined ? undefined : JSON.stringify(body),
       });
     } catch (err) {
-      throw new NotesGraphError(`NotesGraph unreachable at ${this.url}: ${err}`);
+      throw new NotesGraphError(
+        `NotesGraph unreachable at ${this.url}: ${err}`
+      );
     }
     const text = await response.text();
     if (!response.ok) {
@@ -109,7 +117,9 @@ export class NotesGraphApi {
     if (!text.trim()) return {} as T;
     if (text.trimStart().startsWith('<')) {
       // An API path the server doesn't have falls through to the web app.
-      throw new NotesGraphError(`${path} returned a web page: the agent jobs API is not on this server`);
+      throw new NotesGraphError(
+        `${path} returned a web page: the agent jobs API is not on this server`
+      );
     }
     return JSON.parse(text) as T;
   }
@@ -120,7 +130,11 @@ export class NotesGraphApi {
 
   /** Create or update this runner's device, as one agents may run on. */
   async register(workspaceId: string, device: Record<string, unknown>) {
-    return await this.request('POST', `${this.base(workspaceId)}/devices`, device);
+    return await this.request(
+      'POST',
+      `${this.base(workspaceId)}/devices`,
+      device
+    );
   }
 
   async claim(
@@ -151,7 +165,11 @@ export class NotesGraphApi {
     return job ?? null;
   }
 
-  async setTitle(workspaceId: string, jobId: string, title: string): Promise<string> {
+  async setTitle(
+    workspaceId: string,
+    jobId: string,
+    title: string
+  ): Promise<string> {
     const { job } = await this.request<{ job: Job }>(
       'POST',
       `${this.base(workspaceId)}/jobs/${jobId}/title`,
@@ -163,7 +181,12 @@ export class NotesGraphApi {
   async ask(
     workspaceId: string,
     jobId: string,
-    question: { kind: string; text: string; detail?: string | null; options?: string[] }
+    question: {
+      kind: string;
+      text: string;
+      detail?: string | null;
+      options?: string[];
+    }
   ): Promise<Question> {
     const { question: asked } = await this.request<{ question: Question }>(
       'POST',
