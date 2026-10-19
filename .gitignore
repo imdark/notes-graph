@@ -57,6 +57,7 @@ tsconfig.tsbuildinfo
 .context
 /*.md
 !/CLAUDE.md
+!/README.md
 .codex
 .cursor
 

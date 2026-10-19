@@ -30,7 +30,7 @@ git push origin canary
 
 ### 3. Create a Release Action
 
-Trigger a release action in the [Release Desktop App](https://github.com/notesgraph/notesgraph/actions/workflows/release-desktop-app.yml).
+Trigger a release action in the [Release Desktop App](https://github.com/imdark/notes-graph/actions/workflows/release-desktop-app.yml).
 
 ![img.png](assets/release-action.png)
 
@@ -38,7 +38,7 @@ Select the appropriate branch, complete the form, and click `Run workflow`.
 
 ### 4. Publish the Release
 
-Once the release action is complete, a draft release will appear on the [Releases page](https://github.com/notesgraph/notesgraph/releases).
+Once the release action is complete, a draft release will appear on the [Releases page](https://github.com/imdark/notes-graph/releases).
 
 Edit the release notes if necessary, then publish the release.
 

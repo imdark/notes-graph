@@ -2,7 +2,8 @@
 
 > **Warning**:
 >
-> This document is not guaranteed to be up-to-date.
+> This is still AFFiNE's desktop build flow and hasn't been updated for NotesGraph yet: the channels, release
+> workflow and packaging steps may not match. This document is not guaranteed to be up-to-date.
 > If you find any outdated information, please feel free to open an issue or submit a PR.
 
 ## Table of Contents

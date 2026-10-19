@@ -62,7 +62,7 @@ yarn install
 #### Linux & MacOS
 
 ```sh
-git clone https://github.com/notesgraph/notesgraph
+git clone https://github.com/imdark/notes-graph
 ```
 
 #### Windows
@@ -77,14 +77,14 @@ Once Developer Mode is enabled, execute the following command with administrator
 # Enable symbolic links
 git config --global core.symlinks true
 # Clone the repository
-git clone https://github.com/notesgraph/notesgraph
+git clone https://github.com/imdark/notes-graph
 ```
 
 ### Build Native Dependencies
 
 Run the following script. It will build the native module at [`/packages/frontend/native`](/packages/frontend/native) and build Node.js binding using [NAPI.rs](https://napi.rs/).
 This could take a while if you build it for the first time.
-Note: use `strip` from system instead of `binutils` if you are running MacOS. [see problem here](https://github.com/notesgraph/notesgraph/discussions/2840)
+Note: use `strip` from system instead of `binutils` if you are running MacOS. [see problem here](https://github.com/toeverything/AFFiNE/discussions/2840)
 
 ```sh
 yarn notesgraph @notesgraph/native build
@@ -114,7 +114,7 @@ yarn test
 ### E2E Test
 
 ```shell
-# there are `notesgraph-local`, `notesgraph-migration`, `notesgraph-local`, `notesgraph-prototype` e2e tests,
+# there are `notesgraph-local`, `notesgraph-cloud`, `notesgraph-cloud-copilot`, `notesgraph-desktop`, `notesgraph-desktop-cloud` and `notesgraph-mobile` e2e tests,
 #   which are run under different situations.
 yarn workspace @notesgraph-test/notesgraph-local e2e
 ```
