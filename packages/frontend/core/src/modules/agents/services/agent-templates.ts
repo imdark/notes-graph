@@ -1,5 +1,6 @@
 import type { AgentDraft } from '../stores/agents';
 import { COMPILE_AGENT_NAME } from './compile-source';
+import { FIX_AGENT_TEMPLATE } from './fix-task';
 import { NOTES_HEALTH_TEMPLATE } from './notes-health';
 import {
   CLAUDE_CODE_MODEL,
@@ -231,4 +232,5 @@ export const AGENT_TEMPLATES: AgentTemplate[] = [
   GOAL_CHECK_TEMPLATE,
   COMPILE_SOURCE_TEMPLATE,
   NOTES_HEALTH_TEMPLATE,
+  FIX_AGENT_TEMPLATE,
 ];
