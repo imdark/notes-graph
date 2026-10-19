@@ -1,5 +1,6 @@
 import { Text } from '@blocksuite/notesgraph/store';
-import { Service } from '@notesgraph/infra';
+import { LiveData, Service } from '@notesgraph/infra';
+import { filter, firstValueFrom, map, race, timer } from 'rxjs';
 
 import type { DocsService } from '../../doc';
 import type { Agent } from '../stores/agents';
@@ -75,6 +76,20 @@ export interface HealthFailure {
 export const fixTaskTitle = (failure: HealthFailure) =>
   `Fix: ${failure.title.replace(/\s+/g, ' ').trim()}`;
 
+/** Which failure a fix is for: the same failure seen again is the same fix. */
+export const fixKey = (failure: HealthFailure) => fixTaskTitle(failure);
+
+/** A fix that has been started: where its to-do is and the run working it. */
+export interface StartedFix {
+  docId: string;
+  blockId: string;
+  /** The run record, for its window; null when it didn't show in time. */
+  runId: string | null;
+}
+
+/** How long to wait for a started run to get its record. */
+const RUN_RECORD_WAIT_MS = 15_000;
+
 /** The "Fix it" agent, found by name or, renamed, by its instructions. */
 export function findFixAgent(agents: Agent[]): Agent | undefined {
   return (
@@ -92,13 +107,24 @@ export class FixTaskService extends Service {
     super();
   }
 
+  /** Fixes started from this tab, by {@link fixKey}, newest kept. */
+  readonly started$ = new LiveData<Record<string, StartedFix>>({});
+
+  /** The fix started for the failure with this {@link fixKey}, if any. */
+  watchFix(key: string): LiveData<StartedFix | null> {
+    return this.started$.map(
+      (started): StartedFix | null => started[key] ?? null
+    );
+  }
+
   private fixUpsDoc(): string {
     const existing = this.docsService.list.docs$.value.find(
       record =>
         !record.trash$.value && record.title$.value === FIX_UPS_DOC_TITLE
     );
     return (
-      existing?.id ?? this.docsService.createDoc({ title: FIX_UPS_DOC_TITLE }).id
+      existing?.id ??
+      this.docsService.createDoc({ title: FIX_UPS_DOC_TITLE }).id
     );
   }
 
@@ -111,9 +137,10 @@ export class FixTaskService extends Service {
 
   /**
    * Write the failure as a to-do in the Fix-ups note and start the agent on
-   * it. Resolves with where the to-do is once the run has been started.
+   * it. Resolves once the run has its record, so its window can open, not
+   * when it ends.
    */
-  async fix(failure: HealthFailure): Promise<{ docId: string; blockId: string }> {
+  async fix(failure: HealthFailure): Promise<StartedFix> {
     const docId = this.fixUpsDoc();
     const { doc, release } = this.docsService.open(docId);
     let blockId: string;
@@ -144,7 +171,10 @@ export class FixTaskService extends Service {
               {
                 insert: ' ',
                 attributes: {
-                  reference: { type: 'LinkedPage', pageId: failure.sourceDocId },
+                  reference: {
+                    type: 'LinkedPage',
+                    pageId: failure.sourceDocId,
+                  },
                 },
               },
             ] as never),
@@ -157,11 +187,46 @@ export class FixTaskService extends Service {
     }
 
     const agent = this.agent();
-    await this.sessions.start(
+    const running = this.sessions.start(
       failure.deviceKey ? { ...agent, deviceKey: failure.deviceKey } : agent,
       { kind: 'block', docId, blockId }
     );
-    return { docId, blockId };
+    const runId = await this.runRecord(agent.id, blockId, running);
+    const fix = { docId, blockId, runId };
+    this.started$.setValue({ ...this.started$.value, [fixKey(failure)]: fix });
+    return fix;
+  }
+
+  /**
+   * The record of the session started for this agent on this block. A start
+   * that fails before it has one rejects; one that ends first, or is slow,
+   * gives null.
+   */
+  private async runRecord(
+    agentId: string,
+    blockId: string,
+    running: Promise<void>
+  ): Promise<string | null> {
+    const recorded = this.sessions.sessions$.pipe(
+      map(
+        sessions =>
+          sessions.find(
+            session =>
+              session.agentId === agentId &&
+              session.target.kind === 'block' &&
+              session.target.blockId === blockId &&
+              session.runId
+          )?.runId ?? null
+      ),
+      filter((runId): runId is string => !!runId)
+    );
+    return firstValueFrom(
+      race(
+        recorded,
+        timer(RUN_RECORD_WAIT_MS).pipe(map(() => null)),
+        running.then(() => null)
+      )
+    );
   }
 
   /**
@@ -169,6 +234,9 @@ export class FixTaskService extends Service {
    * finding as one, so the agent runs over the whole note, a task at a time.
    */
   async fixReport(reportDocId: string): Promise<void> {
-    await this.sessions.start(this.agent(), { kind: 'doc', docId: reportDocId });
+    await this.sessions.start(this.agent(), {
+      kind: 'doc',
+      docId: reportDocId,
+    });
   }
 }

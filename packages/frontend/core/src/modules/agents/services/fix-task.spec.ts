@@ -1,7 +1,7 @@
 /**
  * @vitest-environment happy-dom
  */
-import { Framework } from '@notesgraph/infra';
+import { Framework, LiveData } from '@notesgraph/infra';
 import { describe, expect, test, vi } from 'vitest';
 
 import { DocsService } from '../../doc';
@@ -12,12 +12,17 @@ import {
   FIX_AGENT_NAME,
   FIX_UPS_DOC_TITLE,
   findFixAgent,
+  fixKey,
   fixTaskTitle,
   FixTaskService,
 } from './fix-task';
 import { AgentRunSessionService } from './run-session';
 
-const fixAgent = { id: 'a1', name: FIX_AGENT_NAME, deviceKey: 'cloud' } as Agent;
+const fixAgent = {
+  id: 'a1',
+  name: FIX_AGENT_NAME,
+  deviceKey: 'cloud',
+} as Agent;
 
 /** A Fix-ups note that records the blocks written to it. */
 const setup = (existingDocId?: string) => {
@@ -54,12 +59,20 @@ const setup = (existingDocId?: string) => {
     agents$: { value: [fixAgent] },
     create: vi.fn(),
   };
-  const start = vi.fn(async () => {});
+  // A run that gets its record at once and then keeps going: fix() must
+  // not wait for it to end.
+  const sessions$ = new LiveData<any[]>([]);
+  const start = vi.fn(
+    (agent: Agent, target: any) =>
+      new Promise<void>(() => {
+        sessions$.setValue([{ agentId: agent.id, target, runId: 'run-1' }]);
+      })
+  );
   const framework = new Framework();
   framework
     .service(DocsService, docsService as any)
     .service(AgentsService, agentsService as any)
-    .service(AgentRunSessionService, { start } as any)
+    .service(AgentRunSessionService, { start, sessions$ } as any)
     .service(FixTaskService, [
       DocsService,
       AgentsService,
@@ -77,7 +90,10 @@ describe('fix tasks', () => {
   });
 
   test('finds the agent by name, or by its instructions once renamed', () => {
-    const renamed = { name: 'Mine', instructions: FIX_AGENT_INSTRUCTIONS } as Agent;
+    const renamed = {
+      name: 'Mine',
+      instructions: FIX_AGENT_INSTRUCTIONS,
+    } as Agent;
     expect(findFixAgent([fixAgent])).toBe(fixAgent);
     expect(findFixAgent([renamed])).toBe(renamed);
     expect(findFixAgent([])).toBeUndefined();
@@ -105,7 +121,7 @@ describe('fix tasks', () => {
       ['notesgraph:paragraph', 'b1'],
       ['notesgraph:paragraph', 'b1'],
     ]);
-    expect(at).toEqual({ docId: 'new-doc', blockId: 'b1' });
+    expect(at).toEqual({ docId: 'new-doc', blockId: 'b1', runId: 'run-1' });
     expect(start).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'a1', deviceKey: 'box-1' }),
       { kind: 'block', docId: 'new-doc', blockId: 'b1' }
@@ -121,5 +137,17 @@ describe('fix tasks', () => {
       expect.objectContaining({ deviceKey: 'cloud' }),
       expect.objectContaining({ docId: 'fix-ups' })
     );
+  });
+
+  test('remembers the fix, so its agent can be shown again', async () => {
+    const { service } = setup('fix-ups');
+    const failure = { title: 'Monitor failing', details: [] };
+    expect(service.watchFix(fixKey(failure)).value).toBeNull();
+    await service.fix(failure);
+    expect(service.watchFix(fixKey(failure)).value).toEqual({
+      docId: 'fix-ups',
+      blockId: 'b1',
+      runId: 'run-1',
+    });
   });
 });
