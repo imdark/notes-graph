@@ -9,7 +9,9 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
 import { patchBlockTaskIndexService } from './block-task-index-service';
 
-const taskNode = (docId: string, blockId: string) => ({
+type TaskNode = { fields: Record<string, string | string[]> };
+
+const taskNode = (docId: string, blockId: string): TaskNode => ({
   fields: {
     docId,
     blockId,
@@ -20,9 +22,21 @@ const taskNode = (docId: string, blockId: string) => ({
   },
 });
 
+/** The same, as the phone's SQLite index returns it: every field an array. */
+const nativeTaskNode = (docId: string, blockId: string): TaskNode => ({
+  fields: {
+    docId: [docId],
+    blockId: [blockId],
+    tags: '',
+    props: '',
+    content: ['task'],
+    todoTrail: ['Inbox'],
+  },
+});
+
 /** A provider whose local index answers on demand and whose remote never does. */
 const setup = () => {
-  const local$ = new Subject<{ nodes: ReturnType<typeof taskNode>[] }>();
+  const local$ = new Subject<{ nodes: TaskNode[] }>();
   const indexer = {
     search$: (_table: string, _query: unknown, options: { prefer?: string }) =>
       options.prefer === 'remote' ? NEVER : local$,
@@ -53,6 +67,20 @@ describe('patchBlockTaskIndexService', () => {
 
     local$.next({ nodes: [taskNode('doc', 'block')] });
     expect(results.at(-1)?.hits).toHaveLength(1);
+    sub.unsubscribe();
+  });
+
+  test('reads hits from the phone index, whose fields are arrays', () => {
+    // The journal's task lists were empty on the phone: its index returns
+    // docId/blockId as ["…"], and only plain strings were taken.
+    const { local$, provider } = setup();
+    const results: { hits: unknown[] }[] = [];
+    const sub = provider.queryTaskBlocks$({}).subscribe(r => results.push(r));
+
+    local$.next({ nodes: [nativeTaskNode('doc', 'block')] });
+    expect(results.at(-1)?.hits).toEqual([
+      { docId: 'doc', blockId: 'block', text: 'task', trail: 'Inbox' },
+    ]);
     sub.unsubscribe();
   });
 

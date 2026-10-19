@@ -123,9 +123,13 @@ export function patchBlockTaskIndexService(
         const wantedTags = filter.tags ?? [];
         const wantedProps = filter.props ?? [];
         for (const node of result.nodes) {
-          const docId = node.fields.docId;
-          const blockId = node.fields.blockId;
-          if (typeof docId !== 'string' || typeof blockId !== 'string') {
+          // The phone's SQLite index hands every field back as an array
+          // (`["<docId>"]`), where the browser's gives a plain string. Taking
+          // only strings dropped every hit there, so the journal's task lists
+          // were always empty on the phone.
+          const docId = firstString(node.fields.docId);
+          const blockId = firstString(node.fields.blockId);
+          if (!docId || !blockId) {
             continue;
           }
           // exactness guard: index matching can be tokenized (e.g. the
