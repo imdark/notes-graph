@@ -11,6 +11,7 @@ import {
   AgentsService,
   type AgentTarget,
 } from '@notesgraph/core/modules/agents';
+import { WorkspaceDialogService } from '@notesgraph/core/modules/dialogs';
 import type { Editor } from '@notesgraph/core/modules/editor';
 import { QuickSearchService } from '@notesgraph/core/modules/quicksearch';
 import { WorkbenchService } from '@notesgraph/core/modules/workbench';
@@ -38,18 +39,20 @@ const targetBlockIds = (s: BlockStdScope): string[] => {
 
 /**
  * Every agent that runs on a block, offered in the Cmd/Ctrl+K palette
- * ("Run agent: …") while the caret or a selection is in the page editor —
- * the palette counterpart of the agents in the `/` menu.
+ * ("Run agent: …") while the caret or a selection is in the page editor,
+ * and "Monitor this block…" to set a monitor up on it: the palette
+ * counterparts of the agents and the monitor in the `/` menu.
  */
 export function useRegisterAgentCommands(editor: Editor, active: boolean) {
   const quickSearch = useService(QuickSearchService).quickSearch;
   const agentsService = useService(AgentsService);
   const sessions = useService(AgentRunSessionService);
   const workbench = useService(WorkbenchService).workbench;
+  const dialogs = useService(WorkspaceDialogService);
   const agents = useLiveData(agentsService.agentsFor$('block'));
 
   useEffect(() => {
-    if (!active || agents.length === 0) return;
+    if (!active) return;
 
     const showSubscription = quickSearch.show$.subscribe(show => {
       if (!show) return;
@@ -58,6 +61,31 @@ export function useRegisterAgentCommands(editor: Editor, active: boolean) {
     });
 
     const unsubs: Array<() => void> = [() => showSubscription.unsubscribe()];
+
+    unsubs.push(
+      registerNotesGraphCommand({
+        id: 'editor:selection-monitor-block',
+        preconditionStrategy: () => paletteTarget.blockIds.length > 0,
+        category: 'editor:selection',
+        icon: <span>📡</span>,
+        label: {
+          title: 'Monitor this block…',
+          // Searched too: "monitor agent", "watch", "track a price".
+          subTitle:
+            'Keep it up to date from a website, a command or an agent: watch, track, alert',
+        },
+        run: () => {
+          const [blockId] = paletteTarget.blockIds;
+          if (!blockId) return;
+          const store = editor.editorContainer$.value?.host?.std.store;
+          dialogs.open('monitor-editor', {
+            docId: editor.doc.id,
+            blockId,
+            text: store?.getBlock(blockId)?.model.text?.toString() ?? '',
+          });
+        },
+      })
+    );
 
     for (const agent of agents) {
       unsubs.push(
@@ -90,5 +118,5 @@ export function useRegisterAgentCommands(editor: Editor, active: boolean) {
     return () => {
       for (const unsub of unsubs) unsub();
     };
-  }, [editor, active, agents, quickSearch, sessions, workbench]);
+  }, [editor, active, agents, quickSearch, sessions, workbench, dialogs]);
 }
