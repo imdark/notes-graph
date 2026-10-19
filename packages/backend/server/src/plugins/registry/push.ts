@@ -26,7 +26,10 @@ const bytes = (data: Record<string, string>) =>
 export function questionPushData(
   serverBaseUrl: string,
   job: Pick<RegistryJob, 'id' | 'workspaceId' | 'agentName' | 'docId'>,
-  question: Pick<RegistryJobQuestion, 'id' | 'kind' | 'text' | 'detail' | 'options'>
+  question: Pick<
+    RegistryJobQuestion,
+    'id' | 'kind' | 'text' | 'detail' | 'options'
+  >
 ): Record<string, string> {
   const data: Record<string, string> = {
     type: 'agent-question',
@@ -63,11 +66,30 @@ export function runOutcome(
   taskStatuses: Record<string, string>
 ): RunOutcome {
   if (jobStatus === 'error') return 'failed';
-  const statuses = new Set(Object.values(taskStatuses).map(s => s.toUpperCase()));
+  const statuses = new Set(
+    Object.values(taskStatuses).map(s => s.toUpperCase())
+  );
   if (statuses.has('BLOCKED')) return 'blocked';
   if (statuses.has('COMMITTED') || statuses.has('MERGED')) return 'review';
   if (statuses.has('DEPLOYED')) return 'deployed';
   return 'done';
+}
+
+/**
+ * Whether a finished job is worth a phone notification. Not when the user
+ * cancelled it, not a monitor's run (its alert is its own push), and not a
+ * health check that passed: those run on a schedule, and only a failure is
+ * news. A failed one still pushes.
+ */
+export function pushesWhenFinished(job: {
+  createdBy: string | null;
+  status: string;
+  agentId: string;
+}): boolean {
+  if (!job.createdBy || job.status === 'cancelled') return false;
+  if (job.agentId.startsWith('monitor:')) return false;
+  if (job.agentId.startsWith('health:') && job.status === 'done') return false;
+  return true;
 }
 
 /** A run ended: enough for the phone to say how, and open its note. */
@@ -130,7 +152,9 @@ export class AgentPushService {
       };
       return this.auth;
     } catch (err) {
-      this.logger.warn(`registry.fcmServiceAccount is not a usable key: ${err}`);
+      this.logger.warn(
+        `registry.fcmServiceAccount is not a usable key: ${err}`
+      );
       return null;
     }
   }
@@ -151,7 +175,10 @@ export class AgentPushService {
    * Questions were answered (on any device): take them off the other phones,
    * so nobody is left holding an Allow button for something already decided.
    */
-  async questionsClosed(job: RegistryJob, questionIds: string[]): Promise<void> {
+  async questionsClosed(
+    job: RegistryJob,
+    questionIds: string[]
+  ): Promise<void> {
     if (!job.createdBy || questionIds.length === 0) return;
     await this.send(job.createdBy, {
       type: 'agent-question-closed',
@@ -170,8 +197,7 @@ export class AgentPushService {
     job: RegistryJob,
     taskStatuses: Record<string, string>
   ): Promise<void> {
-    if (!job.createdBy || job.status === 'cancelled') return;
-    if (job.agentId.startsWith('monitor:')) return;
+    if (!pushesWhenFinished(job) || !job.createdBy) return;
     await this.send(
       job.createdBy,
       finishedPushData(
@@ -236,7 +262,9 @@ export class AgentPushService {
         if (response.status === 404 || body.includes('UNREGISTERED')) {
           gone.push(token);
         } else {
-          this.logger.warn(`FCM send failed (${response.status}): ${body.slice(0, 300)}`);
+          this.logger.warn(
+            `FCM send failed (${response.status}): ${body.slice(0, 300)}`
+          );
         }
       })
     );

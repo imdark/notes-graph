@@ -1,6 +1,6 @@
 import test from 'ava';
 
-import { finishedPushData, runOutcome } from '../push';
+import { finishedPushData, pushesWhenFinished, runOutcome } from '../push';
 
 test('a run that left a task committed waits on a review', t => {
   t.is(runOutcome('done', { a: 'COMMITTED', b: '[X]' }), 'review');
@@ -54,4 +54,17 @@ test('the push carries the summary, or the error for a failed run', t => {
     ).docId,
     ''
   );
+});
+
+test('a health check that passed sends nothing; one that failed still does', t => {
+  const job = { createdBy: 'u1', status: 'done', agentId: 'health:laptop' };
+  t.false(pushesWhenFinished(job));
+  t.true(pushesWhenFinished({ ...job, status: 'error' }));
+  // Other runs push either way, unless cancelled or a monitor's.
+  t.true(pushesWhenFinished({ ...job, agentId: 'agent-1' }));
+  t.false(
+    pushesWhenFinished({ ...job, agentId: 'agent-1', status: 'cancelled' })
+  );
+  t.false(pushesWhenFinished({ ...job, agentId: 'monitor:m1' }));
+  t.false(pushesWhenFinished({ ...job, createdBy: null }));
 });
