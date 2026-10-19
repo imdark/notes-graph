@@ -21,7 +21,7 @@ import {
   useServices,
 } from '@notesgraph/infra';
 import { bodyEmphasized } from '@toeverything/theme/typography';
-import { useCallback, useMemo } from 'react';
+import { type MouseEvent, useCallback, useMemo, useRef } from 'react';
 
 import {
   NavigationBackButton,
@@ -34,6 +34,8 @@ import { SearchResults } from '../../views/search/search-results';
 import * as styles from '../../views/search/style.css';
 
 const searchInput$ = new LiveData('');
+
+const preventBlur = (e: MouseEvent) => e.preventDefault();
 
 const RecentList = () => {
   const t = useI18n();
@@ -157,7 +159,13 @@ export const Component = () => {
     ]
   );
 
+  const leaving = useRef(false);
   const transitionBack = useCallback(() => {
+    // A second tap while the first is still leaving would go back twice.
+    if (leaving.current) return;
+    leaving.current = true;
+    // Cleared again in case the page stays mounted after going back.
+    setTimeout(() => (leaving.current = false), 1000);
     // Snapshotting a long result list for the view transition makes Cancel lag.
     if (searchInput$.value) {
       history.back();
@@ -185,6 +193,10 @@ export const Component = () => {
             <Button
               variant="plain"
               className={styles.searchCancel}
+              // Keep focus in the search box: blurring it first closes the
+              // keyboard, the header moves under the finger, and the tap is
+              // lost, so Cancel needed a second tap.
+              onMouseDown={preventBlur}
               onClick={transitionBack}
             >
               <span className={bodyEmphasized}>{t['Cancel']()}</span>
