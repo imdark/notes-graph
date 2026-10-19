@@ -162,6 +162,14 @@ export function healthStatus(output: string) {
   };
 }
 
+/**
+ * The server's own runner registers as a machine too, but it only runs
+ * Claude Code, Workflow and Research agents, never a command job.
+ */
+export function isCloudRunner(device: { labels?: unknown }): boolean {
+  return (device.labels as Record<string, unknown> | null)?.runner === 'cloud';
+}
+
 /** The status a check that didn't finish leaves: the machine couldn't say. */
 export function failedHealthStatus(error: string | null) {
   const detail = (error || 'no output').slice(0, 500);
@@ -195,6 +203,9 @@ export class RegistryHealthService {
     const device = await this.devices.get(workspaceId, key);
     if (!device) throw new BadRequest(`No device '${key}' in this workspace`);
     if (device.kind !== 'machine') throw new BadRequest('Only a machine can be health-checked');
+    if (isCloudRunner(device)) {
+      throw new BadRequest('The cloud runner runs agents only; it has no shell to health-check');
+    }
 
     const waiting = (await this.jobs.list(workspaceId, key)).find(
       job =>
@@ -226,6 +237,10 @@ export class RegistryHealthService {
     for (const device of machines) {
       if (!device.agentTarget) {
         skipped.push({ key: device.key, reason: 'not an agent target' });
+        continue;
+      }
+      if (isCloudRunner(device)) {
+        skipped.push({ key: device.key, reason: 'the cloud runner runs agents only' });
         continue;
       }
       try {

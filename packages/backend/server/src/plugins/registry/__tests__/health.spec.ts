@@ -3,6 +3,7 @@ import test from 'ava';
 import {
   failedHealthStatus,
   healthStatus,
+  isCloudRunner,
   parseHealthOutput,
 } from '../health';
 
@@ -60,4 +61,10 @@ test('a check that failed to run degrades the machine with its error', t => {
   t.is(status.state, 'degraded');
   t.regex(status.statusDetail, /allow_commands/);
   t.is(status.checks[0].status, 'fail');
+});
+
+test('the server runner is told apart from a machine that takes commands', t => {
+  t.true(isCloudRunner({ labels: { runner: 'cloud' } }));
+  t.false(isCloudRunner({ labels: {} }));
+  t.false(isCloudRunner({ labels: null }));
 });
