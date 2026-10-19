@@ -11,6 +11,7 @@ import {
   mergeReadiness,
   mergesDirectly,
   type PullRequest,
+  pullRequestNumber,
   pullRequestStage,
   repoOf,
   type ShipAction,
@@ -333,6 +334,82 @@ export const DeploymentsView = () => {
     [agent, deployments]
   );
 
+  // What "Ready to merge" lists that GitHub can be asked about: the tasks
+  // with a pull request, and the open pull requests no task names.
+  const readyItems = useMemo(
+    () => [
+      ...rows.flatMap(row => {
+        if (row.stage !== 'committed' || !row.pullRequest) return [];
+        const repo = repoOf(row.pullRequest);
+        const number = pullRequestNumber(row.pullRequest);
+        return repo && number
+          ? [{ pr: { repo, number, url: row.pullRequest }, task: row }]
+          : [];
+      }),
+      ...untrackedOpen.map(pr => ({ pr })),
+    ],
+    [rows, untrackedOpen]
+  );
+  const [checking, setChecking] = useState(false);
+
+  /**
+   * Check the ready-to-merge branches on GitHub: a merged one's branch is
+   * deleted and its task moves on; anything gone or closed is reported.
+   */
+  const checkBranches = useCallback(async () => {
+    if (!agent) return;
+    setChecking(true);
+    try {
+      const { checks, deleted, failed } = await deployments.checkReadyBranches(
+        agent,
+        readyItems
+      );
+      const label = (c: { repo: string; number: number }) => `#${c.number}`;
+      const merged = checks.filter(c => c.state === 'merged');
+      const closed = checks.filter(c => c.state === 'closed');
+      const missing = checks.filter(c => c.state === 'missing');
+      const noBranch = checks.filter(
+        c => c.state === 'open' && !c.branchExists
+      );
+      const lines = [
+        merged.length
+          ? `Already merged: ${merged.map(label).join(', ')}${deleted.length ? ` (deleted ${deleted.length} branch${deleted.length === 1 ? '' : 'es'})` : ''}.`
+          : null,
+        failed.length ? `Couldn't delete: ${failed.join(', ')}.` : null,
+        closed.length
+          ? `Closed without merging: ${closed.map(label).join(', ')}.`
+          : null,
+        missing.length
+          ? `No longer on GitHub: ${missing.map(label).join(', ')}.`
+          : null,
+        noBranch.length
+          ? `Open but the branch is gone: ${noBranch.map(label).join(', ')}.`
+          : null,
+      ].filter(Boolean);
+      const ok =
+        checks.length -
+        merged.length -
+        closed.length -
+        missing.length -
+        noBranch.length;
+      (failed.length ? notify.error : notify.success)({
+        title: `Checked ${checks.length} ready branch${checks.length === 1 ? '' : 'es'}`,
+        message:
+          lines.length > 0
+            ? `${lines.join(' ')}${ok > 0 ? ` ${ok} still open and ready.` : ''}`
+            : 'All still open, with their branches.',
+      });
+      refresh();
+    } catch (err) {
+      notify.error({
+        title: "Couldn't check the branches",
+        message: err instanceof Error ? err.message : String(err),
+      });
+    } finally {
+      setChecking(false);
+    }
+  }, [agent, deployments, readyItems, refresh]);
+
   /** Hand to Claude Code on the device: to fix and merge, or to deploy. */
   const sendToClaude = useCallback(
     async (
@@ -543,6 +620,21 @@ export const DeploymentsView = () => {
           >
             Refresh
           </button>
+          {readyItems.length > 0 ? (
+            <button
+              className={styles.link}
+              disabled={checking || busy || github.loading}
+              onClick={() => {
+                checkBranches().catch(() => {});
+              }}
+              title="Ask GitHub whether each ready-to-merge pull request still exists and is still unmerged. Merged ones have their branch deleted and their task moved to MERGED."
+              data-testid="deployments-check-branches"
+            >
+              {checking
+                ? 'Checking branches…'
+                : `Check ready branches (${readyItems.length})`}
+            </button>
+          ) : null}
           {github.error ? (
             <span className={styles.runError}>{github.error}</span>
           ) : null}

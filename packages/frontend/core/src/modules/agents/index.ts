@@ -42,6 +42,7 @@ export { runChatMessages } from './services/run-chat';
 export { AgentContextService } from './services/context';
 export { AGENT_RULES_TITLE, AgentRulesService } from './services/agent-rules';
 export {
+  type BranchCheck,
   canFixToMerge,
   DeploymentsService,
   type MergeReadiness,
@@ -52,6 +53,7 @@ export {
   type PullRequestStage,
   pullRequestStage,
   type PullRequestsState,
+  pullRequestNumber,
   repoOf,
   SHIP_STAGES,
   type ShipAction,

@@ -5,16 +5,21 @@ import { describe, expect, test } from 'vitest';
 
 import type { Agent } from '../stores/agents';
 import {
+  branchCheckCommand,
   canFixToMerge,
   checksState,
+  deleteBranchCommand,
+  deletesBranch,
   findPullRequest,
   isShipStage,
   mergeCommand,
   mergeReadiness,
   mergesDirectly,
   needsHelpToMerge,
+  parseBranchChecks,
   parsePullRequests,
   type PullRequest,
+  pullRequestNumber,
   pullRequestsCommand,
   pullRequestStage,
   shipAgents,
@@ -284,7 +289,11 @@ describe('pullRequestStage', () => {
     deployedAt: '2026-10-12T23:55:00Z',
     pullRequests: [112, 111, 110],
   };
-  const pr = (number: number, state: 'open' | 'merged', repo = 'imdark/notes-graph') => ({
+  const pr = (
+    number: number,
+    state: 'open' | 'merged',
+    repo = 'imdark/notes-graph'
+  ) => ({
     number,
     state,
     url: `https://github.com/${repo}/pull/${number}`,
@@ -305,6 +314,66 @@ describe('pullRequestStage', () => {
 
   test("can't tell without a deploy record, or for another repo", () => {
     expect(pullRequestStage(pr(111, 'merged'), null)).toBeNull();
-    expect(pullRequestStage(pr(19, 'merged', 'imdark/workflow'), deploy)).toBeNull();
+    expect(
+      pullRequestStage(pr(19, 'merged', 'imdark/workflow'), deploy)
+    ).toBeNull();
+  });
+});
+
+describe('checking ready branches', () => {
+  const prs = [
+    {
+      repo: 'imdark/notes-graph',
+      number: 12,
+      url: 'https://github.com/imdark/notes-graph/pull/12',
+    },
+    {
+      repo: 'imdark/notes-graph',
+      number: 123,
+      url: 'https://github.com/imdark/notes-graph/pull/123',
+    },
+    {
+      repo: 'imdark/notes-graph',
+      number: 7,
+      url: 'https://github.com/imdark/notes-graph/pull/7',
+    },
+  ];
+
+  test('reads each pull request back by number and repo, unknown ones as missing', () => {
+    const output = [
+      'imdark/notes-graph is not asked about',
+      '12\timdark/notes-graph\tMERGED\tfeat-x\ttrue',
+      '123\timdark/notes-graph\tOPEN\tfix-y\tfalse',
+      '7\timdark/notes-graph\tMISSING\t\tfalse',
+    ].join('\n');
+    expect(parseBranchChecks(output, prs)).toEqual([
+      { ...prs[0], state: 'merged', branch: 'feat-x', branchExists: true },
+      { ...prs[1], state: 'open', branch: 'fix-y', branchExists: false },
+      { ...prs[2], state: 'missing', branch: null, branchExists: false },
+    ]);
+  });
+
+  test('deletes only a merged branch that is still there, and never main', () => {
+    const merged = {
+      ...prs[0],
+      state: 'merged' as const,
+      branch: 'feat-x',
+      branchExists: true,
+    };
+    expect(deletesBranch(merged)).toBe(true);
+    expect(deletesBranch({ ...merged, branchExists: false })).toBe(false);
+    expect(deletesBranch({ ...merged, state: 'open' })).toBe(false);
+    expect(deletesBranch({ ...merged, branch: 'main' })).toBe(false);
+    expect(deleteBranchCommand(merged)).toBe(
+      "gh api -X DELETE 'repos/imdark/notes-graph/git/refs/heads/feat-x'"
+    );
+  });
+
+  test('asks gh for state and branch, with jq escapes intact', () => {
+    const command = branchCheckCommand([prs[0]]);
+    expect(command).toContain(`gh pr view 12 -R 'imdark/notes-graph'`);
+    expect(command).toContain(`--jq '"\\(.state)\\t\\(.headRefName)"'`);
+    expect(command).toContain('repos/imdark/notes-graph/branches/$b');
+    expect(pullRequestNumber(prs[1].url)).toBe(123);
   });
 });
