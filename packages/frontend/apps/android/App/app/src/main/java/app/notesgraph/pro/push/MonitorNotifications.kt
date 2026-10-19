@@ -6,21 +6,18 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
-import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
-import app.notesgraph.pro.MainActivity
 import app.notesgraph.pro.R
 
 /**
  * "A monitor saw something": a price dropped below its threshold, a value
  * changed. Informational, so it has its own quieter channel than the agent
  * questions, and one notification per monitor (a newer reading replaces
- * the older one). Tapping it opens the app; the value is also in the note
- * the monitor keeps up to date.
+ * the older one). Tapping it opens the block the monitor keeps up to date.
  */
 object MonitorNotifications {
     private const val CHANNEL_ID = "monitor-alerts"
@@ -53,11 +50,13 @@ object MonitorNotifications {
         ) return
         ensureChannel(context)
 
+        // Opens the block the monitor keeps up to date.
         val open = PendingIntent.getActivity(
             context,
             monitorId.hashCode(),
-            Intent(context, MainActivity::class.java)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP),
+            NotificationTarget.intent(
+                context, data["workspaceId"], data["docId"], data["blockId"]
+            ),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
         val body = listOf(value, reason).filter { it.isNotEmpty() }.joinToString(" · ")

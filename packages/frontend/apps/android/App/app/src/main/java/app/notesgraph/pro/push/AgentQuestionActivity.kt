@@ -1,7 +1,6 @@
 package app.notesgraph.pro.push
 
 import android.content.Context
-import android.content.Intent
 import android.content.res.Configuration
 import android.graphics.Color
 import android.os.Build
@@ -41,7 +40,6 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.fragment.app.FragmentActivity
 import app.notesgraph.pro.AppLock
-import app.notesgraph.pro.MainActivity
 import app.notesgraph.pro.R
 import app.notesgraph.pro.theme.NotesGraphTheme
 import app.notesgraph.pro.theme.ThemeMode
@@ -119,9 +117,11 @@ class AgentQuestionActivity : FragmentActivity() {
                         pushed = pushed,
                         onDone = { finish() },
                         onOpenApp = {
+                            // On the note the run is working on.
                             startActivity(
-                                Intent(this, MainActivity::class.java)
-                                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                NotificationTarget.intent(
+                                    this, pushed.workspaceId, pushed.docId
+                                )
                             )
                             finish()
                         },

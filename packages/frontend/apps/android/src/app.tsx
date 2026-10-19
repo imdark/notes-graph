@@ -380,6 +380,51 @@ try {
 } catch {
   // localStorage unavailable — nothing to resume
 }
+/**
+ * Open what a tapped notification is about: a finished run's note (or the
+ * Agents page when it ran on none), a monitor's block. Native calls this
+ * until it returns true; false means the app has no workspace open yet.
+ * Another workspace is opened by its URL, which reloads into it.
+ */
+(window as any).notesgraphOpenFromNotification = (payload: {
+  workspaceId?: string;
+  docId?: string;
+  blockId?: string;
+}): boolean => {
+  const globalContextService = frameworkProvider.get(GlobalContextService);
+  const currentWorkspaceId =
+    globalContextService.globalContext.workspaceId.get();
+  if (!currentWorkspaceId) return false;
+  const workspaceId = payload?.workspaceId || currentWorkspaceId;
+  const docId = payload?.docId;
+  if (workspaceId !== currentWorkspaceId) {
+    const blocks = payload?.blockId
+      ? `?blockIds=${encodeURIComponent(payload.blockId)}`
+      : '';
+    window.location.href = docId
+      ? `/workspace/${workspaceId}/${docId}${blocks}`
+      : `/workspace/${workspaceId}/agents`;
+    return true;
+  }
+  const workspaceRef =
+    frameworkProvider.get(WorkspacesService).openByWorkspaceId(workspaceId);
+  if (!workspaceRef) return false;
+  const { workspace, dispose } = workspaceRef;
+  try {
+    const workbench = workspace.scope.get(WorkbenchService).workbench;
+    if (docId) {
+      workbench.openDoc({
+        docId,
+        ...(payload?.blockId ? { blockIds: [payload.blockId] } : {}),
+      });
+    } else {
+      workbench.open('/agents');
+    }
+  } finally {
+    dispose();
+  }
+  return true;
+};
 (window as any).getCurrentI18nLocale = () => {
   return I18n.language;
 };

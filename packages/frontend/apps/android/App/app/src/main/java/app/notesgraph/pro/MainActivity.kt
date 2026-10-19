@@ -37,6 +37,7 @@ import app.notesgraph.pro.plugin.HashCashPlugin
 import app.notesgraph.pro.plugin.NbStorePlugin
 import app.notesgraph.pro.plugin.PreviewPlugin
 import app.notesgraph.pro.plugin.SpeechToTextPlugin
+import app.notesgraph.pro.push.NotificationTarget
 import app.notesgraph.pro.service.GraphQLService
 import app.notesgraph.pro.service.SSEService
 import app.notesgraph.pro.service.WebService
@@ -236,12 +237,41 @@ class MainActivity : BridgeActivity(), AIButtonPlugin.Callback, NotesGraphThemeP
         configureEditorWebView()
         bridge.addWebViewListener(renderProcessGoneListener)
         handleShareIntent(intent)
+        handleNotificationTarget(intent)
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
         handleShareIntent(intent)
+        handleNotificationTarget(intent)
+    }
+
+    /**
+     * A tapped run or monitor notification: open the note it is about rather
+     * than wherever the app last was (see push/NotificationTarget).
+     */
+    private fun handleNotificationTarget(intent: Intent?) {
+        val target = NotificationTarget.take(intent) ?: return
+        deliverNotificationTarget(target, 0)
+    }
+
+    // Like a share, the web handler only exists once the bundle has booted and
+    // a workspace is open, so keep asking until it says it opened the page.
+    private fun deliverNotificationTarget(target: String, attempt: Int) {
+        val js =
+            "(function(){return !!(window.notesgraphOpenFromNotification&&" +
+                "window.notesgraphOpenFromNotification($target));})()"
+        bridge.webView.post {
+            bridge.webView.evaluateJavascript(js) { result ->
+                if (result != "true" && attempt < 60) {
+                    bridge.webView.postDelayed(
+                        { deliverNotificationTarget(target, attempt + 1) },
+                        500
+                    )
+                }
+            }
+        }
     }
 
     /**
