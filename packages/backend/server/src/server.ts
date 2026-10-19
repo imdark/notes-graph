@@ -34,6 +34,9 @@ export async function run() {
   });
 
   app.useBodyParser('raw', { limit: 100 * OneMB });
+  // A runner's final report carries what the run changed (a capped diff),
+  // which outgrows express's 100kb default.
+  app.useBodyParser('json', { limit: 2 * OneMB });
 
   const logger = app.get(NotesGraphLogger);
   app.useLogger(logger);

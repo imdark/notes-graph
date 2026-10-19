@@ -169,6 +169,14 @@ export {
   parseLogLines,
 } from './services/log-lines';
 export {
+  changesAreEmpty,
+  type PatchFile,
+  type PatchHunk,
+  type PatchLine,
+  parsePatch,
+  type RunChanges,
+} from './services/run-changes';
+export {
   type AgentTarget,
   agentTargetBlockIds,
   agentTargetKey,

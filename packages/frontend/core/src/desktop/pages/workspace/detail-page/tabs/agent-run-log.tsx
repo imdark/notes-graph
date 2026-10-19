@@ -9,6 +9,7 @@ import {
   RemoteAgentRunnerService,
   type RemoteQuestion,
   type RemoteSteer,
+  type RunChanges,
 } from '@notesgraph/core/modules/agents';
 import { WorkspaceService } from '@notesgraph/core/modules/workspace';
 import { useLiveData, useService } from '@notesgraph/infra';
@@ -23,6 +24,7 @@ import {
 
 import { AgentLogView } from './agent-log-view';
 import { AgentQuestionCard } from './agent-question';
+import { AgentRunChanges } from './agent-run-changes';
 import { AgentRunChat } from './agent-run-chat';
 import { formatDuration } from './agent-run-row';
 import { AgentRunShare } from './agent-run-share';
@@ -42,6 +44,13 @@ interface RunLogState {
   /** Why there is no log to show, when there isn't. */
   note: string | null;
   loading: boolean;
+  /** A remote run's whole answer; the run row keeps only its start. */
+  result: string | null;
+  /**
+   * What a remote run changed, from its runner; null when it recorded
+   * nothing, undefined for a run that doesn't report changes.
+   */
+  changes: RunChanges | null | undefined;
 }
 
 const EMPTY: RunLogState = {
@@ -52,6 +61,8 @@ const EMPTY: RunLogState = {
   allowAllTools: false,
   note: null,
   loading: true,
+  result: null,
+  changes: undefined,
 };
 
 /**
@@ -112,6 +123,9 @@ const useRunLog = (run: AgentRun | undefined): RunLogState => {
                 ? 'Waiting for the device to pick this up…'
                 : null,
             loading: false,
+            result: job.result,
+            // Recorded only as the run ends, so it comes with the last poll.
+            changes: job.changes ?? prev.changes ?? null,
           }));
         }
       })().catch(err => {
@@ -143,6 +157,8 @@ const useRunLog = (run: AgentRun | undefined): RunLogState => {
                   ? 'This run happened on another device. An on-device run keeps its log only in the browser that ran it.'
                   : 'This run is going in another tab or on another device. Its log is only viewable there.',
             loading: false,
+            result: null,
+            changes: undefined,
           });
         })
         .catch(() => {
@@ -174,6 +190,8 @@ const useRunLog = (run: AgentRun | undefined): RunLogState => {
       allowAllTools: false,
       note: null,
       loading: false,
+      result: null,
+      changes: undefined,
     };
   }
   return state;
@@ -213,12 +231,21 @@ const targetLabel = (run: AgentRun) => {
 const LOG_TAB = 'log';
 const DETAILS_TAB = 'details';
 const ASK_TAB = 'ask';
+const CHANGES_TAB = 'changes';
+export type RunLogTab = 'log' | 'details' | 'ask' | 'changes';
 const TABS = [
   { value: LOG_TAB, label: 'Log' },
   { value: DETAILS_TAB, label: 'Details' },
 ];
-/** A run that has ended can be asked about; one going is still answering. */
-const ENDED_TABS = [...TABS, { value: ASK_TAB, label: 'Ask' }];
+/**
+ * A run that has ended can be reviewed (what it changed) and asked about;
+ * one going is still changing things and still answering.
+ */
+const ENDED_TABS = [
+  { value: CHANGES_TAB, label: 'Changes' },
+  ...TABS,
+  { value: ASK_TAB, label: 'Ask' },
+];
 
 /**
  * What a run was set up with: the blocks it read, where it ran and on what.
@@ -273,11 +300,14 @@ export const AgentRunLogDialog = ({
   runId,
   onClose,
   ask = false,
+  initialTab,
 }: {
   runId: string | null;
   onClose: () => void;
   /** Open on the Ask tab, to ask an ended run about itself. */
   ask?: boolean;
+  /** The tab to open on; wins over `ask`. Changes and Ask need an ended run. */
+  initialTab?: RunLogTab;
 }) => {
   const runsStore = useService(AgentRunsStore);
   const sessionService = useService(AgentRunSessionService);
@@ -290,8 +320,17 @@ export const AgentRunLogDialog = ({
       [runsStore, runId]
     )
   );
-  const { log, tmuxSession, questions, steers, allowAllTools, note, loading } =
-    useRunLog(run ?? undefined);
+  const {
+    log,
+    tmuxSession,
+    questions,
+    steers,
+    allowAllTools,
+    note,
+    loading,
+    result,
+    changes,
+  } = useRunLog(run ?? undefined);
 
   // A run can be stopped from here when this tab is driving it, or when it
   // is a device job (the server cancels it for whoever asks). An on-device
@@ -345,9 +384,12 @@ export const AgentRunLogDialog = ({
       .finally(() => setAllowingAll(false));
   }, [remoteRunner, run, workspaceService]);
 
-  // Each run opens on its log, unless it was opened to ask about it.
-  const [tab, setTab] = useState(LOG_TAB);
-  useEffect(() => setTab(ask ? ASK_TAB : LOG_TAB), [runId, ask]);
+  // Each run opens on its log, unless it was opened to review or ask about.
+  const [tab, setTab] = useState<string>(LOG_TAB);
+  useEffect(
+    () => setTab(initialTab ?? (ask ? ASK_TAB : LOG_TAB)),
+    [runId, ask, initialTab]
+  );
   const ended = !!run && run.status !== 'running';
 
   const attachCommand = tmuxSession ? `tmux attach -t ${tmuxSession}` : null;
@@ -396,6 +438,19 @@ export const AgentRunLogDialog = ({
         {run?.remoteJobId ? <AgentRunShare jobId={run.remoteJobId} /> : null}
         {run && tab === DETAILS_TAB ? (
           <RunDetails run={run} />
+        ) : run && ended && tab === CHANGES_TAB ? (
+          <AgentRunChanges
+            run={run}
+            summary={
+              result ??
+              (session?.runId === run.id ? session.output : undefined) ??
+              run.summary ??
+              null
+            }
+            changes={changes}
+            loading={!!run.remoteJobId && loading}
+            onClose={onClose}
+          />
         ) : run && ended && tab === ASK_TAB ? (
           <AgentRunChat
             key={run.id}

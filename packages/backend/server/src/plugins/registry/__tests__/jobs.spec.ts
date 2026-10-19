@@ -2,7 +2,12 @@ import test from 'ava';
 
 import { logStamp, stampInnerLines } from '../../../models';
 import { profileFor } from '../agent-profiles';
-import { RegistryJobService, toJobDto } from '../jobs';
+import {
+  capChanges,
+  MAX_CHANGES_BYTES,
+  RegistryJobService,
+  toJobDto,
+} from '../jobs';
 import { questionPushData } from '../push';
 
 /**
@@ -177,6 +182,44 @@ test('offsets count code points, matching what Postgres trims by', t => {
 test('listings leave the transcript out', t => {
   const dto = toJobDto(storedJob({ log: 'big transcript' }));
   t.is(dto.log, undefined);
+});
+
+test('a single-job read carries what the run changed; listings do not', t => {
+  const changes = { notes: { created: [{ docId: 'd1', title: 'Findings' }] } };
+  t.deepEqual(toJobDto(storedJob({ changes }), { logFrom: 0 }).changes, changes);
+  t.is(toJobDto(storedJob({ changes })).changes, undefined);
+  t.is(toJobDto(storedJob(), { logFrom: 0 }).changes, null);
+});
+
+test('a final report passes what the run changed to the model, capped', async t => {
+  let received: any;
+  const models: any = {
+    registryJob: {
+      report: async (_ws: string, _id: string, input: any) => {
+        received = input;
+        return storedJob({ status: 'done' });
+      },
+    },
+  };
+  const service = new RegistryJobService(models);
+  const changes = {
+    notes: { created: [{ docId: 'd1', title: 'Findings' }] },
+    files: [{ path: 'a.ts', before: 'x', after: 'y' }],
+    git: { base: 'b', head: 'h', commits: [], stat: [], patch: 'p'.repeat(MAX_CHANGES_BYTES), truncated: false },
+  };
+  await service.report(workspaceId, 'job-1', { status: 'done', result: 'ok', changes });
+
+  // The patch is what goes when it is too big; the rest still says what changed.
+  t.is(received.changes.git.patch, '');
+  t.true(received.changes.git.truncated);
+  t.deepEqual(received.changes.notes, changes.notes);
+  t.deepEqual(received.changes.files, changes.files);
+});
+
+test('capChanges drops what is not an object', t => {
+  t.is(capChanges('diff'), undefined);
+  t.is(capChanges([1]), undefined);
+  t.is(capChanges(null), undefined);
 });
 
 test('a report passes log text and the tmux session to the model', async t => {

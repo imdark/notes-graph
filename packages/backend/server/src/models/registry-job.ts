@@ -77,6 +77,8 @@ export interface ReportRegistryJobInput {
   tmuxSession?: string | null;
   /** Extends the lease while a long run is still making progress. */
   leaseSeconds?: number;
+  /** What the run changed; kept only with the report that ends it. */
+  changes?: Prisma.InputJsonValue;
 }
 
 /**
@@ -218,6 +220,9 @@ export class RegistryJobModel extends BaseModel {
         costUsd: input.costUsd ?? job.costUsd,
         tokens: input.tokens ?? job.tokens,
         tmuxSession: input.tmuxSession ?? job.tmuxSession,
+        ...(terminal && input.changes !== undefined
+          ? { changes: input.changes }
+          : {}),
         finishedAt: terminal ? new Date() : null,
         leaseExpiresAt: terminal
           ? null
