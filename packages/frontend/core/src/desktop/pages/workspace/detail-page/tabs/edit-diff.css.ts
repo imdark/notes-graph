@@ -55,6 +55,14 @@ export const body = style({
   lineHeight: 1.55,
 });
 
+/** As `body`, but as tall as its content: a run's changes, read in full. */
+export const bodyFull = style({
+  overflowX: 'auto',
+  fontFamily: cssVar('fontMonoFamily'),
+  fontSize: cssVar('fontXs'),
+  lineHeight: 1.55,
+});
+
 /**
  * As wide as the longest line, so lines scroll sideways instead of wrapping.
  * Every row is a `1fr 1fr` grid at this width, keeping the columns aligned.

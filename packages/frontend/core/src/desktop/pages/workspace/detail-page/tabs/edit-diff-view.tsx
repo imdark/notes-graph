@@ -122,7 +122,7 @@ const Fold = ({ rows, single }: { rows: DiffRow[]; single: boolean }) => {
   );
 };
 
-const FileDiff = ({ edit }: { edit: FileEdit }) => {
+const FileDiff = ({ edit, full }: { edit: FileEdit; full?: boolean }) => {
   // A new file has nothing on the left; show it as one column of additions.
   const single = edit.before === null;
   const rows = useMemo(
@@ -148,7 +148,7 @@ const FileDiff = ({ edit }: { edit: FileEdit }) => {
           {single ? null : <span className={styles.removed}>−{removed}</span>}
         </span>
       </div>
-      <div className={styles.body}>
+      <div className={full ? styles.bodyFull : styles.body}>
         <div className={styles.lines}>
           {single ? null : (
             <div className={styles.columnsHeader}>
@@ -171,11 +171,21 @@ const FileDiff = ({ edit }: { edit: FileEdit }) => {
   );
 };
 
-/** Before/after view of the file edits an agent wants permission for. */
-export const EditDiffView = ({ preview }: { preview: EditPreview }) => (
+/**
+ * Before/after view of file edits: those an agent wants permission for, or
+ * (with `full`) those a finished run made, each as tall as its content.
+ */
+export const EditDiffView = ({
+  preview,
+  full,
+}: {
+  preview: EditPreview;
+  /** Grow to the content instead of scrolling inside a short box. */
+  full?: boolean;
+}) => (
   <div className={styles.diff}>
     {preview.edits.map((edit, i) => (
-      <FileDiff key={i} edit={edit} />
+      <FileDiff key={i} edit={edit} full={full} />
     ))}
   </div>
 );
