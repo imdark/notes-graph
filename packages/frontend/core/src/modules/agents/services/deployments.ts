@@ -73,6 +73,12 @@ export const findPullRequest = (text: string): string | null =>
   PULL_REQUEST_RE.exec(text)?.[0] ?? null;
 
 /** `owner/repo` of a GitHub pull request URL. */
+/** The number in a pull request's URL. */
+export const pullRequestNumber = (url: string): number | null => {
+  const n = Number(/\/pull\/(\d+)/.exec(url)?.[1]);
+  return Number.isFinite(n) && n > 0 ? n : null;
+};
+
 export const repoOf = (url: string): string | null =>
   /github\.com\/([\w.-]+\/[\w.-]+)\/pull\/\d+/.exec(url)?.[1] ?? null;
 
@@ -187,6 +193,88 @@ export function pullRequestsCommand(repos: string[], cwd?: string): string {
 /** The command that merges one pull request, with a merge commit as this repo does. */
 export const mergeCommand = (pr: Pick<PullRequest, 'repo' | 'number'>) =>
   `gh pr merge ${pr.number} -R ${shellQuote(pr.repo)} --merge`;
+
+/** A ready-to-merge pull request as GitHub has it now, and whether its branch is still there. */
+export interface BranchCheck {
+  repo: string;
+  number: number;
+  url: string;
+  /** `missing`: GitHub has no such pull request (deleted, or no access). */
+  state: 'open' | 'merged' | 'closed' | 'missing';
+  branch: string | null;
+  branchExists: boolean;
+}
+
+/** Branches never deleted, merged or not. */
+const KEPT_BRANCHES = new Set([
+  'main',
+  'master',
+  'canary',
+  'develop',
+  'stable',
+]);
+
+/**
+ * The shell command that checks each pull request: its state, its branch,
+ * and whether the branch still exists. One tab-separated line each:
+ * number, repo, state, branch, branch exists. A pull request `gh` can't
+ * read comes back as `missing`.
+ */
+export function branchCheckCommand(
+  prs: Pick<PullRequest, 'repo' | 'number'>[]
+): string {
+  return prs
+    .map(pr => {
+      const repo = shellQuote(pr.repo);
+      const n = Math.floor(pr.number);
+      return (
+        `s=$(gh pr view ${n} -R ${repo} --json state,headRefName --jq '"\\(.state)\\t\\(.headRefName)"' 2>/dev/null) || s='MISSING\t'; ` +
+        `b=$(printf '%s' "$s" | cut -f2); e=false; ` +
+        `[ -n "$b" ] && gh api "repos/${pr.repo}/branches/$b" --silent >/dev/null 2>&1 && e=true; ` +
+        `printf '%s\t%s\t%s\t%s\n' ${n} ${repo} "$s" "$e"`
+      );
+    })
+    .join('; ');
+}
+
+/** Read {@link branchCheckCommand}'s lines back, against the pull requests asked about. */
+export function parseBranchChecks(
+  output: string,
+  prs: Pick<PullRequest, 'repo' | 'number' | 'url'>[]
+): BranchCheck[] {
+  const checks: BranchCheck[] = [];
+  for (const line of output.split('\n')) {
+    const [number, repo, state, branch, exists] = line.trim().split('\t');
+    const pr = prs.find(p => String(p.number) === number && p.repo === repo);
+    if (!pr) continue;
+    const known = state?.toLowerCase();
+    checks.push({
+      repo: pr.repo,
+      number: pr.number,
+      url: pr.url,
+      state:
+        known === 'open' || known === 'merged' || known === 'closed'
+          ? known
+          : 'missing',
+      branch: branch || null,
+      branchExists: exists === 'true',
+    });
+  }
+  return checks;
+}
+
+/** Whether a checked branch is merged, still there and safe to delete. */
+export const deletesBranch = (check: BranchCheck) =>
+  check.state === 'merged' &&
+  check.branchExists &&
+  !!check.branch &&
+  !KEPT_BRANCHES.has(check.branch);
+
+/** The command that deletes a merged pull request's branch on GitHub. */
+export const deleteBranchCommand = (
+  check: Pick<BranchCheck, 'repo' | 'branch'>
+) =>
+  `gh api -X DELETE ${shellQuote(`repos/${check.repo}/git/refs/heads/${check.branch}`)}`;
 
 type CheckRollup = {
   status?: string;
@@ -604,6 +692,63 @@ export class DeploymentsService extends Service {
       ),
     });
     if (task) await this.markMerged(task).catch(() => {});
+  }
+
+  /**
+   * Check the ready-to-merge pull requests against GitHub, through wf on the
+   * agent's device: whether each still exists, is merged, and still has its
+   * branch. A merged one's branch is deleted (never main and the like) and
+   * its task moves to MERGED, so it leaves the list. The rest are reported
+   * and left as they are.
+   */
+  async checkReadyBranches(
+    agent: Agent,
+    items: {
+      pr: Pick<PullRequest, 'repo' | 'number' | 'url'>;
+      task?: Pick<ShipTask, 'docId' | 'blockId'>;
+    }[]
+  ): Promise<{
+    checks: BranchCheck[];
+    deleted: BranchCheck[];
+    failed: string[];
+  }> {
+    if (items.length === 0) return { checks: [], deleted: [], failed: [] };
+    const prs = items.map(item => item.pr);
+    const checks = parseBranchChecks(
+      await this.runCommand(
+        agent,
+        branchCheckCommand(prs),
+        `Check ${prs.length} ready branch${prs.length === 1 ? '' : 'es'}`
+      ),
+      prs
+    );
+    const toDelete = checks.filter(deletesBranch);
+    const deleted: BranchCheck[] = [];
+    const failed: string[] = [];
+    if (toDelete.length > 0) {
+      // One job for all of them; each line says whether its delete went.
+      const output = await this.runCommand(
+        agent,
+        toDelete
+          .map(
+            check =>
+              `${deleteBranchCommand(check)} >/dev/null 2>&1 && echo "ok ${check.repo}#${check.number}" || echo "fail ${check.repo}#${check.number}"`
+          )
+          .join('; '),
+        `Delete ${toDelete.length} merged branch${toDelete.length === 1 ? '' : 'es'}`
+      );
+      const done = new Set(output.split('\n').map(line => line.trim()));
+      for (const check of toDelete) {
+        if (done.has(`ok ${check.repo}#${check.number}`)) deleted.push(check);
+        else failed.push(`${check.repo}#${check.number}`);
+      }
+    }
+    for (const check of checks) {
+      if (check.state !== 'merged') continue;
+      const task = items.find(item => item.pr.url === check.url)?.task;
+      if (task) await this.markMerged(task).catch(() => {});
+    }
+    return { checks, deleted, failed };
   }
 
   /** Move a task to MERGED, as an agent that merged it would. */
