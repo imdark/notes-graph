@@ -17,6 +17,7 @@ import type { WorkspaceService } from '../../workspace';
 import type { Agent } from '../stores/agents';
 import type { AgentContext } from './context';
 import {
+  CLOUD_DEVICE_KEY,
   COMMAND_MODEL,
   type DeployInfo,
   isDeviceClaudeModel,
@@ -72,13 +73,13 @@ const PULL_REQUEST_RE = /https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/pull\/\d+/;
 export const findPullRequest = (text: string): string | null =>
   PULL_REQUEST_RE.exec(text)?.[0] ?? null;
 
-/** `owner/repo` of a GitHub pull request URL. */
 /** The number in a pull request's URL. */
 export const pullRequestNumber = (url: string): number | null => {
   const n = Number(/\/pull\/(\d+)/.exec(url)?.[1]);
   return Number.isFinite(n) && n > 0 ? n : null;
 };
 
+/** `owner/repo` of a GitHub pull request URL. */
 export const repoOf = (url: string): string | null =>
   /github\.com\/([\w.-]+\/[\w.-]+)\/pull\/\d+/.exec(url)?.[1] ?? null;
 
@@ -193,6 +194,22 @@ export function pullRequestsCommand(repos: string[], cwd?: string): string {
 /** The command that merges one pull request, with a merge commit as this repo does. */
 export const mergeCommand = (pr: Pick<PullRequest, 'repo' | 'number'>) =>
   `gh pr merge ${pr.number} -R ${shellQuote(pr.repo)} --merge`;
+
+/**
+ * What the screen asks of GitHub. A Mac runs it as the `gh` shell command
+ * below; the cloud runner runs no shell from a job, so it gets the request
+ * itself (agent id `github:<op>`, the request as JSON) and runs `gh` with
+ * arguments it builds, printing the same output (tools/agent-runner
+ * github.ts).
+ */
+export type GitHubRequest =
+  | { op: 'list'; repos: string[] }
+  | { op: 'merge'; repo: string; number: number }
+  | { op: 'check'; prs: Pick<PullRequest, 'repo' | 'number'>[] }
+  | { op: 'delete'; prs: Pick<PullRequest, 'repo' | 'number'>[] };
+
+/** Agent ids of {@link GitHubRequest} jobs start with this. */
+export const GITHUB_AGENT_PREFIX = 'github:';
 
 /** A ready-to-merge pull request as GitHub has it now, and whether its branch is still there. */
 export interface BranchCheck {
@@ -579,22 +596,26 @@ export class DeploymentsService extends Service {
   }
 
   /**
-   * Run `command` on the agent's device as a wf command job and return its
-   * output. A job not finished in time is cancelled, so a device that is off
-   * doesn't run a stale merge whenever it comes back.
+   * Ask GitHub through the agent's device and return what it printed: on a
+   * Mac, `command` as a wf command job; on the cloud runner, the request
+   * itself (see {@link GitHubRequest}). A job not finished in time is
+   * cancelled, so a device that is off doesn't run a stale merge whenever it
+   * comes back.
    */
   private async runCommand(
     agent: Agent,
+    request: GitHubRequest,
     command: string,
     title: string
   ): Promise<string> {
     if (!agent.deviceKey) throw new Error(`${agent.name} has no device`);
     const workspaceId = this.workspaceId;
+    const cloud = agent.deviceKey === CLOUD_DEVICE_KEY;
     const job = await this.remote.enqueue(workspaceId, {
       deviceKey: agent.deviceKey,
-      agentId: agent.id,
+      agentId: cloud ? GITHUB_AGENT_PREFIX + request.op : agent.id,
       agentName: agent.name,
-      instructions: command,
+      instructions: cloud ? JSON.stringify(request) : command,
       context: '',
       model: COMMAND_MODEL,
       title,
@@ -636,7 +657,8 @@ export class DeploymentsService extends Service {
     this.refreshDeployInfo().catch(() => {});
     try {
       let cwd: string | undefined;
-      if (repos.length === 0) {
+      // The cloud runner lists its own repo.
+      if (repos.length === 0 && agent.deviceKey !== CLOUD_DEVICE_KEY) {
         const devices = await this.remote.agentTargets(this.workspaceId);
         cwd =
           devices.find(device => device.key === agent.deviceKey)?.path ??
@@ -649,6 +671,7 @@ export class DeploymentsService extends Service {
       }
       const output = await this.runCommand(
         agent,
+        { op: 'list', repos },
         pullRequestsCommand(repos, cwd),
         'List pull requests'
       );
@@ -680,6 +703,7 @@ export class DeploymentsService extends Service {
   ): Promise<void> {
     await this.runCommand(
       agent,
+      { op: 'merge', repo: pr.repo, number: pr.number },
       mergeCommand(pr),
       `Merge ${pr.repo}#${pr.number}`
     );
@@ -714,9 +738,12 @@ export class DeploymentsService extends Service {
   }> {
     if (items.length === 0) return { checks: [], deleted: [], failed: [] };
     const prs = items.map(item => item.pr);
+    const refs = (list: Pick<PullRequest, 'repo' | 'number'>[]) =>
+      list.map(({ repo, number }) => ({ repo, number }));
     const checks = parseBranchChecks(
       await this.runCommand(
         agent,
+        { op: 'check', prs: refs(prs) },
         branchCheckCommand(prs),
         `Check ${prs.length} ready branch${prs.length === 1 ? '' : 'es'}`
       ),
@@ -729,6 +756,7 @@ export class DeploymentsService extends Service {
       // One job for all of them; each line says whether its delete went.
       const output = await this.runCommand(
         agent,
+        { op: 'delete', prs: refs(toDelete) },
         toDelete
           .map(
             check =>
