@@ -66,5 +66,8 @@ test('a health check that passed sends nothing; one that failed still does', t =
     pushesWhenFinished({ ...job, agentId: 'agent-1', status: 'cancelled' })
   );
   t.false(pushesWhenFinished({ ...job, agentId: 'monitor:m1' }));
+  t.false(
+    pushesWhenFinished({ ...job, agentId: 'github:check', status: 'error' })
+  );
   t.false(pushesWhenFinished({ ...job, createdBy: null }));
 });

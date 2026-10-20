@@ -29,6 +29,14 @@ import {
   runSteps,
   type ShellEnv,
 } from './automation';
+import {
+  answerGitHubRequest,
+  type Gh,
+  ghCli,
+  isGitHubRequest,
+  parseGitHubRequest,
+  repoFromUrl,
+} from './github';
 import { healthReading, isHealthCheck } from './health';
 import {
   ChangeRecorder,
@@ -68,6 +76,8 @@ export interface RunDeps {
   say: (line: string) => void;
   signal: AbortSignal;
   fetchImpl?: typeof fetch;
+  /** `gh`; a stand-in in tests. */
+  gh?: Gh;
 }
 
 /** What a run spent, reported with its end whichever way it ended. */
@@ -159,6 +169,20 @@ export async function runJob(job: Job, deps: RunDeps): Promise<RunOutcome> {
   if (isHealthCheck(job)) {
     say('$ health check (read by the cloud runner)');
     return { result: await healthReading(settings.workRoot), steps: 0 };
+  }
+  // So is a Deployments request: gh runs with arguments built here.
+  if (isGitHubRequest(job)) {
+    const request = parseGitHubRequest(job);
+    say(`$ gh: ${request.op} (run by the cloud runner)`);
+    const gh = deps.gh ?? ghCli(settings.ghToken);
+    return {
+      result: await answerGitHubRequest(
+        request,
+        gh,
+        repoFromUrl(settings.repo)
+      ),
+      steps: 0,
+    };
   }
   const profile = job.profile;
   if (!profile) {
