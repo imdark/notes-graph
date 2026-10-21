@@ -147,6 +147,19 @@ const CHAT_ON_DEVICE_INSTRUCTIONS = [
   'anything, or redo the work — the user will start a new run for that.',
 ].join('\n');
 
+/**
+ * For a fork of a run that is still going: the conversation opens with its
+ * own system message saying what the fork is for.
+ */
+const FORK_ON_DEVICE_INSTRUCTIONS = [
+  'You are a side conversation forked from an agent run that is still going.',
+  'The conversation below opens with what the fork is for and the run so far.',
+  'Follow its system message and reply to the last user message only.',
+  '',
+  'Only answer. Do not edit notes or files, run commands that change',
+  'anything, or carry on the run — it is waiting and the user replies to it.',
+].join('\n');
+
 /** A turn of the chat is an answer, not a run: keep it short on the device. */
 const CHAT_ON_DEVICE_STEPS = 8;
 
@@ -387,31 +400,70 @@ export class AgentExecutorService extends Service implements AgentExecutor {
     const harness = this.harnessFor(agent);
     if (harness !== 'remote') return this.modelFor(agent, harness);
 
-    const workspaceId = this.workspaceId;
-    const deviceKey = agent.deviceKey;
-    if (!workspaceId) {
-      throw new Error('No workspace is open, so there is nowhere to ask.');
-    }
-    if (!deviceKey) {
+    if (!agent.deviceKey) {
       throw new Error(
         `"${agent.name}" has no device selected. Pick one in Settings → Agents.`
       );
     }
+    return this.chatOnDevice({
+      deviceKey: agent.deviceKey,
+      agentId: agent.id,
+      agentName: agent.name,
+      model: agent.model,
+      maxCostUsd: agent.maxCostUsd,
+      instructions: CHAT_ON_DEVICE_INSTRUCTIONS,
+    });
+  }
+
+  /**
+   * A fork of a device or cloud run that is waiting on the reader: a chat on
+   * the device the run is on, as the agent it runs as, so it needs no model
+   * on the server. Each turn is a short job given the conversation so far
+   * (the fork's opening carries the run's transcript).
+   */
+  async forkOf(job: RemoteJob): Promise<ChatModel> {
+    return this.chatOnDevice({
+      deviceKey: job.deviceKey,
+      agentId: job.agentId,
+      agentName: job.agentName,
+      model: job.model ?? undefined,
+      maxCostUsd: job.maxCostUsd ?? undefined,
+      instructions: FORK_ON_DEVICE_INSTRUCTIONS,
+    });
+  }
+
+  /**
+   * A device has no chat endpoint, so each turn is a short job on it that is
+   * told to only answer; its result is the reply.
+   */
+  private chatOnDevice(asker: {
+    deviceKey: string;
+    agentId: string;
+    agentName: string;
+    model: string | undefined;
+    maxCostUsd: number | undefined;
+    instructions: string;
+  }): ChatModel {
+    const workspaceId = this.workspaceId;
+    if (!workspaceId) {
+      throw new Error('No workspace is open, so there is nowhere to ask.');
+    }
+    const { deviceKey } = asker;
     const remoteRunner = this.remoteRunner;
     return async function* (messages, signal) {
       const job = await remoteRunner.enqueue(workspaceId, {
         deviceKey,
-        agentId: agent.id,
-        agentName: agent.name,
-        instructions: CHAT_ON_DEVICE_INSTRUCTIONS,
+        agentId: asker.agentId,
+        agentName: asker.agentName,
+        instructions: asker.instructions,
         context: messages
           .map(message => `## ${message.role}\n\n${message.content}`)
           .join('\n\n'),
-        title: `Question for ${agent.name}`,
-        model: agent.model,
+        title: `Question for ${asker.agentName}`,
+        model: asker.model,
         tools: [],
         maxSteps: CHAT_ON_DEVICE_STEPS,
-        maxCostUsd: agent.maxCostUsd,
+        maxCostUsd: asker.maxCostUsd,
       });
       for await (const { job: update } of remoteRunner.watch(
         workspaceId,
