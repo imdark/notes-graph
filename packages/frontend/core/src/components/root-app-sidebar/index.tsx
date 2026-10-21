@@ -7,6 +7,7 @@ import {
   ExportIcon,
   ImportIcon,
   JournalIcon,
+  LockIcon,
   PlanetPanelIcon,
   PublishIcon,
   SettingsIcon,
@@ -311,6 +312,19 @@ const MonitoringButton = () => {
   );
 };
 
+/** The workspace's API keys and tokens; see SecretsView. */
+const SecretsButton = () => {
+  const workbench = useService(WorkbenchService).workbench;
+  const active = useLiveData(
+    workbench.location$.selector(location => location.pathname === '/secrets')
+  );
+  return (
+    <MenuLinkItem icon={<LockIcon />} active={active} to={'/secrets'}>
+      <span data-testid="secrets">Secrets</span>
+    </MenuLinkItem>
+  );
+};
+
 const AIChatButton = () => {
   const t = useI18n();
   const featureFlagService = useService(FeatureFlagService);
@@ -460,6 +474,7 @@ export const RootAppSidebar = memo((): ReactElement => {
         <AgentsButton />
         <DeploymentsButton />
         <MonitoringButton />
+        <SecretsButton />
         <DuplicatesButton />
         <MenuItem
           data-testid="slider-bar-workspace-setting-button"

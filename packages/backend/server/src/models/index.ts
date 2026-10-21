@@ -15,6 +15,7 @@ import { RegistryJobModel } from './registry-job';
 import { RegistryJobShareModel } from './registry-job-share';
 import { MonitorModel } from './monitor';
 import { MonitoringAgentModel } from './monitoring-agent';
+import { WorkspaceSecretModel } from './workspace-secret';
 import { CalendarEventModel } from './calendar-event';
 import { CalendarEventInstanceModel } from './calendar-event-instance';
 import { CalendarSubscriptionModel } from './calendar-subscription';
@@ -106,6 +107,7 @@ const MODELS = {
   userPushToken: UserPushTokenModel,
   monitor: MonitorModel,
   monitoringAgent: MonitoringAgentModel,
+  workspaceSecret: WorkspaceSecretModel,
   calendarSubscription: CalendarSubscriptionModel,
   calendarEvent: CalendarEventModel,
   calendarEventInstance: CalendarEventInstanceModel,
@@ -192,6 +194,7 @@ export * from './registry-job-share';
 export * from './magic-link-otp';
 export * from './monitor';
 export * from './monitoring-agent';
+export * from './workspace-secret';
 export * from './notification';
 export * from './permission-projection';
 export * from './permission-write';

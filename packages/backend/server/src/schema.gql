@@ -1615,6 +1615,7 @@ type Mutation {
   createWorkspace(init: Upload): WorkspaceType!
   createProject(input: CreateProjectInput!): ProjectType!
   convertDocToProject(input: ConvertDocToProjectInput!): ProjectType!
+  deleteWorkspaceSecret(name: String!, workspaceId: String!): Boolean!
   renameProject(id: String!, name: String!): ProjectType!
   deleteProject(id: String!): Boolean!
   addProjectMember(input: AddProjectMemberInput!): Boolean!
@@ -1625,6 +1626,8 @@ type Mutation {
   disconnectDirectoryAccount(accountId: String!): Boolean!
   createDirectorySyncScope(input: CreateDirectorySyncScopeInput!): DirectorySyncScopeObjectType!
   deleteDirectorySyncScope(scopeId: String!): Boolean!
+  renameWorkspaceSecret(name: String!, newName: String!, workspaceId: String!): WorkspaceSecretType!
+  setWorkspaceSecret(input: SetWorkspaceSecretInput!): WorkspaceSecretType!
   syncDirectoryScopeNow(scopeId: String!): Boolean!
   createWorkspaceByokLocalLease(input: CreateWorkspaceByokLocalLeaseInput!): CreateWorkspaceByokLocalLeaseResultType!
   deactivateLicense(workspaceId: String!): Boolean!
@@ -1958,6 +1961,15 @@ enum Permission {
 }
 
 """User role in workspace"""
+input SetWorkspaceSecretInput {
+  description: String
+  name: String!
+
+  """Leave out to keep the stored value."""
+  value: String
+  workspaceId: String!
+}
+
 enum WorkspaceRole {
   Admin
   Collaborator
@@ -2879,6 +2891,14 @@ type WorkspaceRolePermissions {
   role: Permission!
 }
 
+type WorkspaceSecretType {
+  createdAt: DateTime!
+  description: String
+  id: String!
+  name: String!
+  updatedAt: DateTime!
+}
+
 type WorkspaceType {
   """Search a specific table with aggregate"""
   aggregate(input: AggregateInput!): AggregateResultObjectType!
@@ -2973,6 +2993,9 @@ type WorkspaceType {
 
   """Search docs by keyword"""
   searchDocs(input: SearchDocsInput!): [SearchDocObjectType!]!
+
+  """Names and descriptions of the workspace secrets, no values."""
+  secrets: [WorkspaceSecretType!]!
 
   """The team subscription of the workspace, if exists."""
   subscription: SubscriptionType

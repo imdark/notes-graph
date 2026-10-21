@@ -1,0 +1,11 @@
+query workspaceSecrets($workspaceId: String!) {
+  workspace(id: $workspaceId) {
+    secrets {
+      id
+      name
+      description
+      createdAt
+      updatedAt
+    }
+  }
+}

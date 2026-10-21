@@ -44,6 +44,7 @@ import { ProjectModule } from './core/projects';
 import { QueueDashboardModule } from './core/queue-dashboard';
 import { QuotaModule } from './core/quota';
 import { RealtimeModule } from './core/realtime';
+import { SecretsModule } from './core/secrets';
 import { SelfhostModule } from './core/selfhost';
 import { StaticFileModule } from './core/static-files';
 import { StorageModule } from './core/storage';
@@ -219,6 +220,7 @@ export function buildAppModule(env: Env) {
       TelemetryModule,
       CommentModule,
       AccessTokenModule,
+      SecretsModule,
       QueueDashboardModule
     )
     // doc service and front service
