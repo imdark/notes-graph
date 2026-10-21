@@ -75,9 +75,7 @@ export function parseOrgTimestamp(
  * Finds every org timestamp annotation in raw text (for annotations typed
  * by hand rather than written as chips).
  */
-export function findOrgTimestamps(
-  text: string
-): {
+export function findOrgTimestamps(text: string): {
   keyword: OrgPlanningKeyword;
   epochMs: number;
   index: number;
