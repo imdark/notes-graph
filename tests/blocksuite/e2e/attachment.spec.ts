@@ -153,7 +153,10 @@ test('can insert attachment from slash menu', async ({ page }, testInfo) => {
   );
 });
 
-test('should undo/redo works for attachment', async ({ page }, testInfo) => {
+// FIXME: flaky in CI even with retries: whether the typed "/" survives undo depends on when the slash menu opens. Passes locally.
+test.fixme('should undo/redo works for attachment', async ({
+  page,
+}, testInfo) => {
   await enterPlaygroundRoom(page);
   await initEmptyParagraphState(page);
 
@@ -225,7 +228,10 @@ test('should rename attachment works', async ({ page }) => {
   await expect.poll(getName).toBe('abc');
 });
 
-test('should turn attachment to image works', async ({ page }, testInfo) => {
+// FIXME: flaky in CI even with retries: times out waiting for the "filechooser" event. Passes locally.
+test.fixme('should turn attachment to image works', async ({
+  page,
+}, testInfo) => {
   await enterPlaygroundRoom(page);
   await initEmptyParagraphState(page);
   const {

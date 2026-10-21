@@ -73,11 +73,12 @@ export const EMBED_BLOCK_MODEL_LIST = [
 ] as const;
 
 export const DEFAULT_IMAGE_PROXY_ENDPOINT =
-  'https://notesgraph-worker.toeverything.workers.dev/api/worker/image-proxy';
+  'https://affine-worker.toeverything.workers.dev/api/worker/image-proxy';
 
-// https://github.com/notesgraph/notesgraph-workers/tree/main/packages/link-preview
+// AFFiNE's public worker (github.com/toeverything/affine-workers): the rename
+// pointed these at a notesgraph-worker host that doesn't exist (404).
 export const DEFAULT_LINK_PREVIEW_ENDPOINT =
-  'https://notesgraph-worker.toeverything.workers.dev/api/worker/link-preview';
+  'https://affine-worker.toeverything.workers.dev/api/worker/link-preview';
 
 // This constant is used to ignore tags when exporting using html2canvas
 export const CANVAS_EXPORT_IGNORE_TAGS = [

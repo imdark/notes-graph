@@ -4,6 +4,7 @@ import type {
   DeltaInsert,
   DocSnapshot,
   Store,
+  TransformerMiddleware,
   Workspace,
 } from '@blocksuite/store';
 import { Schema, Text, Transformer } from '@blocksuite/store';
@@ -24,7 +25,7 @@ function createWorkspace() {
 function makeTransformer(
   schema: Schema,
   collection: Workspace,
-  middlewares: Transformer['middlewares'] = []
+  middlewares: TransformerMiddleware[] = []
 ) {
   return new Transformer({
     schema,

@@ -60,6 +60,7 @@ interface El {
   getAttribute(name: string): string | null;
   querySelectorAll(selector: string): Iterable<El>;
   textContent: string | null;
+  dataset: Record<string, string | undefined>;
 }
 
 const isTrackingPixel = (el: El): boolean => {

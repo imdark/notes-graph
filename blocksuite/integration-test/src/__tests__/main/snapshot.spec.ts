@@ -42,7 +42,9 @@ const fetchRenamedSnapshot = async (snapshotUrl: string) => {
         .replaceAll('--affine-', '--notesgraph-')
     );
   }
-  return new Blob([zipSync(files)], { type: 'application/zip' });
+  return new Blob([zipSync(files) as Uint8Array<ArrayBuffer>], {
+    type: 'application/zip',
+  });
 };
 
 const snapshotTest = async (snapshotUrl: string, elementsCount: number) => {

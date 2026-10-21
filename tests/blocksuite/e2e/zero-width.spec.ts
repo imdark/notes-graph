@@ -12,7 +12,7 @@ const embedUrl = 'https://github.com/toeverything/blocksuite/pull/7217';
 
 test.beforeEach(async ({ page }) => {
   await page.route(
-    'https://notesgraph-worker.toeverything.workers.dev/api/worker/link-preview',
+    'https://affine-worker.toeverything.workers.dev/api/worker/link-preview',
     async route => {
       await route.fulfill({
         json: {},
