@@ -34,6 +34,10 @@ export function useBindWorkbenchToBrowserRouter(
   // effect below tell "the active view switched" apart from "the browser
   // location changed" — they need opposite sync directions.
   const syncedViewRef = useRef(view);
+  // The workbench that view belongs to. Another workbench means another
+  // workspace was opened, at a URL already chosen for it (a new workspace's
+  // "Getting Started" doc): the browser leads then, as on first mount.
+  const syncedWorkbenchRef = useRef(workbench);
 
   useEffect(() => {
     return view.history.listen(update => {
@@ -68,6 +72,12 @@ export function useBindWorkbenchToBrowserRouter(
     // second copy of whatever page you were on — "clicking AI creates a
     // split of the current page" — and focusing another pane clobbered
     // that pane's location the same way.
+    if (syncedWorkbenchRef.current !== workbench) {
+      // Not a view switch: the old view was the last workspace's. Without
+      // this, the new workspace's fresh view ('/all') overwrote the URL.
+      syncedWorkbenchRef.current = workbench;
+      syncedViewRef.current = view;
+    }
     if (syncedViewRef.current !== view) {
       syncedViewRef.current = view;
       const viewLocation = view.location$.value;
@@ -114,7 +124,7 @@ export function useBindWorkbenchToBrowserRouter(
       }
     }
     view.history.push(newLocation, 'fromBrowser');
-  }, [basename, browserLocation, navigate, view]);
+  }, [basename, browserLocation, navigate, view, workbench]);
 }
 
 function browserLocationToViewLocation(
