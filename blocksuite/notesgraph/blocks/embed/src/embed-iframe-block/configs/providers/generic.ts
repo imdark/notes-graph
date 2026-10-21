@@ -15,7 +15,8 @@ const GENERIC_DEFAULT_HEIGHT_IN_NOTE = 400;
  * These are based on the centralized cloud constants and known NotesGraph domains
  */
 const NOTESGRAPH_DOMAINS = [
-  'app.notesgraph.pro', // Stable cloud domain
+  'app.notesgraph.com', // Stable cloud domain
+  'app.notesgraph.pro', // Stable cloud domain, from before the rename
   'insider.notesgraph.com', // Beta/internal cloud domain
   'canary.notesgraph.com', // Canary cloud domain
   'toeverything.app', // Safety measure for potential future use
