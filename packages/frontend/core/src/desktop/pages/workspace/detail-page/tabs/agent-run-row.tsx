@@ -3,6 +3,7 @@ import { IconButton } from '@notesgraph/component';
 import {
   type AgentRun,
   formatRunCost,
+  isAskRun,
 } from '@notesgraph/core/modules/agents';
 import { DocDisplayMetaService } from '@notesgraph/core/modules/doc-display-meta';
 import { useLiveData, useService } from '@notesgraph/infra';
@@ -144,6 +145,8 @@ export const RunRow = ({
   onDelete?: (run: AgentRun) => void;
 }) => {
   const ended = status !== 'running' && status !== 'waiting';
+  // A chat about a run is gone on with from its Ask tab, not run again.
+  const retry = isAskRun(run) ? undefined : onRetry;
   return (
     <div className={styles.runItem} data-testid="agent-run-row">
       <button
@@ -159,14 +162,14 @@ export const RunRow = ({
           onShowTarget={onShowTarget}
         />
       </button>
-      {ended && (onRetry || onDelete) ? (
+      {ended && (retry || onDelete) ? (
         <div className={styles.runActions}>
-          {onRetry ? (
+          {retry ? (
             <IconButton
               size="16"
               icon={<ResetIcon />}
               tooltip="Run again"
-              onClick={() => onRetry(run)}
+              onClick={() => retry(run)}
               data-testid="agent-run-retry"
             />
           ) : null}

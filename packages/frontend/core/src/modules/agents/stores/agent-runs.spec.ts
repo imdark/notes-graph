@@ -46,15 +46,30 @@ describe('AgentRunsStore usage', () => {
     const { store, rows } = setup({ r1: { id: 'r1', startedAt: 0 } });
     store.finish(
       'r1',
-      { status: 'done', steps: 2, output: 'ok', usage: { costUsd: 0.42, tokens: 900 } },
+      {
+        status: 'done',
+        steps: 2,
+        output: 'ok',
+        usage: { costUsd: 0.42, tokens: 900 },
+      },
       1000
     );
-    expect(rows.r1).toMatchObject({ status: 'done', costUsd: 0.42, tokens: 900 });
+    expect(rows.r1).toMatchObject({
+      status: 'done',
+      costUsd: 0.42,
+      tokens: 900,
+    });
   });
 
   test('finish without a reported cost leaves an earlier one in place', () => {
-    const { store, rows } = setup({ r1: { id: 'r1', startedAt: 0, costUsd: 0.1 } });
-    store.finish('r1', { status: 'cancelled', steps: 1, usage: { costUsd: null } }, 1000);
+    const { store, rows } = setup({
+      r1: { id: 'r1', startedAt: 0, costUsd: 0.1 },
+    });
+    store.finish(
+      'r1',
+      { status: 'cancelled', steps: 1, usage: { costUsd: null } },
+      1000
+    );
     expect(rows.r1.costUsd).toBe(0.1);
   });
 
@@ -76,15 +91,29 @@ describe('AgentRunsStore usage', () => {
   });
 
   test('a run that ended long ago and is settled again is not put up for review', () => {
-    const { store, rows } = setup({ r1: { id: 'r1', startedAt: 0, status: 'done' } });
+    const { store, rows } = setup({
+      r1: { id: 'r1', startedAt: 0, status: 'done' },
+    });
     store.finish('r1', { status: 'done', steps: 1, output: 'ok' }, 1000);
     expect(rows.r1.reviewPending).toBeFalsy();
   });
 
   test('a new run of the agent on the note takes over the earlier review', () => {
     const { store, rows } = setup({
-      r1: { id: 'r1', agentId: 'a', docId: 'd', startedAt: 0, reviewPending: true },
-      r2: { id: 'r2', agentId: 'b', docId: 'd', startedAt: 0, reviewPending: true },
+      r1: {
+        id: 'r1',
+        agentId: 'a',
+        docId: 'd',
+        startedAt: 0,
+        reviewPending: true,
+      },
+      r2: {
+        id: 'r2',
+        agentId: 'b',
+        docId: 'd',
+        startedAt: 0,
+        reviewPending: true,
+      },
     });
     store.start({ id: 'a', name: 'A' }, { kind: 'doc', docId: 'd' });
     expect(rows.r1.reviewPending).toBe(false);
@@ -98,5 +127,57 @@ describe('AgentRunsStore usage', () => {
     store.setUsage('r1', { costUsd: null, tokens: undefined });
     expect(writes()).toBe(1);
     expect(rows.r1).toMatchObject({ costUsd: 0.2, tokens: 10 });
+  });
+});
+
+describe('AgentRunsStore ask chats', () => {
+  const parent = {
+    id: 'p',
+    agentId: 'a',
+    agentName: 'Doer',
+    targetKind: 'block',
+    docId: 'd',
+    blockId: 'b',
+    title: 'Fix the bug',
+    status: 'error',
+    startedAt: 0,
+    harness: 'remote',
+    deviceKey: 'mac',
+  } as const;
+
+  test('a chat is its own row about the run, on no blocks', () => {
+    const { store, rows } = setup({ p: { ...parent } });
+    const id = store.startAsk(parent);
+    expect(rows[id]).toMatchObject({
+      kind: 'ask',
+      parentRunId: 'p',
+      targetKind: 'ask',
+      docId: 'd',
+      title: 'Ask: Fix the bug',
+      status: 'running',
+      harness: 'remote',
+    });
+    expect(rows[id].blockId).toBeUndefined();
+    expect(store.latestAsk('p')?.id).toBe(id);
+    expect(store.targetOf(rows[id] as any)).toBeNull();
+  });
+
+  test('a chat keeps its error and is never put up for review', () => {
+    const { store, rows } = setup({ p: { ...parent } });
+    const id = store.startAsk(parent);
+    store.finish(id, { status: 'error', steps: 0, error: 'Model offline' });
+    expect(rows[id]).toMatchObject({ status: 'error', error: 'Model offline' });
+
+    expect(store.resumeAsk(id)).toBe(true);
+    expect(rows[id]).toMatchObject({ status: 'running', error: undefined });
+    store.finish(id, { status: 'done', steps: 1, output: 'Because…' });
+    expect(rows[id]).toMatchObject({ status: 'done', summary: 'Because…' });
+    expect(rows[id].reviewPending).toBe(false);
+  });
+
+  test('a deleted chat cannot be resumed', () => {
+    const { store } = setup({ p: { ...parent } });
+    expect(store.resumeAsk('gone')).toBe(false);
+    expect(store.latestAsk('p')).toBeUndefined();
   });
 });
