@@ -54,6 +54,7 @@ const HYBRID_DEFAULT_ITEMS = 8;
 const HYBRID_DEFAULT_CHARS = 6000;
 /** A widget is stored in the doc and synced to every device. */
 const MAX_WIDGET_HTML = 100_000;
+const MAX_FLASHCARDS = 200;
 
 type McpTextContent = {
   type: 'text';
@@ -1997,6 +1998,64 @@ export class WorkspaceMcpProvider {
         },
       });
 
+      /**
+       * The doc a block-appending tool writes to: `docId`, stamped with the
+       * agent first (the markdown can't carry the appended block, and the
+       * differ keeps it wherever it already is), or a new doc titled
+       * `title`. Returns the doc ID, or the error result to send back.
+       */
+      const appendTarget = async (
+        docId: string | undefined,
+        title: string | undefined,
+        agent: string | undefined,
+        what: string,
+        signal: AbortSignal
+      ): Promise<string | WorkspaceMcpToolResult> => {
+        if (!docId) {
+          const sanitizedTitle = (title ?? '').replace(/[\r\n]+/g, ' ').trim();
+          if (!sanitizedTitle) {
+            return toolError(
+              `Give a title for the new document, or a docId to add ${what} to.`
+            );
+          }
+          await this.ac
+            .user(userId)
+            .workspace(workspaceId)
+            .assert('Workspace.CreateDoc');
+          const aborted = abortIfNeeded(signal);
+          if (aborted) return aborted;
+          return (
+            await this.writer.createDoc(
+              workspaceId,
+              sanitizedTitle,
+              stampAttribution('', agent),
+              userId
+            )
+          ).docId;
+        }
+        const accessible = await this.ac
+          .user(userId)
+          .workspace(workspaceId)
+          .doc(docId)
+          .can('Doc.Update');
+        if (!accessible) return toolError(`Doc with id ${docId} not found.`);
+        const aborted = abortIfNeeded(signal);
+        if (aborted) return aborted;
+        const current = await this.reader.getDocMarkdown(
+          workspaceId,
+          docId,
+          false
+        );
+        if (!current) return toolError(`Doc with id ${docId} not found.`);
+        await this.writer.updateDoc(
+          workspaceId,
+          docId,
+          stampAttribution(current.markdown, agent),
+          userId
+        );
+        return docId;
+      };
+
       const createWidget = defineTool({
         name: 'create_widget',
         title: 'Create Widget',
@@ -2039,62 +2098,18 @@ export class WorkspaceMcpProvider {
           if (secret) return toolError(secret);
           const label = caption?.replace(/[\r\n]+/g, ' ').trim() || null;
 
-          let targetId = docId;
           try {
-            if (!targetId) {
-              const sanitizedTitle = (title ?? '')
-                .replace(/[\r\n]+/g, ' ')
-                .trim();
-              if (!sanitizedTitle) {
-                return toolError(
-                  'Give a title for the new document, or a docId to add the widget to.'
-                );
-              }
-              await this.ac
-                .user(userId)
-                .workspace(workspaceId)
-                .assert('Workspace.CreateDoc');
-              const aborted = abortIfNeeded(options.signal);
-              if (aborted) return aborted;
-              targetId = (
-                await this.writer.createDoc(
-                  workspaceId,
-                  sanitizedTitle,
-                  stampAttribution('', agent),
-                  userId
-                )
-              ).docId;
-            } else {
-              const accessible = await this.ac
-                .user(userId)
-                .workspace(workspaceId)
-                .doc(targetId)
-                .can('Doc.Update');
-              if (!accessible) {
-                return toolError(`Doc with id ${targetId} not found.`);
-              }
-              const aborted = abortIfNeeded(options.signal);
-              if (aborted) return aborted;
-              const current = await this.reader.getDocMarkdown(
-                workspaceId,
-                targetId,
-                false
-              );
-              if (!current) {
-                return toolError(`Doc with id ${targetId} not found.`);
-              }
-              // Stamped before the widget goes in: the markdown can't carry
-              // the widget, and the differ keeps it wherever it already is.
-              await this.writer.updateDoc(
-                workspaceId,
-                targetId,
-                stampAttribution(current.markdown, agent),
-                userId
-              );
-            }
+            const target = await appendTarget(
+              docId,
+              title,
+              agent,
+              'the widget',
+              options.signal
+            );
+            if (typeof target !== 'string') return target;
             await this.writer.appendHtmlEmbed(
               workspaceId,
-              targetId,
+              target,
               html,
               label,
               userId
@@ -2102,7 +2117,7 @@ export class WorkspaceMcpProvider {
             return toolText(
               JSON.stringify({
                 success: true,
-                docId: targetId,
+                docId: target,
                 message: docId
                   ? 'Widget added to the end of the document'
                   : 'Widget created in a new document',
@@ -2116,9 +2131,105 @@ export class WorkspaceMcpProvider {
         },
       });
 
+
+      const createFlashcards = defineTool({
+        name: 'create_flashcards',
+        title: 'Create Flashcards',
+        description:
+          'Add flashcards to the notes for the user to study. Each card is a collapsed list item showing the question; the answer sits inside it and appears when the user expands the item. Write one fact or idea per card, with a short question and answer. With docId the cards are appended to the end of that document; without, a new document is created (title required) and its ID returned.',
+        parser: z.object({
+          docId: z.string().optional(),
+          title: z.string().optional(),
+          cards: z
+            .array(
+              z.object({
+                question: z.string().trim().min(1),
+                answer: z.string().trim().min(1),
+              })
+            )
+            .min(1)
+            .max(MAX_FLASHCARDS),
+          agent: z.string().optional(),
+        }),
+        inputSchema: {
+          type: 'object',
+          properties: {
+            docId: {
+              type: 'string',
+              description:
+                'The document to append the cards to. Omit to create a new document.',
+            },
+            title: {
+              type: 'string',
+              description: 'Title of the new document, when no docId is given.',
+            },
+            cards: {
+              type: 'array',
+              description: `The cards, at most ${MAX_FLASHCARDS}.`,
+              items: {
+                type: 'object',
+                properties: {
+                  question: { type: 'string' },
+                  answer: { type: 'string' },
+                },
+                required: ['question', 'answer'],
+                additionalProperties: false,
+              },
+            },
+            agent: agentInputSchema,
+          },
+          required: ['cards'],
+          additionalProperties: false,
+        },
+        execute: async ({ docId, title, cards, agent }, options) => {
+          const secret = guardSecrets(
+            title,
+            agent,
+            ...cards.flatMap(card => [card.question, card.answer])
+          );
+          if (secret) return toolError(secret);
+          // A card is one list item and one paragraph: no line breaks.
+          const flat = cards.map(card => ({
+            question: card.question.replace(/\s*[\r\n]+\s*/g, ' '),
+            answer: card.answer.replace(/\s*[\r\n]+\s*/g, ' '),
+          }));
+          try {
+            const target = await appendTarget(
+              docId,
+              title,
+              agent,
+              'the cards',
+              options.signal
+            );
+            if (typeof target !== 'string') return target;
+            await this.writer.appendFlashcards(
+              workspaceId,
+              target,
+              flat,
+              userId
+            );
+            return toolText(
+              JSON.stringify({
+                success: true,
+                docId: target,
+                cards: flat.length,
+                message: docId
+                  ? 'Flashcards added to the end of the document'
+                  : 'Flashcards created in a new document',
+              })
+            );
+          } catch (error) {
+            return toolError(
+              `Failed to add flashcards: ${error instanceof Error ? error.message : 'Unknown error'}`
+            );
+          }
+        },
+      });
+
       tools.push(
         replyToComment,
         createWidget,
+        createFlashcards,
         createDocument,
         updateDocument,
         updateDocumentMeta,

@@ -48,15 +48,21 @@ export function appendLinkedDocReference(
   docId: string,
   targetDocId: string
 ): Uint8Array {
-  return appendToNote(existingBinary, docId, block => {
-    const text = new Y.Text();
-    text.insert(0, ' ', { reference: { type: 'LinkedPage', pageId: targetDocId } });
-    block.set('sys:flavour', 'notesgraph:paragraph');
-    block.set('sys:version', 1);
-    block.set('prop:type', 'text');
-    block.set('prop:text', text);
-    block.set('prop:collapsed', false);
-  });
+  return appendToNote(existingBinary, docId, [
+    {
+      fill: block => {
+        const text = new Y.Text();
+        text.insert(0, ' ', {
+          reference: { type: 'LinkedPage', pageId: targetDocId },
+        });
+        block.set('sys:flavour', 'notesgraph:paragraph');
+        block.set('sys:version', 1);
+        block.set('prop:type', 'text');
+        block.set('prop:text', text);
+        block.set('prop:collapsed', false);
+      },
+    },
+  ]);
 }
 
 /**
@@ -71,27 +77,87 @@ export function appendEmbedHtmlBlock(
   html: string,
   caption: string | null
 ): Uint8Array {
-  return appendToNote(existingBinary, docId, block => {
-    block.set('sys:flavour', 'notesgraph:embed-html');
-    block.set('sys:version', 1);
-    block.set('prop:style', 'html');
-    block.set('prop:html', html);
-    block.set('prop:caption', caption);
-    block.set('prop:index', 'a0');
-    block.set('prop:xywh', '[0,0,0,0]');
-    block.set('prop:lockedBySelf', false);
-    block.set('prop:rotate', 0);
-  });
+  return appendToNote(existingBinary, docId, [
+    {
+      fill: block => {
+        block.set('sys:flavour', 'notesgraph:embed-html');
+        block.set('sys:version', 1);
+        block.set('prop:style', 'html');
+        block.set('prop:html', html);
+        block.set('prop:caption', caption);
+        block.set('prop:index', 'a0');
+        block.set('prop:xywh', '[0,0,0,0]');
+        block.set('prop:lockedBySelf', false);
+        block.set('prop:rotate', 0);
+      },
+    },
+  ]);
+}
+
+export interface Flashcard {
+  question: string;
+  answer: string;
 }
 
 /**
- * Loads the doc, adds one block (filled in by `fill`) as the last child of
- * its note, and returns only that change as an update.
+ * Appends flashcards to the end of the doc's note. Each card is a collapsed
+ * bulleted list item holding the question, with the answer as its child
+ * paragraph, so the answer stays hidden until the item is expanded. (The
+ * list schema's `toggle` type is deprecated; any list item with children
+ * collapses.)
+ */
+export function appendFlashcards(
+  existingBinary: Uint8Array,
+  docId: string,
+  cards: Flashcard[]
+): Uint8Array {
+  return appendToNote(
+    existingBinary,
+    docId,
+    cards.map(card => ({
+      fill: block => {
+        block.set('sys:flavour', 'notesgraph:list');
+        block.set('sys:version', 1);
+        block.set('prop:type', 'bulleted');
+        block.set('prop:text', plainText(card.question));
+        block.set('prop:checked', false);
+        block.set('prop:collapsed', true);
+        block.set('prop:order', null);
+      },
+      children: [
+        {
+          fill: block => {
+            block.set('sys:flavour', 'notesgraph:paragraph');
+            block.set('sys:version', 1);
+            block.set('prop:type', 'text');
+            block.set('prop:text', plainText(card.answer));
+            block.set('prop:collapsed', false);
+          },
+        },
+      ],
+    }))
+  );
+}
+
+function plainText(value: string): Y.Text {
+  const text = new Y.Text();
+  text.insert(0, value);
+  return text;
+}
+
+interface BlockSpec {
+  fill: (block: Y.Map<unknown>) => void;
+  children?: BlockSpec[];
+}
+
+/**
+ * Loads the doc, adds the given blocks (and their children) as the last
+ * children of its note, and returns only that change as an update.
  */
 function appendToNote(
   existingBinary: Uint8Array,
   docId: string,
-  fill: (block: Y.Map<unknown>) => void
+  specs: BlockSpec[]
 ): Uint8Array {
   const doc = new Y.Doc();
   Y.applyUpdate(doc, existingBinary);
@@ -116,15 +182,23 @@ function appendToNote(
     );
   }
 
-  doc.transact(() => {
+  const addBlock = (spec: BlockSpec): string => {
+    const childIds = (spec.children ?? []).map(addBlock);
     const newId = nanoid(10);
+    const children = new Y.Array<string>();
+    children.push(childIds);
     const block = new Y.Map<unknown>();
     block.set('sys:id', newId);
-    block.set('sys:children', new Y.Array<string>());
-    fill(block);
-
+    block.set('sys:children', children);
+    spec.fill(block);
     blocks.set(newId, block);
-    (noteBlock!.get('sys:children') as Y.Array<string>).push([newId]);
+    return newId;
+  };
+
+  doc.transact(() => {
+    (noteBlock!.get('sys:children') as Y.Array<string>).push(
+      specs.map(addBlock)
+    );
   });
 
   return Y.encodeStateAsUpdate(doc, beforeState);

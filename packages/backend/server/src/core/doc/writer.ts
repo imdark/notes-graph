@@ -16,7 +16,9 @@ import {
 import { PgWorkspaceDocStorageAdapter } from './adapters/workspace';
 import {
   appendEmbedHtmlBlock,
+  appendFlashcards,
   appendLinkedDocReference,
+  type Flashcard,
 } from './blocksuite-headless';
 import { fileDocInFolders, foldersDocId } from './folders';
 
@@ -453,6 +455,24 @@ export class DocWriter {
       workspaceId,
       docId,
       binary => appendEmbedHtmlBlock(binary, docId, html, caption),
+      editorId
+    );
+  }
+
+  /**
+   * Appends flashcards (collapsed list items, answer hidden as the child) to
+   * the end of a document.
+   */
+  async appendFlashcards(
+    workspaceId: string,
+    docId: string,
+    cards: Flashcard[],
+    editorId?: string
+  ): Promise<UpdateDocResult> {
+    return await this.appendBlock(
+      workspaceId,
+      docId,
+      binary => appendFlashcards(binary, docId, cards),
       editorId
     );
   }
