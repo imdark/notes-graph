@@ -9592,6 +9592,427 @@ export function useNotesGraphI18N(): {
       */
     ["com.notesgraph.docIconPicker.placeholder"](): string;
     /**
+      * `Upload image…`
+      */
+    ["com.notesgraph.docIconPicker.upload"](): string;
+    /**
+      * `Discover`
+      */
+    ["com.notesgraph.discover.title"](): string;
+    /**
+      * `Topics you're interested in, comma-separated`
+      */
+    ["com.notesgraph.discover.topics.placeholder"](): string;
+    /**
+      * `Update`
+      */
+    ["com.notesgraph.discover.update"](): string;
+    /**
+      * `Save as note`
+      */
+    ["com.notesgraph.discover.save"](): string;
+    /**
+      * `Saved to a new note`
+      */
+    ["com.notesgraph.discover.saved"](): string;
+    /**
+      * `Could not save the note`
+      */
+    ["com.notesgraph.discover.saveFailed"](): string;
+    /**
+      * `Loading your feed…`
+      */
+    ["com.notesgraph.discover.loading"](): string;
+    /**
+      * `Add some topics above to build your feed`
+      */
+    ["com.notesgraph.discover.empty"](): string;
+    /**
+      * `Couldn't load the feed — check your connection or try different topics`
+      */
+    ["com.notesgraph.discover.error"](): string;
+    /**
+      * `Duplicates`
+      */
+    ["com.notesgraph.duplicates.title"](): string;
+    /**
+      * `No duplicate notes — everything's tidy`
+      */
+    ["com.notesgraph.duplicates.empty"](): string;
+    /**
+      * `{{count}} notes`
+      */
+    ["com.notesgraph.duplicates.groupCount"](options: {
+        readonly count: string;
+    }): string;
+    /**
+      * `Combine {{count}}`
+      */
+    ["com.notesgraph.duplicates.combine"](options: {
+        readonly count: string;
+    }): string;
+    /**
+      * `Open`
+      */
+    ["com.notesgraph.duplicates.open"](): string;
+    /**
+      * `Combine duplicates?`
+      */
+    ["com.notesgraph.duplicates.confirm.title"](): string;
+    /**
+      * `{{count}} note(s) will be merged into “{{title}}” and moved to trash (recoverable).`
+      */
+    ["com.notesgraph.duplicates.confirm.description"](options: Readonly<{
+        count: string;
+        title: string;
+    }>): string;
+    /**
+      * `Combine`
+      */
+    ["com.notesgraph.duplicates.confirm.confirm"](): string;
+    /**
+      * `Combined into “{{title}}”`
+      */
+    ["com.notesgraph.duplicates.combined"](options: {
+        readonly title: string;
+    }): string;
+    /**
+      * `Could not combine the notes`
+      */
+    ["com.notesgraph.duplicates.combineFailed"](): string;
+    /**
+      * `Merge all`
+      */
+    ["com.notesgraph.duplicates.mergeAll"](): string;
+    /**
+      * `Merge all duplicates?`
+      */
+    ["com.notesgraph.duplicates.mergeAll.title"](): string;
+    /**
+      * `Every set of same-titled notes will be combined — {{count}} note(s) across {{groups}} group(s) merged into one each and moved to trash (recoverable).`
+      */
+    ["com.notesgraph.duplicates.mergeAll.description"](options: Readonly<{
+        count: string;
+        groups: string;
+    }>): string;
+    /**
+      * `Merge all`
+      */
+    ["com.notesgraph.duplicates.mergeAll.confirm"](): string;
+    /**
+      * `Merged {{count}} duplicate note(s)`
+      */
+    ["com.notesgraph.duplicates.mergeAll.done"](options: {
+        readonly count: string;
+    }): string;
+    /**
+      * `Same title`
+      */
+    ["com.notesgraph.duplicates.sameTitle"](): string;
+    /**
+      * `Similar by content`
+      */
+    ["com.notesgraph.duplicates.content.title"](): string;
+    /**
+      * `Scan`
+      */
+    ["com.notesgraph.duplicates.content.scan"](): string;
+    /**
+      * `Scan to find notes with similar content, even when their titles differ.`
+      */
+    ["com.notesgraph.duplicates.content.idle"](): string;
+    /**
+      * `No content-similar notes found.`
+      */
+    ["com.notesgraph.duplicates.content.none"](): string;
+    /**
+      * `Turn on local AI (Settings → AI) to also find duplicates by content.`
+      */
+    ["com.notesgraph.duplicates.content.disabled"](): string;
+    /**
+      * `Preparing the on-device model…`
+      */
+    ["com.notesgraph.duplicates.content.loading"](): string;
+    /**
+      * `Combine notes?`
+      */
+    ["com.notesgraph.duplicates.content.combineConfirm.title"](): string;
+    /**
+      * `Merge “{{source}}” into “{{target}}” and move it to trash (recoverable).`
+      */
+    ["com.notesgraph.duplicates.content.combineConfirm.description"](options: Readonly<{
+        source: string;
+        target: string;
+    }>): string;
+    /**
+      * `Show notes in sidebar`
+      */
+    ["com.notesgraph.appearanceSettings.sidebarNotes.title"](): string;
+    /**
+      * `Show the notes section in the sidebar. On by default.`
+      */
+    ["com.notesgraph.appearanceSettings.sidebarNotes.description"](): string;
+    /**
+      * `Show projects in sidebar`
+      */
+    ["com.notesgraph.appearanceSettings.sidebarProjects.title"](): string;
+    /**
+      * `Show the projects section in the sidebar. On by default.`
+      */
+    ["com.notesgraph.appearanceSettings.sidebarProjects.description"](): string;
+    /**
+      * `Load more`
+      */
+    ["com.notesgraph.discover.loadMore"](): string;
+    /**
+      * `Include interests from my notes`
+      */
+    ["com.notesgraph.discover.interests.toggle"](): string;
+    /**
+      * `From your notes`
+      */
+    ["com.notesgraph.discover.interests.specific"](): string;
+    /**
+      * `Broader areas`
+      */
+    ["com.notesgraph.discover.interests.general"](): string;
+    /**
+      * `Something new`
+      */
+    ["com.notesgraph.discover.interests.discover"](): string;
+    /**
+      * `Sync`
+      */
+    ["com.notesgraph.mobile.setting.sync.title"](): string;
+    /**
+      * `Sync local changes in the background`
+      */
+    ["com.notesgraph.mobile.setting.sync.background.title"](): string;
+    /**
+      * `Local folder`
+      */
+    ["com.notesgraph.import.local-folder"](): string;
+    /**
+      * `Google Keep`
+      */
+    ["com.notesgraph.import.google-keep"](): string;
+    /**
+      * `Pick your Google Takeout 'Keep' folder — each note's .json is imported and its labels become tags.`
+      */
+    ["com.notesgraph.import.google-keep.tooltip"](): string;
+    /**
+      * `Orgzly (org-mode)`
+      */
+    ["com.notesgraph.import.orgzly"](): string;
+    /**
+      * `Pick your Orgzly sync folder — each .org notebook is imported, its outline becoming headings and TODO/DONE items becoming checkboxes.`
+      */
+    ["com.notesgraph.import.orgzly.tooltip"](): string;
+    /**
+      * `Inbox`
+      */
+    ["com.notesgraph.schedule.todo.inbox"](): string;
+    /**
+      * `Add note`
+      */
+    ["com.notesgraph.integration.calendar.add-note"](): string;
+    /**
+      * `Open note`
+      */
+    ["com.notesgraph.integration.calendar.open-note"](): string;
+    /**
+      * `Security`
+      */
+    ["com.notesgraph.mobile.setting.security.title"](): string;
+    /**
+      * `Lock app with device PIN or biometrics`
+      */
+    ["com.notesgraph.mobile.setting.security.app-lock"](): string;
+    /**
+      * `Set a screen lock on your phone to use this.`
+      */
+    ["com.notesgraph.mobile.setting.security.app-lock.unavailable"](): string;
+    /**
+      * `Dictate tasks`
+      */
+    ["com.notesgraph.mobile.voice-tasks.title"](): string;
+    /**
+      * `Say a task, then say “next task” before the next one. Pausing is fine; it won't start a new task.`
+      */
+    ["com.notesgraph.mobile.voice-tasks.hint"](): string;
+    /**
+      * `Your tasks appear here, one per line. You can fix them before adding.`
+      */
+    ["com.notesgraph.mobile.voice-tasks.placeholder"](): string;
+    /**
+      * `Start listening`
+      */
+    ["com.notesgraph.mobile.voice-tasks.listen"](): string;
+    /**
+      * `Stop listening`
+      */
+    ["com.notesgraph.mobile.voice-tasks.stop"](): string;
+    /**
+      * `Add {{count}} tasks`
+    
+      * - com.notesgraph.mobile.voice-tasks.add_one: `Add {{count}} task`
+    
+      * - com.notesgraph.mobile.voice-tasks.add_other: `Add {{count}} tasks`
+      */
+    ["com.notesgraph.mobile.voice-tasks.add"](options: {
+        readonly count: string | number | bigint;
+    }): string;
+    /**
+      * `Add {{count}} task`
+      */
+    ["com.notesgraph.mobile.voice-tasks.add_one"](options: {
+        readonly count: string | number | bigint;
+    }): string;
+    /**
+      * `Add {{count}} tasks`
+      */
+    ["com.notesgraph.mobile.voice-tasks.add_other"](options: {
+        readonly count: string | number | bigint;
+    }): string;
+    /**
+      * `Added {{count}} tasks`
+    
+      * - com.notesgraph.mobile.voice-tasks.added_one: `Added {{count}} task`
+    
+      * - com.notesgraph.mobile.voice-tasks.added_other: `Added {{count}} tasks`
+      */
+    ["com.notesgraph.mobile.voice-tasks.added"](options: {
+        readonly count: string | number | bigint;
+    }): string;
+    /**
+      * `Added {{count}} task`
+      */
+    ["com.notesgraph.mobile.voice-tasks.added_one"](options: {
+        readonly count: string | number | bigint;
+    }): string;
+    /**
+      * `Added {{count}} tasks`
+      */
+    ["com.notesgraph.mobile.voice-tasks.added_other"](options: {
+        readonly count: string | number | bigint;
+    }): string;
+    /**
+      * `Allow microphone access to dictate tasks.`
+      */
+    ["com.notesgraph.mobile.voice-tasks.error.permission"](): string;
+    /**
+      * `Speech recognition isn't available on this device.`
+      */
+    ["com.notesgraph.mobile.voice-tasks.error.unavailable"](): string;
+    /**
+      * `Listening stopped. Tap the mic to try again.`
+      */
+    ["com.notesgraph.mobile.voice-tasks.error.failed"](): string;
+    /**
+      * `Share`
+      */
+    ["com.notesgraph.agent-run.share.button"](): string;
+    /**
+      * `Copy link`
+      */
+    ["com.notesgraph.agent-run.share.copy"](): string;
+    /**
+      * `Update snapshot`
+      */
+    ["com.notesgraph.agent-run.share.refresh"](): string;
+    /**
+      * `Turn off link`
+      */
+    ["com.notesgraph.agent-run.share.revoke"](): string;
+    /**
+      * `Link copied`
+      */
+    ["com.notesgraph.agent-run.share.copied"](): string;
+    /**
+      * `Link turned off`
+      */
+    ["com.notesgraph.agent-run.share.revoked"](): string;
+    /**
+      * `Couldn't share this run`
+      */
+    ["com.notesgraph.agent-run.share.failed"](): string;
+    /**
+      * `Anyone with the link can read this run as it was when shared, with secrets redacted. Later output shows only after you update the snapshot.`
+      */
+    ["com.notesgraph.agent-run.share.hint"](): string;
+    /**
+      * `Make a read-only link to this run that works without signing in`
+      */
+    ["com.notesgraph.agent-run.share.tooltip"](): string;
+    /**
+      * `This link was turned off, or it never existed. Ask whoever sent it for a new one.`
+      */
+    ["com.notesgraph.shared-run.not-found"](): string;
+    /**
+      * `Couldn't load this run.`
+      */
+    ["com.notesgraph.shared-run.load-failed"](): string;
+    /**
+      * `Loading the run…`
+      */
+    ["com.notesgraph.shared-run.loading"](): string;
+    /**
+      * `Read-only snapshot`
+      */
+    ["com.notesgraph.shared-run.snapshot"](): string;
+    /**
+      * `Agent run`
+      */
+    ["com.notesgraph.shared-run.untitled"](): string;
+    /**
+      * `Result`
+      */
+    ["com.notesgraph.shared-run.result"](): string;
+    /**
+      * `Transcript`
+      */
+    ["com.notesgraph.shared-run.transcript"](): string;
+    /**
+      * `What it asked`
+      */
+    ["com.notesgraph.shared-run.questions"](): string;
+    /**
+      * `Not answered`
+      */
+    ["com.notesgraph.shared-run.unanswered"](): string;
+    /**
+      * `Allowed`
+      */
+    ["com.notesgraph.shared-run.allowed"](): string;
+    /**
+      * `Denied`
+      */
+    ["com.notesgraph.shared-run.denied"](): string;
+    /**
+      * `This run left no log.`
+      */
+    ["com.notesgraph.shared-run.empty-log"](): string;
+    /**
+      * `Queued`
+      */
+    ["com.notesgraph.shared-run.status.queued"](): string;
+    /**
+      * `Running`
+      */
+    ["com.notesgraph.shared-run.status.running"](): string;
+    /**
+      * `Done`
+      */
+    ["com.notesgraph.shared-run.status.done"](): string;
+    /**
+      * `Failed`
+      */
+    ["com.notesgraph.shared-run.status.error"](): string;
+    /**
+      * `Cancelled`
+      */
+    ["com.notesgraph.shared-run.status.cancelled"](): string;
+    /**
       * `An internal error occurred.`
       */
     ["error.INTERNAL_SERVER_ERROR"](): string;
@@ -10322,227 +10743,6 @@ export function useNotesGraphI18N(): {
       * `You have exceeded the comment attachment size quota.`
       */
     ["error.COMMENT_ATTACHMENT_QUOTA_EXCEEDED"](): string;
-    /**
-      * `Upload image…`
-      */
-    ["com.notesgraph.docIconPicker.upload"](): string;
-    /**
-      * `Discover`
-      */
-    ["com.notesgraph.discover.title"](): string;
-    /**
-      * `Topics you're interested in, comma-separated`
-      */
-    ["com.notesgraph.discover.topics.placeholder"](): string;
-    /**
-      * `Update`
-      */
-    ["com.notesgraph.discover.update"](): string;
-    /**
-      * `Save as note`
-      */
-    ["com.notesgraph.discover.save"](): string;
-    /**
-      * `Saved to a new note`
-      */
-    ["com.notesgraph.discover.saved"](): string;
-    /**
-      * `Could not save the note`
-      */
-    ["com.notesgraph.discover.saveFailed"](): string;
-    /**
-      * `Loading your feed…`
-      */
-    ["com.notesgraph.discover.loading"](): string;
-    /**
-      * `Add some topics above to build your feed`
-      */
-    ["com.notesgraph.discover.empty"](): string;
-    /**
-      * `Couldn't load the feed — check your connection or try different topics`
-      */
-    ["com.notesgraph.discover.error"](): string;
-    /**
-      * `Duplicates`
-      */
-    ["com.notesgraph.duplicates.title"](): string;
-    /**
-      * `No duplicate notes — everything's tidy`
-      */
-    ["com.notesgraph.duplicates.empty"](): string;
-    /**
-      * `{{count}} notes`
-      */
-    ["com.notesgraph.duplicates.groupCount"](options: {
-        readonly count: string;
-    }): string;
-    /**
-      * `Combine {{count}}`
-      */
-    ["com.notesgraph.duplicates.combine"](options: {
-        readonly count: string;
-    }): string;
-    /**
-      * `Open`
-      */
-    ["com.notesgraph.duplicates.open"](): string;
-    /**
-      * `Combine duplicates?`
-      */
-    ["com.notesgraph.duplicates.confirm.title"](): string;
-    /**
-      * `{{count}} note(s) will be merged into “{{title}}” and moved to trash (recoverable).`
-      */
-    ["com.notesgraph.duplicates.confirm.description"](options: Readonly<{
-        count: string;
-        title: string;
-    }>): string;
-    /**
-      * `Combine`
-      */
-    ["com.notesgraph.duplicates.confirm.confirm"](): string;
-    /**
-      * `Combined into “{{title}}”`
-      */
-    ["com.notesgraph.duplicates.combined"](options: {
-        readonly title: string;
-    }): string;
-    /**
-      * `Could not combine the notes`
-      */
-    ["com.notesgraph.duplicates.combineFailed"](): string;
-    /**
-      * `Merge all`
-      */
-    ["com.notesgraph.duplicates.mergeAll"](): string;
-    /**
-      * `Merge all duplicates?`
-      */
-    ["com.notesgraph.duplicates.mergeAll.title"](): string;
-    /**
-      * `Every set of same-titled notes will be combined — {{count}} note(s) across {{groups}} group(s) merged into one each and moved to trash (recoverable).`
-      */
-    ["com.notesgraph.duplicates.mergeAll.description"](options: Readonly<{
-        count: string;
-        groups: string;
-    }>): string;
-    /**
-      * `Merge all`
-      */
-    ["com.notesgraph.duplicates.mergeAll.confirm"](): string;
-    /**
-      * `Merged {{count}} duplicate note(s)`
-      */
-    ["com.notesgraph.duplicates.mergeAll.done"](options: {
-        readonly count: string;
-    }): string;
-    /**
-      * `Same title`
-      */
-    ["com.notesgraph.duplicates.sameTitle"](): string;
-    /**
-      * `Similar by content`
-      */
-    ["com.notesgraph.duplicates.content.title"](): string;
-    /**
-      * `Scan`
-      */
-    ["com.notesgraph.duplicates.content.scan"](): string;
-    /**
-      * `Scan to find notes with similar content, even when their titles differ.`
-      */
-    ["com.notesgraph.duplicates.content.idle"](): string;
-    /**
-      * `No content-similar notes found.`
-      */
-    ["com.notesgraph.duplicates.content.none"](): string;
-    /**
-      * `Turn on local AI (Settings → AI) to also find duplicates by content.`
-      */
-    ["com.notesgraph.duplicates.content.disabled"](): string;
-    /**
-      * `Preparing the on-device model…`
-      */
-    ["com.notesgraph.duplicates.content.loading"](): string;
-    /**
-      * `Combine notes?`
-      */
-    ["com.notesgraph.duplicates.content.combineConfirm.title"](): string;
-    /**
-      * `Merge “{{source}}” into “{{target}}” and move it to trash (recoverable).`
-      */
-    ["com.notesgraph.duplicates.content.combineConfirm.description"](options: Readonly<{
-        source: string;
-        target: string;
-    }>): string;
-    /**
-      * `Show notes in sidebar`
-      */
-    ["com.notesgraph.appearanceSettings.sidebarNotes.title"](): string;
-    /**
-      * `Show the notes section in the sidebar. On by default.`
-      */
-    ["com.notesgraph.appearanceSettings.sidebarNotes.description"](): string;
-    /**
-      * `Show projects in sidebar`
-      */
-    ["com.notesgraph.appearanceSettings.sidebarProjects.title"](): string;
-    /**
-      * `Show the projects section in the sidebar. On by default.`
-      */
-    ["com.notesgraph.appearanceSettings.sidebarProjects.description"](): string;
-    /**
-      * `Load more`
-      */
-    ["com.notesgraph.discover.loadMore"](): string;
-    /**
-      * `Include interests from my notes`
-      */
-    ["com.notesgraph.discover.interests.toggle"](): string;
-    /**
-      * `From your notes`
-      */
-    ["com.notesgraph.discover.interests.specific"](): string;
-    /**
-      * `Broader areas`
-      */
-    ["com.notesgraph.discover.interests.general"](): string;
-    /**
-      * `Something new`
-      */
-    ["com.notesgraph.discover.interests.discover"](): string;
-    /**
-      * `Sync`
-      */
-    ["com.notesgraph.mobile.setting.sync.title"](): string;
-    /**
-      * `Sync local changes in the background`
-      */
-    ["com.notesgraph.mobile.setting.sync.background.title"](): string;
-    /**
-      * `Local folder`
-      */
-    ["com.notesgraph.import.local-folder"](): string;
-    /**
-      * `Google Keep`
-      */
-    ["com.notesgraph.import.google-keep"](): string;
-    /**
-      * `Pick your Google Takeout 'Keep' folder — each note's .json is imported and its labels become tags.`
-      */
-    ["com.notesgraph.import.google-keep.tooltip"](): string;
-    /**
-      * `Orgzly (org-mode)`
-      */
-    ["com.notesgraph.import.orgzly"](): string;
-    /**
-      * `Pick your Orgzly sync folder — each .org notebook is imported, its outline becoming headings and TODO/DONE items becoming checkboxes.`
-      */
-    ["com.notesgraph.import.orgzly.tooltip"](): string;
-    /**
-      * `Inbox`
-      */
-    ["com.notesgraph.schedule.todo.inbox"](): string;
 } { const { t } = useTranslation(); return useMemo(() => createProxy((key) => t.bind(null, key)), [t]); }
 function createComponent(i18nKey: string) {
     return (props) => createElement(Trans, { i18nKey, shouldUnescape: true, ...props });
