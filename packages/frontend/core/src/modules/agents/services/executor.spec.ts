@@ -254,7 +254,7 @@ describe('AgentExecutorService.chatFor', () => {
     }
     expect(reply).toBe('It edited two lines.');
     expect(enqueued).toHaveLength(1);
-    expect(enqueued[0]).toMatchObject({ deviceKey: 'laptop', agentId: 'a1', model: 'claude-code', tools: [] });
+    expect(enqueued[0]).toMatchObject({ deviceKey: 'laptop', agentId: 'chat:a1', model: 'claude-code', tools: [] });
     expect(enqueued[0].instructions).toMatch(/Only answer/);
     expect(enqueued[0].context).toContain('What did it change?');
   });
@@ -315,9 +315,82 @@ describe('AgentExecutorService.chatFor', () => {
     expect(reply).toBe('Pick main.');
     expect(opened).toEqual([]);
     expect(enqueued).toHaveLength(1);
-    expect(enqueued[0]).toMatchObject({ deviceKey: 'cloud', agentId: 'a1', model: 'claude-code', tools: [], maxCostUsd: 2 });
+    expect(enqueued[0]).toMatchObject({ deviceKey: 'cloud', agentId: 'chat:a1', model: 'claude-code', tools: [], maxCostUsd: 2 });
     expect(enqueued[0].instructions).toMatch(/still going/);
     expect(enqueued[0].context).toContain('Which branch should it use?');
+  });
+
+  test('a fork turn waiting for a slot says so, and stops saying once it runs', async () => {
+    const notes: (string | null)[] = [];
+    const { executor } = setup([], {}, {
+      remoteRunner: {
+        enqueue: async () => job({ id: 'f1', status: 'queued' }),
+        watch: async function* () {
+          yield { job: job({ id: 'f1', status: 'queued' }), logDelta: '' };
+          yield { job: job({ id: 'f1', status: 'running' }), logDelta: '' };
+          yield { job: job({ id: 'f1', status: 'done', result: 'Yes.' }), logDelta: '' };
+        },
+      },
+    });
+    const chat = await executor.forkOf(job({ id: 'r1', deviceKey: 'cloud' }), note => notes.push(note));
+    for await (const _ of chat([{ role: 'user', content: 'ok?' }], new AbortController().signal)) {
+      // drain
+    }
+    expect(notes[0]).toMatch(/free job slot on cloud[\s\S]*Jobs at once/);
+    expect(notes.slice(1)).toEqual([null, null, null]);
+  });
+
+  test('closing a fork before its answer cancels the turn; after it, nothing', async () => {
+    const cancelled: string[] = [];
+    let release!: () => void;
+    const held = new Promise<void>(resolve => (release = resolve));
+    const { executor } = setup([], {}, {
+      remoteRunner: {
+        enqueue: async () => job({ id: 'f1', status: 'queued' }),
+        cancel: async (_ws: string, id: string) => {
+          cancelled.push(id);
+        },
+        watch: async function* (_ws: string, _id: string, signal: AbortSignal) {
+          yield { job: job({ id: 'f1', status: 'queued' }), logDelta: '' };
+          await held;
+          if (signal.aborted) return;
+          yield { job: job({ id: 'f1', status: 'done', result: 'Late.' }), logDelta: '' };
+        },
+      },
+    });
+    const chat = await executor.forkOf(job({ id: 'r1', deviceKey: 'cloud' }));
+    const close = new AbortController();
+    const draining = (async () => {
+      for await (const _ of chat([{ role: 'user', content: 'ok?' }], close.signal)) {
+        // drain
+      }
+    })();
+    await new Promise(r => setTimeout(r, 0));
+    close.abort();
+    release();
+    await draining;
+    expect(cancelled).toEqual(['f1']);
+
+    // Answered, then the panel closes: nothing to cancel.
+    cancelled.length = 0;
+    const later = new AbortController();
+    const { executor: done } = setup([], {}, {
+      remoteRunner: {
+        enqueue: async () => job({ id: 'f2', status: 'queued' }),
+        cancel: async (_ws: string, id: string) => {
+          cancelled.push(id);
+        },
+        watch: async function* () {
+          yield { job: job({ id: 'f2', status: 'done', result: 'Now.' }), logDelta: '' };
+        },
+      },
+    });
+    const quick = await done.forkOf(job({ id: 'r1', deviceKey: 'cloud' }));
+    for await (const _ of quick([{ role: 'user', content: 'ok?' }], later.signal)) {
+      // drain
+    }
+    later.abort();
+    expect(cancelled).toEqual([]);
   });
 
   test('an agent with no device can\'t be asked', async () => {

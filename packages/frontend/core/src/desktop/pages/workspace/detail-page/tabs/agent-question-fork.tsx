@@ -10,7 +10,7 @@ import {
 } from '@notesgraph/core/modules/agents';
 import { WorkspaceService } from '@notesgraph/core/modules/workspace';
 import { useService } from '@notesgraph/infra';
-import { useCallback, useRef } from 'react';
+import { useCallback, useRef, useState } from 'react';
 
 import { AgentSideChat, ChatReplyText } from './agent-side-chat';
 
@@ -21,7 +21,8 @@ import { AgentSideChat, ChatReplyText } from './agent-side-chat';
  *
  * It is a fork of the run: asked on the device the run is on, as the agent it
  * runs as, starting from its transcript — not on the server's model, which a
- * server may not have.
+ * server may not have. A turn takes a job slot there, so with every slot held
+ * by runs waiting on the reader it waits too, and says so.
  */
 export const AgentQuestionFork = ({
   jobId,
@@ -38,11 +39,19 @@ export const AgentQuestionFork = ({
   const remoteRunner = useService(RemoteAgentRunnerService);
   const workspaceService = useService(WorkspaceService);
   const executor = useService(AgentExecutorService);
+  const [waiting, setWaiting] = useState<string | null>(null);
 
-  // The opening and the model both come from the job; read it once.
+  // The opening and the model both come from the job; read it once. A read
+  // that failed is tried again on the next send rather than kept.
   const jobRead = useRef<Promise<RemoteJob> | null>(null);
   const readJob = useCallback(() => {
-    jobRead.current ??= remoteRunner.get(workspaceService.workspace.id, jobId);
+    if (!jobRead.current) {
+      const read = remoteRunner.get(workspaceService.workspace.id, jobId);
+      jobRead.current = read;
+      read.catch(() => {
+        if (jobRead.current === read) jobRead.current = null;
+      });
+    }
     return jobRead.current;
   }, [jobId, remoteRunner, workspaceService]);
 
@@ -55,7 +64,7 @@ export const AgentQuestionFork = ({
   }, [question, readJob]);
 
   const openModel = useCallback(
-    async () => executor.forkOf(await readJob()),
+    async () => executor.forkOf(await readJob(), setWaiting),
     [executor, readJob]
   );
 
@@ -87,6 +96,7 @@ export const AgentQuestionFork = ({
       placeholder="Ask anything about this before you answer"
       opening={opening}
       openModel={openModel}
+      waiting={waiting}
       renderReply={renderReply}
       onClose={onClose}
       testId="agent-question-fork"

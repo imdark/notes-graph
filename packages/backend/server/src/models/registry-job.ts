@@ -189,6 +189,21 @@ export class RegistryJobModel extends BaseModel {
     return this.db.registryJob.findUnique({ where: { id: candidate.id } });
   }
 
+  /**
+   * Jobs on a device a runner holds: running on a live lease. A lapsed lease
+   * is no longer held; the job is claimable again (see `claimable`).
+   */
+  async countHeld(workspaceId: string, deviceKey: string): Promise<number> {
+    return this.db.registryJob.count({
+      where: {
+        workspaceId,
+        deviceKey,
+        status: 'running',
+        leaseExpiresAt: { gte: new Date() },
+      },
+    });
+  }
+
   async report(
     workspaceId: string,
     id: string,

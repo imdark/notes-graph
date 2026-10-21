@@ -1727,6 +1727,9 @@ model RegistryDevice {
   checks        Json      @default("[]")
   /// Last time a runner on this device asked for work; null if none has.
   runnerSeenAt  DateTime? @map("runner_seen_at") @db.Timestamptz(3)
+  /// Jobs its runners may run at once; null leaves it to the runner's own
+  /// setting. Set from the app, never by registration.
+  maxJobs       Int?      @map("max_jobs")
   registeredBy  String?   @map("registered_by") @db.VarChar
   createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt     DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)

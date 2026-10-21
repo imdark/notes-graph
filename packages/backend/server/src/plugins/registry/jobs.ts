@@ -579,6 +579,23 @@ export class RegistryJobService {
     runnerId: string,
     leaseSeconds?: number
   ): Promise<JobDto | null> {
+    return (await this.claimNext(workspaceId, deviceKey, runnerId, leaseSeconds)).job;
+  }
+
+  /**
+   * A runner's claim: the next job, if the device has a free slot, and how
+   * many jobs the device may run at once (null: the runner's own setting),
+   * so a runner can follow what was set in the app.
+   *
+   * The limit counts jobs holding a live lease on the device, from every
+   * runner on it: a run waiting on its starter still holds its slot.
+   */
+  async claimNext(
+    workspaceId: string,
+    deviceKey: string,
+    runnerId: string,
+    leaseSeconds?: number
+  ): Promise<{ job: JobDto | null; maxJobs: number | null }> {
     // Asking is what "a runner is listening" means, whether or not there is
     // work to hand out. Best effort: never fail a claim over it.
     try {
@@ -586,10 +603,28 @@ export class RegistryJobService {
     } catch (err) {
       this.logger.warn(`touchRunner failed: ${err}`);
     }
+    // Best effort too: unread, the runner's own limit still holds.
+    let maxJobs: number | null = null;
+    try {
+      const device = await this.models.registryDevice.get(workspaceId, deviceKey);
+      maxJobs = device?.maxJobs ?? null;
+    } catch (err) {
+      this.logger.warn(`reading ${deviceKey}'s job limit failed: ${err}`);
+    }
+    if (
+      maxJobs !== null &&
+      (await this.models.registryJob.countHeld(workspaceId, deviceKey)) >= maxJobs
+    ) {
+      return { job: null, maxJobs };
+    }
     const job = await this.models.registryJob.claim(
       workspaceId, deviceKey, runnerId || 'runner', leaseSeconds
     );
-    if (!job) return null;
+    if (!job) return { job: null, maxJobs };
+    return { job: await this.claimed(job), maxJobs };
+  }
+
+  private async claimed(job: RegistryJob): Promise<JobDto> {
     await this.tasks?.claimed(job);
     const profile = await this.profile(job);
     // What earlier runs learned about whoever started this one.

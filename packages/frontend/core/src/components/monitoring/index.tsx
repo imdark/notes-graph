@@ -1,4 +1,4 @@
-import { Button, notify } from '@notesgraph/component';
+import { Button, Input, notify } from '@notesgraph/component';
 import {
   type DeviceCheck,
   deviceChecks,
@@ -186,6 +186,105 @@ const MonitorItem = (props: {
     <MonitorRow {...props} />
   );
 
+/** The most "jobs at once" a machine may be set to (the server's cap). */
+const MAX_JOBS_AT_ONCE = 16;
+
+/** Typed in: a whole number in range, blank for the runner's own, or undefined. */
+const parseJobsAtOnce = (text: string): number | null | undefined => {
+  const trimmed = text.trim();
+  if (!trimmed) return null;
+  const value = Number(trimmed);
+  return Number.isInteger(value) && value >= 1 && value <= MAX_JOBS_AT_ONCE
+    ? value
+    : undefined;
+};
+
+/**
+ * How many jobs a machine's runners run at once. A run waiting on its
+ * starter still holds its slot, so when every slot is waiting nothing else
+ * starts there, not even a side chat about one of them.
+ */
+const JobsAtOnce = ({ device }: { device: RegistryDevice }) => {
+  const fleet = useService(FleetService);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState('');
+  const [saving, setSaving] = useState(false);
+  const parsed = parseJobsAtOnce(draft);
+  const current = device.maxJobs ?? null;
+
+  const startEditing = useCallback(() => {
+    setDraft(current === null ? '' : String(current));
+    setEditing(true);
+  }, [current]);
+
+  const save = useCallback(() => {
+    if (parsed === undefined) return;
+    setSaving(true);
+    fleet
+      .setMaxJobs(device.key, parsed)
+      .then(() => setEditing(false))
+      .catch(err => {
+        notify.error({
+          title: `Couldn't change ${device.name}'s jobs at once`,
+          message: errorMessage(err),
+        });
+      })
+      .finally(() => setSaving(false));
+  }, [device, fleet, parsed]);
+
+  if (!editing) {
+    return (
+      <div className={styles.jobsAtOnce} data-testid="monitoring-jobs-at-once">
+        <span>
+          {current === null
+            ? "Jobs at once: the runner's own setting"
+            : `Jobs at once: ${current}`}
+        </span>
+        <Button
+          variant="plain"
+          onClick={startEditing}
+          tooltip="How many jobs run here side by side. A run waiting on you still holds its slot."
+          data-testid="monitoring-jobs-at-once-edit"
+        >
+          Change
+        </Button>
+      </div>
+    );
+  }
+  return (
+    <div className={styles.jobsAtOnce} data-testid="monitoring-jobs-at-once">
+      <span>Jobs at once</span>
+      <Input
+        className={styles.jobsAtOnceInput}
+        value={draft}
+        onChange={setDraft}
+        onEnter={save}
+        inputMode="numeric"
+        placeholder="Own"
+        autoFocus
+        status={parsed === undefined ? 'error' : 'default'}
+        data-testid="monitoring-jobs-at-once-input"
+      />
+      <Button
+        variant="primary"
+        onClick={save}
+        disabled={saving || parsed === undefined}
+        data-testid="monitoring-jobs-at-once-save"
+      >
+        Save
+      </Button>
+      <Button variant="plain" onClick={() => setEditing(false)}>
+        Cancel
+      </Button>
+      <span>
+        {parsed === undefined
+          ? `A whole number from 1 to ${MAX_JOBS_AT_ONCE}, or blank for the runner's own setting.`
+          : "Blank for the runner's own setting (--max-jobs, or RUNNER_MAX_JOBS on the cloud runner)."}
+      </span>
+    </div>
+  );
+};
+
 const MachineCard = ({
   device,
   folders,
@@ -250,6 +349,7 @@ const MachineCard = ({
           : 'Never checked'}
         {device.checkedAt && state === 'unknown' ? ' · too long ago to trust' : ''}
       </span>
+      {device.agentTarget ? <JobsAtOnce device={device} /> : null}
       {device.statusDetail && state !== 'online' ? (
         <span className={styles.problem}>
           {device.statusDetail}

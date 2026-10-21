@@ -163,6 +163,23 @@ describe('FleetService', () => {
     service.dispose();
   });
 
+  test('jobs at once is saved for one machine and shown in the list', async () => {
+    const { service, calls } = setup((_path, init) => ({
+      body: { device: device({ maxJobs: JSON.parse(String(init.body)).maxJobs }) },
+    }));
+    service.devices$.setValue([device({}), device({ key: 'other' })]);
+    await service.setMaxJobs('box', 4);
+    expect(calls[0].path).toBe('/api/registry/workspaces/ws/devices/box/max-jobs');
+    expect(JSON.parse(String(calls[0].init.body))).toEqual({ maxJobs: 4 });
+    expect(service.devices$.value.map(d => [d.key, d.maxJobs ?? null])).toEqual([
+      ['box', 4],
+      ['other', null],
+    ]);
+
+    await service.setMaxJobs('box', null);
+    expect(service.devices$.value[0].maxJobs).toBeNull();
+  });
+
   test('checking all marks the machines the server queued', async () => {
     const { service } = setup(() => ({
       body: { queued: ['a', 'b'], skipped: [{ key: 'c', reason: 'not an agent target' }] },

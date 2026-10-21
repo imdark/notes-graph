@@ -132,6 +132,7 @@ export const AgentSideChat = ({
   opening,
   renderReply = renderFormattedReply,
   openModel,
+  waiting,
   onClose,
   testId,
 }: {
@@ -143,6 +144,8 @@ export const AgentSideChat = ({
   renderReply?: (reply: string, streaming: boolean) => ReactNode;
   /** Who answers; the server's model when not given. */
   openModel?: () => Promise<ChatModel>;
+  /** Why the reply hasn't started, shown under it while it is awaited. */
+  waiting?: string | null;
   onClose?: () => void;
   testId: string;
 }) => {
@@ -352,6 +355,11 @@ export const AgentSideChat = ({
                 </div>
               )
             )}
+            {busy && waiting ? (
+              <span className={styles.hint} data-testid={`${testId}-waiting`}>
+                {waiting}
+              </span>
+            ) : null}
             <div ref={listEnd} />
           </div>
         ) : null}

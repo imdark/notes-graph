@@ -160,6 +160,9 @@ const FORK_ON_DEVICE_INSTRUCTIONS = [
   'anything, or carry on the run — it is waiting and the user replies to it.',
 ].join('\n');
 
+/** Marks a device job that is a turn of a side chat, not a run (see push.ts). */
+export const CHAT_AGENT_PREFIX = 'chat:';
+
 /** A turn of the chat is an answer, not a run: keep it short on the device. */
 const CHAT_ON_DEVICE_STEPS = 8;
 
@@ -421,7 +424,11 @@ export class AgentExecutorService extends Service implements AgentExecutor {
    * on the server. Each turn is a short job given the conversation so far
    * (the fork's opening carries the run's transcript).
    */
-  async forkOf(job: RemoteJob): Promise<ChatModel> {
+  async forkOf(
+    job: RemoteJob,
+    /** Told while a turn waits for a free slot on the device, then null. */
+    onWaiting?: (note: string | null) => void
+  ): Promise<ChatModel> {
     return this.chatOnDevice({
       deviceKey: job.deviceKey,
       agentId: job.agentId,
@@ -429,6 +436,7 @@ export class AgentExecutorService extends Service implements AgentExecutor {
       model: job.model ?? undefined,
       maxCostUsd: job.maxCostUsd ?? undefined,
       instructions: FORK_ON_DEVICE_INSTRUCTIONS,
+      onWaiting,
     });
   }
 
@@ -443,17 +451,19 @@ export class AgentExecutorService extends Service implements AgentExecutor {
     model: string | undefined;
     maxCostUsd: number | undefined;
     instructions: string;
+    onWaiting?: (note: string | null) => void;
   }): ChatModel {
     const workspaceId = this.workspaceId;
     if (!workspaceId) {
       throw new Error('No workspace is open, so there is nowhere to ask.');
     }
-    const { deviceKey } = asker;
+    const { deviceKey, onWaiting } = asker;
     const remoteRunner = this.remoteRunner;
     return async function* (messages, signal) {
       const job = await remoteRunner.enqueue(workspaceId, {
         deviceKey,
-        agentId: asker.agentId,
+        // The server sends no "finished" push for these: the chat shows it.
+        agentId: `${CHAT_AGENT_PREFIX}${asker.agentId}`,
         agentName: asker.agentName,
         instructions: asker.instructions,
         context: messages
@@ -465,23 +475,46 @@ export class AgentExecutorService extends Service implements AgentExecutor {
         maxSteps: CHAT_ON_DEVICE_STEPS,
         maxCostUsd: asker.maxCostUsd,
       });
-      for await (const { job: update } of remoteRunner.watch(
-        workspaceId,
-        job.id,
-        signal
-      )) {
-        if (update.status === 'done') {
-          yield update.result ?? '';
-          return;
-        }
-        if (update.status === 'error') {
-          throw new Error(
-            update.error || `The question failed on ${deviceKey}.`
+      // Closed before the answer came: the turn would otherwise still run,
+      // or wait for a slot and run later, for no one.
+      let answered = false;
+      const cancel = () => {
+        if (!answered) remoteRunner.cancel(workspaceId, job.id).catch(() => {});
+      };
+      if (signal.aborted) cancel();
+      signal.addEventListener('abort', cancel, { once: true });
+      try {
+        for await (const { job: update } of remoteRunner.watch(
+          workspaceId,
+          job.id,
+          signal
+        )) {
+          // Runs waiting on their starter keep their slots, so with every
+          // slot waiting this waits too, until one is answered.
+          onWaiting?.(
+            update.status === 'queued'
+              ? `Waiting for a free job slot on ${deviceKey}. Runs waiting on you hold their slots: answer one, or raise "Jobs at once" for ${deviceKey} on the Monitoring page.`
+              : null
           );
+          if (update.status === 'done') {
+            answered = true;
+            yield update.result ?? '';
+            return;
+          }
+          if (update.status === 'error') {
+            answered = true;
+            throw new Error(
+              update.error || `The question failed on ${deviceKey}.`
+            );
+          }
+          if (update.status === 'cancelled') {
+            answered = true;
+            throw new Error('The question was cancelled.');
+          }
         }
-        if (update.status === 'cancelled') {
-          throw new Error('The question was cancelled.');
-        }
+      } finally {
+        signal.removeEventListener('abort', cancel);
+        onWaiting?.(null);
       }
     };
   }
