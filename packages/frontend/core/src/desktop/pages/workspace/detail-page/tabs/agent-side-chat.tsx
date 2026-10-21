@@ -8,6 +8,7 @@ import {
   LitTextRenderer,
   type TextRendererOptions,
 } from '@notesgraph/core/blocksuite/ai/components/text-renderer';
+import { registerAISharedEffects } from '@notesgraph/core/blocksuite/ai/effects/shared';
 import { useAISpecs } from '@notesgraph/core/components/hooks/notesgraph/use-ai-specs';
 import {
   type ChatMessage,
@@ -32,6 +33,10 @@ import {
 } from 'react';
 
 import * as styles from './agents.css';
+
+// LitTextRenderer constructs <text-renderer>, which is otherwise only
+// registered once an editor or the chat page has loaded.
+registerAISharedEffects();
 
 /** A file sent with a question. Its text rides inside the message. */
 interface AttachedFile {
