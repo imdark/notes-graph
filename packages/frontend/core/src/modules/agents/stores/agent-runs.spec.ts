@@ -1,4 +1,4 @@
-import { Framework } from '@notesgraph/infra';
+import { Framework, LiveData } from '@notesgraph/infra';
 import { describe, expect, test } from 'vitest';
 
 import { WorkspaceDBService } from '../../db';
@@ -24,7 +24,7 @@ const setup = (rows: Record<string, Record<string, unknown>>) => {
   const framework = new Framework();
   framework
     .service(WorkspaceDBService, {
-      userdataDB$: { value: { agentRuns: table } },
+      userdataDB$: new LiveData({ agentRuns: table }),
     } as any)
     .store(AgentRunLogsStore, {} as any)
     .store(AgentRunsStore, [WorkspaceDBService, AgentRunLogsStore]);

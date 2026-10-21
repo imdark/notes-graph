@@ -38,6 +38,7 @@ const nativeTaskNode = (docId: string, blockId: string): TaskNode => ({
 const setup = () => {
   const local$ = new Subject<{ nodes: TaskNode[] }>();
   const indexer = {
+    // eslint-disable-next-line rxjs/finnish -- stubs the indexer.search$ method
     search$: (_table: string, _query: unknown, options: { prefer?: string }) =>
       options.prefer === 'remote' ? NEVER : local$,
   };

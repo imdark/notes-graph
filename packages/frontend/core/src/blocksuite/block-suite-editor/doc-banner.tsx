@@ -60,7 +60,7 @@ export async function blobToIconDataUrl(
 function useDocTitle(docId: string) {
   const docsService = useService(DocsService);
   const record = useLiveData(docsService.list.doc$(docId));
-  return useLiveData(useMemo(() => record?.title$, [record])) || '';
+  return useLiveData(record?.title$) || '';
 }
 
 function useGenerationStatusText(busy: boolean) {

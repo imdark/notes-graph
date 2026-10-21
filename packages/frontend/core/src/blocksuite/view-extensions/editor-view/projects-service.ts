@@ -19,6 +19,7 @@ export function patchProjectsService(
   const projectsService = framework.get(ProjectsService);
 
   const impl: EditorProjectsService = {
+    // eslint-disable-next-line rxjs/finnish -- name fixed by the editor ProjectsService interface
     projects$: () =>
       new Observable<ProjectInfo[]>(subscriber => {
         const subscription = projectsService.projects.projects$.subscribe(

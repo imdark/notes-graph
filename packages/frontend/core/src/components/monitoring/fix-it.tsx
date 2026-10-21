@@ -88,10 +88,11 @@ export const FixItButton = ({
   const started = useLiveData(
     useMemo(() => fixTask.watchFix(key), [fixTask, key])
   );
+  const startedRunId = started?.runId;
   const run = useLiveData(
     useMemo(
-      () => (started?.runId ? runsStore.watchRun(started.runId) : null),
-      [runsStore, started?.runId]
+      () => (startedRunId ? runsStore.watchRun(startedRunId) : null),
+      [runsStore, startedRunId]
     )
   );
   const fixing = run?.status === 'running';

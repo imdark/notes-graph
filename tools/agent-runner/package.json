@@ -13,6 +13,7 @@
     "zod": "^4.0.0"
   },
   "devDependencies": {
-    "@notesgraph-tools/cli": "workspace:*"
+    "@notesgraph-tools/cli": "workspace:*",
+    "vitest": "^4.1.8"
   }
 }

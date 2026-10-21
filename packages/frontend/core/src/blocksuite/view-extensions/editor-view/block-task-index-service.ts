@@ -37,6 +37,7 @@ export function patchBlockTaskIndexService(
   const docsSearchService = framework.get(DocsSearchService);
 
   const provider: BlockTaskIndexProvider = {
+    // eslint-disable-next-line rxjs/finnish -- name fixed by the BlockTaskIndexProvider interface
     queryTaskBlocks$: (filter: BlockTaskFilter) => {
       // A section scope (tasks nested under a named heading, e.g. a journal's
       // per-project sections) can't be pushed into the index query: todoTrail
@@ -191,7 +192,7 @@ export function patchBlockTaskIndexService(
       // answered with nothing" — the consumer treats its first emission as
       // proof the query came back, and an emission it never asked for would
       // make an empty board claim "No results." before either index replied.
-      const hits$ = (prefer?: 'remote') =>
+      const queryHits = (prefer?: 'remote') =>
         defer(() => {
           let answered = false;
           const answer$ = docsSearchService.indexer
@@ -220,7 +221,7 @@ export function patchBlockTaskIndexService(
           return merge(answer$, silence$);
         }).pipe(startWith<BlockTaskHit[] | null>(null));
 
-      return combineLatest([hits$(), hits$('remote')]).pipe(
+      return combineLatest([queryHits(), queryHits('remote')]).pipe(
         // Both still unanswered → stay silent rather than emit a hollow [].
         filterOp(results => results.some(hits => hits !== null)),
         map(results => {

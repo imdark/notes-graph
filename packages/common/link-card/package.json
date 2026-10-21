@@ -17,6 +17,9 @@
     "satori-html": "^0.3.2",
     "sharp": "^0.35.2"
   },
+  "devDependencies": {
+    "vitest": "^4.1.8"
+  },
   "peerDependencies": {
     "playwright": "^1.58.2"
   },

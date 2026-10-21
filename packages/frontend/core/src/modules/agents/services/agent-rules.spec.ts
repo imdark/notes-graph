@@ -1,4 +1,4 @@
-import { Framework } from '@notesgraph/infra';
+import { Framework, LiveData } from '@notesgraph/infra';
 import { describe, expect, test } from 'vitest';
 
 import { DocsService } from '../../doc';
@@ -13,8 +13,8 @@ import {
 
 const record = (id: string, title: string, trash = false) => ({
   id,
-  title$: { value: title },
-  trash$: { value: trash },
+  title$: new LiveData(title),
+  trash$: new LiveData(trash),
 });
 
 /**
@@ -27,7 +27,7 @@ const fakeDocs = (records: ReturnType<typeof record>[]) => {
   const created: string[] = [];
   let released = 0;
   const docs: any = {
-    list: { docs$: { value: records } },
+    list: { docs$: new LiveData(records) },
     open: () => ({
       doc: {
         addPriorityLoad: () => () => {},
