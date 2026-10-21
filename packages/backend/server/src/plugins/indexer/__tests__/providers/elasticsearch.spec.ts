@@ -975,7 +975,7 @@ test('should search doc table query title.autocomplete work', async t => {
       bool: {
         must: [
           { match: { workspace_id: workspaceId } },
-          { match: { 'title.autocomplete': 'aff' } },
+          { match: { 'title.autocomplete': 'not' } },
         ],
       },
     },
