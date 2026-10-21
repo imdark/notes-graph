@@ -266,7 +266,7 @@ export function observeFolder(
       }
       if (paths.length) onChange([...new Set(paths)]);
     });
-    void observer.observe(root, { recursive: true });
+    observer.observe(root, { recursive: true }).catch(console.error);
     return { stop: () => observer.disconnect(), live: true };
   }
 
@@ -301,7 +301,7 @@ export function observeFolder(
     }
   };
 
-  void tick();
+  tick().catch(console.error);
   const timer = setInterval(() => void tick(), pollMs);
   return {
     stop: () => {

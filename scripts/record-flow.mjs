@@ -187,7 +187,7 @@ try {
 // The video is only finalised on close, so this must happen either way.
 await context.close();
 
-const [raw] = (await readdir(videoDir)).filter(f => f.endsWith('.webm'));
+const raw = (await readdir(videoDir)).find(f => f.endsWith('.webm'));
 if (!raw) {
   console.error('!! no video produced');
   process.exit(1);

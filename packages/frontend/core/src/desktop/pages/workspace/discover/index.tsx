@@ -361,7 +361,7 @@ const DiscoverPage = () => {
     }
     const stale = !cached || Date.now() - cached.fetchedAt > FEED_MAX_AGE_MS;
     if (stale) {
-      void refresh(activeTopics, !cached);
+      refresh(activeTopics, !cached).catch(console.error);
     }
   }, [topicsKey, globalCache, refresh]);
 
@@ -462,7 +462,9 @@ const DiscoverPage = () => {
                     size="default"
                     loading={loadingMore}
                     disabled={loadingMore}
-                    onClick={loadMore}
+                    onClick={() => {
+                      loadMore().catch(console.error);
+                    }}
                   >
                     {t['com.notesgraph.discover.loadMore']()}
                   </Button>

@@ -42,7 +42,7 @@ export type AgentHarness = 'on-device' | 'cloud' | 'remote' | 'research';
  */
 export type AgentKind = 'answer' | 'worker' | 'fan-out';
 
-const AGENT_KINDS: AgentKind[] = new Set(['answer', 'worker', 'fan-out']);
+const AGENT_KINDS = new Set<AgentKind>(['answer', 'worker', 'fan-out']);
 
 /**
  * An agent's kind, for rows saved before it was a setting: a Claude Code or
@@ -139,7 +139,7 @@ interface AgentRowShape {
   createdBy?: string | null;
 }
 
-const TARGET_KINDS: AgentTargetKind[] = ['block', 'selection', 'doc'];
+const TARGET_KINDS = new Set<AgentTargetKind>(['block', 'selection', 'doc']);
 
 /**
  * Reads and writes agents across the two tables that hold them: the workspace
@@ -184,7 +184,7 @@ export class AgentsStore extends Store {
       // row written by a newer build (or edited by hand) shouldn't be able to
       // put an agent somewhere this build doesn't understand.
       targets: (row.targets ?? []).filter((t): t is AgentTargetKind =>
-        TARGET_KINDS.includes(t as AgentTargetKind)
+        TARGET_KINDS.has(t as AgentTargetKind)
       ),
       output: 'panel',
       maxSteps: row.maxSteps ?? DEFAULT_MAX_STEPS,
@@ -232,7 +232,9 @@ export class AgentsStore extends Store {
     return this.workspaceDBService.userdataDB$
       .map(db => LiveData.from(db.agents.find$(), []))
       .flat()
-      .map(rows => rows.map(row => this.toAgent(row as AgentRowShape, 'personal')));
+      .map(rows =>
+        rows.map(row => this.toAgent(row as AgentRowShape, 'personal'))
+      );
   }
 
   // --- writes ------------------------------------------------------------

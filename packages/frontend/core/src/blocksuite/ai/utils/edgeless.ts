@@ -1,7 +1,6 @@
 import { SurfaceBlockModel } from '@blocksuite/notesgraph/blocks/surface';
-import type {
-  MindmapElementModel} from '@blocksuite/notesgraph/model';
 import {
+  type MindmapElementModel,
   NoteBlockModel,
   RootBlockModel,
   type ShapeElementModel,

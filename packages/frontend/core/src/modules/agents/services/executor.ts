@@ -22,7 +22,7 @@ import { stampLines } from './log-lines';
 import {
   CLOUD_DEVICE_KEY,
   openQuestions,
-  RemoteAgentRunnerService,
+  type RemoteAgentRunnerService,
   type RemoteJob,
   type RemoteQuestion,
   RESEARCH_MODEL,

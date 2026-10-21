@@ -240,9 +240,7 @@ export const AgentEditor = ({
   const [targets, setTargets] = useState<AgentTargetKind[]>(
     seed?.targets ?? ['block', 'selection', 'doc']
   );
-  const [maxSteps, setMaxSteps] = useState(
-    seed?.maxSteps ?? DEFAULT_MAX_STEPS
-  );
+  const [maxSteps, setMaxSteps] = useState(seed?.maxSteps ?? DEFAULT_MAX_STEPS);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [harness, setHarness] = useState<AgentHarness | undefined>(
     editorHarness(seed?.harness, seed?.model, seed?.deviceKey)
@@ -383,6 +381,7 @@ export const AgentEditor = ({
     harness,
     icon,
     instructions,
+    kind,
     model,
     maxSteps,
     name,
@@ -477,7 +476,7 @@ export const AgentEditor = ({
                 ) : null}
               </div>
               <span className={styles.hint}>
-                Same picker as a note's icon — emoji, a built-in icon, or one
+                Same picker as a note’s icon — emoji, a built-in icon, or one
                 generated with AI.
               </span>
             </div>
@@ -691,35 +690,35 @@ export const AgentEditor = ({
                       'a CLOUD-n ticket, its own branch and worktree, wf ai’s ' +
                       'prompt and skills; it can install, test and push.'
                     : onCloud && model === CLAUDE_CODE_MODEL
-                    ? 'Runs on the server with your notes as tools, in a fresh ' +
-                      'worktree of the repo on its own branch; it can install, ' +
-                      'test and push, and asks you here when it needs something.'
-                    : onCloud && model === RESEARCH_MODEL
-                    ? 'Claude Code with OmniSeek on the server: searches across ' +
-                      'languages, reads papers and PDFs, follows citations, and ' +
-                      'answers with sources.'
-                    : harness === 'remote'
-                  ? model === CLAUDE_CODE_MODEL
-                    ? 'Runs the claude CLI on the device with your notes as tools. ' +
-                      'When it needs a fact or a permission it asks you here, then ' +
-                      'saves the answer to your notes so it does not ask again.'
-                    : model === WORKFLOW_MODEL
-                      ? 'The same Claude Code, started like `wf start` + `wf ai`: ' +
-                        'a ticket in the device’s task backend, its own branch and ' +
-                        'worktree, and the project’s Claude account and skills.'
-                      : model === RESEARCH_MODEL
-                        ? 'Claude Code with OmniSeek on the device: searches across ' +
+                      ? 'Runs on the server with your notes as tools, in a fresh ' +
+                        'worktree of the repo on its own branch; it can install, ' +
+                        'test and push, and asks you here when it needs something.'
+                      : onCloud && model === RESEARCH_MODEL
+                        ? 'Claude Code with OmniSeek on the server: searches across ' +
                           'languages, reads papers and PDFs, follows citations, and ' +
-                          'answers with sources. Needs OmniSeek running on that device.'
-                        : "Default runs the device's configured AI provider."
-                  : harness === 'research'
-                    ? 'The server’s model researches with OmniSeek: searches across ' +
-                      'languages, reads pages and papers, follows citations, and ' +
-                      'answers with sources.'
-                  : harness === 'cloud'
-                    ? 'Claude Code, Workflow and Research run on the server’s own ' +
-                      'runner; any other choice is the server copilot’s model.'
-                    : 'A different on-device model is downloaded the first time it runs.'}
+                          'answers with sources.'
+                        : harness === 'remote'
+                          ? model === CLAUDE_CODE_MODEL
+                            ? 'Runs the claude CLI on the device with your notes as tools. ' +
+                              'When it needs a fact or a permission it asks you here, then ' +
+                              'saves the answer to your notes so it does not ask again.'
+                            : model === WORKFLOW_MODEL
+                              ? 'The same Claude Code, started like `wf start` + `wf ai`: ' +
+                                'a ticket in the device’s task backend, its own branch and ' +
+                                'worktree, and the project’s Claude account and skills.'
+                              : model === RESEARCH_MODEL
+                                ? 'Claude Code with OmniSeek on the device: searches across ' +
+                                  'languages, reads papers and PDFs, follows citations, and ' +
+                                  'answers with sources. Needs OmniSeek running on that device.'
+                                : "Default runs the device's configured AI provider."
+                          : harness === 'research'
+                            ? 'The server’s model researches with OmniSeek: searches across ' +
+                              'languages, reads pages and papers, follows citations, and ' +
+                              'answers with sources.'
+                            : harness === 'cloud'
+                              ? 'Claude Code, Workflow and Research run on the server’s own ' +
+                                'runner; any other choice is the server copilot’s model.'
+                              : 'A different on-device model is downloaded the first time it runs.'}
               </span>
             </div>
 
@@ -762,7 +761,8 @@ export const AgentEditor = ({
                   {skills
                     ? 'Only these skills are loaded for the run.'
                     : 'Following the default set for this model; tick or untick to choose your own.'}{' '}
-                  A note titled “Skill: &lt;name&gt;” is offered here as a skill too.
+                  A note titled “Skill: &lt;name&gt;” is offered here as a skill
+                  too.
                 </span>
               </div>
             ) : null}

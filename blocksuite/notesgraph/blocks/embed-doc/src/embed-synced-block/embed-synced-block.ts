@@ -264,7 +264,7 @@ export class EmbedSyncedBlockComponent extends CaptionedBlockComponent<EmbedSync
     // every edit to the source.
     const expression = this.model.props.expression$.value?.trim();
     if (expression) {
-      this.sourceTextVersion$.value;
+      void this.sourceTextVersion$.value;
       const refs = this.model.props.refs$.value ?? [];
       const result = evaluateFormula(expression, name => {
         const key = name.trim().toLowerCase();

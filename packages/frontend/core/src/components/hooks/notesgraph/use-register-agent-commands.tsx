@@ -109,7 +109,7 @@ export function useRegisterAgentCommands(editor: Editor, active: boolean) {
                 : { kind: 'block', docId, blockId: first };
             workbench.openSidebar();
             workbench.activeView$.value.activeSidebarTab('agents');
-            void sessions.start(agent, target);
+            sessions.start(agent, target).catch(console.error);
           },
         })
       );

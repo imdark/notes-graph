@@ -95,7 +95,7 @@ const AgentRuns = () => {
         });
         return;
       }
-      void sessionService.start(agent, target);
+      sessionService.start(agent, target).catch(console.error);
     },
     [agentsService, runsStore, sessionService]
   );

@@ -12,8 +12,7 @@ import {
   timeout,
 } from 'rxjs';
 
-import type { DocsService } from '../../doc';
-import type { Doc } from '../../doc';
+import type { Doc, DocsService } from '../../doc';
 import type { DocsSearchService } from '../../docs-search';
 import type { TagService } from '../../tag';
 import type { WorkspaceService } from '../../workspace';
@@ -140,7 +139,12 @@ export class PublishSiteService extends Service {
       readSiteManifest(doc.yDoc)
     );
     const pages = existing?.pages ?? [];
-    const manifest: SiteManifest = { version: 1, rootId, site: resolved, pages };
+    const manifest: SiteManifest = {
+      version: 1,
+      rootId,
+      site: resolved,
+      pages,
+    };
     // Rewrite the manifest on every page so the theme/title change reaches all
     // of them (each page self-describes the site).
     for (const page of pages.length ? pages : [{ docId: rootId }]) {
@@ -274,7 +278,9 @@ export class PublishSiteService extends Service {
 
   private isDraft(docId: string): boolean {
     const tags = this.tagService.tagList.tagsByPageId$(docId).value;
-    return tags.some(t => t.value$.value.trim().toLowerCase() === SITE_DRAFT_TAG);
+    return tags.some(
+      t => t.value$.value.trim().toLowerCase() === SITE_DRAFT_TAG
+    );
   }
 
   // ---- auto-publish glue -------------------------------------------------
@@ -284,29 +290,25 @@ export class PublishSiteService extends Service {
     // workspace must never try to (re)publish.
     if (this.workspaceService.workspace.openOptions.isSharedMode) return;
 
-    const enabledRoots$ = this.docsService
-      .propertyValues$('publishSite')
-      .pipe(
-        map(values => {
-          const roots: string[] = [];
-          for (const [docId, raw] of values) {
-            if (this.parseSettings(raw)?.enabled) roots.push(docId);
-          }
-          return roots;
-        }),
-        distinctUntilChanged(
-          (a, b) => a.length === b.length && a.every(x => b.includes(x))
-        )
-      );
+    const enabledRoots$ = this.docsService.propertyValues$('publishSite').pipe(
+      map(values => {
+        const roots: string[] = [];
+        for (const [docId, raw] of values) {
+          if (this.parseSettings(raw)?.enabled) roots.push(docId);
+        }
+        return roots;
+      }),
+      distinctUntilChanged(
+        (a, b) => a.length === b.length && a.every(x => b.includes(x))
+      )
+    );
 
     const subscription = enabledRoots$
       .pipe(
         switchMap(roots =>
           roots.length === 0
             ? of([] as string[][])
-            : combineLatest(
-                roots.map(rootId => this.descendants$(rootId))
-              )
+            : combineLatest(roots.map(rootId => this.descendants$(rootId)))
         )
       )
       .subscribe(() => {

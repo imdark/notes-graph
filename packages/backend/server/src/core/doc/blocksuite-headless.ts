@@ -71,6 +71,7 @@ export function appendLinkedDocReference(
     );
   }
 
+  const note = noteBlock;
   doc.transact(() => {
     const newId = nanoid(10);
     const text = new Y.Text();
@@ -86,7 +87,7 @@ export function appendLinkedDocReference(
     block.set('prop:collapsed', false);
 
     blocks.set(newId, block);
-    (noteBlock!.get('sys:children') as Y.Array<string>).push([newId]);
+    (note.get('sys:children') as Y.Array<string>).push([newId]);
   });
 
   return Y.encodeStateAsUpdate(doc, beforeState);

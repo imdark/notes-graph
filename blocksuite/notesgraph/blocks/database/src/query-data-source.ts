@@ -514,7 +514,7 @@ export class QueryListDataSource extends OrgTaskRowsDataSource {
   protected override sourceRowModels$: ReadonlySignal<BlockModel[]> = computed(
     () => {
       // Status/deadline live in the items' text — re-filter on text edits.
-      this.sourceTextVersion$.value;
+      void this.sourceTextVersion$.value;
       return this.hitModels$.value.filter(model => this.matchesCriteria(model));
     }
   );

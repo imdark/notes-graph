@@ -101,8 +101,8 @@ const StarterBarNotEmpty = ({ doc }: { doc: Store }) => {
 
     // Imported on demand: the blocksuite/ai barrel is ~9MB and stays out of the
     // initial bundle; the user is clicking "start with AI" so the wait is fine.
-    void import('@notesgraph/core/blocksuite/ai').then(
-      ({ handleInlineAskAIAction, pageAIGroups }) => {
+    import('@notesgraph/core/blocksuite/ai')
+      .then(({ handleInlineAskAIAction, pageAIGroups }) => {
         const { id, created } = rootComponent.focusFirstParagraph();
         if (created) {
           const subscription = std.view.viewUpdated.subscribe(v => {
@@ -114,8 +114,8 @@ const StarterBarNotEmpty = ({ doc }: { doc: Store }) => {
         } else {
           handleInlineAskAIAction(std.host, pageAIGroups);
         }
-      }
-    );
+      })
+      .catch(console.error);
   }, [editorService.editor]);
 
   const showTemplate = !isTemplate;

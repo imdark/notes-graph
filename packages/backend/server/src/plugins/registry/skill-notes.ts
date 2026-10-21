@@ -89,7 +89,7 @@ function describe(body: string, fallback: string) {
   const lines = body.split('\n');
   const at = lines.findIndex(line => DESCRIPTION_LINE.test(line));
   if (at >= 0) {
-    const description = plain(DESCRIPTION_LINE.exec(lines[at])![1]);
+    const description = plain(DESCRIPTION_LINE.exec(lines[at])?.[1] ?? '');
     if (description) {
       lines.splice(at, 1);
       return { description, body: lines.join('\n') };

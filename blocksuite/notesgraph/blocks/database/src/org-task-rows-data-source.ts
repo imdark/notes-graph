@@ -419,7 +419,7 @@ export abstract class OrgTaskRowsDataSource extends DatabaseBlockDataSource {
   override cellValueGet(rowId: string, propertyId: string): unknown {
     const dateKeyword = this.orgDateKeyword(propertyId);
     if (dateKeyword) {
-      this.sourceTextVersion$.value;
+      void this.sourceTextVersion$.value;
       const stamp = this.rowTimestamp(rowId, dateKeyword);
       if (stamp) return stamp.epochMs;
       if (dateKeyword === 'CREATED') {
@@ -432,7 +432,7 @@ export abstract class OrgTaskRowsDataSource extends DatabaseBlockDataSource {
       return null;
     }
     if (this.isOrgStatusProperty(propertyId)) {
-      this.sourceTextVersion$.value;
+      void this.sourceTextVersion$.value;
       const statusText =
         this.rowOrgStatus(rowId)?.statusText ??
         this.nativeCheckboxOrgText(rowId);
@@ -457,7 +457,7 @@ export abstract class OrgTaskRowsDataSource extends DatabaseBlockDataSource {
    * checkbox, so a task written as `DONE` and one written as `[X]` agree.
    */
   taskDoneGet(rowId: string): boolean | undefined {
-    this.sourceTextVersion$.value;
+    void this.sourceTextVersion$.value;
     const statusText =
       this.rowOrgStatus(rowId)?.statusText ?? this.nativeCheckboxOrgText(rowId);
     if (!statusText) return undefined;

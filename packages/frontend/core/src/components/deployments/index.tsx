@@ -138,8 +138,8 @@ const ProdLine = ({ deploy }: { deploy: DeployInfo | null | undefined }) => {
   if (deploy === null) {
     return (
       <div className={styles.sectionHint} data-testid="deployments-prod">
-        This server keeps no deploy record, so merged pull requests can't be
-        checked for being live. It starts with the next deploy.
+        This server keeps no deploy record, so merged pull requests can&apos;t
+        be checked for being live. It starts with the next deploy.
       </div>
     );
   }
@@ -506,11 +506,14 @@ export const DeploymentsView = () => {
           ? pullsByUrl.get(row.pullRequest)
           : undefined;
         const readiness = pr?.state === 'open' ? mergeReadiness(pr) : null;
-        if (pr && readiness && mergesDirectly(readiness)) {
-          if (await mergeOne(pr, row)) {
-            mergedNow.add(rowKey(row));
-            continue;
-          }
+        if (
+          pr &&
+          readiness &&
+          mergesDirectly(readiness) &&
+          (await mergeOne(pr, row))
+        ) {
+          mergedNow.add(rowKey(row));
+          continue;
         }
         // A draft isn't ready to go, whoever merges it.
         if (readiness !== 'draft') helpNeeded.push(row);
@@ -819,8 +822,8 @@ export const DeploymentsView = () => {
           <div className={styles.sectionHint}>
             Marked COMMITTED, but there is nothing open to merge: no pull
             request in the note, or Check ready branches found it closed, gone
-            or without its branch. Mark it merged if the work is on main
-            another way, or done if nothing is left to ship.
+            or without its branch. Mark it merged if the work is on main another
+            way, or done if nothing is left to ship.
           </div>
           <div className={styles.rows}>
             {stuck.map(row => {

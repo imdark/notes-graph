@@ -70,7 +70,10 @@ export const BudgetLine = ({ refreshKey }: { refreshKey: number }) => {
         setEditing(false);
       })
       .catch((err: Error) => {
-        notify.error({ title: "Couldn't save the budget", message: err.message });
+        notify.error({
+          title: "Couldn't save the budget",
+          message: err.message,
+        });
       })
       .finally(() => setSaving(false));
   }, [parsed, remoteRunner, workspaceId]);
@@ -81,14 +84,14 @@ export const BudgetLine = ({ refreshKey }: { refreshKey: number }) => {
   if (loadError && !budget) {
     return (
       <div className={styles.budget} data-testid="agents-page-budget">
-        Couldn't load this month's spend: {loadError}
+        Couldn&apos;t load this month&apos;s spend: {loadError}
       </div>
     );
   }
   if (!budget) {
     return (
       <div className={styles.budget} data-testid="agents-page-budget">
-        Loading this month's spend…
+        Loading this month&apos;s spend…
       </div>
     );
   }
@@ -137,7 +140,9 @@ export const BudgetLine = ({ refreshKey }: { refreshKey: number }) => {
         {budget.monthlyUsd !== null
           ? ` of ${usd(budget.monthlyUsd)} budget`
           : ''}
-        {over ? '. New runs are refused until next month or a higher budget.' : ''}
+        {over
+          ? '. New runs are refused until next month or a higher budget.'
+          : ''}
       </span>
       <Button
         variant="plain"

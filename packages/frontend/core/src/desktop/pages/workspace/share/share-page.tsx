@@ -428,7 +428,7 @@ const MaybeSiteShell = ({
   workspaceId: string;
   children: ReactNode;
 }) => {
-  if (!manifest) return <>{children}</>;
+  if (!manifest) return children;
   return (
     <SiteShell
       manifest={manifest}

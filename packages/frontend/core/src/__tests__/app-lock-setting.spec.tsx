@@ -1,6 +1,7 @@
 /**
  * @vitest-environment happy-dom
  */
+import type * as Infra from '@notesgraph/infra';
 import { Framework } from '@notesgraph/infra';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -15,7 +16,7 @@ import {
 const holder = vi.hoisted(() => ({ service: null as unknown }));
 
 vi.mock('@notesgraph/infra', async importOriginal => ({
-  ...(await importOriginal<typeof import('@notesgraph/infra')>()),
+  ...(await importOriginal<typeof Infra>()),
   useService: () => holder.service,
 }));
 

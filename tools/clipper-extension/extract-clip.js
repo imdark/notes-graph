@@ -20,7 +20,7 @@ function extractClip() {
     try {
       const u = new URL(v, base);
       return u.protocol === 'http:' || u.protocol === 'https:' ? u.href : null;
-    } catch (e) {
+    } catch {
       return null;
     }
   }

@@ -673,10 +673,10 @@ export class RegistryJobService {
     // A "done" whose whole answer is the limit message counts too.
     const limit =
       status === 'error' ? error : status === 'done' && (result ?? '').length < 300 ? result : undefined;
-    if (isSessionLimit(limit)) {
-      const runAfter = sessionLimitRunAfter(limit!);
+    if (limit && isSessionLimit(limit)) {
+      const runAfter = sessionLimitRunAfter(limit);
       const note =
-        `⏸ Claude session limit reached (${limit!.trim()}). ` +
+        `⏸ Claude session limit reached (${limit.trim()}). ` +
         `Queued to run again at ${runAfter.toISOString()}.\n`;
       const requeued = await this.models.registryJob.requeue(
         workspaceId,

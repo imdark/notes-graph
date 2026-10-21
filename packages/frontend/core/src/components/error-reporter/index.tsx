@@ -86,12 +86,12 @@ function install() {
   });
 
   window.addEventListener('unhandledrejection', event => {
-    const reason = event.reason as { message?: string; stack?: string } | string;
+    const reason = event.reason as
+      | { message?: string; stack?: string }
+      | string;
     record(
       'unhandledrejection',
-      typeof reason === 'string'
-        ? reason
-        : (reason?.message ?? fmtArg(reason)),
+      typeof reason === 'string' ? reason : (reason?.message ?? fmtArg(reason)),
       typeof reason === 'object' ? reason?.stack : undefined
     );
   });
@@ -101,11 +101,7 @@ function install() {
   console.error = (...args: unknown[]) => {
     try {
       const first = args.find(a => a instanceof Error) as Error | undefined;
-      record(
-        'console.error',
-        args.map(fmtArg).join(' '),
-        first?.stack
-      );
+      record('console.error', args.map(fmtArg).join(' '), first?.stack);
     } catch {
       // never let capture break logging
     }
@@ -234,10 +230,22 @@ export const ErrorReporter = () => {
           <span style={{ flex: 1, fontSize: 12, color: '#9ca3af' }}>
             {status}
           </span>
-          <button type="button" style={pill} onClick={copy}>
+          <button
+            type="button"
+            style={pill}
+            onClick={() => {
+              copy().catch(console.error);
+            }}
+          >
             Copy
           </button>
-          <button type="button" style={pill} onClick={submit}>
+          <button
+            type="button"
+            style={pill}
+            onClick={() => {
+              submit().catch(console.error);
+            }}
+          >
             Submit
           </button>
           <button type="button" style={pill} onClick={clear}>

@@ -114,7 +114,7 @@ export function useBindWorkbenchToBrowserRouter(
       }
     }
     view.history.push(newLocation, 'fromBrowser');
-  }, [basename, browserLocation, view]);
+  }, [basename, browserLocation, navigate, view]);
 }
 
 function browserLocationToViewLocation(

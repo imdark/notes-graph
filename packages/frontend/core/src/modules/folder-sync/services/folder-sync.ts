@@ -275,11 +275,12 @@ export class FolderSyncService extends Service {
           this.docWatchers.set(
             record.id,
             record.updatedAt$.subscribe(() => {
-              void this.store
+              this.store
                 .findEntryByDocId(this.workspaceId, record.id)
                 .then(entry => {
                   if (entry) this.dirtyDocs$.next(record.id);
-                });
+                })
+                .catch(console.error);
             })
           );
         }
@@ -379,7 +380,8 @@ export class FolderSyncService extends Service {
       if (!note) return;
 
       store.transact(() => {
-        for (const child of [...note.model.children]) {
+        // Snapshot: deleting a block mutates `children`.
+        for (const child of note.model.children.slice()) {
           store.deleteBlock(child);
         }
       });

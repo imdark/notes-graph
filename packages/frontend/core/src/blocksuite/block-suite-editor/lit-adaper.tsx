@@ -120,9 +120,11 @@ export const usePatchSpecs = (mode: DocMode, shared?: boolean) => {
   useEffect(() => {
     if (!enableAI) return;
     let cancelled = false;
-    void ensureAIViewExtension().then(() => {
-      if (!cancelled) setAiReady(true);
-    });
+    ensureAIViewExtension()
+      .then(() => {
+        if (!cancelled) setAiReady(true);
+      })
+      .catch(console.error);
     return () => {
       cancelled = true;
     };

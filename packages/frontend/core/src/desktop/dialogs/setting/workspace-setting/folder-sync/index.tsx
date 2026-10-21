@@ -27,7 +27,7 @@ export const WorkspaceSettingFolderSync = () => {
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    void folderSync.resume();
+    folderSync.resume().catch(console.error);
   }, [folderSync]);
 
   const handleBind = useCallback(() => {

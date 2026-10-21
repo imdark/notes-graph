@@ -217,7 +217,8 @@ export function ingestLogs(
         rate: { mean: 0, variance: 0, samples: 0, lastValue: null },
       };
       // Two templates can hash alike only if they are the same; keep ids unique anyway.
-      while (patterns.some(p => p.id === pattern!.id)) pattern.id = patternId(pattern.id);
+      const fresh = pattern;
+      while (patterns.some(p => p.id === fresh.id)) fresh.id = patternId(fresh.id);
       patterns.push(pattern);
       created.add(pattern.id);
     }

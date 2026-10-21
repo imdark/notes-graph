@@ -343,13 +343,13 @@ export class AgentRunSessionService extends Service {
     const [next, ...rest] = this.queue$.value;
     if (!next) return;
     this.queue$.setValue(rest);
-    void this.runNow(
+    this.runNow(
       next.agent,
       next.target,
       next.targetLabel,
       next.pass,
       next.brief
-    );
+    ).catch(console.error);
   }
 
   private async runNow(
@@ -469,7 +469,7 @@ export class AgentRunSessionService extends Service {
       if (answered && !controller.signal.aborted) {
         // The controller stays registered until the list is settled, so
         // stopping or dismissing the run also stops the next pass.
-        void this.continueList(
+        this.continueList(
           id,
           controller,
           agent,
@@ -478,12 +478,12 @@ export class AgentRunSessionService extends Service {
           pass,
           started,
           brief
-        );
+        ).catch(console.error);
       } else {
         this.controllers.delete(id);
         if (claims) this.unclaim(target, started);
         if (controller.signal.aborted) this.keep(id);
-        else void this.announce(id, agent, target);
+        else this.announce(id, agent, target).catch(console.error);
       }
     }
   }
@@ -596,7 +596,7 @@ export class AgentRunSessionService extends Service {
     } else {
       if (claims) this.unclaim(target, started);
       if (controller.signal.aborted) this.keep(sessionId);
-      else void this.announce(sessionId, agent, target);
+      else this.announce(sessionId, agent, target).catch(console.error);
     }
   }
 
@@ -619,7 +619,7 @@ export class AgentRunSessionService extends Service {
   cancelAll(): void {
     for (const run of this.queue$.value) this.unclaim(run.target);
     this.queue$.setValue([]);
-    for (const id of [...this.controllers.keys()]) this.cancel(id);
+    for (const id of Array.from(this.controllers.keys())) this.cancel(id);
   }
 
   /** Take a session off the panel, stopping it if it is still going. */

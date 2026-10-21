@@ -654,9 +654,9 @@ function createStoreManagerClient() {
     };
     if (!id || !endpoint) return;
     if (write !== undefined) {
-      writeEndpointToken(endpoint, write)
-        .catch(() => {})
-        .then(() => authTokenChannelServer.postMessage({ id, written: true }));
+      const written = () =>
+        authTokenChannelServer.postMessage({ id, written: true });
+      writeEndpointToken(endpoint, write).then(written, written);
       return;
     }
     readEndpointToken(endpoint)

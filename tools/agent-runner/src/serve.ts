@@ -198,7 +198,9 @@ export async function serve(opts: ServeOptions): Promise<void> {
         err => log(`failed ${job.id}: ${err}`)
       );
       running.add(work);
-      void work.finally(() => running.delete(work));
+      work
+        .finally(() => running.delete(work))
+        .catch(err => log(`failed ${job.id}: ${err}`));
     }
     if (running.size >= maxJobs()) {
       // Wait for a slot to free up, and meanwhile notice, without claiming,

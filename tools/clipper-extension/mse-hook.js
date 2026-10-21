@@ -33,15 +33,15 @@
       'video/webm',
       'video/mp4',
     ];
-    for (let i = 0; i < candidates.length; i++) {
+    for (const candidate of candidates) {
       try {
         if (
           typeof MediaRecorder !== 'undefined' &&
-          MediaRecorder.isTypeSupported(candidates[i])
+          MediaRecorder.isTypeSupported(candidate)
         ) {
-          return candidates[i];
+          return candidate;
         }
-      } catch (e) {}
+      } catch {}
     }
     return '';
   }
@@ -78,7 +78,7 @@
           if (entry.bytes >= MAX_BYTES) {
             try {
               rec.stop();
-            } catch (x) {}
+            } catch {}
           }
         }
       };
@@ -89,7 +89,7 @@
       video.__ngRec = entry;
       entry.recorder = rec;
       store.recordings.push(entry);
-    } catch (e) {
+    } catch {
       /* tainted stream / not allowed — fall back to segment capture */
     }
   }
@@ -125,10 +125,10 @@
               rec.chunks.push(u8.slice(0));
               rec.bytes += u8.length;
             }
-          } catch (e) {}
+          } catch {}
           return origAppend.call(this, data);
         };
-      } catch (e) {}
+      } catch {}
       return sb;
     };
   }
@@ -155,14 +155,13 @@
   window.__ngAssembleCapturedVideo = function () {
     // 1) best MediaRecorder recording (audio + video)
     let best = null;
-    for (let i = 0; i < store.recordings.length; i++) {
-      const r = store.recordings[i];
+    for (const r of store.recordings) {
       if (r.bytes > 0 && (!best || r.bytes > best.bytes)) best = r;
     }
     if (best) {
       const finish = function () {
-        var blob = new Blob(best.chunks, { type: best.mime });
-        var ext = /mp4/.test(best.mime) ? 'mp4' : 'webm';
+        const blob = new Blob(best.chunks, { type: best.mime });
+        const ext = /mp4/.test(best.mime) ? 'mp4' : 'webm';
         return blobToDataUrl(blob).then(function (dataUrl) {
           return dataUrl
             ? {
@@ -183,7 +182,7 @@
           });
           try {
             best.recorder.stop();
-          } catch (e) {
+          } catch {
             finish().then(resolve);
           }
         });
@@ -193,8 +192,7 @@
 
     // 2) fallback: concat the largest video SourceBuffer's segments (no audio)
     let seg = null;
-    for (let j = 0; j < store.segBuffers.length; j++) {
-      const b = store.segBuffers[j];
+    for (const b of store.segBuffers) {
       if (!b.bytes) continue;
       if (/audio\//i.test(b.mime)) continue;
       if (!seg || b.bytes > seg.bytes) seg = b;
@@ -202,9 +200,9 @@
     if (!seg) return Promise.resolve(null);
     const merged = new Uint8Array(seg.bytes);
     let off = 0;
-    for (let k = 0; k < seg.chunks.length; k++) {
-      merged.set(seg.chunks[k], off);
-      off += seg.chunks[k].length;
+    for (const chunk of seg.chunks) {
+      merged.set(chunk, off);
+      off += chunk.length;
     }
     let container = (seg.mime.split(';')[0] || 'video/mp4').trim();
     if (!container.startsWith('video/')) container = 'video/mp4';

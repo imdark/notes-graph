@@ -68,8 +68,7 @@ export const ContentDuplicates = () => {
             setPairs(prev =>
               prev
                 ? prev.filter(
-                    p =>
-                      p.aDocId !== pair.bDocId && p.bDocId !== pair.bDocId
+                    p => p.aDocId !== pair.bDocId && p.bDocId !== pair.bDocId
                   )
                 : prev
             );
@@ -95,7 +94,13 @@ export const ContentDuplicates = () => {
         {t['com.notesgraph.duplicates.content.title']()}
         {status.state === 'ready' ? (
           <div className={styles.sectionActions}>
-            <Button size="default" onClick={scan} loading={scanning}>
+            <Button
+              size="default"
+              onClick={() => {
+                scan().catch(console.error);
+              }}
+              loading={scanning}
+            >
               {t['com.notesgraph.duplicates.content.scan']()}
             </Button>
           </div>
@@ -120,10 +125,7 @@ export const ContentDuplicates = () => {
         <div className={styles.groups}>
           <div className={styles.group}>
             {pairs.map(pair => (
-              <div
-                key={`${pair.aDocId}:${pair.bDocId}`}
-                className={styles.row}
-              >
+              <div key={`${pair.aDocId}:${pair.bDocId}`} className={styles.row}>
                 <div className={styles.pairTitles}>
                   <button
                     className={styles.pairTitle}

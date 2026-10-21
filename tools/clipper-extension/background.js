@@ -9,8 +9,6 @@
  */
 
 const DEFAULT_APP_BASE = 'https://app.notesgraph.com';
-const MAX_CLIP_IMAGES = 12;
-const MAX_IMAGE_BYTES = 8_000_000;
 
 async function getAppBase() {
   try {

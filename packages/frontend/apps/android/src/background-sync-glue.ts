@@ -39,7 +39,7 @@ export function setupBackgroundSyncManifest(framework: FrameworkProvider) {
   const subscription = state$
     .pipe(debounceTime(1000))
     .subscribe(({ enabled, workspaces, serversWithAccount }) => {
-      void (async () => {
+      (async () => {
         try {
           if (!enabled) {
             await NbStore.cancelBackgroundSync();
@@ -69,7 +69,7 @@ export function setupBackgroundSyncManifest(framework: FrameworkProvider) {
         } catch (error) {
           console.error('[background-sync] failed to update manifest', error);
         }
-      })();
+      })().catch(console.error);
     });
 
   return () => subscription.unsubscribe();

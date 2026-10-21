@@ -188,18 +188,20 @@ export const databaseSlashMenuConfig: SlashMenuConfig = {
       when: ({ model }) =>
         !isInsideBlockByFlavour(model.store, model, 'notesgraph:edgeless-text'),
       action: ({ std, model }) => {
-        promptQueryFilter(std, 'Query Board').then(filter => {
-          if (!filter) return;
-          insertQueryDatabase(
-            std.host,
-            viewPresets.kanbanViewMeta.type,
-            model,
-            filter
-          );
-          std
-            .getOptional(TelemetryProvider)
-            ?.track('BlockCreated', { blockType: 'notesgraph:database' });
-        });
+        promptQueryFilter(std, 'Query Board')
+          .then(filter => {
+            if (!filter) return;
+            insertQueryDatabase(
+              std.host,
+              viewPresets.kanbanViewMeta.type,
+              model,
+              filter
+            );
+            std
+              .getOptional(TelemetryProvider)
+              ?.track('BlockCreated', { blockType: 'notesgraph:database' });
+          })
+          .catch(console.error);
       },
     },
 
@@ -212,18 +214,20 @@ export const databaseSlashMenuConfig: SlashMenuConfig = {
       when: ({ model }) =>
         !isInsideBlockByFlavour(model.store, model, 'notesgraph:edgeless-text'),
       action: ({ std, model }) => {
-        promptQueryFilter(std, 'Query Table').then(filter => {
-          if (!filter) return;
-          insertQueryDatabase(
-            std.host,
-            viewPresets.tableViewMeta.type,
-            model,
-            filter
-          );
-          std
-            .getOptional(TelemetryProvider)
-            ?.track('BlockCreated', { blockType: 'notesgraph:database' });
-        });
+        promptQueryFilter(std, 'Query Table')
+          .then(filter => {
+            if (!filter) return;
+            insertQueryDatabase(
+              std.host,
+              viewPresets.tableViewMeta.type,
+              model,
+              filter
+            );
+            std
+              .getOptional(TelemetryProvider)
+              ?.track('BlockCreated', { blockType: 'notesgraph:database' });
+          })
+          .catch(console.error);
       },
     },
 
@@ -236,18 +240,20 @@ export const databaseSlashMenuConfig: SlashMenuConfig = {
       when: ({ model }) =>
         !isInsideBlockByFlavour(model.store, model, 'notesgraph:edgeless-text'),
       action: ({ std, model }) => {
-        promptQueryFilter(std, 'Task List').then(filter => {
-          if (!filter) return;
-          insertQueryDatabase(
-            std.host,
-            viewPresets.listViewMeta.type,
-            model,
-            filter
-          );
-          std
-            .getOptional(TelemetryProvider)
-            ?.track('BlockCreated', { blockType: 'notesgraph:database' });
-        });
+        promptQueryFilter(std, 'Task List')
+          .then(filter => {
+            if (!filter) return;
+            insertQueryDatabase(
+              std.host,
+              viewPresets.listViewMeta.type,
+              model,
+              filter
+            );
+            std
+              .getOptional(TelemetryProvider)
+              ?.track('BlockCreated', { blockType: 'notesgraph:database' });
+          })
+          .catch(console.error);
       },
     },
 
@@ -260,16 +266,18 @@ export const databaseSlashMenuConfig: SlashMenuConfig = {
       when: ({ model }) =>
         !isInsideBlockByFlavour(model.store, model, 'notesgraph:edgeless-text'),
       action: ({ std, model }) => {
-        promptQueryFilter(std, 'Task Report').then(filter => {
-          if (!filter) return;
-          insertTaskReport(std.host, model, filter, {
-            table: viewPresets.tableViewMeta.type,
-            kanban: viewPresets.kanbanViewMeta.type,
-          });
-          std
-            .getOptional(TelemetryProvider)
-            ?.track('BlockCreated', { blockType: 'notesgraph:database' });
-        });
+        promptQueryFilter(std, 'Task Report')
+          .then(filter => {
+            if (!filter) return;
+            insertTaskReport(std.host, model, filter, {
+              table: viewPresets.tableViewMeta.type,
+              kanban: viewPresets.kanbanViewMeta.type,
+            });
+            std
+              .getOptional(TelemetryProvider)
+              ?.track('BlockCreated', { blockType: 'notesgraph:database' });
+          })
+          .catch(console.error);
       },
     },
     {
@@ -281,18 +289,20 @@ export const databaseSlashMenuConfig: SlashMenuConfig = {
       when: ({ model }) =>
         !isInsideBlockByFlavour(model.store, model, 'notesgraph:edgeless-text'),
       action: ({ std, model }) => {
-        promptQueryFilter(std, 'Task Chart').then(filter => {
-          if (!filter) return;
-          insertQueryDatabase(
-            std.host,
-            viewPresets.chartViewMeta.type,
-            model,
-            filter
-          );
-          std
-            .getOptional(TelemetryProvider)
-            ?.track('BlockCreated', { blockType: 'notesgraph:database' });
-        });
+        promptQueryFilter(std, 'Task Chart')
+          .then(filter => {
+            if (!filter) return;
+            insertQueryDatabase(
+              std.host,
+              viewPresets.chartViewMeta.type,
+              model,
+              filter
+            );
+            std
+              .getOptional(TelemetryProvider)
+              ?.track('BlockCreated', { blockType: 'notesgraph:database' });
+          })
+          .catch(console.error);
       },
     },
   ],

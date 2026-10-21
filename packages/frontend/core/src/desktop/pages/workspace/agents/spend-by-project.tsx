@@ -99,7 +99,8 @@ export const SpendByProject = ({ refreshKey }: { refreshKey: number }) => {
   if (loadError && !runs) {
     body = (
       <div className={styles.empty}>
-        Couldn't load what runs cost: {loadError}. It reloads when a run ends.
+        Couldn&apos;t load what runs cost: {loadError}. It reloads when a run
+        ends.
       </div>
     );
   } else if (!runs) {
@@ -157,8 +158,8 @@ export const SpendByProject = ({ refreshKey }: { refreshKey: number }) => {
           </table>
         </div>
         <div className={styles.spendNote}>
-          Device and cloud runs only; runs in this app don't report a cost. A
-          run counts toward the <code>#project:</code> prop of the note it ran
+          Device and cloud runs only; runs in this app don&apos;t report a cost.
+          A run counts toward the <code>#project:</code> prop of the note it ran
           on.
         </div>
       </>
