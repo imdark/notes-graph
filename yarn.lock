@@ -10811,6 +10811,7 @@ __metadata:
     set-cookie-parser: "npm:^2.7.1"
     sharp: "npm:^0.35.2"
     tree-kill: "npm:^1.2.2"
+    tsx: "npm:^4.21.0"
     typescript: "npm:^5.9.3"
     uuid: "npm:^14.0.0"
     vitest: "npm:^4.1.8"

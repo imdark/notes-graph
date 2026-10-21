@@ -998,7 +998,17 @@ jobs:
 
       - name: Decide test scope
         id: decision
+        env:
+          # Without a model config the copilot tests can only time out.
+          HAS_SERVER_CONFIG: ${{ secrets.TEST_SERVER_CONFIG != '' }}
         run: |
+          if [[ "$HAS_SERVER_CONFIG" != "true" ]]; then
+            echo "TEST_SERVER_CONFIG is not set; skipping copilot tests"
+            echo "run_api=false" >> "$GITHUB_OUTPUT"
+            echo "run_e2e=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
           if [[ "${{ steps.copilot-filter.outputs.api }}" == "true" ]]; then
             echo "run_api=true" >> "$GITHUB_OUTPUT"
           else

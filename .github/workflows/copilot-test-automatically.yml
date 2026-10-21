@@ -1,11 +1,8 @@
 name: Copilot Test Automatically
 
+# Manual only: the schedule dispatched to a `canary` branch this repo doesn't
+# have, and the tests need secrets.TEST_SERVER_CONFIG.
 on:
-  push:
-    tags:
-      - 'v[0-9]+.[0-9]+.[0-9]+-canary.[0-9]+'
-  schedule:
-    - cron: '0 8 * * *'
   workflow_dispatch:
 
 permissions:
@@ -16,14 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     name: Setup Test
     steps:
-      - name: dispatch test by tag
-        if: ${{ github.event_name == 'push' || github.event_name == 'workflow_dispatch' }}
+      - name: dispatch test
         uses: benc-uk/workflow-dispatch@v1
         with:
           workflow: copilot-test.yml
-      - name: dispatch test by schedule
-        if: ${{ github.event_name == 'schedule' }}
-        uses: benc-uk/workflow-dispatch@v1
-        with:
-          workflow: copilot-test.yml
-          ref: canary
