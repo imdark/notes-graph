@@ -817,6 +817,7 @@ export const PackageList = [
     location: 'blocksuite/notesgraph/inlines/preset',
     name: '@blocksuite/notesgraph-inline-preset',
     workspaceDependencies: [
+      'blocksuite/framework/global',
       'blocksuite/notesgraph/components',
       'blocksuite/notesgraph/ext-loader',
       'blocksuite/notesgraph/inlines/comment',
