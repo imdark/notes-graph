@@ -63,8 +63,12 @@ export class DevCommand extends PackageSelectorCommand {
     // The web app relies on local sidecars (link cards / screenshots on :8088,
     // plugin marketplace on :8099). Start them alongside the web dev server so
     // `yarn dev -p web` is self-contained; skip any already running.
+    // CI's e2e jobs install only the packages they test, so the sidecars'
+    // dependencies aren't there, and nothing there uses them.
     const sidecars =
-      name === '@notesgraph/web' ? await this.startWebSidecars() : [];
+      name === '@notesgraph/web' && !process.env.CI
+        ? await this.startWebSidecars()
+        : [];
 
     try {
       await this.cli.run(args);
