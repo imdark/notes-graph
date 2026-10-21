@@ -78,6 +78,13 @@ export class NotesGraphError extends Error {
   }
 }
 
+/**
+ * A device's "jobs at once" as the server sends it: null (or absent, from an
+ * older server) leaves it to the runner's own setting.
+ */
+const asMaxJobs = (value: unknown): number | null =>
+  typeof value === 'number' && Number.isInteger(value) && value >= 1 ? value : null;
+
 export class NotesGraphApi {
   constructor(
     readonly url: string,
@@ -142,13 +149,28 @@ export class NotesGraphApi {
     deviceKey: string,
     runnerId: string,
     leaseSeconds: number
-  ): Promise<Job | null> {
-    const { job } = await this.request<{ job: Job | null }>(
+  ): Promise<{ job: Job | null; maxJobs: number | null }> {
+    const { job, maxJobs } = await this.request<{
+      job: Job | null;
+      maxJobs?: number | null;
+    }>(
       'POST',
       `${this.base(workspaceId)}/devices/${deviceKey}/jobs/claim`,
       { runnerId, leaseSeconds }
     );
-    return job ?? null;
+    return { job: job ?? null, maxJobs: asMaxJobs(maxJobs) };
+  }
+
+  /**
+   * What the device is set to run at once in the app, without claiming: for
+   * a runner whose slots are full to notice that it may take more.
+   */
+  async maxJobs(workspaceId: string, deviceKey: string): Promise<number | null> {
+    const { device } = await this.request<{ device: { maxJobs?: number | null } }>(
+      'GET',
+      `${this.base(workspaceId)}/devices/${deviceKey}`
+    );
+    return asMaxJobs(device?.maxJobs);
   }
 
   /** Report on a job (renewing its lease); returns the job as the server has it. */

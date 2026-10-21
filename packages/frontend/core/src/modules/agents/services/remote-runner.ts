@@ -187,6 +187,10 @@ export interface SharedRun {
 export interface RemoteJob {
   id: string;
   deviceKey: string;
+  /** The agent it runs as, and its model; null for a shell command. */
+  agentId: string;
+  agentName: string;
+  model: string | null;
   status: 'queued' | 'running' | 'done' | 'error' | 'cancelled';
   /** What the run is called; the agent may rename it. Absent from older servers. */
   title?: string | null;

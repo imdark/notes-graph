@@ -22,7 +22,7 @@ import {
   steerHooks,
   steerNote,
 } from '../run-tools';
-import { runClaimed } from '../serve';
+import { runClaimed, serve } from '../serve';
 import { FakeNotesGraph, until } from './fake-notesgraph';
 
 let ng: FakeNotesGraph;
@@ -613,6 +613,54 @@ describe('running a job', () => {
 });
 
 describe('serving', () => {
+  test('runs as many jobs at once as the device is set to in the app', async () => {
+    // Each run waits, like one waiting on its starter, until let go.
+    let letGo!: () => void;
+    const gate = new Promise<void>(resolve => (letGo = resolve));
+    const started: string[] = [];
+    const waiting = ((params: { prompt: string }) => {
+      started.push(params.prompt);
+      return (async function* () {
+        yield init;
+        await gate;
+        yield success('ok');
+      })();
+    }) as any;
+    ng.queue = [job({ id: 'j-1' }), job({ id: 'j-2' }), job({ id: 'j-3' })];
+    ng.maxJobs = 1;
+    const stop = new AbortController();
+    const served = serve({
+      api: api(),
+      workspaces: ['ws-1'],
+      deviceKey: 'cloud',
+      runnerId: 'r1',
+      settings: settings(),
+      query: waiting,
+      maxJobs: 3,
+      pollMs: 10,
+      tickMs: 5,
+      signal: stop.signal,
+    });
+    try {
+      // Set to 1: the runner's own 3 doesn't matter, one runs.
+      await until(() => started.length === 1);
+      await new Promise(r => setTimeout(r, 100));
+      expect(started).toHaveLength(1);
+      expect(ng.queue).toHaveLength(2);
+
+      // Raised while it's full: noticed without a claim, and a second runs.
+      ng.maxJobs = 2;
+      await until(() => started.length === 2);
+      await new Promise(r => setTimeout(r, 100));
+      expect(started).toHaveLength(2);
+      expect(ng.queue).toHaveLength(1);
+    } finally {
+      letGo();
+      stop.abort();
+      await served;
+    }
+  });
+
   test('a claimed job ends reported done, with its transcript', async () => {
     const end = await runClaimed(
       {

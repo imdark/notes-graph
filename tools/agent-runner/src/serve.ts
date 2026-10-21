@@ -146,22 +146,45 @@ const sleep = (ms: number, signal?: AbortSignal) =>
   });
 
 /**
- * Up to `maxJobs` at once across the workspaces; with every slot taken
- * nothing more is claimed, so the rest stay queued. Resolves once `signal`
- * aborts and the running jobs have ended.
+ * Up to `maxJobs` at once across the workspaces, or what the device is set
+ * to run at once in the app ("jobs at once") when it is; with every slot
+ * taken nothing more is claimed, so the rest stay queued. Resolves once
+ * `signal` aborts and the running jobs have ended.
  */
 export async function serve(opts: ServeOptions): Promise<void> {
   const log = opts.log ?? (() => {});
-  const maxJobs = Math.max(1, opts.maxJobs ?? 2);
+  const ownMax = Math.max(1, opts.maxJobs ?? 2);
+  // What each workspace set this device to run at once in the app, from its
+  // last claim; unset ones leave it to `ownMax`. The server also refuses a
+  // claim past its own workspace's setting, so this only decides how many
+  // this runner tries for.
+  const setInApp = new Map<string, number | null>();
+  const maxJobs = () => {
+    const set = [...setInApp.values()].filter((n): n is number => n !== null);
+    return set.length ? Math.max(...set) : ownMax;
+  };
+  const setLimit = (workspaceId: string, limit: number | null) => {
+    if (setInApp.has(workspaceId) && setInApp.get(workspaceId) === limit) return;
+    setInApp.set(workspaceId, limit);
+    log(
+      limit === null
+        ? `${workspaceId}: jobs at once is this runner's own (${ownMax})`
+        : `${workspaceId}: jobs at once set to ${limit} in the app`
+    );
+  };
   const running = new Set<Promise<unknown>>();
 
   while (!opts.signal?.aborted) {
     let claimed = false;
     for (const workspaceId of opts.workspaces) {
-      if (running.size >= maxJobs || opts.signal?.aborted) break;
+      if (running.size >= maxJobs() || opts.signal?.aborted) break;
       let job: Job | null;
       try {
-        job = await opts.api.claim(workspaceId, opts.deviceKey, opts.runnerId, LEASE_SECONDS);
+        const claim = await opts.api.claim(
+          workspaceId, opts.deviceKey, opts.runnerId, LEASE_SECONDS
+        );
+        setLimit(workspaceId, claim.maxJobs);
+        job = claim.job;
       } catch (err) {
         log(`claim failed: ${err}`);
         await sleep(Math.min((opts.pollMs ?? 5000) * 4, 60_000), opts.signal);
@@ -177,8 +200,18 @@ export async function serve(opts: ServeOptions): Promise<void> {
       running.add(work);
       void work.finally(() => running.delete(work));
     }
-    if (running.size >= maxJobs) {
-      await Promise.race(running);
+    if (running.size >= maxJobs()) {
+      // Wait for a slot to free up, and meanwhile notice, without claiming,
+      // that the device was given more in the app.
+      await Promise.race([...running, sleep(opts.pollMs ?? 5000, opts.signal)]);
+      for (const workspaceId of opts.workspaces) {
+        if (running.size < maxJobs() || opts.signal?.aborted) break;
+        try {
+          setLimit(workspaceId, await opts.api.maxJobs(workspaceId, opts.deviceKey));
+        } catch (err) {
+          log(`reading jobs at once failed: ${err}`);
+        }
+      }
     } else if (!claimed) {
       await sleep(opts.pollMs ?? 5000, opts.signal);
     }

@@ -113,6 +113,19 @@ export class RegistryDeviceModel extends BaseModel {
           OR "runner_seen_at" < NOW() - INTERVAL '30 seconds')`;
   }
 
+  /** How many jobs the device's runners may run at once; null for theirs. */
+  async setMaxJobs(
+    workspaceId: string,
+    key: string,
+    maxJobs: number | null
+  ): Promise<RegistryDevice | null> {
+    const { count } = await this.db.registryDevice.updateMany({
+      where: { workspaceId, key },
+      data: { maxJobs },
+    });
+    return count ? this.get(workspaceId, key) : null;
+  }
+
   async updateStatus(
     workspaceId: string,
     key: string,

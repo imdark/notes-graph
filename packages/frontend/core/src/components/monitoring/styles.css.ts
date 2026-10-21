@@ -141,6 +141,19 @@ export const meta = style({
   whiteSpace: 'nowrap',
 });
 
+export const jobsAtOnce = style({
+  display: 'flex',
+  flexWrap: 'wrap',
+  alignItems: 'center',
+  gap: 6,
+  fontSize: cssVar('fontXs'),
+  color: cssVarV2('text/secondary'),
+});
+
+export const jobsAtOnceInput = style({
+  width: 56,
+});
+
 export const problem = style({
   display: 'flex',
   flexWrap: 'wrap',
