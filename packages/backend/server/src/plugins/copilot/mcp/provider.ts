@@ -26,6 +26,16 @@ import {
   parseSearchQuery,
   searchText,
 } from '../search-query';
+import {
+  CanvasError,
+  canvasSvg,
+  describeItem,
+  type DrawItem,
+  drawOnCanvas,
+  intersects,
+  readCanvas,
+  svgToPng,
+} from './canvas';
 import { applyBudget, fuseRanked } from './rrf';
 import { findSecret, guardSecrets, secretRefusal } from './secret-guard';
 import {
@@ -55,8 +65,14 @@ type McpTextContent = {
   text: string;
 };
 
+type McpImageContent = {
+  type: 'image';
+  data: string;
+  mimeType: string;
+};
+
 export type WorkspaceMcpToolResult = {
-  content: McpTextContent[];
+  content: (McpTextContent | McpImageContent)[];
   isError?: boolean;
 };
 
@@ -1223,11 +1239,145 @@ export class WorkspaceMcpProvider {
       },
     });
 
+    /** The doc's canvas, or an error result when it can't be read. */
+    const loadCanvas = async (docId: string, signal: AbortSignal) => {
+      const notFoundError = toolError(`Doc with id ${docId} not found.`);
+      const accessible = await this.ac
+        .user(userId)
+        .workspace(workspaceId)
+        .doc(docId)
+        .can('Doc.Read');
+      if (!accessible) return notFoundError;
+      const aborted = abortIfNeeded(signal);
+      if (aborted) return aborted;
+      const doc = await this.reader.getDoc(workspaceId, docId);
+      if (!doc?.bin) return notFoundError;
+      return readCanvas(doc.bin);
+    };
+
+    const regionParser = z
+      .object({
+        x: z.number(),
+        y: z.number(),
+        w: z.number().positive(),
+        h: z.number().positive(),
+      })
+      .optional();
+    const regionInputSchema = {
+      type: 'object',
+      description:
+        'A part of the canvas, in canvas coordinates (x, y of its top-left corner, w, h). Omit for the whole canvas.',
+      properties: {
+        x: { type: 'number' },
+        y: { type: 'number' },
+        w: { type: 'number' },
+        h: { type: 'number' },
+      },
+      required: ['x', 'y', 'w', 'h'],
+      additionalProperties: false,
+    } as const;
+
+    const readCanvasTool = defineTool({
+      name: 'read_canvas',
+      title: 'Read Canvas',
+      description:
+        "List what is on a document's canvas (its edgeless/whiteboard view): handwriting and pen strokes (brush), shapes, text, connectors, and the notes, images and frames placed on it, back to front. Each item has its id, type, position and size in canvas coordinates, and its text. Strokes give a pointCount, not their ink; to see handwriting, use capture_canvas. Pass region to list only what touches that part.",
+      parser: z.object({ docId: z.string(), region: regionParser }),
+      inputSchema: {
+        type: 'object',
+        properties: {
+          docId: { type: 'string' },
+          region: regionInputSchema,
+        },
+        required: ['docId'],
+        additionalProperties: false,
+      },
+      execute: async ({ docId, region }, options) => {
+        const canvas = await loadCanvas(docId, options.signal);
+        if ('content' in canvas) return canvas;
+        const items = region
+          ? canvas.items.filter(item => intersects(item, region))
+          : canvas.items;
+        return toolText(
+          JSON.stringify({
+            docId,
+            hasCanvas: canvas.hasSurface,
+            ...(region ? { region } : {}),
+            count: items.length,
+            items: items.map(describeItem),
+          })
+        );
+      },
+    });
+
+    const captureCanvasTool = defineTool({
+      name: 'capture_canvas',
+      title: 'Capture Canvas',
+      description:
+        "Take a picture of a document's canvas (its edgeless/whiteboard view), or of one region of it, so you can see handwriting, sketches and layout. Returns a PNG (SVG when the server can't rasterise) plus the region it shows, in canvas coordinates. It is drawn from the stored canvas: strokes, shapes, text and connectors as they are, notes and images as labelled boxes, so it is close to the app's view, not identical. Use read_canvas for ids and exact text.",
+      parser: z.object({
+        docId: z.string(),
+        region: regionParser,
+        maxSize: z.number().int().min(100).max(4000).optional(),
+      }),
+      inputSchema: {
+        type: 'object',
+        properties: {
+          docId: { type: 'string' },
+          region: regionInputSchema,
+          maxSize: {
+            type: 'number',
+            description:
+              'Longest side of the picture in pixels (default 1600). The canvas is never drawn larger than 1:1.',
+          },
+        },
+        required: ['docId'],
+        additionalProperties: false,
+      },
+      execute: async ({ docId, region, maxSize }, options) => {
+        const canvas = await loadCanvas(docId, options.signal);
+        if ('content' in canvas) return canvas;
+        const picture = canvasSvg(canvas.items, region, maxSize);
+        const shown = region
+          ? canvas.items.filter(item => intersects(item, region)).length
+          : canvas.items.length;
+        const png = await svgToPng(picture.svg);
+        const caption = JSON.stringify({
+          docId,
+          region: picture.region,
+          width: picture.width,
+          height: picture.height,
+          items: shown,
+          format: png ? 'png' : 'svg',
+        });
+        if (!png) {
+          return {
+            content: [
+              { type: 'text', text: caption },
+              { type: 'text', text: picture.svg },
+            ],
+          };
+        }
+        return {
+          content: [
+            { type: 'text', text: caption },
+            {
+              type: 'image',
+              data: png.toString('base64'),
+              mimeType: 'image/png',
+            },
+          ],
+        };
+      },
+    });
+
     const tools = [
       readDocument,
       hybridSearch,
       docOutline,
       readDocSection,
+      readCanvasTool,
+      captureCanvasTool,
       semanticSearch,
       keywordSearch,
       searchBlocks,
@@ -1844,6 +1994,153 @@ export class WorkspaceMcpProvider {
         },
       });
 
+      const xy = z.tuple([z.number(), z.number()]);
+      const drawItemParser = z.discriminatedUnion('type', [
+        z.object({
+          type: z.literal('stroke'),
+          key: z.string().optional(),
+          points: z
+            .array(z.union([xy, z.tuple([z.number(), z.number(), z.number()])]))
+            .min(2)
+            .max(5000),
+          color: z.string().optional(),
+          width: z.number().positive().max(100).optional(),
+        }),
+        z.object({
+          type: z.literal('shape'),
+          key: z.string().optional(),
+          shape: z.enum(['rect', 'ellipse', 'diamond', 'triangle']).optional(),
+          x: z.number(),
+          y: z.number(),
+          w: z.number().positive(),
+          h: z.number().positive(),
+          text: z.string().optional(),
+          color: z.string().optional(),
+          fill: z.string().optional(),
+        }),
+        z.object({
+          type: z.literal('text'),
+          key: z.string().optional(),
+          x: z.number(),
+          y: z.number(),
+          text: z.string().min(1),
+          fontSize: z.number().positive().max(400).optional(),
+          color: z.string().optional(),
+        }),
+        z.object({
+          type: z.literal('connector'),
+          key: z.string().optional(),
+          from: z.union([z.string(), xy]),
+          to: z.union([z.string(), xy]),
+          color: z.string().optional(),
+        }),
+      ]);
+
+      const drawOnCanvasTool = defineTool({
+        name: 'draw_on_canvas',
+        title: 'Draw On Canvas',
+        description:
+          "Draw on a document's canvas (its edgeless/whiteboard view), on top of what is there; nothing existing is moved or removed. Items: `stroke` (freehand pen ink through points, e.g. to circle, underline or annotate something), `shape` (rect, ellipse, diamond or triangle, with optional text inside), `text`, and `connector` (an arrow; each end is an [x, y] point, an element id from read_canvas, or the `key` of an item drawn earlier in the same call). Coordinates are canvas coordinates, as read_canvas and capture_canvas report them. Colours are CSS colours such as '#d14' (default near-black). Returns the new element ids. Check the result with capture_canvas.",
+        parser: z.object({
+          docId: z.string(),
+          items: z.array(drawItemParser).min(1).max(200),
+          agent: z.string().optional(),
+        }),
+        inputSchema: {
+          type: 'object',
+          properties: {
+            docId: { type: 'string' },
+            items: {
+              type: 'array',
+              minItems: 1,
+              maxItems: 200,
+              items: {
+                type: 'object',
+                properties: {
+                  type: {
+                    type: 'string',
+                    enum: ['stroke', 'shape', 'text', 'connector'],
+                  },
+                  key: {
+                    type: 'string',
+                    description:
+                      'A name for this item, so a connector later in the call can point at it.',
+                  },
+                  points: {
+                    type: 'array',
+                    description:
+                      'stroke: [x, y] points (or [x, y, pressure]) along the pen path, at least 2.',
+                    items: { type: 'array', items: { type: 'number' } },
+                  },
+                  width: {
+                    type: 'number',
+                    description: 'stroke: line width (default 4).',
+                  },
+                  shape: {
+                    type: 'string',
+                    enum: ['rect', 'ellipse', 'diamond', 'triangle'],
+                  },
+                  x: { type: 'number' },
+                  y: { type: 'number' },
+                  w: { type: 'number' },
+                  h: { type: 'number' },
+                  text: { type: 'string' },
+                  fontSize: {
+                    type: 'number',
+                    description: 'text: font size (default 24).',
+                  },
+                  from: {
+                    description: 'connector start: [x, y], element id or key.',
+                  },
+                  to: {
+                    description: 'connector end: [x, y], element id or key.',
+                  },
+                  color: { type: 'string' },
+                  fill: {
+                    type: 'string',
+                    description: 'shape: fill colour (default unfilled).',
+                  },
+                },
+                required: ['type'],
+              },
+            },
+            agent: agentInputSchema,
+          },
+          required: ['docId', 'items'],
+          additionalProperties: false,
+        },
+        execute: async ({ docId, items }, options) => {
+          const secret = guardSecrets(
+            ...items.map(item => ('text' in item ? item.text : undefined))
+          );
+          if (secret) return toolError(secret);
+          const accessible = await this.ac
+            .user(userId)
+            .workspace(workspaceId)
+            .doc(docId)
+            .can('Doc.Update');
+          if (!accessible) return toolError(`Doc with id ${docId} not found.`);
+
+          const aborted = abortIfNeeded(options.signal);
+          if (aborted) return aborted;
+
+          try {
+            const { ids } = await this.writer.editDoc(
+              workspaceId,
+              docId,
+              binary => drawOnCanvas(binary, items as DrawItem[]),
+              userId
+            );
+            return toolText(JSON.stringify({ success: true, docId, ids }));
+          } catch (error) {
+            if (error instanceof CanvasError) return toolError(error.message);
+            return toolError(
+              `Failed to draw on canvas: ${error instanceof Error ? error.message : 'Unknown error'}`
+            );
+          }
+        },
+      });
+
       tools.push(
         createDocument,
         updateDocument,
@@ -1851,7 +2148,8 @@ export class WorkspaceMcpProvider {
         linkDocument,
         updateTask,
         updateBlock,
-        createDiagram
+        createDiagram,
+        drawOnCanvasTool
       );
     }
 

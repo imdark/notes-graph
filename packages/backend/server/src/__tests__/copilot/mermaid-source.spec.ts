@@ -3,7 +3,11 @@ import test from 'ava';
 import {
   mermaidSource,
   WorkspaceMcpProvider,
+  type WorkspaceMcpToolResult,
 } from '../../plugins/copilot/mcp/provider';
+
+const text = (result: WorkspaceMcpToolResult) =>
+  result.content[0].type === 'text' ? result.content[0].text : '';
 
 /** The MCP provider with write tools on, over an in-memory doc store. */
 async function diagramTool(docs: Record<string, string>) {
@@ -57,7 +61,7 @@ test('create_diagram appends a mermaid block to an existing doc', async t => {
     agent: 'bot',
   });
   t.falsy(result.isError);
-  t.is(JSON.parse(result.content[0].text).docId, 'd1');
+  t.is(JSON.parse(text(result)).docId, 'd1');
   t.is(writes.length, 1);
   const [write] = writes;
   t.is(write.op, 'update');
@@ -76,7 +80,7 @@ test('create_diagram makes a new doc when no docId is given', async t => {
   t.true(missingTitle.isError);
   const result = await call({ title: 'Pets', mermaid: 'pie\n  "A": 1' });
   t.falsy(result.isError);
-  t.is(JSON.parse(result.content[0].text).docId, 'new-doc');
+  t.is(JSON.parse(text(result)).docId, 'new-doc');
   t.is(writes[0].op, 'create');
   t.true(writes[0].markdown.startsWith('```mermaid\npie\n  "A": 1\n```'));
 });
@@ -87,7 +91,7 @@ test('create_diagram refuses prose and unknown docs without writing', async t =>
   t.true(prose.isError);
   const missing = await call({ docId: 'nope', mermaid: 'graph TD\n  A-->B' });
   t.true(missing.isError);
-  t.regex(missing.content[0].text, /not found/);
+  t.regex(text(missing), /not found/);
   t.is(writes.length, 0);
 });
 
