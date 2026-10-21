@@ -29,6 +29,12 @@ export const skipOnboarding = async (context: BrowserContext) => {
     window.localStorage.setItem('dismissAiOnboarding', 'true');
     window.localStorage.setItem('dismissAiOnboardingEdgeless', 'true');
     window.localStorage.setItem('dismissAiOnboardingLocal', 'true');
+    // Edgeless is a built-in plugin, off by default; the suites test it, so
+    // they turn it on (see BUILTIN_ENABLED_PREFIX in modules/plugin).
+    window.localStorage.setItem(
+      'global-state:plugin:builtin-enabled:com.notesgraph.edgeless',
+      'true'
+    );
   });
 };
 
