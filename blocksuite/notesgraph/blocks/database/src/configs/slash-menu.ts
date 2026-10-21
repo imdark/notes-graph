@@ -12,8 +12,8 @@ import {
   TelemetryProvider,
 } from '@blocksuite/notesgraph-shared/services';
 import { isInsideBlockByFlavour } from '@blocksuite/notesgraph-shared/utils';
-import type { BlockStdScope } from '@blocksuite/std';
 import { type SlashMenuConfig } from '@blocksuite/notesgraph-widget-slash-menu';
+import type { BlockStdScope } from '@blocksuite/std';
 
 import { insertDatabaseBlockCommand } from '../commands';
 import {

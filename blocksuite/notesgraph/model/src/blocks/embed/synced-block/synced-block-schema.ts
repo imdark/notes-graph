@@ -2,8 +2,8 @@ import { BlockSchemaExtension } from '@blocksuite/store';
 
 import { createEmbedBlockSchema } from '../../../utils/index.js';
 import {
-  type EmbedSyncedBlockProps,
   EmbedSyncedBlockModel,
+  type EmbedSyncedBlockProps,
 } from './synced-block-model.js';
 
 export const defaultEmbedSyncedBlockProps: EmbedSyncedBlockProps = {

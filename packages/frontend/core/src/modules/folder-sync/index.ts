@@ -1,6 +1,6 @@
 export {
-  type FolderSyncState,
   FolderSyncService,
+  type FolderSyncState,
 } from './services/folder-sync';
 export {
   type FolderBinding,

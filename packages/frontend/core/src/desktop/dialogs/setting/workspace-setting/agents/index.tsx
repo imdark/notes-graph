@@ -1,3 +1,4 @@
+import { MoreHorizontalIcon } from '@blocksuite/icons/rc';
 import {
   Button,
   Menu,
@@ -8,21 +9,20 @@ import {
 import { SettingHeader } from '@notesgraph/component/setting-components';
 import { useWorkspaceInfo } from '@notesgraph/core/components/hooks/use-workspace-info';
 import {
-  AGENT_TEMPLATES,
   type Agent,
-  type AgentTemplate,
-  AgentIcon,
+  AGENT_TEMPLATES,
   type AgentDraft,
+  AgentIcon,
   AgentRulesService,
   type AgentScope,
   AgentsService,
+  type AgentTemplate,
   deviceHarnessName,
   isDeviceClaudeModel,
 } from '@notesgraph/core/modules/agents';
 import { WorkbenchService } from '@notesgraph/core/modules/workbench';
 import { WorkspaceService } from '@notesgraph/core/modules/workspace';
 import { FrameworkScope, useLiveData, useService } from '@notesgraph/infra';
-import { MoreHorizontalIcon } from '@blocksuite/icons/rc';
 import { useCallback, useState } from 'react';
 
 import { AgentEditor } from './agent-editor';

@@ -1,15 +1,16 @@
 import { Service } from '@notesgraph/infra';
 
 import { DEFAULT_LOCAL_MODEL, type LocalLLMService } from '../../ai-local';
+import type { WorkspaceService } from '../../workspace';
+import type { AgentRunLogsStore } from '../stores/agent-run-logs';
+import type { AgentRunsStore } from '../stores/agent-runs';
 import {
   type Agent,
   type AgentHarness,
   DEFAULT_MAX_STEPS,
 } from '../stores/agents';
-import type { AgentRunLogsStore } from '../stores/agent-run-logs';
-import type { AgentRunsStore } from '../stores/agent-runs';
-import type { ChatModel, CloudAgentRunnerService } from './cloud-runner';
 import { agentRulesSection, type AgentRulesService } from './agent-rules';
+import type { ChatModel, CloudAgentRunnerService } from './cloud-runner';
 import type { AgentContext, AgentContextService } from './context';
 import {
   type AgentFileToolsService,
@@ -17,7 +18,7 @@ import {
   FILE_TOOL_NAMES,
   FILE_TOOLS,
 } from './file-tools';
-import type { WorkspaceService } from '../../workspace';
+import { stampLines } from './log-lines';
 import {
   CLOUD_DEVICE_KEY,
   openQuestions,
@@ -26,7 +27,6 @@ import {
   type RemoteQuestion,
   RESEARCH_MODEL,
 } from './remote-runner';
-import { stampLines } from './log-lines';
 import {
   RESEARCH_TOOL_RULES,
   type ResearchToolsService,

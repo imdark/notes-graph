@@ -19,14 +19,14 @@ import {
 } from '@notesgraph/core/modules/editor';
 import { PeekViewManagerModal } from '@notesgraph/core/modules/peek-view';
 import {
+  readSiteManifest,
+  type SiteManifest,
+} from '@notesgraph/core/modules/share-doc';
+import {
   ViewIcon,
   ViewTitle,
   WorkbenchService,
 } from '@notesgraph/core/modules/workbench';
-import {
-  readSiteManifest,
-  type SiteManifest,
-} from '@notesgraph/core/modules/share-doc';
 import {
   type Workspace,
   WorkspacesService,
@@ -42,7 +42,6 @@ import { filter, firstValueFrom, timeout } from 'rxjs';
 import { PageNotFound } from '../../404';
 import { ShareFooter } from './share-footer';
 import { ShareHeader } from './share-header';
-import { SiteShell } from './site/site-shell';
 import * as styles from './share-page.css';
 import {
   fetchSharedPublishMode,
@@ -50,6 +49,7 @@ import {
   isSharePagePermissionError,
   isSharePageTimeoutError,
 } from './share-page.utils';
+import { SiteShell } from './site/site-shell';
 import { useSharedModeQuerySync } from './use-shared-mode-query-sync';
 
 const waitForSharedDocRecord = async (

@@ -28,11 +28,11 @@ import {
   updateBlockAlign,
   updateBlockType,
 } from '@blocksuite/notesgraph/blocks/note';
-import {
-  textConversionConfigs,
-  textAlignConfigs,
-} from '@blocksuite/notesgraph/rich-text';
 import { textFormatConfigs } from '@blocksuite/notesgraph/inlines/preset';
+import {
+  textAlignConfigs,
+  textConversionConfigs,
+} from '@blocksuite/notesgraph/rich-text';
 import { getSelectedModelsCommand } from '@blocksuite/notesgraph/shared/commands';
 import {
   ToolbarContext,

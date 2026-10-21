@@ -1,6 +1,6 @@
+import * as react from 'react';
 import * as jsxDevRuntime from 'react/jsx-dev-runtime';
 import * as jsxRuntime from 'react/jsx-runtime';
-import * as react from 'react';
 
 /**
  * Publish the host's React to plugins.

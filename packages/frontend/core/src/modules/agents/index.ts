@@ -1,46 +1,17 @@
 export { Agents } from './entities/agents';
-export { AgentIcon, agentIconData } from './views/agent-icon';
+export { AGENT_RULES_TITLE, AgentRulesService } from './services/agent-rules';
 export { AgentsService, DEFAULT_AGENT_TOOLS } from './services/agents';
 export {
-  AGENT_SKILLS,
-  type AgentBudget,
-  defaultSkillsFor,
-  CLAUDE_CODE_MODEL,
-  deviceHarnessName,
-  type EnqueueRemoteJob,
-  CLOUD_DEVICE_KEY,
-  editorHarness,
-  isDeviceClaudeModel,
-  isSkillNoteTitle,
-  openQuestions,
-  RESEARCH_MODEL,
-  type DeployInfo,
-  type RemoteJob,
-  type RemoteJobUpdate,
-  type RemoteQuestion,
-  type RemoteSteer,
-  RemoteAgentRunnerService,
-  type RunShare,
-  savedPlacement,
-  type SharedRun,
-  type SkillNote,
-  type SpentRun,
-  waitingSteers,
-  WORKFLOW_MODEL,
-} from './services/remote-runner';
+  hasAgentClaim,
+  runsForBlock,
+  runTargetsBlock,
+} from './services/block-runs';
 export {
   type ChatMessage,
   type ChatModel,
   CloudAgentRunnerService,
 } from './services/cloud-runner';
-export {
-  forkMessages,
-  forkTranscript,
-  splitSuggestion,
-} from './services/question-fork';
-export { runChatMessages } from './services/run-chat';
 export { AgentContextService } from './services/context';
-export { AGENT_RULES_TITLE, AgentRulesService } from './services/agent-rules';
 export {
   type BranchCheck,
   canFixToMerge,
@@ -50,44 +21,32 @@ export {
   mergesDirectly,
   needsHelpToMerge,
   type PullRequest,
+  pullRequestNumber,
+  type PullRequestsState,
   type PullRequestStage,
   pullRequestStage,
-  type PullRequestsState,
-  pullRequestNumber,
   repoOf,
   SHIP_STAGES,
   type ShipAction,
   shipAgents,
   type ShipStage,
+  shipTargets,
   type ShipTask,
   type ShipTaskDetails,
-  shipTargets,
   stuckReason,
 } from './services/deployments';
 export {
-  type ConditionType,
-  type ExtractType,
-  MIN_INTERVAL_MINUTES,
-  type Monitor,
-  type MonitorAlerts,
-  type MonitorCondition,
-  type MonitorDraft,
-  type MonitorKind,
-  type MonitorReading,
-  MonitorsService,
-  type MonitorSource,
-  type MonitorSpec,
-} from './services/monitors';
+  AgentAlreadyRunningError,
+  type AgentEvent,
+  type AgentExecutor,
+  AgentExecutorService,
+} from './services/executor';
 export {
-  isNotesHealthMonitor,
-  NOTES_HEALTH_DOC_TITLE,
-  NOTES_HEALTH_INSTRUCTIONS,
-  NOTES_HEALTH_NAME,
-  NOTES_HEALTH_TEMPLATE,
-  notesHealthDevice,
-  notesHealthMonitorDraft,
-  WEEK_MINUTES,
-} from './services/notes-health';
+  AgentFileToolError,
+  AgentFileToolsService,
+  FILE_TOOL_NAMES,
+  FILE_TOOLS,
+} from './services/file-tools';
 export {
   AGENT_MODES,
   AGENT_WARMUP,
@@ -102,14 +61,21 @@ export {
   deviceState,
   FleetService,
   fleetSummary,
-  type RegistryDevice,
   type LogCatalog,
   type LogPattern,
   type MonitoringAgent,
   type MonitoringDecision,
   openDecisions,
+  type RegistryDevice,
   STALE_AFTER_SECONDS,
 } from './services/fleet';
+export { type AgentBlockRef, lastBlockTouched } from './services/focus-block';
+export {
+  groupLogLines,
+  type LogLine,
+  type LogSegment,
+  parseLogLines,
+} from './services/log-lines';
 export {
   formatTrendValue,
   monitorTrend,
@@ -119,41 +85,86 @@ export {
   type TrendPoint,
 } from './services/monitor-trend';
 export {
-  AgentFileToolError,
-  AgentFileToolsService,
-  FILE_TOOL_NAMES,
-  FILE_TOOLS,
-} from './services/file-tools';
+  type ConditionType,
+  type ExtractType,
+  MIN_INTERVAL_MINUTES,
+  type Monitor,
+  type MonitorAlerts,
+  type MonitorCondition,
+  type MonitorDraft,
+  type MonitorKind,
+  type MonitorReading,
+  type MonitorSource,
+  type MonitorSpec,
+  MonitorsService,
+} from './services/monitors';
 export {
-  AgentAlreadyRunningError,
-  type AgentEvent,
-  type AgentExecutor,
-  AgentExecutorService,
-} from './services/executor';
+  isNotesHealthMonitor,
+  NOTES_HEALTH_DOC_TITLE,
+  NOTES_HEALTH_INSTRUCTIONS,
+  NOTES_HEALTH_NAME,
+  NOTES_HEALTH_TEMPLATE,
+  notesHealthDevice,
+  notesHealthMonitorDraft,
+  WEEK_MINUTES,
+} from './services/notes-health';
 export {
-  type AgentRun,
-  type AgentRunStatus,
-  AgentRunsStore,
-  formatRunCost,
-} from './stores/agent-runs';
-export { AgentRunLogsStore } from './stores/agent-run-logs';
+  forkMessages,
+  forkTranscript,
+  splitSuggestion,
+} from './services/question-fork';
 export {
-  type ProjectSpend,
-  projectFromProps,
-  spendByProject,
-  weekStarts,
-} from './services/run-spend';
+  AGENT_SKILLS,
+  type AgentBudget,
+  CLAUDE_CODE_MODEL,
+  CLOUD_DEVICE_KEY,
+  defaultSkillsFor,
+  type DeployInfo,
+  deviceHarnessName,
+  editorHarness,
+  type EnqueueRemoteJob,
+  isDeviceClaudeModel,
+  isSkillNoteTitle,
+  openQuestions,
+  RemoteAgentRunnerService,
+  type RemoteJob,
+  type RemoteJobUpdate,
+  type RemoteQuestion,
+  type RemoteSteer,
+  RESEARCH_MODEL,
+  type RunShare,
+  savedPlacement,
+  type SharedRun,
+  type SkillNote,
+  type SpentRun,
+  waitingSteers,
+  WORKFLOW_MODEL,
+} from './services/remote-runner';
+export {
+  changesAreEmpty,
+  parsePatch,
+  type PatchFile,
+  type PatchHunk,
+  type PatchLine,
+  type RunChanges,
+} from './services/run-changes';
+export { runChatMessages } from './services/run-chat';
 export {
   type AgentRunSession,
   AgentRunSessionService,
   type QueuedAgentRun,
 } from './services/run-session';
 export {
-  hasAgentClaim,
-  runsForBlock,
-  runTargetsBlock,
-} from './services/block-runs';
-export { type AgentBlockRef, lastBlockTouched } from './services/focus-block';
+  projectFromProps,
+  type ProjectSpend,
+  spendByProject,
+  weekStarts,
+} from './services/run-spend';
+export {
+  type AgentTarget,
+  agentTargetBlockIds,
+  agentTargetKey,
+} from './services/target';
 export {
   AgentTaskClaimService,
   isOpenTask,
@@ -162,25 +173,13 @@ export {
   QUEUED_STATUS,
   releaseQueuedTasks,
 } from './services/task-claim';
+export { AgentRunLogsStore } from './stores/agent-run-logs';
 export {
-  groupLogLines,
-  type LogLine,
-  type LogSegment,
-  parseLogLines,
-} from './services/log-lines';
-export {
-  changesAreEmpty,
-  type PatchFile,
-  type PatchHunk,
-  type PatchLine,
-  parsePatch,
-  type RunChanges,
-} from './services/run-changes';
-export {
-  type AgentTarget,
-  agentTargetBlockIds,
-  agentTargetKey,
-} from './services/target';
+  type AgentRun,
+  AgentRunsStore,
+  type AgentRunStatus,
+  formatRunCost,
+} from './stores/agent-runs';
 export {
   type Agent,
   AGENT_ACCESS_LEVELS,
@@ -194,6 +193,7 @@ export {
   type AgentTargetKind,
   DEFAULT_MAX_STEPS,
 } from './stores/agents';
+export { AgentIcon, agentIconData } from './views/agent-icon';
 
 import { type Framework } from '@notesgraph/infra';
 
@@ -211,12 +211,12 @@ import { AgentsService } from './services/agents';
 import { CloudAgentRunnerService } from './services/cloud-runner';
 import { AgentContextService } from './services/context';
 import { DeploymentsService } from './services/deployments';
-import { AgentFileToolsService } from './services/file-tools';
 import { AgentExecutorService } from './services/executor';
+import { AgentFileToolsService } from './services/file-tools';
 import { FixTaskService } from './services/fix-task';
 import { FleetService } from './services/fleet';
-import { RemoteAgentRunnerService } from './services/remote-runner';
 import { MonitorsService } from './services/monitors';
+import { RemoteAgentRunnerService } from './services/remote-runner';
 import { ResearchToolsService } from './services/research-tools';
 import { AgentRunSessionService } from './services/run-session';
 import { AgentTaskClaimService } from './services/task-claim';
@@ -277,6 +277,13 @@ export {
   DEAL_MONITOR_TEMPLATE,
 } from './services/agent-templates';
 export {
+  COMPILE_AGENT_NAME,
+  compileBrief,
+  type CompileSource,
+  compileSourceOf,
+  findCompileAgent,
+} from './services/compile-source';
+export {
   FIX_AGENT_TEMPLATE,
   FIX_UPS_DOC_TITLE,
   fixKey,
@@ -284,10 +291,3 @@ export {
   type HealthFailure,
   type StartedFix,
 } from './services/fix-task';
-export {
-  COMPILE_AGENT_NAME,
-  compileBrief,
-  type CompileSource,
-  compileSourceOf,
-  findCompileAgent,
-} from './services/compile-source';

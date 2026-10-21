@@ -1,8 +1,8 @@
-import type { EmbedSyncedBlockModel } from '@blocksuite/notesgraph-model';
 import { CaptionedBlockComponent } from '@blocksuite/notesgraph-components/caption';
 import { createLitPortal } from '@blocksuite/notesgraph-components/portal';
 import { DefaultInlineManagerExtension } from '@blocksuite/notesgraph-inline-preset';
 import { RefNodeSlotsProvider } from '@blocksuite/notesgraph-inline-reference';
+import type { EmbedSyncedBlockModel } from '@blocksuite/notesgraph-model';
 import {
   evaluateFormula,
   type FormulaValue,

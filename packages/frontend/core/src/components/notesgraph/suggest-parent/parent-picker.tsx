@@ -5,6 +5,7 @@ import { DocsSearchService } from '@notesgraph/core/modules/docs-search';
 import { LiveData, useLiveData, useService } from '@notesgraph/infra';
 import { useMemo, useState } from 'react';
 import { catchError, map, of } from 'rxjs';
+
 import * as styles from './styles.css';
 import type { ParentCandidate } from './use-suggest-parent';
 

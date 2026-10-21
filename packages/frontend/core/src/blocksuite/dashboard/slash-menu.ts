@@ -8,8 +8,8 @@ import { html } from 'lit';
 
 import {
   DashboardBlockFlavour,
-  type WidgetBlockProps,
   WidgetBlockFlavour,
+  type WidgetBlockProps,
 } from './model';
 
 const GROUP = '8_Dashboard';

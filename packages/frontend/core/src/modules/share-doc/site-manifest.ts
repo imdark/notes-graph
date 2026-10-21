@@ -1,4 +1,5 @@
-import { type Doc as YDoc, Map as YMap } from 'yjs';
+import type { Map as YMap } from 'yjs';
+import { type Doc as YDoc } from 'yjs';
 
 import { SITE_MAP_KEY, type SiteManifest } from './publish-site-types';
 

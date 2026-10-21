@@ -19,19 +19,19 @@ import type { TemplateResult } from 'lit';
 import { z } from 'zod';
 
 import { patchForAudioEmbedView } from './audio/audio-view';
+import { patchBlockTaskIndexService } from './block-task-index-service';
 import { buildDocDisplayMetaExtension } from './display-meta';
 import { patchDocModeService } from './doc-mode-service';
 import { patchDocUrlExtensions } from './doc-url';
 import { patchFileSizeLimitExtension } from './file-size-limit';
 import { patchNotificationService } from './notification-service';
 import { patchOpenDocExtension } from './open-doc';
+import { patchProjectsService } from './projects-service';
 import { patchQuickSearchService } from './quick-search-service';
 import {
   patchReferenceRenderer,
   type ReferenceReactRenderer,
 } from './reference-renderer';
-import { patchBlockTaskIndexService } from './block-task-index-service';
-import { patchProjectsService } from './projects-service';
 import { patchSideBarService } from './side-bar-service';
 import { patchUppyUploadService } from './uppy-upload-service';
 

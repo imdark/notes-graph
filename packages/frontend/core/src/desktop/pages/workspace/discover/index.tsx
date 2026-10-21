@@ -30,8 +30,8 @@ import {
 } from './feed';
 import {
   deriveInterests,
-  interestSearchTopics,
   INTERESTS_MAX_AGE_MS,
+  interestSearchTopics,
   loadInterests,
   loadUseInterests,
   type NotesSnapshot,

@@ -1,6 +1,7 @@
 import { SurfaceBlockModel } from '@blocksuite/notesgraph/blocks/surface';
+import type {
+  MindmapElementModel} from '@blocksuite/notesgraph/model';
 import {
-  MindmapElementModel,
   NoteBlockModel,
   RootBlockModel,
   type ShapeElementModel,
@@ -31,12 +32,11 @@ export function mindMapToMarkdown(mindmap: MindmapElementModel) {
 
 // Moved to a non-AI location so the editor-config toolbar can use them without
 // pulling the AI chunk into the initial bundle; re-exported here for AI callers.
+export { getEdgelessCopilotWidget } from './get-edgeless-copilot-widget';
 export {
   isMindmapChild,
   isMindMapRoot,
 } from '@notesgraph/core/blocksuite/utils/mindmap-model';
-
-export { getEdgelessCopilotWidget } from './get-edgeless-copilot-widget';
 
 export function findNoteBlockModel(blockElement: BlockComponent) {
   let curBlock = blockElement;

@@ -13,9 +13,9 @@ import {
   deviceState,
   FleetService,
   fleetSummary,
-  type RegistryDevice,
   type MonitoringDecision,
   openDecisions,
+  type RegistryDevice,
   STALE_AFTER_SECONDS,
 } from './fleet';
 
@@ -196,12 +196,17 @@ describe('FleetService', () => {
     const { service, calls } = setup(path =>
       path.endsWith('/decisions?limit=50')
         ? { body: { decisions: [decision] } }
-        : { body: { agent } }
+        : path.endsWith('/logs')
+          ? { body: { catalogs: [] } }
+          : { body: { agent } }
     );
     await service.revalidateAgent();
+    // The log catalogs are read alongside, without holding the rest up.
+    await vi.waitFor(() => expect(calls).toHaveLength(3));
     expect(calls.map(c => c.path)).toEqual([
       '/api/registry/workspaces/ws/monitoring-agent',
       '/api/registry/workspaces/ws/monitoring-agent/decisions?limit=50',
+      '/api/registry/workspaces/ws/monitoring-agent/logs',
     ]);
     expect(service.agent$.value?.mode).toBe('shadow');
     expect(service.decisions$.value).toHaveLength(1);
@@ -209,9 +214,11 @@ describe('FleetService', () => {
 
   test('feedback on a decision replaces it in the list', async () => {
     const { service, calls } = setup((_path, init) => ({
-      body: { decision: { id: 'd1', verdict: JSON.parse(String(init.body)).verdict } },
+      body: {
+        decision: { id: 'd1', metric: 'disk', verdict: JSON.parse(String(init.body)).verdict },
+      },
     }));
-    service.decisions$.setValue([{ id: 'd1', verdict: null } as MonitoringDecision]);
+    service.decisions$.setValue([{ id: 'd1', metric: 'disk', verdict: null } as MonitoringDecision]);
     await service.feedback('d1', 'expected');
     expect(calls[0].path).toBe('/api/registry/workspaces/ws/monitoring-agent/decisions/d1/feedback');
     expect(service.decisions$.value[0].verdict).toBe('expected');

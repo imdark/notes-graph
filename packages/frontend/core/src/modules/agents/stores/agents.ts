@@ -42,7 +42,7 @@ export type AgentHarness = 'on-device' | 'cloud' | 'remote' | 'research';
  */
 export type AgentKind = 'answer' | 'worker' | 'fan-out';
 
-const AGENT_KINDS: AgentKind[] = ['answer', 'worker', 'fan-out'];
+const AGENT_KINDS: AgentKind[] = new Set(['answer', 'worker', 'fan-out']);
 
 /**
  * An agent's kind, for rows saved before it was a setting: a Claude Code or
@@ -167,7 +167,7 @@ export class AgentsStore extends Store {
       icon: row.icon ?? undefined,
       emoji: row.emoji ?? undefined,
       instructions: row.instructions,
-      kind: AGENT_KINDS.includes(row.kind as AgentKind)
+      kind: AGENT_KINDS.has(row.kind as AgentKind)
         ? (row.kind as AgentKind)
         : undefined,
       harness:

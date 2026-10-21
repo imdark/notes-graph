@@ -1,6 +1,7 @@
 import { configureQuotaModule } from '@notesgraph/core/modules/quota';
 import { type Framework } from '@notesgraph/infra';
 
+import { configureAgentsModule } from './agents';
 import {
   configureAIButtonModule,
   configureAIDraftModule,
@@ -9,10 +10,8 @@ import {
   configureAIReasoningModule,
   configureAIToolsConfigModule,
 } from './ai-button';
-import { configureAgentsModule } from './agents';
-import { configureAppLockModule } from './app-lock';
-import { configureFolderSyncModule } from './folder-sync';
 import { configureAiLocalModule } from './ai-local';
+import { configureAppLockModule } from './app-lock';
 import { configureAppSidebarModule } from './app-sidebar';
 import { configAtMenuConfigModule } from './at-menu-config';
 import { configureBlobManagementModule } from './blob-management';
@@ -38,6 +37,7 @@ import { configureEditorSettingModule } from './editor-setting';
 import { configureExplorerIconModule } from './explorer-icon';
 import { configureFavoriteModule } from './favorite';
 import { configureFeatureFlagModule } from './feature-flag';
+import { configureFolderSyncModule } from './folder-sync';
 import { configureGlobalContextModule } from './global-context';
 import { configureHomeDocModule } from './home-doc';
 import { configureI18nModule } from './i18n';
@@ -50,7 +50,6 @@ import { configureJournalModule } from './journal';
 import { configureLifecycleModule } from './lifecycle';
 import { configureLinkCardModule } from './link-card';
 import { configureMediaModule } from './media';
-import { configureVideoIngestionModule } from './video-ingestion';
 import { configureNavigationModule } from './navigation';
 import { configureNavigationPanelModule } from './navigation-panel';
 import { configureNotificationModule } from './notification';
@@ -79,6 +78,7 @@ import { configureAppThemeModule } from './theme';
 import { configureThemeEditorModule } from './theme-editor';
 import { configureUrlModule } from './url';
 import { configureUserspaceModule } from './userspace';
+import { configureVideoIngestionModule } from './video-ingestion';
 import { configureVirtualViewsModule } from './virtual-views';
 import { configureVoiceTasksModule } from './voice-tasks';
 import { configureWorkspaceModule } from './workspace';

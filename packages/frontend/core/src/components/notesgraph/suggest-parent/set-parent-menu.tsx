@@ -1,8 +1,8 @@
 import { LinkedPageIcon, PlusIcon } from '@blocksuite/icons/rc';
 import {
+  MenuItem,
   MenuSeparator,
   MenuSub,
-  MenuItem,
 } from '@notesgraph/component/ui/menu';
 import { FeatureFlagService } from '@notesgraph/core/modules/feature-flag';
 import { preventDefault } from '@notesgraph/core/utils';

@@ -17,9 +17,9 @@ import {
   type ShipAction,
   shipAgents,
   type ShipStage,
+  shipTargets,
   type ShipTask,
   type ShipTaskDetails,
-  shipTargets,
   stuckReason,
 } from '@notesgraph/core/modules/agents';
 import { WorkbenchService } from '@notesgraph/core/modules/workbench';

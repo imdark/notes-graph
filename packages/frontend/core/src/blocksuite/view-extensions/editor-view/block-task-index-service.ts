@@ -15,8 +15,8 @@ import type { Query, SearchOptions } from '@notesgraph/nbstore';
 import {
   catchError,
   combineLatest,
-  filter as filterOp,
   defer,
+  filter as filterOp,
   map,
   merge,
   of,

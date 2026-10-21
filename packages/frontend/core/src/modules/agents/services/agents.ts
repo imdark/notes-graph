@@ -1,4 +1,5 @@
-import { LiveData, Service } from '@notesgraph/infra';
+import type { LiveData} from '@notesgraph/infra';
+import { Service } from '@notesgraph/infra';
 
 import type { Agents } from '../entities/agents';
 import {

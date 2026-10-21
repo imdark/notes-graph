@@ -1,9 +1,9 @@
-import { Transactional } from '@nestjs-cls/transactional';
 import { Injectable } from '@nestjs/common';
+import { Transactional } from '@nestjs-cls/transactional';
 import {
+  Prisma,
   type RegistryJob,
   type RegistryJobQuestion,
-  Prisma,
 } from '@prisma/client';
 
 import { BaseModel } from './base';

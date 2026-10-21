@@ -16,8 +16,8 @@ import { PermissionAccess } from '../../core/permission';
 import { Models } from '../../models';
 import {
   type MonitorAlerts,
-  type MonitorSpec,
   MonitorService,
+  type MonitorSpec,
 } from './service';
 
 /** Wire shape for a monitor. Times are epoch seconds, like the job DTOs. */

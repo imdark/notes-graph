@@ -8,8 +8,8 @@
 //
 // New keys are appended; other locales are filled by the normal i18n sync.
 import { readFileSync, writeFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const [key, ...rest] = process.argv.slice(2);
 const value = rest.join(' ');

@@ -2,7 +2,7 @@ import { Injectable, Logger, Optional } from '@nestjs/common';
 
 import { BadRequest, EventBus, OnEvent } from '../../base';
 import { Models } from '../../models';
-import { RegistryJobService, type JobDto } from './jobs';
+import { type JobDto,RegistryJobService } from './jobs';
 import { RegistryService } from './service';
 
 /** Jobs of a health check carry this agent id, so their end is recognised. */

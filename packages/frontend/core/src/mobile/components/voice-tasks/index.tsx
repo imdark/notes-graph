@@ -4,9 +4,9 @@ import { EditorService } from '@notesgraph/core/modules/editor';
 import {
   appendDictation,
   insertTasks,
-  splitDictatedTasks,
   type SpeechToTextError,
   type SpeechToTextSession,
+  splitDictatedTasks,
   VoiceTasksService,
 } from '@notesgraph/core/modules/voice-tasks';
 import { useI18n } from '@notesgraph/i18n';

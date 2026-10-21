@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import type { RegistryDevice, Prisma } from '@prisma/client';
+import type { Prisma,RegistryDevice } from '@prisma/client';
 
 import { BaseModel } from './base';
 

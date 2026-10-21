@@ -1,5 +1,5 @@
-import { notify } from '@notesgraph/component';
 import { ImportIcon } from '@blocksuite/icons/rc';
+import { notify } from '@notesgraph/component';
 import type { useI18n } from '@notesgraph/i18n';
 
 import type { DesktopApiService } from '../modules/desktop-api';

@@ -11,6 +11,7 @@ import { InlineCommentViewExtension } from '@blocksuite/notesgraph/inlines/comme
 import { NotesGraphCanvasTextFonts } from '@blocksuite/notesgraph/shared/services';
 import { LinkedDocViewExtension } from '@blocksuite/notesgraph/widgets/linked-doc/view';
 import type { ReactToLit } from '@notesgraph/component';
+import { AgentsViewExtension } from '@notesgraph/core/blocksuite/view-extensions/agents';
 // AIViewExtension pulls the ~9MB blocksuite/ai bundle. It is NOT imported here
 // (that would drag AI into the initial bundle via getViewManager, which runs at
 // bootstrap for doc CRUD). Instead the editor host loads it lazily and registers
@@ -37,7 +38,6 @@ import { NotesGraphLinkPreviewExtension } from '@notesgraph/core/blocksuite/view
 import { MobileViewExtension } from '@notesgraph/core/blocksuite/view-extensions/mobile';
 import { OutlineZoomViewExtension } from '@notesgraph/core/blocksuite/view-extensions/outline-zoom';
 import { PdfViewExtension } from '@notesgraph/core/blocksuite/view-extensions/pdf';
-import { AgentsViewExtension } from '@notesgraph/core/blocksuite/view-extensions/agents';
 import { ScheduleViewExtension } from '@notesgraph/core/blocksuite/view-extensions/schedule';
 import { NotesGraphThemeViewExtension } from '@notesgraph/core/blocksuite/view-extensions/theme';
 import { TurboRendererViewExtension } from '@notesgraph/core/blocksuite/view-extensions/turbo-renderer';

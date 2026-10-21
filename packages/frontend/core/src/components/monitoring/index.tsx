@@ -7,9 +7,9 @@ import {
   FleetService,
   fleetSummary,
   formatTrendValue,
-  type RegistryDevice,
   type Monitor,
   MonitorsService,
+  type RegistryDevice,
   sparklinePath,
   type Trend,
 } from '@notesgraph/core/modules/agents';

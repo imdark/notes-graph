@@ -1,6 +1,6 @@
 import { PlusIcon } from '@blocksuite/icons/rc';
-import { saveAnswerAsDoc } from '@notesgraph/core/blocksuite/ai/utils/save-answer-as-doc';
 import { Button, notify, Scrollable } from '@notesgraph/component';
+import { saveAnswerAsDoc } from '@notesgraph/core/blocksuite/ai/utils/save-answer-as-doc';
 import {
   type Agent,
   AgentContextService,

@@ -12,8 +12,8 @@ import {
   AgentRunSessionService,
   AgentRunsStore,
   AgentsService,
-  AgentTaskClaimService,
   agentTargetKey,
+  AgentTaskClaimService,
   RemoteAgentRunnerService,
 } from '@notesgraph/core/modules/agents';
 import type { DialogComponentProps } from '@notesgraph/core/modules/dialogs';

@@ -3,8 +3,8 @@ import throttle from 'lodash-es/throttle';
 
 import { TextSelection } from '../../selection/index.js';
 import { EditorHost } from '../../view/index.js';
-import { isActiveInEditor } from './active.js';
 import { INLINE_ROOT_ATTR } from '../consts.js';
+import { isActiveInEditor } from './active.js';
 import { RANGE_SYNC_EXCLUDE_ATTR } from './consts.js';
 import type { RangeManager } from './range-manager.js';
 /**

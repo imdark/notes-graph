@@ -18,11 +18,12 @@
  * Run from the repo root (Playwright + Chromium resolve from ./node_modules):
  *   node tools/doordash-crawler/crawl.mjs
  */
-import { chromium } from 'playwright';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import readline from 'node:readline';
+
+import { chromium } from 'playwright';
 
 // A persistent profile keeps you logged in between runs and looks like a normal
 // browser to DoorDash's bot checks.

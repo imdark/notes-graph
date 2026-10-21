@@ -26,7 +26,6 @@ export {
   type GoBoardOcrStatus,
 } from './services/go-board-ocr';
 export { createLocalAIRequestService } from './services/local-copilot-client';
-export { mergeDocs } from './services/merge-docs';
 export {
   EMBEDDING_DIM,
   EMBEDDING_MODEL,
@@ -48,6 +47,7 @@ export {
   LocalVisionService,
   type LocalVisionStatus,
 } from './services/local-vision';
+export { mergeDocs } from './services/merge-docs';
 export { SpeechService, stripMarkdown } from './services/speech';
 export {
   type VectorChunk,

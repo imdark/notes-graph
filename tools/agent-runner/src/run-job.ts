@@ -30,6 +30,12 @@ import {
   type ShellEnv,
 } from './automation';
 import {
+  ChangeRecorder,
+  collectChanges,
+  gitBase,
+  type RunChanges,
+} from './changes';
+import {
   answerGitHubRequest,
   type Gh,
   ghCli,
@@ -38,12 +44,6 @@ import {
   repoFromUrl,
 } from './github';
 import { healthReading, isHealthCheck } from './health';
-import {
-  ChangeRecorder,
-  collectChanges,
-  gitBase,
-  type RunChanges,
-} from './changes';
 import { Narrator } from './narrate';
 import { permissionPrompt, runServer, steerHooks } from './run-tools';
 import { skillsPlugin } from './skills';

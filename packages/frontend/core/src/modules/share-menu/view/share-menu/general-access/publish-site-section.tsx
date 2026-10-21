@@ -12,8 +12,8 @@ import { useAsyncCallback } from '@notesgraph/core/components/hooks/notesgraph-a
 import { DocService } from '@notesgraph/core/modules/doc';
 import {
   DEFAULT_SITE_THEME,
-  type PublishSiteSettings,
   PublishSiteService,
+  type PublishSiteSettings,
   type SiteTheme,
 } from '@notesgraph/core/modules/share-doc';
 import { UserFriendlyError } from '@notesgraph/error';
@@ -21,7 +21,7 @@ import { useLiveData, useService } from '@notesgraph/infra';
 import { useCallback, useMemo } from 'react';
 
 import * as styles from './publish-site-section.css';
-import { rowContainerStyle, labelStyle } from './styles.css';
+import { labelStyle,rowContainerStyle } from './styles.css';
 
 const COLOR_SCHEMES: { value: SiteTheme['colorScheme']; label: string }[] = [
   { value: 'auto', label: 'Auto' },

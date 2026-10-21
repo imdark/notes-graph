@@ -4,8 +4,8 @@ import * as Y from 'yjs';
 import { profileFor } from '../agent-profiles';
 import {
   AGENT_RULES_TITLE,
-  agentRulesSection,
   AgentRules,
+  agentRulesSection,
   MAX_AGENT_RULES_CHARS,
   withAgentRules,
 } from '../agent-rules';

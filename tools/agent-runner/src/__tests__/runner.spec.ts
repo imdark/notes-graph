@@ -475,7 +475,7 @@ describe('running a job', () => {
     expect(options.env!.CLAUDE_CODE_OAUTH_TOKEN).toBeUndefined();
     expect(options.settingSources).toEqual([]);
     expect(Object.keys(options.hooks!).sort()).toEqual(['PostToolUse', 'Stop']);
-    expect(lines.some(l => /^⚙ setup · prepare ✓/.test(l))).toBe(true);
+    expect(lines.some(l => l.startsWith('⚙ setup · prepare ✓'))).toBe(true);
     expect(lines.at(-2)).toMatch(/^✓ finished in 3 turns/);
     expect(lines.at(-1)).toMatch(/^⚙ teardown · note ✓/);
     expect(await readFile(join(root, 'cache', 'teardown'), 'utf8')).toBe(

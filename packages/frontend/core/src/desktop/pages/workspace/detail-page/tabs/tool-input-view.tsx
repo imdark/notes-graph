@@ -1,5 +1,5 @@
-import * as styles from './tool-input.css';
 import type { ToolInputPreview } from './tool-input';
+import * as styles from './tool-input.css';
 
 /** The input of a tool an agent wants permission for, laid out to read. */
 export const ToolInputView = ({ preview }: { preview: ToolInputPreview }) => (

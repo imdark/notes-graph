@@ -3,8 +3,8 @@ import {
   AgentExecutorService,
   forkMessages,
   forkTranscript,
-  type RemoteJob,
   RemoteAgentRunnerService,
+  type RemoteJob,
   type RemoteQuestion,
   splitSuggestion,
 } from '@notesgraph/core/modules/agents';

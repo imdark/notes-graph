@@ -13,11 +13,11 @@ import {
 } from 'rxjs';
 
 import type { DocsService } from '../../doc';
+import type { Doc } from '../../doc';
 import type { DocsSearchService } from '../../docs-search';
 import type { TagService } from '../../tag';
-import { WorkspaceInitialized } from '../../workspace';
 import type { WorkspaceService } from '../../workspace';
-import type { Doc } from '../../doc';
+import { WorkspaceInitialized } from '../../workspace';
 import {
   DEFAULT_SITE_THEME,
   type PublishSiteSettings,

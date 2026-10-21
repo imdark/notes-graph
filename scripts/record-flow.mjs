@@ -28,10 +28,11 @@
  *   RECORD_HEADLESS   '1' to hide the window (default: headed, so you can
  *                     take over for a manual step such as signing in)
  */
-import { chromium } from 'playwright';
-import { mkdir, readdir, rename } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
+import { mkdir, readdir, rename } from 'node:fs/promises';
 import path from 'node:path';
+
+import { chromium } from 'playwright';
 
 const BASE = process.env.RECORD_BASE_URL ?? 'https://app.notesgraph.com';
 const PROFILE = process.env.RECORD_PROFILE ?? '/tmp/notesgraph-record-profile';

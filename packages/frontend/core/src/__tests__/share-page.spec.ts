@@ -56,7 +56,7 @@ describe('fetchSharedPublishMode', () => {
         workspaceId: 'workspace-id',
         docId: 'doc-id',
       })
-    ).resolves.toBe('edgeless');
+    ).resolves.toEqual({ mode: 'edgeless', commentable: false });
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock).toHaveBeenCalledWith(
       new URL(
@@ -83,7 +83,7 @@ describe('fetchSharedPublishMode', () => {
         workspaceId: 'workspace-id',
         docId: 'doc-id',
       })
-    ).resolves.toBe('page');
+    ).resolves.toEqual({ mode: 'page', commentable: false });
     expect(globalThis.fetch).toHaveBeenCalledTimes(2);
   });
 });

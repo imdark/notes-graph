@@ -26,8 +26,8 @@ import {
 } from '../../base';
 import { Models } from '../../models';
 import { validators } from '../utils/validators';
-import { extractTokenFromHeader } from './input';
 import { Public } from './guard';
+import { extractTokenFromHeader } from './input';
 import { MagicLinkAuthService } from './magic-link';
 import { AuthMethodsService } from './methods';
 import { SessionExchangeService } from './native-exchange';

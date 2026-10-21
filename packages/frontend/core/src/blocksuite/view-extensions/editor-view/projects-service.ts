@@ -1,7 +1,7 @@
 import {
   type ProjectInfo,
-  type ProjectsService as EditorProjectsService,
   ProjectsProvider,
+  type ProjectsService as EditorProjectsService,
 } from '@blocksuite/notesgraph/shared/services';
 import type { ExtensionType } from '@blocksuite/notesgraph/store';
 import { ProjectsService } from '@notesgraph/core/modules/projects';

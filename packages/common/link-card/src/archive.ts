@@ -96,8 +96,8 @@ export function extractArchive(html: string, baseUrl: string): PageArchive {
     pushImg(
       absUrl(
         img.getAttribute('src') ??
-          img.getAttribute('data-src') ??
-          img.getAttribute('data-delayed-url'),
+          img.dataset.src ??
+          img.dataset.delayedUrl,
         baseUrl
       ) ?? (srcset ? largestFromSrcset(srcset, baseUrl) : null)
     );

@@ -45,7 +45,7 @@ import { JobTaskClaims } from './task-claims';
 export class RegistryModule {}
 
 export { RegistryJobService } from './jobs';
+export * from './jobs';
 export { AgentPushService } from './push';
 export { RegistryService } from './service';
-export * from './jobs';
 export * from './types';

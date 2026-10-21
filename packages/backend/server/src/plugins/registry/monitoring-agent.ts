@@ -19,6 +19,7 @@ import {
   WARMUP,
 } from './baseline';
 import { RegistryHealthService } from './health';
+import { RegistryJobService } from './jobs';
 import {
   acceptPattern,
   ingestLogs,
@@ -29,7 +30,6 @@ import {
   readCatalog,
   toLogPatternDto,
 } from './log-patterns';
-import { RegistryJobService } from './jobs';
 import { AgentPushService } from './push';
 
 /**

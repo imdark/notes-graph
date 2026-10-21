@@ -7,11 +7,11 @@
 import { readFile, statfs } from 'node:fs/promises';
 import {
   cpus,
+  freemem,
   hostname,
   loadavg,
   release,
   totalmem,
-  freemem,
   type,
   uptime,
 } from 'node:os';

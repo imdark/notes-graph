@@ -15,8 +15,8 @@ import {
 } from '@testing-library/react';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 
-import manifestJson from './manifest.json';
 import plugin from './index.js';
+import manifestJson from './manifest.json';
 
 const manifest = manifestJson as Parameters<
   typeof createPluginHarness

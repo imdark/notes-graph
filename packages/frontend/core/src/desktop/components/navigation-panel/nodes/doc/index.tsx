@@ -36,8 +36,6 @@ import {
   useMemo,
   useState,
 } from 'react';
-
-import { HasChildrenContext } from './has-children-context';
 import { NEVER } from 'rxjs';
 
 import {
@@ -46,6 +44,7 @@ import {
 } from '../../tree';
 import type { GenericNavigationPanelNode } from '../types';
 import { Empty } from './empty';
+import { HasChildrenContext } from './has-children-context';
 import { useNavigationPanelDocNodeOperations } from './operations';
 import * as styles from './styles.css';
 

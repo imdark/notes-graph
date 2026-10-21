@@ -11,8 +11,8 @@ import { MarkdownAdapter } from '@blocksuite/notesgraph/shared/adapters';
 import type { NotesGraphTextAttributes } from '@blocksuite/notesgraph/shared/types';
 import {
   findOrgTimestamps,
-  orgStatusLabel,
   type OrgPlanningKeyword,
+  orgStatusLabel,
   parseOrgStatusPrefix,
   parseOrgTimestamp,
 } from '@blocksuite/notesgraph/shared/utils';

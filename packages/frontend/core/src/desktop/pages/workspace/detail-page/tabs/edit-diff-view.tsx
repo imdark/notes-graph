@@ -2,9 +2,9 @@ import clsx from 'clsx';
 import { useMemo, useState } from 'react';
 
 import {
+  diffLines,
   type DiffRow,
   type DiffSpan,
-  diffLines,
   type EditPreview,
   type FileEdit,
 } from './edit-diff';

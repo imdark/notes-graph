@@ -5,7 +5,7 @@
 import type { query as sdkQuery } from '@anthropic-ai/claude-agent-sdk';
 
 import { type Job, type NotesGraphApi, NotesGraphError } from './api';
-import { type RunnerSettings, RunFailed, runJob } from './run-job';
+import { RunFailed, runJob,type RunnerSettings } from './run-job';
 import { JobCancelled } from './run-tools';
 
 export const LEASE_SECONDS = 300;

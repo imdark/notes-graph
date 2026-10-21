@@ -5,10 +5,10 @@ import {
   agentReadiness,
   type AgentSettings,
   FleetService,
-  type RegistryDevice,
   type LogPattern,
   type MonitoringDecision,
   openDecisions,
+  type RegistryDevice,
 } from '@notesgraph/core/modules/agents';
 import { useLiveData, useService } from '@notesgraph/infra';
 import { useCallback, useState } from 'react';

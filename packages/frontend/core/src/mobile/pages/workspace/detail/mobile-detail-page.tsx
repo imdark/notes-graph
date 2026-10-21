@@ -12,8 +12,8 @@ import { useActiveBlocksuiteEditor } from '@notesgraph/core/components/hooks/use
 import { useNavigateHelper } from '@notesgraph/core/components/hooks/use-navigate-helper';
 import { NotesGraphErrorBoundary } from '@notesgraph/core/components/notesgraph/notesgraph-error-boundary';
 import { PageDetailEditor } from '@notesgraph/core/components/page-detail-editor';
-import { DetailPageWrapper } from '@notesgraph/core/desktop/pages/workspace/detail-page/detail-page-wrapper';
 import { DayScheduleSection } from '@notesgraph/core/desktop/pages/workspace/detail-page/day-schedule-section';
+import { DetailPageWrapper } from '@notesgraph/core/desktop/pages/workspace/detail-page/detail-page-wrapper';
 import {
   AppTabs,
   PageHeader,

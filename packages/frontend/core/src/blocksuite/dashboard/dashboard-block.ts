@@ -6,9 +6,9 @@ import { styleMap } from 'lit/directives/style-map.js';
 import {
   type DashboardBlockModel,
   MAX_DASHBOARD_COLUMNS,
+  WidgetBlockFlavour,
   type WidgetBlockModel,
   type WidgetBlockProps,
-  WidgetBlockFlavour,
 } from './model';
 
 export const DASHBOARD_BLOCK_TAG = 'notesgraph-dashboard-block';

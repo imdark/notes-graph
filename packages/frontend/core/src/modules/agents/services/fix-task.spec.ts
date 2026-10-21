@@ -8,13 +8,13 @@ import { DocsService } from '../../doc';
 import type { Agent } from '../stores/agents';
 import { AgentsService } from './agents';
 import {
+  findFixAgent,
   FIX_AGENT_INSTRUCTIONS,
   FIX_AGENT_NAME,
   FIX_UPS_DOC_TITLE,
-  findFixAgent,
   fixKey,
-  fixTaskTitle,
   FixTaskService,
+  fixTaskTitle,
 } from './fix-task';
 import { AgentRunSessionService } from './run-session';
 

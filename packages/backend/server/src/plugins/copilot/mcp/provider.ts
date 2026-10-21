@@ -26,8 +26,6 @@ import {
   parseSearchQuery,
   searchText,
 } from '../search-query';
-import { applyBudget, fuseRanked } from './rrf';
-import { findSecret, guardSecrets, secretRefusal } from './secret-guard';
 import {
   DEFAULT_STALE_DAYS,
   DEFAULT_STUB_CHARS,
@@ -39,6 +37,8 @@ import {
   type OutlineSource,
   readSection,
 } from './outline';
+import { applyBudget, fuseRanked } from './rrf';
+import { findSecret, guardSecrets, secretRefusal } from './secret-guard';
 
 function first(value: unknown): string {
   const item = Array.isArray(value) ? value[0] : value;

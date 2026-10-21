@@ -48,7 +48,6 @@ import {
 } from 'react';
 
 import { DocGlobalComments } from '../../components/comment/global';
-import { SharedPageComments } from './shared-page-comments';
 import {
   type DefaultOpenProperty,
   WorkspacePropertiesTable,
@@ -58,6 +57,7 @@ import { DocBanner } from './doc-banner';
 import { DocIconPicker } from './doc-icon-picker';
 import { BlocksuiteEditorJournalDocTitle } from './journal-doc-title';
 import { OutlineZoomBreadcrumb, useOutlineZoom } from './outline-zoom';
+import { SharedPageComments } from './shared-page-comments';
 import { StarterBar } from './starter-bar';
 import * as styles from './styles.css';
 import { useDocProjectLinkGuard } from './use-doc-project-link-guard';

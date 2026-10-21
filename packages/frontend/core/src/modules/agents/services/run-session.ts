@@ -3,12 +3,12 @@ import { Subject } from 'rxjs';
 
 import { type Agent, type AgentKind, agentKind } from '../stores/agents';
 import type { AgentContext } from './context';
-import type { RemoteQuestion } from './remote-runner';
 import {
   AgentAlreadyRunningError,
   type AgentExecutorService,
 } from './executor';
 import { type AgentBlockRef, lastBlockTouched } from './focus-block';
+import type { RemoteQuestion } from './remote-runner';
 import {
   type AgentTarget,
   agentTargetBlockIds,

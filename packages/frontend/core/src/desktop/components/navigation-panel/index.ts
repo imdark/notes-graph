@@ -5,8 +5,8 @@ export { NavigationPanelMigrationFavorites } from './sections/migration-favorite
 export { NavigationPanelNotes } from './sections/notes';
 export { NavigationPanelOrganize } from './sections/organize';
 export { NavigationPanelProjects } from './sections/projects';
-export { NavigationPanelVirtualViews } from './sections/virtual-views';
 export { NavigationPanelTags } from './sections/tags';
+export { NavigationPanelVirtualViews } from './sections/virtual-views';
 export { NavigationPanelTreeRoot } from './tree';
 export { NavigationPanelTreeContext } from './tree/context';
 export type {

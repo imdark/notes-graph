@@ -1,5 +1,5 @@
-import { applyUpdate, Doc as YDoc, encodeStateAsUpdate } from 'yjs';
 import { describe, expect, test } from 'vitest';
+import { applyUpdate, Doc as YDoc, encodeStateAsUpdate } from 'yjs';
 
 import { buildSiteTree } from '../../../desktop/pages/workspace/share/site/site-tree';
 import {

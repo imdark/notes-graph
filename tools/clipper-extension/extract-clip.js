@@ -9,16 +9,16 @@
  * packages/common/link-card/src/archive.ts.
  */
 function extractClip() {
-  var MAX_IMAGES = 24;
-  var MAX_VIDEOS = 8;
-  var base = location.href;
+  const MAX_IMAGES = 24;
+  const MAX_VIDEOS = 8;
+  const base = location.href;
 
   function absUrl(href) {
     if (!href) return null;
-    var v = String(href).trim();
+    const v = String(href).trim();
     if (!v || v.indexOf('data:') === 0 || v.indexOf('blob:') === 0) return null;
     try {
-      var u = new URL(v, base);
+      const u = new URL(v, base);
       return u.protocol === 'http:' || u.protocol === 'https:' ? u.href : null;
     } catch (e) {
       return null;
@@ -26,14 +26,14 @@ function extractClip() {
   }
 
   function largestFromSrcset(srcset) {
-    var best = null;
-    var bestScore = -1;
+    let best = null;
+    let bestScore = -1;
     String(srcset)
       .split(',')
       .forEach(function (part) {
-        var bits = part.trim().split(/\s+/);
-        var score = bits[1] ? parseFloat(bits[1]) || 0 : 0;
-        var abs = absUrl(bits[0]);
+        const bits = part.trim().split(/\s+/);
+        const score = bits[1] ? parseFloat(bits[1]) || 0 : 0;
+        const abs = absUrl(bits[0]);
         if (abs && score >= bestScore) {
           best = abs;
           bestScore = score;
@@ -43,13 +43,13 @@ function extractClip() {
   }
 
   function meta(sel) {
-    var el = document.querySelector(sel);
+    const el = document.querySelector(sel);
     return el ? el.getAttribute('content') : null;
   }
 
   // ---- images ----
-  var images = [];
-  var seenImg = {};
+  const images = [];
+  const seenImg = {};
   function pushImg(url) {
     if (url && !seenImg[url] && images.length < MAX_IMAGES) {
       seenImg[url] = 1;
@@ -60,22 +60,22 @@ function extractClip() {
   pushImg(absUrl(meta('meta[property="og:image:secure_url"]')));
   pushImg(absUrl(meta('meta[name="twitter:image"]')));
   Array.prototype.forEach.call(document.querySelectorAll('img'), function (img) {
-    var w = Number(img.getAttribute('width'));
-    var h = Number(img.getAttribute('height'));
+    const w = Number(img.getAttribute('width'));
+    const h = Number(img.getAttribute('height'));
     if ((w > 0 && w <= 2) || (h > 0 && h <= 2)) return; // tracking pixel
-    var srcset = img.getAttribute('srcset');
+    const srcset = img.getAttribute('srcset');
     pushImg(
       absUrl(
         img.getAttribute('src') ||
-          img.getAttribute('data-src') ||
-          img.getAttribute('data-delayed-url')
+          img.dataset.src ||
+          img.dataset.delayedUrl
       ) || (srcset ? largestFromSrcset(srcset) : null)
     );
   });
 
   // ---- videos (direct sources only; blob:/MSE streams need the capture hook) ----
-  var videos = [];
-  var seenVid = {};
+  const videos = [];
+  const seenVid = {};
   function pushVid(url) {
     if (url && !seenVid[url] && videos.length < MAX_VIDEOS) {
       seenVid[url] = 1;
@@ -90,7 +90,7 @@ function extractClip() {
     )
   );
   pushVid(absUrl(meta('meta[name="twitter:player:stream"]')));
-  var poster = null;
+  let poster = null;
   Array.prototype.forEach.call(
     document.querySelectorAll('video'),
     function (v) {
@@ -106,8 +106,8 @@ function extractClip() {
   );
 
   // ---- text ----
-  var titleEl = document.querySelector('title');
-  var title = (
+  const titleEl = document.querySelector('title');
+  const title = (
     meta('meta[property="og:title"]') ||
     (titleEl && titleEl.textContent) ||
     document.title ||
@@ -116,13 +116,13 @@ function extractClip() {
     .replace(/\s+/g, ' ')
     .trim();
 
-  var container =
+  const container =
     document.querySelector('article') ||
     document.querySelector('main') ||
     document.body;
   // innerText respects visibility (skips hidden scaffolding); textContent is a
   // safe fallback where innerText isn't implemented.
-  var text = (
+  const text = (
     (container && (container.innerText || container.textContent)) ||
     ''
   )
