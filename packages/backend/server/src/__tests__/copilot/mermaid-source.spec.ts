@@ -41,8 +41,11 @@ async function diagramTool(docs: Record<string, string>) {
   const server = await provider.for('user', 'ws');
   const tool = server.tools.find(item => item.name === 'create_diagram');
   if (!tool) throw new Error('create_diagram is not offered');
-  const call = (args: Record<string, unknown>) =>
-    tool.execute(args, { signal: new AbortController().signal });
+  const call = async (args: Record<string, unknown>) =>
+    (await tool.execute(args, { signal: new AbortController().signal })) as {
+      isError?: boolean;
+      content: { type: 'text'; text: string }[];
+    };
   return { call, writes };
 }
 

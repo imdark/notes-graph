@@ -26,6 +26,12 @@ import {
   parseSearchQuery,
   searchText,
 } from '../search-query';
+import {
+  type Bounds,
+  buildScene,
+  readCanvasElements,
+  renderCanvas,
+} from './canvas';
 import { applyBudget, fuseRanked } from './rrf';
 import { findSecret, guardSecrets, secretRefusal } from './secret-guard';
 import {
@@ -55,8 +61,14 @@ type McpTextContent = {
   text: string;
 };
 
+type McpImageContent = {
+  type: 'image';
+  data: string;
+  mimeType: string;
+};
+
 export type WorkspaceMcpToolResult = {
-  content: McpTextContent[];
+  content: (McpTextContent | McpImageContent)[];
   isError?: boolean;
 };
 
@@ -1223,11 +1235,132 @@ export class WorkspaceMcpProvider {
       },
     });
 
+    const readCanvas = defineTool({
+      name: 'read_canvas',
+      title: 'Read Canvas',
+      description:
+        "Read a document's Edgeless canvas (whiteboard): a picture of it plus a scene of what is where. Look at the image to recognise what the user wrote and drew: transcribe handwriting as text, equations as LaTeX, and hand-drawn diagrams as nodes and edges (or Mermaid for create_diagram). In the image, handwriting is near-black, shapes are blue outlines, connectors grey arrows, and notes, text, LaTeX and frames faint boxes; their text is in the scene, not the image. The scene lists inkRegions (strokes grouped by proximity, each with bounds, its frame/group and the nearest labelled elements with direction and gap), every other element with bounds, text, LaTeX, shape, connector from/to ids, frame and group, and readingOrder (top-to-bottom, left-to-right). Bounds are canvas units [x, y, w, h]; image.region and image.scale map them to pixels. To read small writing, call again with focus set to an inkRegion id (e.g. 'ink-2') or an element id, or with region.",
+      parser: z.object({
+        docId: z.string(),
+        focus: z.string().optional(),
+        region: z
+          .object({
+            x: z.number(),
+            y: z.number(),
+            w: z.number().positive(),
+            h: z.number().positive(),
+          })
+          .optional(),
+        image: z.boolean().optional(),
+      }),
+      inputSchema: {
+        type: 'object',
+        properties: {
+          docId: { type: 'string' },
+          focus: {
+            type: 'string',
+            description:
+              "An inkRegion id ('ink-3') or element id from an earlier call: draw only that part, zoomed in.",
+          },
+          region: {
+            type: 'object',
+            description: 'A canvas area to draw, in canvas units.',
+            properties: {
+              x: { type: 'number' },
+              y: { type: 'number' },
+              w: { type: 'number' },
+              h: { type: 'number' },
+            },
+            required: ['x', 'y', 'w', 'h'],
+            additionalProperties: false,
+          },
+          image: {
+            type: 'boolean',
+            description: 'Include the picture (default true).',
+          },
+        },
+        required: ['docId'],
+        additionalProperties: false,
+      },
+      execute: async ({ docId, focus, region, image }, options) => {
+        const notFoundError = toolError(`Doc with id ${docId} not found.`);
+        const accessible = await this.ac
+          .user(userId)
+          .workspace(workspaceId)
+          .doc(docId)
+          .can('Doc.Read');
+        if (!accessible) return notFoundError;
+        const aborted = abortIfNeeded(options.signal);
+        if (aborted) return aborted;
+
+        const doc = await this.reader.getDoc(workspaceId, docId);
+        if (!doc?.bin?.length) return notFoundError;
+        const elements = readCanvasElements(doc.bin);
+        if (!elements.length) {
+          return toolText(
+            JSON.stringify({
+              docId,
+              empty: true,
+              message: 'This document has nothing on its Edgeless canvas.',
+            })
+          );
+        }
+        const scene = buildScene(elements);
+
+        let area: Bounds | undefined = region
+          ? [region.x, region.y, region.w, region.h]
+          : undefined;
+        if (focus) {
+          const target =
+            scene.inkRegions.find(r => r.id === focus) ??
+            scene.elements.find(e => e.id === focus);
+          if (!target) {
+            return toolError(
+              `No ink region or element ${focus} on the canvas of ${docId}; take ids from the scene.`
+            );
+          }
+          area = target.bounds;
+        }
+
+        const picture = image === false ? null : renderCanvas(elements, area);
+        const result: WorkspaceMcpToolResult = {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({
+                docId,
+                ...(picture
+                  ? {
+                      image: {
+                        region: picture.region,
+                        scale: picture.scale,
+                        width: picture.width,
+                        height: picture.height,
+                      },
+                    }
+                  : {}),
+                ...scene,
+              }),
+            },
+          ],
+        };
+        if (picture) {
+          result.content.push({
+            type: 'image',
+            data: picture.png.toString('base64'),
+            mimeType: 'image/png',
+          });
+        }
+        return result;
+      },
+    });
+
     const tools = [
       readDocument,
       hybridSearch,
       docOutline,
       readDocSection,
+      readCanvas,
       semanticSearch,
       keywordSearch,
       searchBlocks,
