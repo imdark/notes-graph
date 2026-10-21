@@ -23,9 +23,14 @@ import {
 } from './utils/actions/index.js';
 import { assertKeyboardWorkInInput } from './utils/asserts.js';
 import { test } from './utils/playwright.js';
+import { getFormatBar } from './utils/query.js';
 
-const pressCreateLinkShortCut = async (page: Page) => {
-  await page.keyboard.press(`${SHORT_KEY}+k`);
+// NotesGraph has no Mod-k link hotkey (Cmd/Ctrl+K opens the command palette);
+// the format bar's Link button is the direct way to create a link.
+const openCreateLinkPopover = async (page: Page) => {
+  const { linkBtn } = getFormatBar(page);
+  await expect(linkBtn).toBeVisible();
+  await linkBtn.click();
 };
 
 test('basic link', async ({ page }, testInfo) => {
@@ -38,7 +43,7 @@ test('basic link', async ({ page }, testInfo) => {
 
   // Create link
   await dragBetweenIndices(page, [0, 0], [0, 8]);
-  await pressCreateLinkShortCut(page);
+  await openCreateLinkPopover(page);
   await page.mouse.move(0, 0);
 
   const createLinkPopoverLocator = page.locator(
@@ -104,7 +109,7 @@ test('add link when dragging from empty line', async ({ page }) => {
     x: 1,
     y: 2,
   });
-  await pressCreateLinkShortCut(page);
+  await openCreateLinkPopover(page);
   await page.mouse.move(0, 0);
 
   const createLinkPopoverLocator = page.locator(
@@ -196,7 +201,7 @@ test('readonly mode should not trigger toolbar', async ({ page }) => {
   // press hotkey should not trigger create link popup
 
   await dragBetweenIndices(page, [0, 0], [0, 3]);
-  await pressCreateLinkShortCut(page);
+  await page.keyboard.press(`${SHORT_KEY}+k`);
 
   await expect(toolbar).not.toBeVisible();
   const linkPopoverInput = page.locator('.notesgraph-link-popover-input');
@@ -213,7 +218,7 @@ test('should mock selection not stored', async ({ page }, testInfo) => {
 
   // Create link
   await dragBetweenIndices(page, [0, 0], [0, 8]);
-  await pressCreateLinkShortCut(page);
+  await openCreateLinkPopover(page);
 
   const mockSelectNode = page.locator('.mock-selection');
   await expect(mockSelectNode).toHaveCount(1);
@@ -238,7 +243,7 @@ test('should keyboard work in link popover', async ({ page }) => {
   await createLinkBlock(page, linkText, 'http://example.com');
 
   await dragBetweenIndices(page, [0, 0], [0, 8]);
-  await pressCreateLinkShortCut(page);
+  await openCreateLinkPopover(page);
   const linkPopoverInput = page.locator('.notesgraph-link-popover-input');
   await assertKeyboardWorkInInput(page, linkPopoverInput);
   await page.mouse.click(500, 500);
@@ -277,12 +282,13 @@ test('link bar should not be appear when the range is collapsed', async ({
   await focusRichText(page);
   await type(page, 'aaa');
 
-  await pressCreateLinkShortCut(page);
+  // collapsed range: no format bar, so no way to open the link popover
+  await expect(getFormatBar(page).linkBtn).not.toBeVisible();
   const linkPopoverLocator = page.locator('.notesgraph-link-popover');
   await expect(linkPopoverLocator).not.toBeVisible();
 
   await dragBetweenIndices(page, [0, 0], [0, 3]);
-  await pressCreateLinkShortCut(page);
+  await openCreateLinkPopover(page);
   await expect(linkPopoverLocator).toBeVisible();
 
   await focusRichText(page); // click to cancel the link popover
@@ -292,7 +298,7 @@ test('link bar should not be appear when the range is collapsed', async ({
   await waitNextFrame(page);
   await type(page, 'bbb');
   await dragBetweenIndices(page, [0, 1], [0, 5]);
-  await pressCreateLinkShortCut(page);
+  await openCreateLinkPopover(page);
   await expect(linkPopoverLocator).toBeVisible();
 
   await focusRichText(page); // click to cancel the link popover
@@ -304,7 +310,7 @@ test('link bar should not be appear when the range is collapsed', async ({
   await focusRichText(page);
   await waitNextFrame(page);
   await dragBetweenIndices(page, [1, 1], [1, 66]);
-  await pressCreateLinkShortCut(page);
+  await openCreateLinkPopover(page);
   await expect(linkPopoverLocator).toBeVisible();
 });
 
@@ -315,7 +321,7 @@ test('create link with paste', async ({ page }, testInfo) => {
   await type(page, 'aaa');
 
   await dragBetweenIndices(page, [0, 0], [0, 3]);
-  await pressCreateLinkShortCut(page);
+  await openCreateLinkPopover(page);
 
   const createLinkPopoverLocator = page.locator(
     '.notesgraph-link-popover.create'
@@ -358,7 +364,7 @@ test('convert link to card', async ({ page }, testInfo) => {
 
   // Create link
   await setSelection(page, 3, 1, 3, 9);
-  await pressCreateLinkShortCut(page);
+  await openCreateLinkPopover(page);
   await waitNextFrame(page);
   const toolbar = page.locator('notesgraph-toolbar-widget editor-toolbar');
   await expect(toolbar).toBeVisible();
@@ -410,7 +416,7 @@ test('convert link to embed', async ({ page }, testInfo) => {
 
   // Create link
   await setSelection(page, 3, 1, 3, 9);
-  await pressCreateLinkShortCut(page);
+  await openCreateLinkPopover(page);
   await waitNextFrame(page);
   const toolbar = page.locator('notesgraph-toolbar-widget editor-toolbar');
   await expect(toolbar).toBeVisible();
@@ -418,7 +424,9 @@ test('convert link to embed', async ({ page }, testInfo) => {
   await expect(linkPopoverInput).toBeVisible();
   await type(page, link);
   await pressEnter(page);
-  await focusRichText(page);
+  // the format bar over the selected link covers the first line; click the
+  // link's own line (as in "convert link to card") to collapse the selection
+  await focusRichText(page, 1);
 
   expect(await getPageSnapshot(page, true)).toMatchSnapshot(
     `${testInfo.title}.json`
@@ -441,7 +449,7 @@ test('strikethrough applies to a link', async ({ page }) => {
 
   // turn the selected text into a link
   await dragBetweenIndices(page, [0, 0], [0, 8]);
-  await pressCreateLinkShortCut(page);
+  await openCreateLinkPopover(page);
   await page.mouse.move(0, 0);
   const linkPopoverInput = page.locator('.notesgraph-link-popover-input');
   await expect(linkPopoverInput).toBeVisible();

@@ -69,7 +69,7 @@ function getAttachment(page: Page) {
     await type(page, '/');
     await resetHistory(page);
     await expect(slashMenu).toBeVisible();
-    await type(page, 'file', 100);
+    await type(page, 'attach', 100);
     await expect(slashMenu).toBeVisible();
 
     const fileChooser = page.waitForEvent('filechooser');
@@ -371,7 +371,7 @@ test('cancel file picker with input element resolves', async ({ page }) => {
 
   const slashMenu = page.locator(`.slash-menu`);
   await waitNextFrame(page);
-  await type(page, '/file', 100);
+  await type(page, '/attach', 100);
   await expect(slashMenu).toBeVisible();
 
   const fileChooser = page.waitForEvent('filechooser');

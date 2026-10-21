@@ -76,7 +76,12 @@ test(
         const note = doc.addBlock('notesgraph:note', {}, rootId);
         doc.addBlock('notesgraph:code', {}, note);
         doc.addBlock('notesgraph:divider', {}, note);
-        doc.addBlock('notesgraph:bookmark', { url: bookMarkUrl }, note);
+        // NotesGraph defaults bookmarks to the tall 'vertical' card
+        doc.addBlock(
+          'notesgraph:bookmark',
+          { url: bookMarkUrl, style: 'horizontal' },
+          note
+        );
         await new Promise(res => setTimeout(res, 200));
         const pageRoot = document.querySelector('notesgraph-page-root');
         if (!pageRoot) throw new Error('Cannot find doc page');

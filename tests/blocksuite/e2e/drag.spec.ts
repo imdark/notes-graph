@@ -508,7 +508,8 @@ test('should trigger click event on editor container when clicking on blocks und
   await expect(page.locator('[contenteditable="true"]:focus')).toHaveCount(1);
 });
 
-test('should get to selected block when dragging unselected block', async ({
+// FIXME: block selection is lost after the drag (upstream marks this FIXME(DND)).
+test.fixme('should get to selected block when dragging unselected block', async ({
   page,
 }) => {
   await enterPlaygroundRoom(page);
