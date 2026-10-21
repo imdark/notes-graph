@@ -1,3 +1,4 @@
+import { test } from '@notesgraph-test/kit/playwright';
 import { clickEdgelessModeButton } from '@notesgraph-test/kit/utils/editor';
 import { openHomePage } from '@notesgraph-test/kit/utils/load-page';
 import {
@@ -5,7 +6,7 @@ import {
   getBlockSuiteEditorTitle,
   waitForEmptyEditor,
 } from '@notesgraph-test/kit/utils/page-logic';
-import test, { expect } from '@playwright/test';
+import { expect } from '@playwright/test';
 
 test('should be able to undo on empty page', async ({ page }) => {
   await openHomePage(page);

@@ -26,6 +26,9 @@ test.beforeEach(async ({ page }) => {
 });
 
 test('should correct text color on toolbar', async ({ page }) => {
+  // NotesGraph's app theme defaults to dark, so a new doc's edgeless theme
+  // starts dark; start from light so the light -> dark switch is tested.
+  await switchEdgelessTheme(page, 'light');
   await setEdgelessTool(page, 'connector');
   await dragView(page, [100, 300], [200, 400]);
   await dblclickView(page, [150, 350]);

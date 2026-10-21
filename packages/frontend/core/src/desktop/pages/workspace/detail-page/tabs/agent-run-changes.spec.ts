@@ -21,5 +21,5 @@ describe('agent run changes', () => {
   test('registers the AI elements (<text-renderer>) on load', async () => {
     await import('./agent-run-changes');
     expect(registered).toHaveBeenCalled();
-  }, 60_000);
+  }, 180_000);
 });

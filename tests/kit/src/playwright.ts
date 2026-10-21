@@ -35,6 +35,15 @@ export const skipOnboarding = async (context: BrowserContext) => {
       'global-state:plugin:builtin-enabled:com.notesgraph.edgeless',
       'true'
     );
+    // NotesGraph hides the Favorites / Tags / Collections sidebar sections by
+    // default (Settings → Appearance); the suites exercise them, so show them.
+    // Only when unset, so a test that toggles one keeps its choice on reload.
+    for (const section of ['showFavorites', 'showTags', 'showCollections']) {
+      const key = `global-state:app-sidebar-state:${section}`;
+      if (window.localStorage.getItem(key) === null) {
+        window.localStorage.setItem(key, 'true');
+      }
+    }
   });
 };
 

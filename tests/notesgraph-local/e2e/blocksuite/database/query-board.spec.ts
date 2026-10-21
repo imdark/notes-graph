@@ -59,8 +59,9 @@ test('query board collects #personal todos across docs, live', async ({
   await expect(database).not.toContainText('Untagged chore');
 
   // Live: a newly typed tagged todo in the board's own doc shows up.
+  // (Don't click the database's top-left corner: that is now the
+  // collapse toggle, and a collapsed board renders no cards.)
   await page.keyboard.press('Escape');
-  await database.click({ position: { x: 10, y: 10 } });
   // place the cursor on the first (empty) paragraph above the board
   await page.locator('notesgraph-paragraph').first().click();
   await page.keyboard.press('End');

@@ -78,6 +78,10 @@ test('heading icon should be updated after change heading level', async ({
   await paragraph.hover();
   await expect(page.getByTestId('heading-icon-1')).toBeVisible();
 
+  // Put the caret back in the text first: a second select-all while the
+  // whole text is already selected escalates to a block selection, whose
+  // toolbar has no Conversions menu.
+  await paragraph.getByText('Hello').click();
   await selectAllByKeyboard(page);
   await toolbar.getByLabel('Conversions').click();
   await toolbar.getByLabel('Heading 2').click();

@@ -86,7 +86,9 @@ test.describe('Mirror list as database', () => {
     await expect(rows.nth(3)).toContainText('Durian');
   });
 
-  test('create table (destructive) works on a nested list item', async ({
+  // The destructive "Create Table" toolbar action is gone (convertToDatabase
+  // has no caller); "Mirror as Table" replaced it — covered below.
+  test.skip('create table (destructive) works on a nested list item', async ({
     page,
   }) => {
     // "Create Table" (turnIntoDatabase/convertToDatabase) is the older,

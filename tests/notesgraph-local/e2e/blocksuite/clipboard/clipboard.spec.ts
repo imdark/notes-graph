@@ -450,8 +450,9 @@ test.describe('paste in readonly mode', () => {
     const initialParagraphCount = blockIds.length;
 
     await page.evaluate(() => {
+      // The outline-zoom extension replaces the page root view with a subclass.
       const pageRoot = document.querySelector(
-        'notesgraph-page-root'
+        'notesgraph-focusable-page-root, notesgraph-page-root'
       ) as PageRootBlockComponent;
       pageRoot.store.readonly = true;
     });
