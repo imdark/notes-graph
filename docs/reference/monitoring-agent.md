@@ -15,13 +15,13 @@ Code: `packages/backend/server/src/plugins/registry/monitoring-agent.ts`
   (disk, memory and load from the health check, plus any check with a
   `value` that the wf CLI posts to `/devices/:key/status`) gets a
   per-machine EWMA baseline: mean and variance, α = 0.2. After 10
-  readings, a reading ≥ *sensitivity* σ above normal is an anomaly
+  readings, a reading ≥ _sensitivity_ σ above normal is an anomaly
   (σ ≥ 2× sensitivity is critical). Disk, memory and load only alarm when
   they go up. Other metrics alarm in both directions. A floor on σ (2
   points for disk, 5 for memory, 0.25 for load) keeps a flat baseline
   from flagging tiny changes.
 - **Flags what's new.** A warn or fail state the machine has never been
-  in, such as a check that has never failed, is a *new* finding once the
+  in, such as a check that has never failed, is a _new_ finding once the
   machine has had 10 health checks. A state it has already been in isn't
   news a second time.
 - **Doesn't learn a spike as normal.** An anomalous reading is learned at
@@ -52,13 +52,13 @@ The guide's main source is logs, so the agent reads them too. Code:
   never stored, only templates and one redacted example.
 - **The catalog** is one row a machine (`monitoring_log_catalogs`), up
   to 300 patterns. The patterns not seen for longest are dropped first.
-  A pattern is *known* once it has been seen 20 times or someone labels
+  A pattern is _known_ once it has been seen 20 times or someone labels
   it known.
 - **Verdicts.** After the catalog has had 10 scans, a pattern that has
   never been seen is **new**. It is critical if the line says fatal,
   panic, OOM, segfault, corruption and the like, and warn otherwise.
   Each pattern learns its rate in lines an hour (EWMA). A known pattern
-  with at least 5 lines in a scan and a rate ≥ *sensitivity* σ above
+  with at least 5 lines in a scan and a rate ≥ _sensitivity_ σ above
   normal is a **spike** (an `anomaly` decision). σ is never taken as
   less than √mean, as for Poisson counts. A spike is held out of the
   baseline, so it can't drag normal up.
@@ -68,11 +68,11 @@ The guide's main source is logs, so the agent reads them too. Code:
 
 ## Modes: earning trust
 
-| Mode     | Learns | Logs decisions | Alerts / triage |
-|----------|--------|----------------|-----------------|
-| training | ✓      |                |                 |
-| shadow   | ✓      | ✓ (`shadow`)   |                 |
-| detect   | ✓      | ✓ (`escalated`)| ✓               |
+| Mode     | Learns | Logs decisions  | Alerts / triage |
+| -------- | ------ | --------------- | --------------- |
+| training | ✓      |                 |                 |
+| shadow   | ✓      | ✓ (`shadow`)    |                 |
+| detect   | ✓      | ✓ (`escalated`) | ✓               |
 
 When detect escalates a finding, it can do two things:
 
@@ -80,14 +80,14 @@ When detect escalates a finding, it can do two things:
   the current APK shows it;
 - if **Triage with Claude** is on, queue a `claude-code` job on the
   machine. The job is told to use read-only commands only and to answer
-  with *Likely cause / Evidence / Suggested fix / Urgency*. Its answer is
+  with _Likely cause / Evidence / Suggested fix / Urgency_. Its answer is
   stored on the decision.
 
 **Expected** on a decision moves the baseline halfway to that reading and
 widens its spread, so it stops being flagged. **Resolved** lets the
 finding alert again at once.
 
-The agent runs **Check all machines** itself every *interval* minutes
+The agent runs **Check all machines** itself every _interval_ minutes
 (default 60; 0 means only when someone asks). It acts as whoever last
 changed its settings.
 
@@ -96,17 +96,17 @@ changed its settings.
 All under `/api/registry/workspaces/:workspaceId`, PAT or session auth.
 Reads need `Workspace.Read`. Everything else needs `Workspace.Settings.Update`.
 
-| Method | Path | Body / query |
-|--------|------|--------------|
-| GET  | `/monitoring-agent` | settings plus per-machine learning progress |
-| POST | `/monitoring-agent` | `{ mode?, sensitivity?, intervalMinutes?, autoTriage?, alerts?: { push } }`. The first call turns the agent on |
-| POST | `/monitoring-agent/reset` | `{ deviceKey? }` forgets what was learned (all machines → back to training) |
-| GET  | `/monitoring-agent/decisions` | `?limit=` (max 500) |
-| POST | `/monitoring-agent/decisions/:id/triage` | queues a read-only Claude run |
-| POST | `/monitoring-agent/decisions/:id/feedback` | `{ verdict: 'expected' \| 'resolved' }` |
-| GET  | `/monitoring-agent/logs` | each machine's catalog of log patterns |
-| POST | `/monitoring-agent/logs/:key/:patternId/label` | `{ label: 'known' \| null }` |
-| POST | `/devices/:key/logs` | `{ lines: string[], until?: epoch s }`: a machine sends its own log lines |
+| Method | Path                                           | Body / query                                                                                                   |
+| ------ | ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| GET    | `/monitoring-agent`                            | settings plus per-machine learning progress                                                                    |
+| POST   | `/monitoring-agent`                            | `{ mode?, sensitivity?, intervalMinutes?, autoTriage?, alerts?: { push } }`. The first call turns the agent on |
+| POST   | `/monitoring-agent/reset`                      | `{ deviceKey? }` forgets what was learned (all machines → back to training)                                    |
+| GET    | `/monitoring-agent/decisions`                  | `?limit=` (max 500)                                                                                            |
+| POST   | `/monitoring-agent/decisions/:id/triage`       | queues a read-only Claude run                                                                                  |
+| POST   | `/monitoring-agent/decisions/:id/feedback`     | `{ verdict: 'expected' \| 'resolved' }`                                                                        |
+| GET    | `/monitoring-agent/logs`                       | each machine's catalog of log patterns                                                                         |
+| POST   | `/monitoring-agent/logs/:key/:patternId/label` | `{ label: 'known' \| null }`                                                                                   |
+| POST   | `/devices/:key/logs`                           | `{ lines: string[], until?: epoch s }`: a machine sends its own log lines                                      |
 
 ## Not done yet
 

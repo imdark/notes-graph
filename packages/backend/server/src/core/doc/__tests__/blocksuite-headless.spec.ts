@@ -41,9 +41,16 @@ test('appendLinkedDocReference adds a reference paragraph without touching exist
   const blocks = merged.getMap('blocks');
 
   const mergedTexts = paragraphTexts(blocks);
-  t.is(mergedTexts.length, 3, 'original two paragraphs plus the new reference one');
+  t.is(
+    mergedTexts.length,
+    3,
+    'original two paragraphs plus the new reference one'
+  );
   for (const text of originalTexts) {
-    t.true(mergedTexts.includes(text), `original paragraph preserved: "${text}"`);
+    t.true(
+      mergedTexts.includes(text),
+      `original paragraph preserved: "${text}"`
+    );
   }
 
   let noteId: string | undefined;

@@ -44,7 +44,8 @@ export class FakeNotesGraph {
           res.writeHead(code, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify(value));
         };
-        if (req.headers.authorization !== 'Bearer pat') return reply({ message: 'no' }, 401);
+        if (req.headers.authorization !== 'Bearer pat')
+          return reply({ message: 'no' }, 401);
         const path = req.url ?? '';
         let m: RegExpMatchArray | null;
         if (req.method === 'POST' && path.endsWith('/devices')) {
@@ -64,14 +65,25 @@ export class FakeNotesGraph {
         }
         if ((m = path.match(/\/jobs\/([^/]+)\/report$/))) {
           this.reports.push({ jobId: m[1], fields: data });
-          return reply({ job: { id: m[1], status: this.status === 'cancelled' ? 'cancelled' : (data.status ?? this.status) } });
+          return reply({
+            job: {
+              id: m[1],
+              status:
+                this.status === 'cancelled'
+                  ? 'cancelled'
+                  : (data.status ?? this.status),
+            },
+          });
         }
         if ((m = path.match(/\/jobs\/([^/]+)\/title$/))) {
           this.titles.push(data.title);
           return reply({ job: { id: m[1], title: data.title } });
         }
         if (req.method === 'POST' && path.endsWith('/steer/take')) {
-          return reply({ steers: this.steers.splice(0), jobStatus: this.status });
+          return reply({
+            steers: this.steers.splice(0),
+            jobStatus: this.status,
+          });
         }
         if (req.method === 'POST' && path.endsWith('/questions')) {
           const question: StoredQuestion = {
@@ -91,7 +103,9 @@ export class FakeNotesGraph {
         return reply({ message: `no route ${path}` }, 404);
       });
     });
-    await new Promise<void>(resolve => this.server!.listen(0, '127.0.0.1', resolve));
+    await new Promise<void>(resolve =>
+      this.server!.listen(0, '127.0.0.1', resolve)
+    );
     this.url = `http://127.0.0.1:${(this.server.address() as AddressInfo).port}`;
     return this;
   }

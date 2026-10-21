@@ -56,7 +56,9 @@ export class RegistryController {
   @Get('/session')
   async session(@CurrentUser() user: CurrentUserType) {
     this.assertEnabled();
-    const workspaceIds = await this.models.workspaceUser.getUserWorkspaceIds(user.id);
+    const workspaceIds = await this.models.workspaceUser.getUserWorkspaceIds(
+      user.id
+    );
     return {
       user: { id: user.id, email: user.email, name: user.name },
       workspaceIds,
@@ -109,7 +111,8 @@ export class RegistryController {
     await this.ac.user(user.id).workspace(workspaceId).assert('Workspace.Read');
     const devices = await this.service.list(workspaceId, {
       kind: kind || undefined,
-      agentTarget: agentTarget === undefined ? undefined : agentTarget === 'true',
+      agentTarget:
+        agentTarget === undefined ? undefined : agentTarget === 'true',
     });
     return { devices };
   }
@@ -141,7 +144,11 @@ export class RegistryController {
       .user(user.id)
       .workspace(workspaceId)
       .assert('Workspace.Settings.Update');
-    const device = await this.service.register(workspaceId, user.id, body ?? {});
+    const device = await this.service.register(
+      workspaceId,
+      user.id,
+      body ?? {}
+    );
     return { device };
   }
 
@@ -204,7 +211,11 @@ export class RegistryController {
       .user(user.id)
       .workspace(workspaceId)
       .assert('Workspace.Settings.Update');
-    const device = await this.service.recordStatus(workspaceId, key, body ?? {});
+    const device = await this.service.recordStatus(
+      workspaceId,
+      key,
+      body ?? {}
+    );
     if (!device) {
       throw new NotFoundException(`No device '${key}' in this workspace`);
     }
@@ -269,7 +280,13 @@ export class RegistryController {
       .user(user.id)
       .workspace(workspaceId)
       .assert('Workspace.Settings.Update');
-    return { agent: await this.monitoringAgent.configure(workspaceId, user.id, body ?? {}) };
+    return {
+      agent: await this.monitoringAgent.configure(
+        workspaceId,
+        user.id,
+        body ?? {}
+      ),
+    };
   }
 
   /** Forget what was learned: all of it, or one machine's (`{ deviceKey }`). */
@@ -284,7 +301,11 @@ export class RegistryController {
       .user(user.id)
       .workspace(workspaceId)
       .assert('Workspace.Settings.Update');
-    return await this.monitoringAgent.reset(workspaceId, user.id, body?.deviceKey || undefined);
+    return await this.monitoringAgent.reset(
+      workspaceId,
+      user.id,
+      body?.deviceKey || undefined
+    );
   }
 
   @Get('/workspaces/:workspaceId/monitoring-agent/decisions')
@@ -297,11 +318,16 @@ export class RegistryController {
     await this.ac.user(user.id).workspace(workspaceId).assert('Workspace.Read');
     const n = Number(limit);
     return {
-      decisions: await this.monitoringAgent.decisions(workspaceId, Number.isFinite(n) && n > 0 ? n : 100),
+      decisions: await this.monitoringAgent.decisions(
+        workspaceId,
+        Number.isFinite(n) && n > 0 ? n : 100
+      ),
     };
   }
 
-  @Post('/workspaces/:workspaceId/monitoring-agent/decisions/:decisionId/triage')
+  @Post(
+    '/workspaces/:workspaceId/monitoring-agent/decisions/:decisionId/triage'
+  )
   async triageDecision(
     @CurrentUser() user: CurrentUserType,
     @Param('workspaceId') workspaceId: string,
@@ -312,11 +338,19 @@ export class RegistryController {
       .user(user.id)
       .workspace(workspaceId)
       .assert('Workspace.Settings.Update');
-    return { decision: await this.monitoringAgent.triage(workspaceId, user.id, decisionId) };
+    return {
+      decision: await this.monitoringAgent.triage(
+        workspaceId,
+        user.id,
+        decisionId
+      ),
+    };
   }
 
   /** `{ verdict: 'expected' | 'resolved' }`: teach it, or let it alert again. */
-  @Post('/workspaces/:workspaceId/monitoring-agent/decisions/:decisionId/feedback')
+  @Post(
+    '/workspaces/:workspaceId/monitoring-agent/decisions/:decisionId/feedback'
+  )
   async decisionFeedback(
     @CurrentUser() user: CurrentUserType,
     @Param('workspaceId') workspaceId: string,
@@ -329,7 +363,11 @@ export class RegistryController {
       .workspace(workspaceId)
       .assert('Workspace.Settings.Update');
     return {
-      decision: await this.monitoringAgent.feedback(workspaceId, decisionId, String(body?.verdict ?? '')),
+      decision: await this.monitoringAgent.feedback(
+        workspaceId,
+        decisionId,
+        String(body?.verdict ?? '')
+      ),
     };
   }
 
@@ -359,7 +397,12 @@ export class RegistryController {
       .workspace(workspaceId)
       .assert('Workspace.Settings.Update');
     return {
-      pattern: await this.monitoringAgent.labelPattern(workspaceId, key, patternId, body?.label ?? null),
+      pattern: await this.monitoringAgent.labelPattern(
+        workspaceId,
+        key,
+        patternId,
+        body?.label ?? null
+      ),
     };
   }
 
@@ -380,9 +423,11 @@ export class RegistryController {
       .user(user.id)
       .workspace(workspaceId)
       .assert('Workspace.Settings.Update');
-    if (!Array.isArray(body?.lines)) throw new BadRequest('lines must be an array of strings');
+    if (!Array.isArray(body?.lines))
+      throw new BadRequest('lines must be an array of strings');
     const device = await this.service.get(workspaceId, key);
-    if (!device) throw new NotFoundException(`No device '${key}' in this workspace`);
+    if (!device)
+      throw new NotFoundException(`No device '${key}' in this workspace`);
     const now = Date.now() / 1000;
     const until = Number(body.until);
     const decisions = await this.monitoringAgent.observeLogs(
@@ -437,7 +482,9 @@ export class RegistryController {
       .user(user.id)
       .workspace(workspaceId)
       .assert('Workspace.Settings.Update');
-    return { budget: await this.jobs.setBudget(workspaceId, user.id, body ?? {}) };
+    return {
+      budget: await this.jobs.setBudget(workspaceId, user.id, body ?? {}),
+    };
   }
 
   @Get('/workspaces/:workspaceId/agent-spend')
@@ -460,7 +507,13 @@ export class RegistryController {
   ) {
     this.assertEnabled();
     await this.ac.user(user.id).workspace(workspaceId).assert('Workspace.Read');
-    return { jobs: await this.jobs.list(workspaceId, device || undefined, status || undefined) };
+    return {
+      jobs: await this.jobs.list(
+        workspaceId,
+        device || undefined,
+        status || undefined
+      ),
+    };
   }
 
   @Get('/workspaces/:workspaceId/jobs/:jobId')
@@ -513,7 +566,10 @@ export class RegistryController {
     // `maxJobs`: what the device was set to run at once in the app (null:
     // the runner's own setting), for the runner to follow.
     return this.jobs.claimNext(
-      workspaceId, key, body?.runnerId ?? 'runner', body?.leaseSeconds
+      workspaceId,
+      key,
+      body?.runnerId ?? 'runner',
+      body?.leaseSeconds
     );
   }
 
@@ -602,7 +658,9 @@ export class RegistryController {
   ) {
     this.assertEnabled();
     await this.ac.user(user.id).workspace(workspaceId).assert('Workspace.Read');
-    return { steer: await this.jobs.steer(workspaceId, jobId, user.id, body ?? {}) };
+    return {
+      steer: await this.jobs.steer(workspaceId, jobId, user.id, body ?? {}),
+    };
   }
 
   /**
@@ -701,7 +759,10 @@ export class RegistryController {
       throw new NotFoundException(`No skill note '${docId}' in this workspace`);
     }
     res.setHeader('content-type', 'text/markdown; charset=utf-8');
-    res.setHeader('content-disposition', `attachment; filename="${skill.name}-SKILL.md"`);
+    res.setHeader(
+      'content-disposition',
+      `attachment; filename="${skill.name}-SKILL.md"`
+    );
     res.send(skill.text);
   }
 }

@@ -292,7 +292,7 @@ export class BlockAgentRunsWidget extends WidgetComponent {
     e.stopPropagation();
   };
 
-  private readonly _openMonitor =(e: Event, monitor: Monitor) => {
+  private readonly _openMonitor = (e: Event, monitor: Monitor) => {
     e.preventDefault();
     e.stopPropagation();
     this._framework?.get(WorkspaceDialogService).open('monitor-editor', {
@@ -303,7 +303,11 @@ export class BlockAgentRunsWidget extends WidgetComponent {
   };
 
   private renderMonitor(monitor: Monitor) {
-    const state = !monitor.enabled ? 'paused' : monitor.lastError ? 'error' : 'ok';
+    const state = !monitor.enabled
+      ? 'paused'
+      : monitor.lastError
+        ? 'error'
+        : 'ok';
     const title = !monitor.enabled
       ? `${monitor.name}: paused${monitor.lastError ? ` (${monitor.lastError})` : ''}`
       : monitor.lastError
@@ -316,9 +320,8 @@ export class BlockAgentRunsWidget extends WidgetComponent {
       @click=${(e: Event) => this._openMonitor(e, monitor)}
       @pointerdown=${this._holdFocus}
       @mousedown=${(e: Event) => e.stopPropagation()}
-      ><span class="ng-monitor-dot" data-state=${state}></span>📡${this.renderTrend(
-        monitor
-      )}</span
+      ><span class="ng-monitor-dot" data-state=${state}></span
+      >📡${this.renderTrend(monitor)}</span
     >`;
   }
 
@@ -396,7 +399,9 @@ export class BlockAgentRunsWidget extends WidgetComponent {
             @mousedown=${(e: Event) => e.stopPropagation()}
             >${running
               ? html`<span class="ng-agent-runs-dot"></span>`
-              : nothing}🤖${single ? nothing : ` ${runs.length} agent runs`}</span
+              : nothing}🤖${single
+              ? nothing
+              : ` ${runs.length} agent runs`}</span
           >`
         : nothing}</span
     >`;

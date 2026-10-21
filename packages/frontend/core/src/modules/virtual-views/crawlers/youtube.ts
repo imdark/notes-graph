@@ -63,8 +63,9 @@ export const youtubeCrawler: Crawler = {
     }
     const xml = await proxyFetchText(feedUrl(channelId));
     const channelName = decodeXml(
-      xml.replace(/<entry[\s\S]*$/, '').match(/<title>([\s\S]*?)<\/title>/)?.[1] ??
-        ''
+      xml
+        .replace(/<entry[\s\S]*$/, '')
+        .match(/<title>([\s\S]*?)<\/title>/)?.[1] ?? ''
     );
     const entries = xml.match(/<entry>[\s\S]*?<\/entry>/g) ?? [];
     const items = entries.map(entry => {

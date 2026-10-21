@@ -216,7 +216,8 @@ export class AgentRunsStore extends Store {
       error: outcome.status === 'error' ? outcome.error : undefined,
       // A run settled again after the fact keeps the review it had.
       reviewPending:
-        outcome.status === 'done' && (row.status === 'running' || row.reviewPending),
+        outcome.status === 'done' &&
+        (row.status === 'running' || row.reviewPending),
     });
   }
 

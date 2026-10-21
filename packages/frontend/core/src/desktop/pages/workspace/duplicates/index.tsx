@@ -1,4 +1,9 @@
-import { Button, Checkbox, notify, useConfirmModal } from '@notesgraph/component';
+import {
+  Button,
+  Checkbox,
+  notify,
+  useConfirmModal,
+} from '@notesgraph/component';
 import { DocsService } from '@notesgraph/core/modules/doc';
 import { WorkbenchService } from '@notesgraph/core/modules/workbench';
 import { useI18n } from '@notesgraph/i18n';
@@ -73,11 +78,7 @@ const GroupCard = ({
         </div>
       </div>
       {group.docs.map(doc => (
-        <div
-          key={doc.id}
-          className={styles.row}
-          onClick={() => toggle(doc.id)}
-        >
+        <div key={doc.id} className={styles.row} onClick={() => toggle(doc.id)}>
           <Checkbox
             className={styles.checkbox}
             checked={selected.has(doc.id)}

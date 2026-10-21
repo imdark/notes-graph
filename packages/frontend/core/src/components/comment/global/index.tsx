@@ -8,11 +8,7 @@ import { DocService } from '@notesgraph/core/modules/doc';
 import { WorkspaceService } from '@notesgraph/core/modules/workspace';
 import { ServerFeature } from '@notesgraph/graphql';
 import { useI18n } from '@notesgraph/i18n';
-import {
-  useLiveData,
-  useService,
-  useServiceOptional,
-} from '@notesgraph/infra';
+import { useLiveData, useService, useServiceOptional } from '@notesgraph/infra';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { useAsyncCallback } from '../../hooks/notesgraph-async-hooks';

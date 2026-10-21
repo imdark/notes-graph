@@ -98,7 +98,9 @@ export class LocalTransport implements Transport {
 
   async pushUpdate(docId: string, update: Uint8Array): Promise<void> {
     this.db
-      .prepare('INSERT INTO updates (doc_id, created_at, data) VALUES (?, ?, ?)')
+      .prepare(
+        'INSERT INTO updates (doc_id, created_at, data) VALUES (?, ?, ?)'
+      )
       .run(docId, Date.now(), update);
   }
 

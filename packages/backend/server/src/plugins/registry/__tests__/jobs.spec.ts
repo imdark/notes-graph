@@ -23,7 +23,12 @@ const workspaceId = 'ws-1';
 const userId = 'user-1';
 
 function makeService(
-  options: { device?: any; heldUntil?: Date; budget?: number; spent?: number } = {}
+  options: {
+    device?: any;
+    heldUntil?: Date;
+    budget?: number;
+    spent?: number;
+  } = {}
 ) {
   const created: any[] = [];
   const allowedAll: string[] = [];
@@ -76,7 +81,9 @@ test('queues a job for an agent target', async t => {
 
 test('refuses a device that is not an agent target', async t => {
   // Registering a machine is not consent to run code on it.
-  const { service } = makeService({ device: { key: 'laptop', agentTarget: false } });
+  const { service } = makeService({
+    device: { key: 'laptop', agentTarget: false },
+  });
   await t.throwsAsync(
     service.enqueue(workspaceId, userId, 'laptop', { instructions: 'go' }),
     { message: /not an agent target/ }
@@ -186,7 +193,10 @@ test('listings leave the transcript out', t => {
 
 test('a single-job read carries what the run changed; listings do not', t => {
   const changes = { notes: { created: [{ docId: 'd1', title: 'Findings' }] } };
-  t.deepEqual(toJobDto(storedJob({ changes }), { logFrom: 0 }).changes, changes);
+  t.deepEqual(
+    toJobDto(storedJob({ changes }), { logFrom: 0 }).changes,
+    changes
+  );
   t.is(toJobDto(storedJob({ changes })).changes, undefined);
   t.is(toJobDto(storedJob(), { logFrom: 0 }).changes, null);
 });
@@ -205,9 +215,20 @@ test('a final report passes what the run changed to the model, capped', async t 
   const changes = {
     notes: { created: [{ docId: 'd1', title: 'Findings' }] },
     files: [{ path: 'a.ts', before: 'x', after: 'y' }],
-    git: { base: 'b', head: 'h', commits: [], stat: [], patch: 'p'.repeat(MAX_CHANGES_BYTES), truncated: false },
+    git: {
+      base: 'b',
+      head: 'h',
+      commits: [],
+      stat: [],
+      patch: 'p'.repeat(MAX_CHANGES_BYTES),
+      truncated: false,
+    },
   };
-  await service.report(workspaceId, 'job-1', { status: 'done', result: 'ok', changes });
+  await service.report(workspaceId, 'job-1', {
+    status: 'done',
+    result: 'ok',
+    changes,
+  });
 
   // The patch is what goes when it is too big; the rest still says what changed.
   t.is(received.changes.git.patch, '');
@@ -252,20 +273,27 @@ function questionService(job: any, question?: any, open: any[] = []) {
   const models: any = {
     registryJob: {
       get: async () => job,
-      allowAllTools: async (_jobId: string, by: string, except: string[] = []) => {
+      allowAllTools: async (
+        _jobId: string,
+        by: string,
+        except: string[] = []
+      ) => {
         allowedAll.push(by);
         kept.push(except);
       },
       listQuestions: async () => open,
-      ask: async (jobId: string, input: any) => (asked.push(input), {
-        id: 'q1',
-        jobId,
-        ...input,
-        answer: null,
-        allowed: null,
-        createdAt: new Date(0),
-        answeredAt: null,
-      }),
+      ask: async (jobId: string, input: any) => (
+        asked.push(input),
+        {
+          id: 'q1',
+          jobId,
+          ...input,
+          answer: null,
+          allowed: null,
+          createdAt: new Date(0),
+          answeredAt: null,
+        }
+      ),
       getQuestion: async () => question ?? null,
       // Mirrors the model's conditional update: only an open question wins.
       answer: async (_jobId: string, _qid: string, input: any) => {
@@ -275,7 +303,13 @@ function questionService(job: any, question?: any, open: any[] = []) {
       },
     },
   };
-  return { service: new RegistryJobService(models), answered, asked, allowedAll, kept };
+  return {
+    service: new RegistryJobService(models),
+    answered,
+    asked,
+    allowedAll,
+    kept,
+  };
 }
 
 const openQuestion = (overrides: Record<string, unknown> = {}) => ({
@@ -306,7 +340,13 @@ test('a question can offer choices to pick from', async t => {
   const { service } = questionService(storedJob({ createdBy: userId }));
   const question = await service.ask(workspaceId, 'job-1', {
     text: 'Open a PR to main?',
-    options: ['  Yes, open the PR ', '', 'No, stop here', 'Yes, open the PR', 7],
+    options: [
+      '  Yes, open the PR ',
+      '',
+      'No, stop here',
+      'Yes, open the PR',
+      7,
+    ],
   });
   t.deepEqual(question.options, ['Yes, open the PR', 'No, stop here', '7']);
 });
@@ -323,9 +363,12 @@ test('a permission keeps no choices; it is allow or deny', async t => {
 
 test('a finished job cannot ask anything', async t => {
   const { service } = questionService(storedJob({ status: 'done' }));
-  await t.throwsAsync(service.ask(workspaceId, 'job-1', { text: 'still there?' }), {
-    message: /is done, not running/,
-  });
+  await t.throwsAsync(
+    service.ask(workspaceId, 'job-1', { text: 'still there?' }),
+    {
+      message: /is done, not running/,
+    }
+  );
 });
 
 test('only the person who started the run can answer it', async t => {
@@ -357,7 +400,11 @@ test('the starter answers a question with text', async t => {
 test('a permission needs an explicit allow or deny', async t => {
   const { service, answered } = questionService(
     storedJob({ createdBy: userId }),
-    openQuestion({ kind: 'permission', text: 'Run Bash?', detail: '{"command":"ls"}' })
+    openQuestion({
+      kind: 'permission',
+      text: 'Run Bash?',
+      detail: '{"command":"ls"}',
+    })
   );
   await t.throwsAsync(
     service.answer(workspaceId, 'job-1', 'q1', userId, { answer: 'sure' }),
@@ -400,7 +447,10 @@ test('after "Allow all" a permission is recorded as allowed, not asked', async t
   const { service, asked } = questionService(
     storedJob({ createdBy: userId, allowAllTools: true })
   );
-  await service.ask(workspaceId, 'job-1', { kind: 'permission', text: 'Allow Edit?' });
+  await service.ask(workspaceId, 'job-1', {
+    kind: 'permission',
+    text: 'Allow Edit?',
+  });
   // A plain question still waits for the person: "Allow all" covers tools only.
   await service.ask(workspaceId, 'job-1', { text: 'Who is Cosmo?' });
   t.is(asked[0].allowedBy, userId);
@@ -423,7 +473,9 @@ test('only the starter can allow all up front, and only before it ends', async t
   await t.throwsAsync(service.allowAll(workspaceId, 'job-1', 'someone-else'), {
     message: /Only the person who started this run/,
   });
-  const ended = questionService(storedJob({ createdBy: userId, status: 'done' }));
+  const ended = questionService(
+    storedJob({ createdBy: userId, status: 'done' })
+  );
   await t.throwsAsync(ended.service.allowAll(workspaceId, 'job-1', userId), {
     message: /nothing left to allow/,
   });
@@ -438,7 +490,10 @@ test("the run's own tools are allowed without asking", async t => {
     text: 'Allow mcp__run__set_title?',
     detail: '{"title":"Pick a show"}',
   });
-  await service.ask(workspaceId, 'job-1', { kind: 'permission', text: 'Allow Bash?' });
+  await service.ask(workspaceId, 'job-1', {
+    kind: 'permission',
+    text: 'Allow Bash?',
+  });
   t.is(asked[0].allowedBy, userId);
   t.false('allowedBy' in asked[1]);
 });
@@ -456,8 +511,10 @@ test('a question is answered once', async t => {
 
 test('a single job carries its questions; a listing does not', t => {
   const questions = [openQuestion()] as any;
-  t.is(toJobDto(storedJob(), { logFrom: 0, questions }).questions?.[0].text,
-    'Who is Cosmo, and how old?');
+  t.is(
+    toJobDto(storedJob(), { logFrom: 0, questions }).questions?.[0].text,
+    'Who is Cosmo, and how old?'
+  );
   t.is(toJobDto(storedJob()).questions, undefined);
 });
 
@@ -465,11 +522,19 @@ test('messages sent to a run travel apart from its questions', t => {
   const rows = [
     openQuestion(),
     openQuestion({ id: 's1', kind: 'steer', text: 'Use the staging DB' }),
-    openQuestion({ id: 's2', kind: 'steer', text: 'Skip tests', answeredAt: new Date(2000) }),
+    openQuestion({
+      id: 's2',
+      kind: 'steer',
+      text: 'Skip tests',
+      answeredAt: new Date(2000),
+    }),
   ] as any;
   const dto = toJobDto(storedJob(), { logFrom: 0, questions: rows });
   // Nothing that reads open questions may take a waiting message for one.
-  t.deepEqual(dto.questions?.map(q => q.id), ['q1']);
+  t.deepEqual(
+    dto.questions?.map(q => q.id),
+    ['q1']
+  );
   t.deepEqual(dto.steers, [
     { id: 's1', text: 'Use the staging DB', createdAt: 0, deliveredAt: null },
     { id: 's2', text: 'Skip tests', createdAt: 0, deliveredAt: 2 },
@@ -483,12 +548,17 @@ function steerService(job: any, waiting: any[] = []) {
     registryJob: {
       get: async () => job,
       getQuestion: async () => waiting[0] ?? null,
-      steer: async (jobId: string, text: string) => (sent.push(text), {
-        ...openQuestion({ id: 's1', jobId, kind: 'steer', text }),
-      }),
+      steer: async (jobId: string, text: string) => (
+        sent.push(text),
+        {
+          ...openQuestion({ id: 's1', jobId, kind: 'steer', text }),
+        }
+      ),
       takeSteers: async () => {
         taken++;
-        return waiting.splice(0).map(s => ({ id: s.id, text: s.text, createdAt: new Date(0) }));
+        return waiting
+          .splice(0)
+          .map(s => ({ id: s.id, text: s.text, createdAt: new Date(0) }));
       },
     },
   };
@@ -510,22 +580,33 @@ test('only the starter can message a run, and only before it ends', async t => {
     service.steer(workspaceId, 'job-1', 'someone-else', { text: 'x' }),
     { message: /Only the person who started this run/ }
   );
-  await t.throwsAsync(service.steer(workspaceId, 'job-1', userId, { text: '  ' }), {
-    message: /text is required/,
-  });
+  await t.throwsAsync(
+    service.steer(workspaceId, 'job-1', userId, { text: '  ' }),
+    {
+      message: /text is required/,
+    }
+  );
   const ended = steerService(storedJob({ createdBy: userId, status: 'done' }));
-  await t.throwsAsync(ended.service.steer(workspaceId, 'job-1', userId, { text: 'x' }), {
-    message: /can't take a message/,
-  });
+  await t.throwsAsync(
+    ended.service.steer(workspaceId, 'job-1', userId, { text: 'x' }),
+    {
+      message: /can't take a message/,
+    }
+  );
   t.deepEqual(sent, []);
   t.deepEqual(ended.sent, []);
 });
 
 test('the runner takes waiting messages once, and none after the run ends', async t => {
-  const waiting = [openQuestion({ id: 's1', kind: 'steer', text: 'Skip tests' })];
+  const waiting = [
+    openQuestion({ id: 's1', kind: 'steer', text: 'Skip tests' }),
+  ];
   const { service } = steerService(storedJob({ createdBy: userId }), waiting);
   const first = await service.takeSteers(workspaceId, 'job-1');
-  t.deepEqual(first.steers.map(s => s.text), ['Skip tests']);
+  t.deepEqual(
+    first.steers.map(s => s.text),
+    ['Skip tests']
+  );
   t.deepEqual((await service.takeSteers(workspaceId, 'job-1')).steers, []);
 
   const ended = steerService(storedJob({ status: 'cancelled' }), [
@@ -574,7 +655,10 @@ test('a permission already allowed by "Allow all" pushes nothing', async t => {
     storedJob({ createdBy: userId, allowAllTools: true })
   );
   const withPush = new RegistryJobService((service as any).models, push);
-  await withPush.ask(workspaceId, 'job-1', { kind: 'permission', text: 'Allow Edit?' });
+  await withPush.ask(workspaceId, 'job-1', {
+    kind: 'permission',
+    text: 'Allow Edit?',
+  });
   t.deepEqual(asked, []);
 });
 
@@ -645,7 +729,11 @@ test('a job asked for while its device is at the session limit waits too', async
 });
 
 function makeReportService() {
-  const calls: Record<string, any[]> = { requeue: [], holdQueued: [], report: [] };
+  const calls: Record<string, any[]> = {
+    requeue: [],
+    holdQueued: [],
+    report: [],
+  };
   const job = {
     id: 'job-1',
     deviceKey: 'laptop',
@@ -725,17 +813,29 @@ test('a claimed job carries how to run it, the same for every runner', async t =
   t.deepEqual(research?.profile?.mcpServers, ['notesgraph', 'run', 'omniseek']);
   t.true(research?.profile?.allowedTools.includes('mcp__omniseek'));
   t.is(research?.profile?.workdir, 'job');
-  t.regex(research?.profile?.systemPrompt ?? '', /mcp__run__ask_user[\s\S]*research run[\s\S]*gap ledger/);
+  t.regex(
+    research?.profile?.systemPrompt ?? '',
+    /mcp__run__ask_user[\s\S]*research run[\s\S]*gap ledger/
+  );
   // OmniSeek's own method, from its repo, not a paraphrase of it.
-  t.deepEqual(research?.profile?.skills.map(s => s.name), ['omniseek-investigate']);
-  t.regex(research!.profile!.skills[0].url, /^https:\/\/raw\.githubusercontent\.com\/Battam1111\/omniseek\/.*\/SKILL\.md$/);
+  t.deepEqual(
+    research?.profile?.skills.map(s => s.name),
+    ['omniseek-investigate']
+  );
+  t.regex(
+    research!.profile!.skills[0].url,
+    /^https:\/\/raw\.githubusercontent\.com\/Battam1111\/omniseek\/.*\/SKILL\.md$/
+  );
 
   const code = await claimWith('claude-code');
   t.deepEqual(code?.profile?.mcpServers, ['notesgraph', 'run']);
   t.is(code?.profile?.workdir, 'repo');
   t.false(code?.profile?.allowedTools.includes('mcp__omniseek'));
   // A code task works in its own worktree; tests and typechecks are tools.
-  t.deepEqual(code?.profile?.automation.setup.map(s => s.name), ['mirror', 'worktree']);
+  t.deepEqual(
+    code?.profile?.automation.setup.map(s => s.name),
+    ['mirror', 'worktree']
+  );
   t.is(code?.profile?.automation.cwd, '{job_dir}/repo');
   t.deepEqual(
     code?.profile?.automation.tools.map(tool => tool.name),
@@ -744,35 +844,52 @@ test('a claimed job carries how to run it, the same for every runner', async t =
   // Agent-supplied values reach a tool's command only as $ARG_*, never spliced in.
   for (const tool of code?.profile?.automation.tools ?? []) {
     for (const param of Object.keys(tool.params ?? {})) {
-      t.true(tool.run.includes(`"$ARG_${param.toUpperCase()}"`), `${tool.name} quotes $ARG_${param}`);
+      t.true(
+        tool.run.includes(`"$ARG_${param.toUpperCase()}"`),
+        `${tool.name} quotes $ARG_${param}`
+      );
       t.false(tool.run.includes(`{${param}}`));
     }
   }
-  t.deepEqual(research?.profile?.automation.tools.map(tool => tool.name), ['fetch_source']);
+  t.deepEqual(
+    research?.profile?.automation.tools.map(tool => tool.name),
+    ['fetch_source']
+  );
 
   // antislop, pinned to a release, with its terminal-only steps settled up front.
-  t.deepEqual(code?.profile?.skills.map(s => s.name), [
-    'antislop',
-    'antislop-ui',
-    'antislop-copywriting',
-    'antislop-human',
-    'antislop-layoutmobile',
-    'antislop-code',
-  ]);
+  t.deepEqual(
+    code?.profile?.skills.map(s => s.name),
+    [
+      'antislop',
+      'antislop-ui',
+      'antislop-copywriting',
+      'antislop-human',
+      'antislop-layoutmobile',
+      'antislop-code',
+    ]
+  );
   for (const skill of code?.profile?.skills ?? []) {
     t.regex(
       skill.url,
-      new RegExp(`^https://raw\\.githubusercontent\\.com/miqdadbadjuber/anti-slop/[0-9a-f]{40}/skills/${skill.name}/SKILL\\.md$`)
+      new RegExp(
+        `^https://raw\\.githubusercontent\\.com/miqdadbadjuber/anti-slop/[0-9a-f]{40}/skills/${skill.name}/SKILL\\.md$`
+      )
     );
   }
-  t.regex(code?.profile?.systemPrompt ?? '', /Skip its First-Run Install Wizard[\s\S]*"during"/);
+  t.regex(
+    code?.profile?.systemPrompt ?? '',
+    /Skip its First-Run Install Wizard[\s\S]*"during"/
+  );
   // Research reads the world; it doesn't build UI.
   t.false(research?.profile?.systemPrompt.includes('antislop'));
 
   // A Workflow job is a wf task in the runner's own CLOUD project.
   const workflow = await claimWith('workflow');
   t.is(workflow?.profile?.systemPrompt, code?.profile?.systemPrompt);
-  t.deepEqual(workflow?.profile?.automation.setup.map(s => s.name), ['checkout', 'wf project', 'task']);
+  t.deepEqual(
+    workflow?.profile?.automation.setup.map(s => s.name),
+    ['checkout', 'wf project', 'task']
+  );
   t.regex(workflow!.profile!.automation.setup[1].run, /name: CLOUD/);
   t.regex(
     workflow!.profile!.automation.setup[2].run,
@@ -798,7 +915,10 @@ test('a job on tasks marks them queued when it is asked for', async t => {
   const { service } = makeService({ device: agentTarget });
   const { tasks, calls } = fakeTasks();
   const withTasks = new RegistryJobService(
-    (service as any).models, undefined, undefined, tasks
+    (service as any).models,
+    undefined,
+    undefined,
+    tasks
   );
   const job = await withTasks.enqueue(workspaceId, userId, 'laptop', {
     instructions: 'work the list',
@@ -807,7 +927,10 @@ test('a job on tasks marks them queued when it is asked for', async t => {
   });
 
   t.deepEqual(job.taskIds, ['t1', 't2']);
-  t.deepEqual(calls.map(c => c.op), ['queued']);
+  t.deepEqual(
+    calls.map(c => c.op),
+    ['queued']
+  );
   t.deepEqual(calls[0].job.taskIds, ['t1', 't2']);
 });
 
@@ -822,7 +945,13 @@ test('tasks without a note to find them in are dropped', async t => {
 
 test('claiming a job starts its tasks', async t => {
   const { tasks, calls } = fakeTasks();
-  const job = { id: 'job-1', workspaceId, model: null, tools: [], createdAt: new Date(0) };
+  const job = {
+    id: 'job-1',
+    workspaceId,
+    model: null,
+    tools: [],
+    createdAt: new Date(0),
+  };
   const service = new RegistryJobService(
     { registryJob: { claim: async () => job } } as any,
     undefined,
@@ -830,7 +959,10 @@ test('claiming a job starts its tasks', async t => {
     tasks
   );
   await service.claim(workspaceId, 'laptop', 'runner');
-  t.deepEqual(calls.map(c => c.op), ['claimed']);
+  t.deepEqual(
+    calls.map(c => c.op),
+    ['claimed']
+  );
 
   const none = new RegistryJobService(
     { registryJob: { claim: async () => null } } as any,
@@ -843,7 +975,13 @@ test('claiming a job starts its tasks', async t => {
 });
 
 test('a device set to N jobs at once hands out none while N are held', async t => {
-  const job = { id: 'job-1', workspaceId, model: null, tools: [], createdAt: new Date(0) };
+  const job = {
+    id: 'job-1',
+    workspaceId,
+    model: null,
+    tools: [],
+    createdAt: new Date(0),
+  };
   const claimed: string[] = [];
   const service = (held: number, maxJobs: number | null) =>
     new RegistryJobService({
@@ -872,7 +1010,11 @@ test('a device set to N jobs at once hands out none while N are held', async t =
   t.is(free.maxJobs, 2);
 
   // Unset: the runner's own setting decides; the server doesn't count.
-  const unset = await service(99, null).claimNext(workspaceId, 'cloud', 'runner');
+  const unset = await service(99, null).claimNext(
+    workspaceId,
+    'cloud',
+    'runner'
+  );
   t.is(unset.job?.id, 'job-1');
   t.is(unset.maxJobs, null);
 });
@@ -882,17 +1024,27 @@ test('a job that ends, however it ends, hands its tasks back', async t => {
     const { service: base } = makeReportService();
     const { tasks, calls } = fakeTasks();
     const service = new RegistryJobService(
-      (base as any).models, undefined, undefined, tasks
+      (base as any).models,
+      undefined,
+      undefined,
+      tasks
     );
     await service.report(workspaceId, 'job-1', { status, error: 'boom' });
-    t.deepEqual(calls.map(c => c.op), ['finished'], status);
+    t.deepEqual(
+      calls.map(c => c.op),
+      ['finished'],
+      status
+    );
   }
 
   // Still going: nothing to hand back yet.
   const { service: base } = makeReportService();
   const { tasks, calls } = fakeTasks();
   const service = new RegistryJobService(
-    (base as any).models, undefined, undefined, tasks
+    (base as any).models,
+    undefined,
+    undefined,
+    tasks
   );
   await service.report(workspaceId, 'job-1', { status: 'running', steps: 2 });
   t.deepEqual(calls, []);
@@ -900,7 +1052,12 @@ test('a job that ends, however it ends, hands its tasks back', async t => {
 
 test('a cancelled job hands its tasks back', async t => {
   const { tasks, calls } = fakeTasks();
-  const job = { id: 'job-1', status: 'cancelled', tools: [], createdAt: new Date(0) };
+  const job = {
+    id: 'job-1',
+    status: 'cancelled',
+    tools: [],
+    createdAt: new Date(0),
+  };
   const service = new RegistryJobService(
     { registryJob: { cancel: async () => job } } as any,
     undefined,
@@ -908,7 +1065,10 @@ test('a cancelled job hands its tasks back', async t => {
     tasks
   );
   await service.cancel(workspaceId, 'job-1');
-  t.deepEqual(calls.map(c => c.op), ['finished']);
+  t.deepEqual(
+    calls.map(c => c.op),
+    ['finished']
+  );
 });
 
 /** A service over one stored job, recording lost-runner notes it writes. */
@@ -920,7 +1080,12 @@ function lostRunnerService(job: any) {
     registryJob: {
       get: async () => row,
       listQuestions: async () => [],
-      noteLeaseLapsed: async (_id: string, lease: Date, marker: string, note: string) => {
+      noteLeaseLapsed: async (
+        _id: string,
+        lease: Date,
+        marker: string,
+        note: string
+      ) => {
         // Once per lapse, as the model's guarded update does it.
         if (row.log.includes(marker)) return false;
         notes.push({ lease, marker, note });
@@ -954,7 +1119,10 @@ test('a run whose runner stopped reporting says so in its log', async t => {
 
 test('the lost-runner note goes on its own line', async t => {
   const { service, notes } = lostRunnerService(
-    storedJob({ log: 'cloning…', leaseExpiresAt: new Date(Date.now() - 10 * 60_000) })
+    storedJob({
+      log: 'cloning…',
+      leaseExpiresAt: new Date(Date.now() - 10 * 60_000),
+    })
   );
   await service.get(workspaceId, 'job-1', 0);
   t.true(notes[0].note.startsWith('\n⚠'));
@@ -1016,12 +1184,22 @@ test('a queued run no runner is picking up says how to start one', async t => {
 test('a queued run is not flagged while its runner is listening or it is held', async t => {
   const cases: [any, any][] = [
     // Just queued: give a runner a moment.
-    [storedJob({ status: 'queued', createdAt: minutesAgo(0.2) }), { runnerSeenAt: null }],
+    [
+      storedJob({ status: 'queued', createdAt: minutesAgo(0.2) }),
+      { runnerSeenAt: null },
+    ],
     // Runner asked for work a moment ago (it's busy, not gone).
-    [storedJob({ status: 'queued', createdAt: minutesAgo(5) }), { runnerSeenAt: minutesAgo(0.5) }],
+    [
+      storedJob({ status: 'queued', createdAt: minutesAgo(5) }),
+      { runnerSeenAt: minutesAgo(0.5) },
+    ],
     // Held back to after a session limit on purpose.
     [
-      storedJob({ status: 'queued', createdAt: minutesAgo(5), runAfter: new Date(Date.now() + 3_600_000) }),
+      storedJob({
+        status: 'queued',
+        createdAt: minutesAgo(5),
+        runAfter: new Date(Date.now() + 3_600_000),
+      }),
       { runnerSeenAt: null },
     ],
     // The server's own cloud runner has no device row.
@@ -1037,7 +1215,9 @@ test('a queued run is not flagged while its runner is listening or it is held', 
 test('asking for work marks the device as having a runner', async t => {
   const touched: string[] = [];
   const models: any = {
-    registryDevice: { touchRunner: async (_ws: string, key: string) => void touched.push(key) },
+    registryDevice: {
+      touchRunner: async (_ws: string, key: string) => void touched.push(key),
+    },
     registryJob: { claim: async () => null },
   };
   const service = new RegistryJobService(models);
@@ -1049,13 +1229,20 @@ test('a job’s chosen skills replace the model’s defaults, catalog names only
   const defaults = profileFor('claude-code')!;
   t.true(defaults.skills.length > 1);
   const chosen = profileFor('claude-code', ['antislop-ui', 'not-a-skill']);
-  t.deepEqual(chosen?.skills.map(s => s.name), ['antislop-ui']);
+  t.deepEqual(
+    chosen?.skills.map(s => s.name),
+    ['antislop-ui']
+  );
   t.deepEqual(profileFor('claude-code', [])?.skills, []);
   t.is(profileFor('some-other-model', ['antislop']), null);
 });
 
 test('a run is refused once the month has used the budget', async t => {
-  const { service, created } = makeService({ device: agentTarget, budget: 20, spent: 20.5 });
+  const { service, created } = makeService({
+    device: agentTarget,
+    budget: 20,
+    spent: 20.5,
+  });
   await t.throwsAsync(
     service.enqueue(workspaceId, userId, 'laptop', { instructions: 'go' }),
     { message: /used their \$20\.00 budget for \d{4}-\d{2} \(\$20\.50 spent\)/ }
@@ -1063,7 +1250,9 @@ test('a run is refused once the month has used the budget', async t => {
   t.deepEqual(created, []);
 
   const under = makeService({ device: agentTarget, budget: 20, spent: 19.99 });
-  await under.service.enqueue(workspaceId, userId, 'laptop', { instructions: 'go' });
+  await under.service.enqueue(workspaceId, userId, 'laptop', {
+    instructions: 'go',
+  });
   t.is(under.created.length, 1);
 });
 
@@ -1147,22 +1336,32 @@ test('a report passes what the run cost to the model', async t => {
     registryJob: {
       report: async (_ws: string, _id: string, input: any) => {
         received = input;
-        return storedJob({ status: 'done', costUsd: input.costUsd, tokens: input.tokens });
+        return storedJob({
+          status: 'done',
+          costUsd: input.costUsd,
+          tokens: input.tokens,
+        });
       },
     },
   };
-  const job = await new RegistryJobService(models).report(workspaceId, 'job-1', {
-    status: 'done',
-    costUsd: 0.4213,
-    tokens: 1200.4,
-  });
+  const job = await new RegistryJobService(models).report(
+    workspaceId,
+    'job-1',
+    {
+      status: 'done',
+      costUsd: 0.4213,
+      tokens: 1200.4,
+    }
+  );
   t.is(received.costUsd, 0.4213);
   t.is(received.tokens, 1200);
   t.is(job?.costUsd, 0.4213);
 });
 
 test('a read-only run is refused a tool without anyone being asked', async t => {
-  const { service, asked } = questionService(storedJob({ createdBy: userId, access: 'read' }));
+  const { service, asked } = questionService(
+    storedJob({ createdBy: userId, access: 'read' })
+  );
   const question = await service.ask(workspaceId, 'job-1', {
     kind: 'permission',
     text: 'Allow mcp__notesgraph__update_document?',
@@ -1171,7 +1370,10 @@ test('a read-only run is refused a tool without anyone being asked', async t => 
   t.false('allowedBy' in asked[0]);
   t.is(question.kind, 'permission');
   // Its own tools and plain questions still go through.
-  await service.ask(workspaceId, 'job-1', { kind: 'permission', text: 'Allow mcp__run__set_title?' });
+  await service.ask(workspaceId, 'job-1', {
+    kind: 'permission',
+    text: 'Allow mcp__run__set_title?',
+  });
   await service.ask(workspaceId, 'job-1', { text: 'Which topic?' });
   t.false('refused' in asked[1]);
   t.false('refused' in asked[2]);
@@ -1207,7 +1409,10 @@ test('pressing "Allow all" leaves an open deploy waiting', async t => {
     openQuestion({ kind: 'permission', text: 'Allow Edit?' }),
     [deploy]
   );
-  await service.answer(workspaceId, 'job-1', 'q1', userId, { allowed: true, allowAll: true });
+  await service.answer(workspaceId, 'job-1', 'q1', userId, {
+    allowed: true,
+    allowAll: true,
+  });
   t.deepEqual(kept, [['q2']]);
 });
 
@@ -1223,7 +1428,10 @@ function reportService(after: any, taskStatuses: Record<string, string> = {}) {
     },
   };
   const tasks: any = { finished: async () => taskStatuses };
-  return { service: new RegistryJobService(models, push, undefined, tasks), finished };
+  return {
+    service: new RegistryJobService(models, push, undefined, tasks),
+    finished,
+  };
 }
 
 test("a run's end pushes where its tasks ended", async t => {
@@ -1231,7 +1439,10 @@ test("a run's end pushes where its tasks ended", async t => {
     storedJob({ createdBy: userId, status: 'done', result: 'PR #1' }),
     { b1: 'COMMITTED' }
   );
-  await service.report(workspaceId, 'job-1', { status: 'done', result: 'PR #1' });
+  await service.report(workspaceId, 'job-1', {
+    status: 'done',
+    result: 'PR #1',
+  });
   await new Promise(resolve => setImmediate(resolve));
   t.is(finished.length, 1);
   t.deepEqual(finished[0].statuses, { b1: 'COMMITTED' });
@@ -1241,13 +1452,19 @@ test('a late report on a cancelled run pushes nothing', async t => {
   const { service, finished } = reportService(
     storedJob({ createdBy: userId, status: 'cancelled' })
   );
-  await service.report(workspaceId, 'job-1', { status: 'done', result: 'too late' });
+  await service.report(workspaceId, 'job-1', {
+    status: 'done',
+    result: 'too late',
+  });
   await new Promise(resolve => setImmediate(resolve));
   t.is(finished.length, 0);
 });
 
 test('a running report pushes nothing', async t => {
   const { service, finished } = reportService(storedJob({ createdBy: userId }));
-  await service.report(workspaceId, 'job-1', { status: 'running', logAppend: 'x' });
+  await service.report(workspaceId, 'job-1', {
+    status: 'running',
+    logAppend: 'x',
+  });
   t.is(finished.length, 0);
 });

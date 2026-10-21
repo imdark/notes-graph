@@ -72,5 +72,7 @@ test('a health check that passed sends nothing; one that failed still does', t =
   t.false(pushesWhenFinished({ ...job, createdBy: null }));
   // A side chat's turn: the chat shows the answer, failed or not.
   t.false(pushesWhenFinished({ ...job, agentId: 'chat:agent-1' }));
-  t.false(pushesWhenFinished({ ...job, agentId: 'chat:agent-1', status: 'error' }));
+  t.false(
+    pushesWhenFinished({ ...job, agentId: 'chat:agent-1', status: 'error' })
+  );
 });

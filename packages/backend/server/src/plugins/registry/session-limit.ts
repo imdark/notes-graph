@@ -21,8 +21,18 @@ const AFTER_RESET_MS = 60 * 1000;
 const MAX_WAIT_MS = 8 * 24 * 60 * 60 * 1000;
 
 const MONTHS = [
-  'jan', 'feb', 'mar', 'apr', 'may', 'jun',
-  'jul', 'aug', 'sep', 'oct', 'nov', 'dec',
+  'jan',
+  'feb',
+  'mar',
+  'apr',
+  'may',
+  'jun',
+  'jul',
+  'aug',
+  'sep',
+  'oct',
+  'nov',
+  'dec',
 ];
 
 /** Whether this error (or a too-short "result") is Claude's limit message. */
@@ -49,8 +59,12 @@ function zoneOffset(at: number, timeZone: string): number {
   const get = (type: string) =>
     Number(parts.find(part => part.type === type)?.value ?? 0);
   const wall = Date.UTC(
-    get('year'), get('month') - 1, get('day'),
-    get('hour'), get('minute'), get('second')
+    get('year'),
+    get('month') - 1,
+    get('day'),
+    get('hour'),
+    get('minute'),
+    get('second')
   );
   return wall - Math.floor(at / 1000) * 1000;
 }
@@ -67,8 +81,12 @@ function zoneDate(at: number, timeZone: string) {
 
 /** A wall-clock time in `timeZone` as an instant. */
 function fromZone(
-  year: number, month: number, day: number,
-  hour: number, minute: number, timeZone: string
+  year: number,
+  month: number,
+  day: number,
+  hour: number,
+  minute: number,
+  timeZone: string
 ): number {
   const guess = Date.UTC(year, month, day, hour, minute);
   // Twice, so a guess on the far side of a DST change settles.
@@ -81,7 +99,10 @@ function fromZone(
  * that can be placed: a clock time with no zone could be hours either way,
  * since the zone is the device's and not the server's.
  */
-export function parseSessionReset(text: string, now = Date.now()): number | null {
+export function parseSessionReset(
+  text: string,
+  now = Date.now()
+): number | null {
   const epoch = /limit reached\|(\d{9,13})/i.exec(text);
   if (epoch) {
     const value = Number(epoch[1]);
@@ -107,17 +128,45 @@ export function parseSessionReset(text: string, now = Date.now()): number | null
       ? MONTHS.indexOf(monthName.slice(0, 3).toLowerCase())
       : -1;
     if (monthName && month >= 0 && dayText) {
-      let at = fromZone(today.year, month, Number(dayText), hour, minute, timeZone);
+      let at = fromZone(
+        today.year,
+        month,
+        Number(dayText),
+        hour,
+        minute,
+        timeZone
+      );
       // "Jan 2" read on Dec 30 is next year's.
       if (at < now - 24 * 60 * 60 * 1000) {
-        at = fromZone(today.year + 1, month, Number(dayText), hour, minute, timeZone);
+        at = fromZone(
+          today.year + 1,
+          month,
+          Number(dayText),
+          hour,
+          minute,
+          timeZone
+        );
       }
       return at;
     }
-    let at = fromZone(today.year, today.month, today.day, hour, minute, timeZone);
+    let at = fromZone(
+      today.year,
+      today.month,
+      today.day,
+      hour,
+      minute,
+      timeZone
+    );
     // A time already past today is tomorrow's.
     if (at <= now) {
-      at = fromZone(today.year, today.month, today.day + 1, hour, minute, timeZone);
+      at = fromZone(
+        today.year,
+        today.month,
+        today.day + 1,
+        hour,
+        minute,
+        timeZone
+      );
     }
     return at;
   } catch {

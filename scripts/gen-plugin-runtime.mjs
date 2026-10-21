@@ -17,10 +17,7 @@ import { fileURLToPath } from 'node:url';
 
 const require = createRequire(import.meta.url);
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
-const outDir = join(
-  repoRoot,
-  'packages/frontend/core/public/plugin-runtime'
-);
+const outDir = join(repoRoot, 'packages/frontend/core/public/plugin-runtime');
 
 const IDENT = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
 const namedExports = mod =>

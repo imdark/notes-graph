@@ -119,8 +119,7 @@ export class DocCommentStore extends Entity<{
    */
   get isLocal() {
     return (
-      this.workspaceService.workspace.flavour === 'local' ||
-      !this.serverService
+      this.workspaceService.workspace.flavour === 'local' || !this.serverService
     );
   }
 
@@ -148,8 +147,8 @@ export class DocCommentStore extends Entity<{
 
   /** Best-effort author for a locally-authored comment. */
   private localUser() {
-    const account = this.serverService?.scope.get(AuthService)?.session.account$
-      .value;
+    const account =
+      this.serverService?.scope.get(AuthService)?.session.account$.value;
     return account
       ? { id: account.id, name: account.label, avatarUrl: account.avatar ?? '' }
       : { id: 'local', name: 'You', avatarUrl: '' };

@@ -1,10 +1,6 @@
 import test from 'ava';
 
-import {
-  failedHealthStatus,
-  healthStatus,
-  parseHealthOutput,
-} from '../health';
+import { failedHealthStatus, healthStatus, parseHealthOutput } from '../health';
 
 const LINUX = [
   'host=box-1',
@@ -41,7 +37,9 @@ test('a healthy machine is online with a check a reading', t => {
 });
 
 test('a full disk or busy CPUs degrade it, and say why', t => {
-  const status = healthStatus(LINUX.replace('disk=41', 'disk=96').replace('load=0.52', 'load=7'));
+  const status = healthStatus(
+    LINUX.replace('disk=41', 'disk=96').replace('load=0.52', 'load=7')
+  );
   t.is(status.state, 'degraded');
   t.is(status.checks.find(check => check.name === 'Disk')?.status, 'fail');
   // 7 over 4 CPUs is 1.75 a CPU: a warning, not a failure.
@@ -56,7 +54,9 @@ test('output with nothing readable leaves the state unknown', t => {
 });
 
 test('a check that failed to run degrades the machine with its error', t => {
-  const status = failedHealthStatus("commands aren't allowed: set agent.allow_commands");
+  const status = failedHealthStatus(
+    "commands aren't allowed: set agent.allow_commands"
+  );
   t.is(status.state, 'degraded');
   t.regex(status.statusDetail, /allow_commands/);
   t.is(status.checks[0].status, 'fail');

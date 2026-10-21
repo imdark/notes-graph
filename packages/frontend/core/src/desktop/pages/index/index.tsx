@@ -132,12 +132,10 @@ export const Component = ({
       // auto-opening it 404s and hangs, stranding the user before their real
       // (initialized) workspace ever loads. `initialized` is undefined for
       // local workspaces, which are always openable.
-      const isOpenable = (w: (typeof list)[number]) =>
-        w.initialized !== false;
+      const isOpenable = (w: (typeof list)[number]) => w.initialized !== false;
       const lastId = localStorage.getItem('last_workspace_id');
       const lastWorkspace = list.find(w => w.id === lastId && isOpenable(w));
-      const openWorkspace =
-        lastWorkspace ?? list.find(isOpenable) ?? list[0];
+      const openWorkspace = lastWorkspace ?? list.find(isOpenable) ?? list[0];
       openPage(openWorkspace.id, defaultIndexRoute, RouteLogic.REPLACE);
     }
   }, [

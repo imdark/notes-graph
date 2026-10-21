@@ -327,9 +327,7 @@ export class LocalCopilotClient extends CopilotClient {
   > {
     return true as Awaited<ReturnType<CopilotClient['removeContextCategory']>>;
   }
-  override async addContextBlob(): ReturnType<
-    CopilotClient['addContextBlob']
-  > {
+  override async addContextBlob(): ReturnType<CopilotClient['addContextBlob']> {
     return { status: 'finished', createdAt: Date.now() } as unknown as Awaited<
       ReturnType<CopilotClient['addContextBlob']>
     >;

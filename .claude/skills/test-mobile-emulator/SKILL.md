@@ -32,7 +32,7 @@ After `shot`, **Read the PNG** to inspect the UI. Drive the app with adb:
   navigate before looking for sidebar sections.
 - Confirm the build's server with `scripts/mobile-emulator.sh url` — it should show
   `https://localhost/workspace/<id>/...` (localhost is just the Capacitor WebView
-  origin; the *API* server is baked in — verify that with the `deploy-android-apk` skill).
+  origin; the _API_ server is baked in — verify that with the `deploy-android-apk` skill).
 - WebView JS console shows up in `adb logcat | grep -i "Capacitor/Console"`.
 - The emulator is a long-lived background process; `adb devices` shows `emulator-5554`.
 

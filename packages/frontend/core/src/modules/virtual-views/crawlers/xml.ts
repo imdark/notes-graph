@@ -52,9 +52,7 @@ export function tagAttr(
   tag: string,
   attr: string
 ): string | undefined {
-  const match = xml.match(
-    new RegExp(`<${tag}[^>]*\\b${attr}="([^"]*)"[^>]*>`)
-  );
+  const match = xml.match(new RegExp(`<${tag}[^>]*\\b${attr}="([^"]*)"[^>]*>`));
   return match ? match[1] : undefined;
 }
 

@@ -23,9 +23,7 @@ import {
  */
 export const SetParentMenuSection = ({ docId }: { docId?: string }) => {
   const featureFlagService = useService(FeatureFlagService);
-  const enabled = useLiveData(
-    featureFlagService.flags.enable_suggest_parent.$
-  );
+  const enabled = useLiveData(featureFlagService.flags.enable_suggest_parent.$);
   const parents = useCurrentParents(docId);
   const suggestions = useSuggestedParents(docId, 3);
   const setParent = useSetParent();

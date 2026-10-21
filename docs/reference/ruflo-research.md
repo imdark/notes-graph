@@ -46,9 +46,10 @@ read-only agent or limited write permissions via configuration".
 
 **Proposal:** add a `level` field to agents that expands to a tool allowlist
 (`read` = search/read tools; `write` = + `update_task`/`update_block`; `manage` =
-+ create/link/update_document; `full` = + Bash/Edit on device runners). Keep `tools` as an
-override. Keep a fixed "always ask" class (git push, deploy, spending, deleting) that
-"Allow all" doesn't cover.
+
+- create/link/update_document; `full` = + Bash/Edit on device runners). Keep `tools` as an
+  override. Keep a fixed "always ask" class (git push, deploy, spending, deleting) that
+  "Allow all" doesn't cover.
 
 ### 3. One "Waiting for a yes" inbox across runs
 

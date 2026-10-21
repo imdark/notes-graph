@@ -23,9 +23,18 @@ import { css, html } from 'lit';
 import { property } from 'lit/decorators.js';
 
 const CHIP_COLORS: Record<string, { color: string; background: string }> = {
-  Todo: { color: 'var(--affine-text-secondary-color, #8e8d91)', background: 'var(--affine-hover-color, rgba(0,0,0,.04))' },
-  'In Progress': { color: 'var(--affine-processing-color, #1e96eb)', background: 'rgba(30,150,235,.12)' },
-  Done: { color: 'var(--affine-success-color, #10cb86)', background: 'rgba(16,203,134,.12)' },
+  Todo: {
+    color: 'var(--affine-text-secondary-color, #8e8d91)',
+    background: 'var(--affine-hover-color, rgba(0,0,0,.04))',
+  },
+  'In Progress': {
+    color: 'var(--affine-processing-color, #1e96eb)',
+    background: 'rgba(30,150,235,.12)',
+  },
+  Done: {
+    color: 'var(--affine-success-color, #10cb86)',
+    background: 'rgba(16,203,134,.12)',
+  },
 };
 
 const FALLBACK_CHIP_COLOR = {

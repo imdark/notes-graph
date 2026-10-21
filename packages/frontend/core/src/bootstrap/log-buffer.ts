@@ -28,7 +28,12 @@ function format(arg: unknown): string {
 function push(level: LogLevel, args: unknown[]) {
   entries = [
     ...entries.slice(-(MAX_ENTRIES - 1)),
-    { id: nextId++, time: Date.now(), level, message: args.map(format).join(' ') },
+    {
+      id: nextId++,
+      time: Date.now(),
+      level,
+      message: args.map(format).join(' '),
+    },
   ];
   listeners.forEach(l => l());
 }

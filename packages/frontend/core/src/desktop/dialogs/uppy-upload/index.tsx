@@ -10,7 +10,10 @@ import Dashboard from '@uppy/react/dashboard';
 import { useTheme } from 'next-themes';
 import { useEffect, useMemo } from 'react';
 
-import { createNotesGraphUppy, resolveUppyFiles } from '../../../modules/uppy-upload';
+import {
+  createNotesGraphUppy,
+  resolveUppyFiles,
+} from '../../../modules/uppy-upload';
 
 export const UppyUploadDialog = ({
   serverBaseUrl,
@@ -34,7 +37,9 @@ export const UppyUploadDialog = ({
   }, [uppy]);
 
   useEffect(() => {
-    const handleComplete: Parameters<typeof uppy.on<'complete'>>[1] = result => {
+    const handleComplete: Parameters<
+      typeof uppy.on<'complete'>
+    >[1] = result => {
       resolveUppyFiles(serverBaseUrl, result.successful ?? [])
         .then(files => close(files))
         .catch(() => close([]));

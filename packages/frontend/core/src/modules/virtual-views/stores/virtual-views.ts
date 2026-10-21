@@ -88,20 +88,20 @@ export class VirtualViewsStore extends Store {
   }
 
   watchItems(viewId: string): Observable<VirtualItem[]> {
-    return this.itemsTable.find$({ viewId }).pipe(
-      map(rows =>
-        (rows as VirtualItem[])
-          .slice()
-          .sort((a, b) => (b.publishedAt ?? 0) - (a.publishedAt ?? 0))
-      )
-    );
+    return this.itemsTable
+      .find$({ viewId })
+      .pipe(
+        map(rows =>
+          (rows as VirtualItem[])
+            .slice()
+            .sort((a, b) => (b.publishedAt ?? 0) - (a.publishedAt ?? 0))
+        )
+      );
   }
 
   /** All crawled items across every view (for global quick-search). */
   watchAllItems(): Observable<VirtualItem[]> {
-    return this.itemsTable
-      .find$()
-      .pipe(map(rows => rows as VirtualItem[]));
+    return this.itemsTable.find$().pipe(map(rows => rows as VirtualItem[]));
   }
 
   getView(id: string): VirtualView | null {
@@ -112,11 +112,13 @@ export class VirtualViewsStore extends Store {
   // --- time series (trackers) -------------------------------------------
 
   watchDataPoints(viewId: string): Observable<VirtualDataPoint[]> {
-    return this.dataPointsTable.find$({ viewId }).pipe(
-      map(rows =>
-        (rows as VirtualDataPoint[]).slice().sort((a, b) => a.at - b.at)
-      )
-    );
+    return this.dataPointsTable
+      .find$({ viewId })
+      .pipe(
+        map(rows =>
+          (rows as VirtualDataPoint[]).slice().sort((a, b) => a.at - b.at)
+        )
+      );
   }
 
   listDataPoints(viewId: string): VirtualDataPoint[] {

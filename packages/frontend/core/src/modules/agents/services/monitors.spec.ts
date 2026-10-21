@@ -30,13 +30,18 @@ const monitor = (over: Partial<Monitor>): Monitor => ({
 });
 
 /** A service over a fake server answering with `respond`. */
-const setup = (respond: (path: string, init: any) => { status?: number; body: unknown }) => {
+const setup = (
+  respond: (path: string, init: any) => { status?: number; body: unknown }
+) => {
   const calls: { path: string; init: any }[] = [];
   const fetchService = {
     fetchRaw: async (path: string, init: any) => {
       calls.push({ path, init });
       const { status = 200, body } = respond(path, init);
-      return new Response(typeof body === 'string' ? body : JSON.stringify(body), { status });
+      return new Response(
+        typeof body === 'string' ? body : JSON.stringify(body),
+        { status }
+      );
     },
   };
   const framework = new Framework();
@@ -84,7 +89,9 @@ describe('MonitorsService', () => {
 
   test('an older server without monitors says so instead of failing oddly', async () => {
     const { service } = setup(() => ({ status: 404, body: '<!doctype html>' }));
-    await expect(service.revalidate()).rejects.toThrow('This server has no monitors yet.');
+    await expect(service.revalidate()).rejects.toThrow(
+      'This server has no monitors yet.'
+    );
     expect(service.error$.value).toBe('This server has no monitors yet.');
   });
 
@@ -101,7 +108,9 @@ describe('MonitorsService', () => {
     }));
     const first = await service.trend(monitor({ lastRunAt: 30 }));
     await service.trend(monitor({ lastRunAt: 30 }));
-    expect(calls.map(c => c.path)).toEqual(['/api/workspaces/ws/monitors/m1/readings']);
+    expect(calls.map(c => c.path)).toEqual([
+      '/api/workspaces/ws/monitors/m1/readings',
+    ]);
     expect(first?.points.map(p => p.value)).toEqual([1, 3]);
     await service.trend(monitor({ lastRunAt: 40 }));
     expect(calls).toHaveLength(2);

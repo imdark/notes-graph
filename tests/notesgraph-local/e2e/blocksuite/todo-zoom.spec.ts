@@ -31,7 +31,9 @@ test('todo items zoom via the hover bullet left of the checkbox', async ({
   // sibling is filtered out).
   await handle.click();
   await expect(page.getByText('All blocks')).toBeVisible();
-  await expect(page.locator('notesgraph-list', { hasText: 'Walk dog' })).toBeHidden();
+  await expect(
+    page.locator('notesgraph-list', { hasText: 'Walk dog' })
+  ).toBeHidden();
 
   // Exit zoom restores the outline.
   await page.getByText('All blocks').click();
@@ -41,8 +43,6 @@ test('todo items zoom via the hover bullet left of the checkbox', async ({
 
   // The checkbox itself still toggles rather than zooming.
   await firstItem.locator('.notesgraph-list-block__todo-prefix').click();
-  await expect(
-    firstItem.locator('.notesgraph-list--checked')
-  ).toHaveCount(1);
+  await expect(firstItem.locator('.notesgraph-list--checked')).toHaveCount(1);
   await expect(page.getByText('All blocks')).toBeHidden();
 });

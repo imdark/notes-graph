@@ -22,6 +22,4 @@ export const AgentIcon = ({
   agent,
 }: {
   agent: Pick<Agent, 'icon' | 'emoji'>;
-}) => (
-  <IconRenderer data={agentIconData(agent)} fallback={<ToolIcon />} />
-);
+}) => <IconRenderer data={agentIconData(agent)} fallback={<ToolIcon />} />;

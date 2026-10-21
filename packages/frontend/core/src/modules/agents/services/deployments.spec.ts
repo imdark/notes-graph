@@ -373,21 +373,38 @@ describe('checking ready branches', () => {
   test('a committed task with nothing open to merge says why', () => {
     const pr = prs[0].url;
     const open = { state: 'open' as const, branchExists: true };
-    expect(stuckReason({ stage: 'committed', pullRequest: null }, undefined)).toBe('No pull request');
-    expect(stuckReason({ stage: 'committed', pullRequest: pr }, { ...open, state: 'closed' })).toBe(
-      'Closed without merging'
-    );
-    expect(stuckReason({ stage: 'committed', pullRequest: pr }, { state: 'missing', branchExists: false })).toBe(
-      'Not on GitHub'
-    );
-    expect(stuckReason({ stage: 'committed', pullRequest: pr }, { ...open, branchExists: false })).toBe(
-      'Branch deleted'
-    );
+    expect(
+      stuckReason({ stage: 'committed', pullRequest: null }, undefined)
+    ).toBe('No pull request');
+    expect(
+      stuckReason(
+        { stage: 'committed', pullRequest: pr },
+        { ...open, state: 'closed' }
+      )
+    ).toBe('Closed without merging');
+    expect(
+      stuckReason(
+        { stage: 'committed', pullRequest: pr },
+        { state: 'missing', branchExists: false }
+      )
+    ).toBe('Not on GitHub');
+    expect(
+      stuckReason(
+        { stage: 'committed', pullRequest: pr },
+        { ...open, branchExists: false }
+      )
+    ).toBe('Branch deleted');
     // Open with its branch, or not checked yet: ready as far as anyone knows.
-    expect(stuckReason({ stage: 'committed', pullRequest: pr }, open)).toBeNull();
-    expect(stuckReason({ stage: 'committed', pullRequest: pr }, undefined)).toBeNull();
+    expect(
+      stuckReason({ stage: 'committed', pullRequest: pr }, open)
+    ).toBeNull();
+    expect(
+      stuckReason({ stage: 'committed', pullRequest: pr }, undefined)
+    ).toBeNull();
     // Only COMMITTED tasks are merged from here.
-    expect(stuckReason({ stage: 'merged', pullRequest: null }, undefined)).toBeNull();
+    expect(
+      stuckReason({ stage: 'merged', pullRequest: null }, undefined)
+    ).toBeNull();
   });
 
   test('asks gh for state and branch, with jq escapes intact', () => {

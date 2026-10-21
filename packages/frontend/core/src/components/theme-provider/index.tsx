@@ -19,11 +19,7 @@ function ThemeObserver() {
 
 export const ThemeProvider = ({ children }: PropsWithChildren) => {
   return (
-    <NextThemeProvider
-      themes={themes}
-      enableSystem={true}
-      defaultTheme="dark"
-    >
+    <NextThemeProvider themes={themes} enableSystem={true} defaultTheme="dark">
       {children}
       <ThemeObserver />
     </NextThemeProvider>

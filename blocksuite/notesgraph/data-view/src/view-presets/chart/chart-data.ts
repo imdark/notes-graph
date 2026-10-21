@@ -127,7 +127,11 @@ const fillDateGaps = (
   const first = Number(firstBucket.key);
   const last = Number(lastBucket.key);
   const filled: ChartBucket[] = [];
-  for (let start = first; start <= last; start = nextBucketStart(start, bucket)) {
+  for (
+    let start = first;
+    start <= last;
+    start = nextBucketStart(start, bucket)
+  ) {
     if (filled.length >= MAX_FILLED_DATE_BUCKETS) return buckets;
     filled.push(
       byStart.get(start) ?? {
@@ -236,9 +240,7 @@ export const foldDonutSlices = (buckets: ChartBucket[]): ChartBucket[] => {
   const positive = buckets.filter(b => b.value > 0);
   if (positive.length <= MAX_DONUT_SLICES) return positive;
   const sorted = [...positive].sort((a, b) => b.value - a.value);
-  const kept = new Set(
-    sorted.slice(0, MAX_DONUT_SLICES - 1).map(b => b.key)
-  );
+  const kept = new Set(sorted.slice(0, MAX_DONUT_SLICES - 1).map(b => b.key));
   const rest = positive.filter(b => !kept.has(b.key));
   return [
     ...positive.filter(b => kept.has(b.key)),

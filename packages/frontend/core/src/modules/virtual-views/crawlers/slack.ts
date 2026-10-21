@@ -61,9 +61,11 @@ export const slackCrawler: Crawler = {
       token,
       'auth.test'
     );
-    const info = await slack<
-      SlackResponse & { channel?: { name?: string } }
-    >(token, 'conversations.info', { channel });
+    const info = await slack<SlackResponse & { channel?: { name?: string } }>(
+      token,
+      'conversations.info',
+      { channel }
+    );
     return {
       config: {
         // Encrypted at rest with a device-local key (see crypto.ts).

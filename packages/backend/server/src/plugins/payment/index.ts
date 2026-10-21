@@ -59,9 +59,6 @@ import { StripeWebhook } from './webhook';
     WorkspaceSubscriptionResolver,
     PaymentEventHandlers,
   ],
-  controllers: [
-    StripeWebhookController,
-    RevenueCatWebhookController,
-  ],
+  controllers: [StripeWebhookController, RevenueCatWebhookController],
 })
 export class PaymentModule {}

@@ -2,7 +2,7 @@ import { Injectable, Logger, Optional } from '@nestjs/common';
 
 import { BadRequest, EventBus, OnEvent } from '../../base';
 import { Models } from '../../models';
-import { type JobDto,RegistryJobService } from './jobs';
+import { type JobDto, RegistryJobService } from './jobs';
 import { RegistryService } from './service';
 
 /** Jobs of a health check carry this agent id, so their end is recognised. */
@@ -23,7 +23,7 @@ export const HEALTH_SCRIPT = [
   '[ -n "$disk" ] && echo "disk=$disk"',
   'if [ -r /proc/meminfo ]; then mem=$(awk \'/^MemTotal:/ {t=$2} /^MemAvailable:/ {a=$2} END {if (t) printf "%d", (t-a)*100/t}\' /proc/meminfo); else mem=$(memory_pressure 2>/dev/null | awk -F": " \'/free percentage/ {gsub("%","",$2); print 100-$2}\'); fi',
   '[ -n "$mem" ] && echo "mem=$mem"',
-  'up=$(uptime 2>/dev/null | sed -E \'s/.*up +//; s/, +[0-9]+ users?.*//; s/, +load.*//\')',
+  "up=$(uptime 2>/dev/null | sed -E 's/.*up +//; s/, +[0-9]+ users?.*//; s/, +load.*//')",
   '[ -n "$up" ] && echo "uptime=$up"',
   'exit 0',
 ].join('\n');
@@ -64,7 +64,9 @@ export function healthScript(logsSince?: number | null) {
  * The log lines a health check sent, and up to when they go; null when it
  * sent none (no agent, or no journal on the machine).
  */
-export function healthLogs(output: string): { lines: string[]; until: number | null } | null {
+export function healthLogs(
+  output: string
+): { lines: string[]; until: number | null } | null {
   const at = output.indexOf(LOGS_MARKER);
   if (at < 0) return null;
   const [head, ...lines] = output.slice(at).split('\n');
@@ -76,7 +78,10 @@ export function healthLogs(output: string): { lines: string[]; until: number | n
 }
 
 /** When the next log scan of a machine should start reading from. */
-export const logsSince = (scannedAt: Date | null | undefined, now = Date.now()) =>
+export const logsSince = (
+  scannedAt: Date | null | undefined,
+  now = Date.now()
+) =>
   Math.floor((scannedAt?.getTime() ?? now - FIRST_SCAN_SECONDS * 1000) / 1000);
 
 export type CheckStatus = 'ok' | 'warn' | 'fail';
@@ -98,8 +103,10 @@ const THRESHOLDS = {
   load: { warn: 1.5, fail: 3 },
 };
 
-const grade = (value: number, { warn, fail }: { warn: number; fail: number }): CheckStatus =>
-  value >= fail ? 'fail' : value >= warn ? 'warn' : 'ok';
+const grade = (
+  value: number,
+  { warn, fail }: { warn: number; fail: number }
+): CheckStatus => (value >= fail ? 'fail' : value >= warn ? 'warn' : 'ok');
 
 /** The `key=value` lines the script printed. */
 export function parseHealthOutput(output: string): Record<string, string> {
@@ -126,11 +133,23 @@ export function healthStatus(output: string) {
 
   const disk = number('disk');
   if (disk !== null) {
-    checks.push({ name: 'Disk', status: grade(disk, THRESHOLDS.disk), value: disk, unit: '%', detail: `${disk}% of / used` });
+    checks.push({
+      name: 'Disk',
+      status: grade(disk, THRESHOLDS.disk),
+      value: disk,
+      unit: '%',
+      detail: `${disk}% of / used`,
+    });
   }
   const mem = number('mem');
   if (mem !== null) {
-    checks.push({ name: 'Memory', status: grade(mem, THRESHOLDS.mem), value: mem, unit: '%', detail: `${mem}% used` });
+    checks.push({
+      name: 'Memory',
+      status: grade(mem, THRESHOLDS.mem),
+      value: mem,
+      unit: '%',
+      detail: `${mem}% used`,
+    });
   }
   const load = number('load');
   if (load !== null) {
@@ -151,7 +170,8 @@ export function healthStatus(output: string) {
 
   const bad = checks.filter(check => check.status !== 'ok');
   return {
-    state: checks.length === 0 ? 'unknown' : bad.length > 0 ? 'degraded' : 'online',
+    state:
+      checks.length === 0 ? 'unknown' : bad.length > 0 ? 'degraded' : 'online',
     statusDetail:
       checks.length === 0
         ? 'The health check printed nothing it could read'
@@ -191,10 +211,15 @@ export class RegistryHealthService {
   ) {}
 
   /** Queue a check on `key`, unless one is already waiting to run there. */
-  async check(workspaceId: string, userId: string, key: string): Promise<JobDto> {
+  async check(
+    workspaceId: string,
+    userId: string,
+    key: string
+  ): Promise<JobDto> {
     const device = await this.devices.get(workspaceId, key);
     if (!device) throw new BadRequest(`No device '${key}' in this workspace`);
-    if (device.kind !== 'machine') throw new BadRequest('Only a machine can be health-checked');
+    if (device.kind !== 'machine')
+      throw new BadRequest('Only a machine can be health-checked');
 
     const waiting = (await this.jobs.list(workspaceId, key)).find(
       job =>
@@ -206,7 +231,10 @@ export class RegistryHealthService {
     // With the monitoring agent on, the check also reads the logs since the last one.
     const agent = await this.models.monitoringAgent.get(workspaceId);
     const since = agent
-      ? logsSince((await this.models.monitoringAgent.getLogCatalog(workspaceId, key))?.scannedAt)
+      ? logsSince(
+          (await this.models.monitoringAgent.getLogCatalog(workspaceId, key))
+            ?.scannedAt
+        )
       : null;
 
     return await this.jobs.enqueue(workspaceId, userId, key, {
@@ -241,7 +269,10 @@ export class RegistryHealthService {
   /** A check finished: record what it found as the machine's status. */
   @OnEvent('registry.job.finished')
   async onJobFinished(event: Events['registry.job.finished']) {
-    const job = await this.models.registryJob.get(event.workspaceId, event.jobId);
+    const job = await this.models.registryJob.get(
+      event.workspaceId,
+      event.jobId
+    );
     if (!job?.agentId.startsWith(HEALTH_AGENT_PREFIX)) return;
     if (event.status === 'cancelled') return;
     try {
@@ -257,7 +288,8 @@ export class RegistryHealthService {
         version: device.version,
         checkedAt: Date.now() / 1000,
       });
-      const logs = event.status === 'done' ? healthLogs(event.result ?? '') : null;
+      const logs =
+        event.status === 'done' ? healthLogs(event.result ?? '') : null;
       if (logs) {
         this.event?.emit('registry.device.logs', {
           workspaceId: event.workspaceId,
@@ -267,7 +299,9 @@ export class RegistryHealthService {
         });
       }
     } catch (err) {
-      this.logger.warn(`health check ${event.jobId} could not be recorded: ${(err as Error).message}`);
+      this.logger.warn(
+        `health check ${event.jobId} could not be recorded: ${(err as Error).message}`
+      );
     }
   }
 }

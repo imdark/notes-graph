@@ -222,7 +222,8 @@ export class VirtualViewsService extends Service {
     const threshold = config.alertValue as number | undefined;
     if (!op || typeof threshold !== 'number') return;
 
-    const meets = (v: number) => (op === 'below' ? v < threshold : v > threshold);
+    const meets = (v: number) =>
+      op === 'below' ? v < threshold : v > threshold;
     // Only fire on a fresh crossing (not every crawl while still past it).
     if (meets(value) && (previous === undefined || !meets(previous))) {
       const unit = config.unit ? String(config.unit) : '';

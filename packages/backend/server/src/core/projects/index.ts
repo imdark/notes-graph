@@ -1,7 +1,10 @@
 import { Module } from '@nestjs/common';
 
 import { PermissionModule } from '../permission';
-import { ProjectResolver, WorkspaceProjectsResolver } from './resolvers/project';
+import {
+  ProjectResolver,
+  WorkspaceProjectsResolver,
+} from './resolvers/project';
 import { ProjectService } from './service';
 
 @Module({

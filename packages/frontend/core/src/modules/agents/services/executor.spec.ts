@@ -115,51 +115,97 @@ const setup = (
 describe('AgentExecutorService device runs', () => {
   test('a job held for the device’s session limit says so in its log', async () => {
     const runAfter = Date.UTC(2026, 9, 5, 22, 11) / 1000;
-    const { executor } = setup([], {}, {
-      context: { build: async () => ({ text: 'x', label: 'a block', title: 'x' }) },
-      remoteRunner: {
-        enqueue: async () => job({ id: 'j9', status: 'queued' }),
-        agentTargets: async () => [],
-        watch: async function* () {
-          yield { job: job({ id: 'j9', status: 'queued', runAfter }), logDelta: '' };
-          yield { job: job({ id: 'j9', status: 'done', result: 'ok' }), logDelta: '' };
+    const { executor } = setup(
+      [],
+      {},
+      {
+        context: {
+          build: async () => ({ text: 'x', label: 'a block', title: 'x' }),
         },
-      },
-    });
+        remoteRunner: {
+          enqueue: async () => job({ id: 'j9', status: 'queued' }),
+          agentTargets: async () => [],
+          watch: async function* () {
+            yield {
+              job: job({ id: 'j9', status: 'queued', runAfter }),
+              logDelta: '',
+            };
+            yield {
+              job: job({ id: 'j9', status: 'done', result: 'ok' }),
+              logDelta: '',
+            };
+          },
+        },
+      }
+    );
     (executor as any).runsStore.attachRemote = () => {};
     const logs: string[] = [];
     for await (const event of executor.run(
-      { id: 'a1', name: 'W', harness: 'remote', deviceKey: 'laptop', model: 'workflow', tools: [], instructions: 'go', maxSteps: 4 } as any,
+      {
+        id: 'a1',
+        name: 'W',
+        harness: 'remote',
+        deviceKey: 'laptop',
+        model: 'workflow',
+        tools: [],
+        instructions: 'go',
+        maxSteps: 4,
+      } as any,
       { kind: 'block', docId: 'doc', blockId: 'b1' },
       new AbortController().signal
     )) {
       if (event.type === 'log') logs.push(event.text);
     }
-    expect(logs.join('')).toMatch(/⏸ Session limit reached on laptop; waiting to run again at/);
+    expect(logs.join('')).toMatch(
+      /⏸ Session limit reached on laptop; waiting to run again at/
+    );
   });
 
   test('a device run is queued with its cost cap and permission level, and records its cost', async () => {
     const enqueued: any[] = [];
-    const { executor, usages } = setup([], {}, {
-      context: { build: async () => ({ text: 'x', label: 'a block', title: 'x' }) },
-      remoteRunner: {
-        enqueue: async (_ws: string, input: any) => {
-          enqueued.push(input);
-          return job({ id: 'j9', status: 'queued' });
+    const { executor, usages } = setup(
+      [],
+      {},
+      {
+        context: {
+          build: async () => ({ text: 'x', label: 'a block', title: 'x' }),
         },
-        agentTargets: async () => [],
-        watch: async function* () {
-          yield { job: job({ id: 'j9', status: 'running' }), logDelta: '' };
-          yield {
-            job: job({ id: 'j9', status: 'done', result: 'ok', costUsd: 0.42, tokens: 1234 }),
-            logDelta: '',
-          };
+        remoteRunner: {
+          enqueue: async (_ws: string, input: any) => {
+            enqueued.push(input);
+            return job({ id: 'j9', status: 'queued' });
+          },
+          agentTargets: async () => [],
+          watch: async function* () {
+            yield { job: job({ id: 'j9', status: 'running' }), logDelta: '' };
+            yield {
+              job: job({
+                id: 'j9',
+                status: 'done',
+                result: 'ok',
+                costUsd: 0.42,
+                tokens: 1234,
+              }),
+              logDelta: '',
+            };
+          },
         },
-      },
-    });
+      }
+    );
     (executor as any).runsStore.attachRemote = () => {};
     for await (const _ of executor.run(
-      { id: 'a1', name: 'W', harness: 'remote', deviceKey: 'laptop', model: 'claude-code', tools: [], instructions: 'go', maxSteps: 4, maxCostUsd: 2.5, access: 'manage' } as any,
+      {
+        id: 'a1',
+        name: 'W',
+        harness: 'remote',
+        deviceKey: 'laptop',
+        model: 'claude-code',
+        tools: [],
+        instructions: 'go',
+        maxSteps: 4,
+        maxCostUsd: 2.5,
+        access: 'manage',
+      } as any,
       { kind: 'block', docId: 'doc', blockId: 'b1' },
       new AbortController().signal
     )) {
@@ -174,22 +220,40 @@ describe('AgentExecutorService device runs', () => {
 
   test('an agent with no cap or level leaves both off the job', async () => {
     const enqueued: any[] = [];
-    const { executor } = setup([], {}, {
-      context: { build: async () => ({ text: 'x', label: 'a block', title: 'x' }) },
-      remoteRunner: {
-        enqueue: async (_ws: string, input: any) => {
-          enqueued.push(input);
-          return job({ id: 'j9', status: 'queued' });
+    const { executor } = setup(
+      [],
+      {},
+      {
+        context: {
+          build: async () => ({ text: 'x', label: 'a block', title: 'x' }),
         },
-        agentTargets: async () => [],
-        watch: async function* () {
-          yield { job: job({ id: 'j9', status: 'done', result: 'ok' }), logDelta: '' };
+        remoteRunner: {
+          enqueue: async (_ws: string, input: any) => {
+            enqueued.push(input);
+            return job({ id: 'j9', status: 'queued' });
+          },
+          agentTargets: async () => [],
+          watch: async function* () {
+            yield {
+              job: job({ id: 'j9', status: 'done', result: 'ok' }),
+              logDelta: '',
+            };
+          },
         },
-      },
-    });
+      }
+    );
     (executor as any).runsStore.attachRemote = () => {};
     for await (const _ of executor.run(
-      { id: 'a1', name: 'W', harness: 'remote', deviceKey: 'laptop', model: 'claude-code', tools: [], instructions: 'go', maxSteps: 4 } as any,
+      {
+        id: 'a1',
+        name: 'W',
+        harness: 'remote',
+        deviceKey: 'laptop',
+        model: 'claude-code',
+        tools: [],
+        instructions: 'go',
+        maxSteps: 4,
+      } as any,
       { kind: 'block', docId: 'doc', blockId: 'b1' },
       new AbortController().signal
     )) {
@@ -200,23 +264,42 @@ describe('AgentExecutorService device runs', () => {
   });
 
   test('a refused enqueue fails the run with the server’s reason', async () => {
-    const { executor, finished } = setup([], {}, {
-      context: { build: async () => ({ text: 'x', label: 'a block', title: 'x' }) },
-      remoteRunner: {
-        enqueue: async () => {
-          throw new Error('This workspace has used its monthly agent budget.');
+    const { executor, finished } = setup(
+      [],
+      {},
+      {
+        context: {
+          build: async () => ({ text: 'x', label: 'a block', title: 'x' }),
         },
-      },
-    });
+        remoteRunner: {
+          enqueue: async () => {
+            throw new Error(
+              'This workspace has used its monthly agent budget.'
+            );
+          },
+        },
+      }
+    );
     const errors: string[] = [];
     for await (const event of executor.run(
-      { id: 'a1', name: 'W', harness: 'remote', deviceKey: 'laptop', model: 'claude-code', tools: [], instructions: 'go', maxSteps: 4 } as any,
+      {
+        id: 'a1',
+        name: 'W',
+        harness: 'remote',
+        deviceKey: 'laptop',
+        model: 'claude-code',
+        tools: [],
+        instructions: 'go',
+        maxSteps: 4,
+      } as any,
       { kind: 'block', docId: 'doc', blockId: 'b1' },
       new AbortController().signal
     )) {
       if (event.type === 'error') errors.push(event.message);
     }
-    expect(errors).toEqual(['This workspace has used its monthly agent budget.']);
+    expect(errors).toEqual([
+      'This workspace has used its monthly agent budget.',
+    ]);
     expect(finished[0].outcome).toMatchObject({
       status: 'error',
       error: 'This workspace has used its monthly agent budget.',
@@ -227,21 +310,39 @@ describe('AgentExecutorService device runs', () => {
 describe('AgentExecutorService.chatFor', () => {
   test('a device agent is asked on its device, told only to answer', async () => {
     const enqueued: any[] = [];
-    const { executor } = setup([], {}, {
-      remoteRunner: {
-        enqueue: async (_ws: string, input: any) => {
-          enqueued.push(input);
-          return job({ id: 'q1', status: 'queued' });
+    const { executor } = setup(
+      [],
+      {},
+      {
+        remoteRunner: {
+          enqueue: async (_ws: string, input: any) => {
+            enqueued.push(input);
+            return job({ id: 'q1', status: 'queued' });
+          },
+          watch: async function* () {
+            yield { job: job({ id: 'q1', status: 'running' }), logDelta: '' };
+            yield {
+              job: job({
+                id: 'q1',
+                status: 'done',
+                result: 'It edited two lines.',
+              }),
+              logDelta: '',
+            };
+          },
         },
-        watch: async function* () {
-          yield { job: job({ id: 'q1', status: 'running' }), logDelta: '' };
-          yield { job: job({ id: 'q1', status: 'done', result: 'It edited two lines.' }), logDelta: '' };
-        },
-      },
-    });
-    const chat = await executor.chatFor(
-      { id: 'a1', name: 'Claude', harness: 'remote', deviceKey: 'laptop', model: 'claude-code', tools: ['Bash'], instructions: 'do work', maxSteps: 40 } as any
+      }
     );
+    const chat = await executor.chatFor({
+      id: 'a1',
+      name: 'Claude',
+      harness: 'remote',
+      deviceKey: 'laptop',
+      model: 'claude-code',
+      tools: ['Bash'],
+      instructions: 'do work',
+      maxSteps: 40,
+    } as any);
     let reply = '';
     for await (const delta of chat(
       [
@@ -254,25 +355,46 @@ describe('AgentExecutorService.chatFor', () => {
     }
     expect(reply).toBe('It edited two lines.');
     expect(enqueued).toHaveLength(1);
-    expect(enqueued[0]).toMatchObject({ deviceKey: 'laptop', agentId: 'chat:a1', model: 'claude-code', tools: [] });
+    expect(enqueued[0]).toMatchObject({
+      deviceKey: 'laptop',
+      agentId: 'chat:a1',
+      model: 'claude-code',
+      tools: [],
+    });
     expect(enqueued[0].instructions).toMatch(/Only answer/);
     expect(enqueued[0].context).toContain('What did it change?');
   });
 
   test('a device question that fails says why', async () => {
-    const { executor } = setup([], {}, {
-      remoteRunner: {
-        enqueue: async () => job({ id: 'q2', status: 'queued' }),
-        watch: async function* () {
-          yield { job: job({ id: 'q2', status: 'error', error: 'device offline' }), logDelta: '' };
+    const { executor } = setup(
+      [],
+      {},
+      {
+        remoteRunner: {
+          enqueue: async () => job({ id: 'q2', status: 'queued' }),
+          watch: async function* () {
+            yield {
+              job: job({ id: 'q2', status: 'error', error: 'device offline' }),
+              logDelta: '',
+            };
+          },
         },
-      },
-    });
-    const chat = await executor.chatFor(
-      { id: 'a1', name: 'Claude', harness: 'remote', deviceKey: 'laptop', tools: [], instructions: '', maxSteps: 4 } as any
+      }
     );
+    const chat = await executor.chatFor({
+      id: 'a1',
+      name: 'Claude',
+      harness: 'remote',
+      deviceKey: 'laptop',
+      tools: [],
+      instructions: '',
+      maxSteps: 4,
+    } as any);
     await expect(async () => {
-      for await (const _ of chat([{ role: 'user', content: 'hi' }], new AbortController().signal)) {
+      for await (const _ of chat(
+        [{ role: 'user', content: 'hi' }],
+        new AbortController().signal
+      )) {
         // drain
       }
     }).rejects.toThrow('device offline');
@@ -281,26 +403,41 @@ describe('AgentExecutorService.chatFor', () => {
   test('a fork of a waiting run is asked on its device, not the server', async () => {
     const enqueued: any[] = [];
     const opened: string[] = [];
-    const { executor } = setup([], {}, {
-      cloudRunner: {
-        available: false,
-        open: async (workspaceId: string) => {
-          opened.push(workspaceId);
-          throw new Error('This server has no AI model set up');
+    const { executor } = setup(
+      [],
+      {},
+      {
+        cloudRunner: {
+          available: false,
+          open: async (workspaceId: string) => {
+            opened.push(workspaceId);
+            throw new Error('This server has no AI model set up');
+          },
         },
-      },
-      remoteRunner: {
-        enqueue: async (_ws: string, input: any) => {
-          enqueued.push(input);
-          return job({ id: 'f1', status: 'queued' });
+        remoteRunner: {
+          enqueue: async (_ws: string, input: any) => {
+            enqueued.push(input);
+            return job({ id: 'f1', status: 'queued' });
+          },
+          watch: async function* () {
+            yield {
+              job: job({ id: 'f1', status: 'done', result: 'Pick main.' }),
+              logDelta: '',
+            };
+          },
         },
-        watch: async function* () {
-          yield { job: job({ id: 'f1', status: 'done', result: 'Pick main.' }), logDelta: '' };
-        },
-      },
-    });
+      }
+    );
     const chat = await executor.forkOf(
-      job({ id: 'r1', status: 'running', deviceKey: 'cloud', agentId: 'a1', agentName: 'Claude', model: 'claude-code', maxCostUsd: 2 })
+      job({
+        id: 'r1',
+        status: 'running',
+        deviceKey: 'cloud',
+        agentId: 'a1',
+        agentName: 'Claude',
+        model: 'claude-code',
+        maxCostUsd: 2,
+      })
     );
     let reply = '';
     for await (const delta of chat(
@@ -315,25 +452,44 @@ describe('AgentExecutorService.chatFor', () => {
     expect(reply).toBe('Pick main.');
     expect(opened).toEqual([]);
     expect(enqueued).toHaveLength(1);
-    expect(enqueued[0]).toMatchObject({ deviceKey: 'cloud', agentId: 'chat:a1', model: 'claude-code', tools: [], maxCostUsd: 2 });
+    expect(enqueued[0]).toMatchObject({
+      deviceKey: 'cloud',
+      agentId: 'chat:a1',
+      model: 'claude-code',
+      tools: [],
+      maxCostUsd: 2,
+    });
     expect(enqueued[0].instructions).toMatch(/still going/);
     expect(enqueued[0].context).toContain('Which branch should it use?');
   });
 
   test('a fork turn waiting for a slot says so, and stops saying once it runs', async () => {
     const notes: (string | null)[] = [];
-    const { executor } = setup([], {}, {
-      remoteRunner: {
-        enqueue: async () => job({ id: 'f1', status: 'queued' }),
-        watch: async function* () {
-          yield { job: job({ id: 'f1', status: 'queued' }), logDelta: '' };
-          yield { job: job({ id: 'f1', status: 'running' }), logDelta: '' };
-          yield { job: job({ id: 'f1', status: 'done', result: 'Yes.' }), logDelta: '' };
+    const { executor } = setup(
+      [],
+      {},
+      {
+        remoteRunner: {
+          enqueue: async () => job({ id: 'f1', status: 'queued' }),
+          watch: async function* () {
+            yield { job: job({ id: 'f1', status: 'queued' }), logDelta: '' };
+            yield { job: job({ id: 'f1', status: 'running' }), logDelta: '' };
+            yield {
+              job: job({ id: 'f1', status: 'done', result: 'Yes.' }),
+              logDelta: '',
+            };
+          },
         },
-      },
-    });
-    const chat = await executor.forkOf(job({ id: 'r1', deviceKey: 'cloud' }), note => notes.push(note));
-    for await (const _ of chat([{ role: 'user', content: 'ok?' }], new AbortController().signal)) {
+      }
+    );
+    const chat = await executor.forkOf(
+      job({ id: 'r1', deviceKey: 'cloud' }),
+      note => notes.push(note)
+    );
+    for await (const _ of chat(
+      [{ role: 'user', content: 'ok?' }],
+      new AbortController().signal
+    )) {
       // drain
     }
     expect(notes[0]).toMatch(/free job slot on cloud[\s\S]*Jobs at once/);
@@ -344,24 +500,38 @@ describe('AgentExecutorService.chatFor', () => {
     const cancelled: string[] = [];
     let release!: () => void;
     const held = new Promise<void>(resolve => (release = resolve));
-    const { executor } = setup([], {}, {
-      remoteRunner: {
-        enqueue: async () => job({ id: 'f1', status: 'queued' }),
-        cancel: async (_ws: string, id: string) => {
-          cancelled.push(id);
+    const { executor } = setup(
+      [],
+      {},
+      {
+        remoteRunner: {
+          enqueue: async () => job({ id: 'f1', status: 'queued' }),
+          cancel: async (_ws: string, id: string) => {
+            cancelled.push(id);
+          },
+          watch: async function* (
+            _ws: string,
+            _id: string,
+            signal: AbortSignal
+          ) {
+            yield { job: job({ id: 'f1', status: 'queued' }), logDelta: '' };
+            await held;
+            if (signal.aborted) return;
+            yield {
+              job: job({ id: 'f1', status: 'done', result: 'Late.' }),
+              logDelta: '',
+            };
+          },
         },
-        watch: async function* (_ws: string, _id: string, signal: AbortSignal) {
-          yield { job: job({ id: 'f1', status: 'queued' }), logDelta: '' };
-          await held;
-          if (signal.aborted) return;
-          yield { job: job({ id: 'f1', status: 'done', result: 'Late.' }), logDelta: '' };
-        },
-      },
-    });
+      }
+    );
     const chat = await executor.forkOf(job({ id: 'r1', deviceKey: 'cloud' }));
     const close = new AbortController();
     const draining = (async () => {
-      for await (const _ of chat([{ role: 'user', content: 'ok?' }], close.signal)) {
+      for await (const _ of chat(
+        [{ role: 'user', content: 'ok?' }],
+        close.signal
+      )) {
         // drain
       }
     })();
@@ -374,29 +544,46 @@ describe('AgentExecutorService.chatFor', () => {
     // Answered, then the panel closes: nothing to cancel.
     cancelled.length = 0;
     const later = new AbortController();
-    const { executor: done } = setup([], {}, {
-      remoteRunner: {
-        enqueue: async () => job({ id: 'f2', status: 'queued' }),
-        cancel: async (_ws: string, id: string) => {
-          cancelled.push(id);
+    const { executor: done } = setup(
+      [],
+      {},
+      {
+        remoteRunner: {
+          enqueue: async () => job({ id: 'f2', status: 'queued' }),
+          cancel: async (_ws: string, id: string) => {
+            cancelled.push(id);
+          },
+          watch: async function* () {
+            yield {
+              job: job({ id: 'f2', status: 'done', result: 'Now.' }),
+              logDelta: '',
+            };
+          },
         },
-        watch: async function* () {
-          yield { job: job({ id: 'f2', status: 'done', result: 'Now.' }), logDelta: '' };
-        },
-      },
-    });
+      }
+    );
     const quick = await done.forkOf(job({ id: 'r1', deviceKey: 'cloud' }));
-    for await (const _ of quick([{ role: 'user', content: 'ok?' }], later.signal)) {
+    for await (const _ of quick(
+      [{ role: 'user', content: 'ok?' }],
+      later.signal
+    )) {
       // drain
     }
     later.abort();
     expect(cancelled).toEqual([]);
   });
 
-  test('an agent with no device can\'t be asked', async () => {
+  test("an agent with no device can't be asked", async () => {
     const { executor } = setup([], {}, {});
     await expect(
-      executor.chatFor({ id: 'a1', name: 'Claude', harness: 'remote', tools: [], instructions: '', maxSteps: 4 } as any)
+      executor.chatFor({
+        id: 'a1',
+        name: 'Claude',
+        harness: 'remote',
+        tools: [],
+        instructions: '',
+        maxSteps: 4,
+      } as any)
     ).rejects.toThrow(/no device selected/);
   });
 });
@@ -410,31 +597,53 @@ describe('AgentExecutorService research runs', () => {
     ];
     const prompts: string[] = [];
     const calls: unknown[] = [];
-    const { executor, finished, described } = setup([], {}, {
-      context: { build: async () => ({ text: 'Survey graph RAG', label: 'a block', title: 'Survey graph RAG' }) },
-      fileTools: { available: false },
-      cloudRunner: {
-        available: true,
-        open: async () =>
-          async function* (messages: { content: string }[]) {
-            prompts.push(messages[0].content);
-            yield replies.shift() ?? '';
-          },
-      },
-      researchTools: {
-        specs: async () => [
-          { name: 'omniseek_search', desc: 'Search widely', args: { query: 'what to look for' }, mutates: false },
-        ],
-        call: async (workspaceId: string, name: string, args: unknown) => {
-          calls.push({ workspaceId, name, args });
-          return '1. From Local to Global: A Graph RAG Approach — arxiv.org/abs/2404.16130';
+    const { executor, finished, described } = setup(
+      [],
+      {},
+      {
+        context: {
+          build: async () => ({
+            text: 'Survey graph RAG',
+            label: 'a block',
+            title: 'Survey graph RAG',
+          }),
         },
-      },
-    });
+        fileTools: { available: false },
+        cloudRunner: {
+          available: true,
+          open: async () =>
+            async function* (messages: { content: string }[]) {
+              prompts.push(messages[0].content);
+              yield replies.shift() ?? '';
+            },
+        },
+        researchTools: {
+          specs: async () => [
+            {
+              name: 'omniseek_search',
+              desc: 'Search widely',
+              args: { query: 'what to look for' },
+              mutates: false,
+            },
+          ],
+          call: async (workspaceId: string, name: string, args: unknown) => {
+            calls.push({ workspaceId, name, args });
+            return '1. From Local to Global: A Graph RAG Approach — arxiv.org/abs/2404.16130';
+          },
+        },
+      }
+    );
 
     const events = [];
     for await (const event of executor.run(
-      { id: 'a1', name: 'Researcher', harness: 'research', tools: [], instructions: '', maxSteps: 4 } as any,
+      {
+        id: 'a1',
+        name: 'Researcher',
+        harness: 'research',
+        tools: [],
+        instructions: '',
+        maxSteps: 4,
+      } as any,
       { kind: 'block', docId: 'doc', blockId: 'b1' },
       new AbortController().signal
     )) {
@@ -442,13 +651,20 @@ describe('AgentExecutorService research runs', () => {
     }
 
     expect(calls).toEqual([
-      { workspaceId: 'ws', name: 'omniseek_search', args: { query: 'graph RAG' } },
+      {
+        workspaceId: 'ws',
+        name: 'omniseek_search',
+        args: { query: 'graph RAG' },
+      },
     ]);
     // Told about the research tools and how to cite, and not about a folder.
     expect(prompts[0]).toContain('omniseek_search');
     expect(prompts[0]).toContain('source URL');
     expect(prompts[0]).not.toContain('bound to this workspace');
-    expect(described[0]).toMatchObject({ harness: 'research', model: 'server default + OmniSeek' });
+    expect(described[0]).toMatchObject({
+      harness: 'research',
+      model: 'server default + OmniSeek',
+    });
     expect(finished[0].outcome).toMatchObject({
       status: 'done',
       output: expect.stringContaining('arxiv.org/abs/2404.16130'),
@@ -462,39 +678,64 @@ describe('AgentExecutorService research runs', () => {
     ];
     const calls: unknown[] = [];
     const logs: string[] = [];
-    const { executor, finished, described } = setup([], {}, {
-      context: { build: async () => ({ text: 'Survey graph RAG', label: 'a block', title: 'x' }) },
-      fileTools: { available: false },
-      cloudRunner: {
-        available: false,
-        open: async () => {
-          throw new Error('no copilot');
+    const { executor, finished, described } = setup(
+      [],
+      {},
+      {
+        context: {
+          build: async () => ({
+            text: 'Survey graph RAG',
+            label: 'a block',
+            title: 'x',
+          }),
         },
-      },
-      localLLM: {
-        chatStream: async function* () {
-          yield replies.shift() ?? '';
+        fileTools: { available: false },
+        cloudRunner: {
+          available: false,
+          open: async () => {
+            throw new Error('no copilot');
+          },
         },
-      },
-      researchTools: {
-        specs: async () => [
-          { name: 'omniseek_search', desc: 'Search widely', args: { query: 'what to look for' }, mutates: false },
-        ],
-        call: async (_ws: string, name: string) => {
-          calls.push(name);
-          return '1. arxiv.org/abs/2404.16130';
+        localLLM: {
+          chatStream: async function* () {
+            yield replies.shift() ?? '';
+          },
         },
-      },
-    });
+        researchTools: {
+          specs: async () => [
+            {
+              name: 'omniseek_search',
+              desc: 'Search widely',
+              args: { query: 'what to look for' },
+              mutates: false,
+            },
+          ],
+          call: async (_ws: string, name: string) => {
+            calls.push(name);
+            return '1. arxiv.org/abs/2404.16130';
+          },
+        },
+      }
+    );
     for await (const event of executor.run(
-      { id: 'a1', name: 'R', harness: 'research', tools: [], instructions: '', maxSteps: 4 } as any,
+      {
+        id: 'a1',
+        name: 'R',
+        harness: 'research',
+        tools: [],
+        instructions: '',
+        maxSteps: 4,
+      } as any,
       { kind: 'block', docId: 'doc', blockId: 'b1' },
       new AbortController().signal
     )) {
       if (event.type === 'log') logs.push(event.text);
     }
     expect(calls).toEqual(['omniseek_search']);
-    expect(described[0]).toMatchObject({ harness: 'research', model: expect.stringMatching(/-MLC \+ OmniSeek$/) });
+    expect(described[0]).toMatchObject({
+      harness: 'research',
+      model: expect.stringMatching(/-MLC \+ OmniSeek$/),
+    });
     expect(logs.join('')).toContain('no AI model set up');
     expect(finished[0].outcome).toMatchObject({ status: 'done' });
   });
@@ -502,29 +743,60 @@ describe('AgentExecutorService research runs', () => {
   test('a server with no model but its own runner hands research to that runner', async () => {
     const enqueued: any[] = [];
     const logs: string[] = [];
-    const { executor, finished } = setup([], {}, {
-      context: { build: async () => ({ text: 'Survey graph RAG', label: 'a block', title: 'x' }) },
-      cloudRunner: { available: false },
-      remoteRunner: {
-        agentTargets: async () => [{ key: 'cloud', name: 'Cloud (server)', state: 'online', kind: 'server' }],
-        enqueue: async (_ws: string, input: any) => {
-          enqueued.push(input);
-          return job({ id: 'j1', status: 'queued' });
+    const { executor, finished } = setup(
+      [],
+      {},
+      {
+        context: {
+          build: async () => ({
+            text: 'Survey graph RAG',
+            label: 'a block',
+            title: 'x',
+          }),
         },
-        watch: async function* () {
-          yield { job: job({ id: 'j1', status: 'done', result: 'GraphRAG' }), logDelta: '' };
+        cloudRunner: { available: false },
+        remoteRunner: {
+          agentTargets: async () => [
+            {
+              key: 'cloud',
+              name: 'Cloud (server)',
+              state: 'online',
+              kind: 'server',
+            },
+          ],
+          enqueue: async (_ws: string, input: any) => {
+            enqueued.push(input);
+            return job({ id: 'j1', status: 'queued' });
+          },
+          watch: async function* () {
+            yield {
+              job: job({ id: 'j1', status: 'done', result: 'GraphRAG' }),
+              logDelta: '',
+            };
+          },
         },
-      },
-    });
+      }
+    );
     (executor as any).runsStore.attachRemote = () => {};
     for await (const event of executor.run(
-      { id: 'a1', name: 'R', harness: 'research', tools: ['omniseek_search'], instructions: '', maxSteps: 4 } as any,
+      {
+        id: 'a1',
+        name: 'R',
+        harness: 'research',
+        tools: ['omniseek_search'],
+        instructions: '',
+        maxSteps: 4,
+      } as any,
       { kind: 'block', docId: 'doc', blockId: 'b1' },
       new AbortController().signal
     )) {
       if (event.type === 'log') logs.push(event.text);
     }
-    expect(enqueued[0]).toMatchObject({ deviceKey: 'cloud', model: 'research', tools: [] });
+    expect(enqueued[0]).toMatchObject({
+      deviceKey: 'cloud',
+      model: 'research',
+      tools: [],
+    });
     expect(logs.join('')).toContain("runs on the server's runner");
     expect(finished[0].outcome).toMatchObject({ status: 'done' });
   });
@@ -535,31 +807,48 @@ describe('AgentExecutorService research runs', () => {
       'Could not do that.',
     ];
     const logs: string[] = [];
-    const { executor } = setup([], {}, {
-      context: { build: async () => ({ text: 'x', label: 'a block', title: 'x' }) },
-      fileTools: { available: false },
-      cloudRunner: {
-        available: true,
-        open: async () =>
-          async function* () {
-            yield replies.shift() ?? '';
-          },
-      },
-      researchTools: {
-        specs: async () => [{ name: 'omniseek_search', desc: 's', args: {}, mutates: false }],
-        call: async () => {
-          throw new Error('must not be called');
+    const { executor } = setup(
+      [],
+      {},
+      {
+        context: {
+          build: async () => ({ text: 'x', label: 'a block', title: 'x' }),
         },
-      },
-    });
+        fileTools: { available: false },
+        cloudRunner: {
+          available: true,
+          open: async () =>
+            async function* () {
+              yield replies.shift() ?? '';
+            },
+        },
+        researchTools: {
+          specs: async () => [
+            { name: 'omniseek_search', desc: 's', args: {}, mutates: false },
+          ],
+          call: async () => {
+            throw new Error('must not be called');
+          },
+        },
+      }
+    );
     for await (const event of executor.run(
-      { id: 'a1', name: 'R', harness: 'research', tools: [], instructions: '', maxSteps: 4 } as any,
+      {
+        id: 'a1',
+        name: 'R',
+        harness: 'research',
+        tools: [],
+        instructions: '',
+        maxSteps: 4,
+      } as any,
       { kind: 'block', docId: 'doc', blockId: 'b1' },
       new AbortController().signal
     )) {
       if (event.type === 'log') logs.push(event.text);
     }
-    expect(logs.join('')).toContain('There is no tool called omniseek_curator_act');
+    expect(logs.join('')).toContain(
+      'There is no tool called omniseek_curator_act'
+    );
   });
 
   test('independent searches in one reply run together, in order; a repeat is not re-run', async () => {
@@ -576,32 +865,54 @@ describe('AgentExecutorService research runs', () => {
     let maxInFlight = 0;
     const calls: string[] = [];
     const logs: string[] = [];
-    const { executor } = setup([], {}, {
-      context: { build: async () => ({ text: 'x', label: 'a block', title: 'x' }) },
-      fileTools: { available: false },
-      cloudRunner: {
-        available: true,
-        open: async () =>
-          async function* (messages: { role: string; content: string }[]) {
-            userTurns.push(messages.at(-1)!.content);
-            yield replies.shift() ?? '';
-          },
-      },
-      researchTools: {
-        specs: async () => [{ name: 'omniseek_search', desc: 's', args: { query: 'q' }, mutates: false }],
-        call: async (_ws: string, _name: string, args: { query: string }) => {
-          calls.push(args.query);
-          inFlight += 1;
-          maxInFlight = Math.max(maxInFlight, inFlight);
-          // The first call finishes last: results still come back in order.
-          await new Promise(resolve => setTimeout(resolve, args.query === 'graph RAG' ? 20 : 1));
-          inFlight -= 1;
-          return `results for ${args.query}`;
+    const { executor } = setup(
+      [],
+      {},
+      {
+        context: {
+          build: async () => ({ text: 'x', label: 'a block', title: 'x' }),
         },
-      },
-    });
+        fileTools: { available: false },
+        cloudRunner: {
+          available: true,
+          open: async () =>
+            async function* (messages: { role: string; content: string }[]) {
+              userTurns.push(messages.at(-1)!.content);
+              yield replies.shift() ?? '';
+            },
+        },
+        researchTools: {
+          specs: async () => [
+            {
+              name: 'omniseek_search',
+              desc: 's',
+              args: { query: 'q' },
+              mutates: false,
+            },
+          ],
+          call: async (_ws: string, _name: string, args: { query: string }) => {
+            calls.push(args.query);
+            inFlight += 1;
+            maxInFlight = Math.max(maxInFlight, inFlight);
+            // The first call finishes last: results still come back in order.
+            await new Promise(resolve =>
+              setTimeout(resolve, args.query === 'graph RAG' ? 20 : 1)
+            );
+            inFlight -= 1;
+            return `results for ${args.query}`;
+          },
+        },
+      }
+    );
     for await (const event of executor.run(
-      { id: 'a1', name: 'R', harness: 'research', tools: [], instructions: '', maxSteps: 4 } as any,
+      {
+        id: 'a1',
+        name: 'R',
+        harness: 'research',
+        tools: [],
+        instructions: '',
+        maxSteps: 4,
+      } as any,
       { kind: 'block', docId: 'doc', blockId: 'b1' },
       new AbortController().signal
     )) {
@@ -612,7 +923,9 @@ describe('AgentExecutorService research runs', () => {
     expect(userTurns[1]).toBe(
       'Result of omniseek_search:\nresults for graph RAG\n\nResult of omniseek_search:\nresults for GraphRAG eval'
     );
-    expect(userTurns[2]).toContain('Already searched for "Graph   RAG" — see the earlier result.');
+    expect(userTurns[2]).toContain(
+      'Already searched for "Graph   RAG" — see the earlier result.'
+    );
     expect(logs.join('')).toContain('Already searched for');
   });
 });
@@ -631,9 +944,16 @@ describe('countFound', () => {
         })
       )
     ).toEqual({ notes: 3, docs: 2 });
-    expect(countFound('{"docId":"d1","title":"A"}\n{"docId":"d2","title":"B"}')).toEqual({ notes: 2, docs: 2 });
-    expect(countFound('No matching documents found.')).toEqual({ notes: 0, docs: 0 });
-    expect(foundLine({ notes: 3, docs: 2 })).toBe('Found 3 notes across 2 docs');
+    expect(
+      countFound('{"docId":"d1","title":"A"}\n{"docId":"d2","title":"B"}')
+    ).toEqual({ notes: 2, docs: 2 });
+    expect(countFound('No matching documents found.')).toEqual({
+      notes: 0,
+      docs: 0,
+    });
+    expect(foundLine({ notes: 3, docs: 2 })).toBe(
+      'Found 3 notes across 2 docs'
+    );
     expect(foundLine({ notes: 1, docs: 0 })).toBe('Found 1 note');
   });
 });
@@ -641,25 +961,47 @@ describe('countFound', () => {
 describe('AgentExecutorService agent rules', () => {
   const runCloud = async (agentRules: object, withTools: boolean) => {
     const prompts: string[] = [];
-    const { executor, finished } = setup([], {}, {
-      context: { build: async () => ({ text: 'x', label: 'a block', title: 'x' }) },
-      fileTools: { available: false },
-      cloudRunner: {
-        available: true,
-        open: async () =>
-          async function* (messages: { content: string }[]) {
-            prompts.push(messages[0].content);
-            yield 'Done.';
-          },
-      },
-      researchTools: {
-        specs: async () =>
-          withTools ? [{ name: 'omniseek_search', desc: 's', args: {}, mutates: false }] : [],
-      },
-      agentRules,
-    });
+    const { executor, finished } = setup(
+      [],
+      {},
+      {
+        context: {
+          build: async () => ({ text: 'x', label: 'a block', title: 'x' }),
+        },
+        fileTools: { available: false },
+        cloudRunner: {
+          available: true,
+          open: async () =>
+            async function* (messages: { content: string }[]) {
+              prompts.push(messages[0].content);
+              yield 'Done.';
+            },
+        },
+        researchTools: {
+          specs: async () =>
+            withTools
+              ? [
+                  {
+                    name: 'omniseek_search',
+                    desc: 's',
+                    args: {},
+                    mutates: false,
+                  },
+                ]
+              : [],
+        },
+        agentRules,
+      }
+    );
     for await (const _ of executor.run(
-      { id: 'a1', name: 'R', harness: withTools ? 'research' : 'cloud', tools: [], instructions: 'Do it', maxSteps: 2 } as any,
+      {
+        id: 'a1',
+        name: 'R',
+        harness: withTools ? 'research' : 'cloud',
+        tools: [],
+        instructions: 'Do it',
+        maxSteps: 2,
+      } as any,
       { kind: 'block', docId: 'doc', blockId: 'b1' },
       new AbortController().signal
     )) {
@@ -722,7 +1064,13 @@ describe('AgentExecutorService.reconcileRuns', () => {
 
   test('a settled device run keeps what its job cost', async () => {
     const { executor, finished } = setup([row({ remoteJobId: 'j1' })], {
-      j1: job({ status: 'error', error: 'Over the cost cap', costUsd: 2.51, tokens: 90000, finishedAt: 1 }),
+      j1: job({
+        status: 'error',
+        error: 'Over the cost cap',
+        costUsd: 2.51,
+        tokens: 90000,
+        finishedAt: 1,
+      }),
     });
     await executor.reconcileRuns();
     expect(finished[0].outcome).toEqual({
@@ -754,10 +1102,9 @@ describe('AgentExecutorService.reconcileRuns', () => {
   });
 
   test('a failed device job settles as an error', async () => {
-    const { executor, finished } = setup(
-      [row({ remoteJobId: 'j1' })],
-      { j1: job({ status: 'error', error: 'boom', finishedAt: 1 }) }
-    );
+    const { executor, finished } = setup([row({ remoteJobId: 'j1' })], {
+      j1: job({ status: 'error', error: 'boom', finishedAt: 1 }),
+    });
     await executor.reconcileRuns();
     expect(finished[0].outcome).toEqual({
       status: 'error',

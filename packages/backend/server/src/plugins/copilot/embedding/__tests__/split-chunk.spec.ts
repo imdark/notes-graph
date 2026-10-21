@@ -7,7 +7,10 @@ test('short text stays one chunk', t => {
 });
 
 test('long text splits at line breaks, each piece within the limit', t => {
-  const lines = Array.from({ length: 30 }, (_, i) => `link ${i} https://example.com/${i}`);
+  const lines = Array.from(
+    { length: 30 },
+    (_, i) => `link ${i} https://example.com/${i}`
+  );
   const pieces = splitChunkText(lines.join('\n'), 100);
 
   t.true(pieces.length > 1);
@@ -16,7 +19,8 @@ test('long text splits at line breaks, each piece within the limit', t => {
 });
 
 test('a line too long for one chunk splits at sentences, then words', t => {
-  const line = 'First sentence here. Second one is a bit longer. ' + 'word '.repeat(40);
+  const line =
+    'First sentence here. Second one is a bit longer. ' + 'word '.repeat(40);
   const pieces = splitChunkText(line, 60);
 
   t.true(pieces.every(piece => piece.length <= 60));

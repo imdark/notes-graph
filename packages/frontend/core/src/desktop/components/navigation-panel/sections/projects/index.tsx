@@ -62,7 +62,9 @@ export const NavigationPanelProjects = () => {
               open
               onOpenChange={setCreating}
               onRename={handleCreateProject}
-              currentName={t['com.notesgraph.rootAppSidebar.projects.new-project']()}
+              currentName={t[
+                'com.notesgraph.rootAppSidebar.projects.new-project'
+              ]()}
             />
           )}
         </>

@@ -53,7 +53,8 @@ export interface RunShareDto {
 
 export const sharedRunPath = (token: string) => `/share/run/${token}`;
 
-const redactOrNull = (text: string | null) => (text === null ? null : redact(text));
+const redactOrNull = (text: string | null) =>
+  text === null ? null : redact(text);
 
 /**
  * Public read-only snapshots of agent runs.
@@ -80,7 +81,11 @@ export class RegistryJobShareService {
   }
 
   /** The job's starter, or someone who could dispatch it, may share it. */
-  private async assertCanShare(userId: string, workspaceId: string, jobId: string) {
+  private async assertCanShare(
+    userId: string,
+    workspaceId: string,
+    jobId: string
+  ) {
     await this.ac.user(userId).workspace(workspaceId).assert('Workspace.Read');
     const job = await this.models.registryJob.get(workspaceId, jobId);
     if (!job) throw new NotFound(`No job '${jobId}' in this workspace`);
@@ -90,7 +95,9 @@ export class RegistryJobShareService {
         .workspace(workspaceId)
         .can('Workspace.Settings.Update');
       if (!canManage) {
-        throw new ActionForbidden('Only the person who started this run can share it.');
+        throw new ActionForbidden(
+          'Only the person who started this run can share it.'
+        );
       }
     }
     return job;
@@ -98,7 +105,10 @@ export class RegistryJobShareService {
 
   async get(userId: string, workspaceId: string, jobId: string) {
     await this.ac.user(userId).workspace(workspaceId).assert('Workspace.Read');
-    const share = await this.models.registryJobShare.getByJob(workspaceId, jobId);
+    const share = await this.models.registryJobShare.getByJob(
+      workspaceId,
+      jobId
+    );
     return share ? this.toShareDto(share) : null;
   }
 
@@ -137,7 +147,10 @@ export class RegistryJobShareService {
   /** A link stops working when its workspace turns sharing off. */
   async read(token: string): Promise<SharedRunDto | null> {
     const share = await this.models.registryJobShare.getByToken(token);
-    if (!share || !(await this.models.workspace.allowSharing(share.workspaceId))) {
+    if (
+      !share ||
+      !(await this.models.workspace.allowSharing(share.workspaceId))
+    ) {
       return null;
     }
     return {

@@ -59,7 +59,10 @@ test('extraction output is cleaned and capped', t => {
       { subject: '', fact: 'no subject' },
       { subject: 'Agent memory', fact: 'filed under the root' },
       'nonsense',
-      ...Array.from({ length: 30 }, (_, i) => ({ subject: 'X', fact: `f${i}` })),
+      ...Array.from({ length: 30 }, (_, i) => ({
+        subject: 'X',
+        fact: `f${i}`,
+      })),
     ],
     delete: null,
   });
@@ -78,7 +81,11 @@ test('ops group by subject regardless of case', t => {
     delete: [{ subject: 'Cosmo', fact: 'a' }],
   });
   t.deepEqual([...groups.keys()], ['cosmo', 'diet']);
-  t.deepEqual(groups.get('cosmo'), { subject: 'Cosmo', create: ['b'], delete: ['a'] });
+  t.deepEqual(groups.get('cosmo'), {
+    subject: 'Cosmo',
+    create: ['b'],
+    delete: ['a'],
+  });
 });
 
 test('new facts are appended dated, below the list and above the stamp', t => {
@@ -112,7 +119,8 @@ test('new facts are appended dated, below the list and above the stamp', t => {
 });
 
 test('a delete removes the fact however it was worded; an update replaces it', t => {
-  const markdown = "- Cosmo: the user's son, 7 years old (as of 2025-10-02).\n- Likes dinosaurs\n";
+  const markdown =
+    "- Cosmo: the user's son, 7 years old (as of 2025-10-02).\n- Likes dinosaurs\n";
   const result = applyMemoryOps(
     markdown,
     'Cosmo',
@@ -142,19 +150,30 @@ test('nothing to change leaves the note as it is', t => {
 });
 
 test('a new note starts with its facts', t => {
-  const result = applyMemoryOps('', 'Diet', { create: ['Vegetarian'], delete: [] }, today);
+  const result = applyMemoryOps(
+    '',
+    'Diet',
+    { create: ['Vegetarian'], delete: [] },
+    today
+  );
   t.is(result.markdown, `- Vegetarian (as of ${today})\n`);
 });
 
 const facts: MemoryFact[] = [
-  { subject: 'Cosmo', text: "Cosmo is the user's son, 7 years old", date: '2026-01-01' },
+  {
+    subject: 'Cosmo',
+    text: "Cosmo is the user's son, 7 years old",
+    date: '2026-01-01',
+  },
   { subject: 'Diet', text: 'The user is vegetarian', date: '2026-09-01' },
   { subject: 'Home', text: 'Lives in Lisbon', date: '2026-08-01' },
   { subject: 'Work', text: 'Works on NotesGraph', date: null },
 ];
 
 test('recall puts facts the task mentions first, then the most recent', t => {
-  const picked = recallFacts(facts, 'Find a show to watch with Cosmo', { max: 3 });
+  const picked = recallFacts(facts, 'Find a show to watch with Cosmo', {
+    max: 3,
+  });
   t.deepEqual(
     picked.map(f => f.subject),
     ['Cosmo', 'Diet', 'Home']

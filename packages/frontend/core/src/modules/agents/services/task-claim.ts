@@ -38,7 +38,8 @@ export const readTaskStatus = (
   const text = model.text;
   if (!text) return null;
   const first = text.toDelta()[0] as
-    { insert?: string; attributes?: { orgStatus?: string } } | undefined;
+    | { insert?: string; attributes?: { orgStatus?: string } }
+    | undefined;
   const embedded = first?.attributes?.orgStatus;
   if (typeof embedded === 'string' && first?.insert) {
     return { text: embedded, length: first.insert.length, embedded: true };
@@ -390,7 +391,9 @@ export class AgentTaskClaimService extends Service {
 
   /** What a fan-out run on the target splits into; see {@link subBlockIds}. */
   async subBlocks(target: AgentTarget): Promise<string[]> {
-    return (await this.withStore(target, store => subBlockIds(store, target))) ?? [];
+    return (
+      (await this.withStore(target, store => subBlockIds(store, target))) ?? []
+    );
   }
 
   /** What the tasks a run is on are called; see {@link targetTitle}. */

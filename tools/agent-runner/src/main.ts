@@ -31,10 +31,17 @@ function claudeLogin() {
   process.exit(2);
 }
 
-const api = new NotesGraphApi(required('RUNNER_NG_URL'), required('RUNNER_NG_TOKEN'));
-const workspaces = required('RUNNER_WORKSPACES').split(',').map(w => w.trim()).filter(Boolean);
+const api = new NotesGraphApi(
+  required('RUNNER_NG_URL'),
+  required('RUNNER_NG_TOKEN')
+);
+const workspaces = required('RUNNER_WORKSPACES')
+  .split(',')
+  .map(w => w.trim())
+  .filter(Boolean);
 const deviceKey = process.env.RUNNER_DEVICE_KEY?.trim() || 'cloud';
-const log = (line: string) => console.log(`${new Date().toISOString()} ${line}`);
+const log = (line: string) =>
+  console.log(`${new Date().toISOString()} ${line}`);
 
 // HOME may be on the work volume (the image puts it there), fresh on first start.
 if (process.env.HOME) await mkdir(process.env.HOME, { recursive: true });

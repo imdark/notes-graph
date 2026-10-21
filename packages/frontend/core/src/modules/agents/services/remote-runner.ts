@@ -271,7 +271,7 @@ export interface SpentRun {
   tokens: number | null;
 }
 
-export const openQuestions =(job: RemoteJob): RemoteQuestion[] =>
+export const openQuestions = (job: RemoteJob): RemoteQuestion[] =>
   (job.questions ?? []).filter(q => !q.answeredAt);
 
 /** Messages sent to the job that its runner hasn't taken yet. */

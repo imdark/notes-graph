@@ -98,8 +98,7 @@ async function roundTrip(order: 'a-first' | 'b-first') {
     replaceIdMiddleware(dst.collection.idGenerator),
   ]);
 
-  const [first, second] =
-    order === 'a-first' ? [snapA, snapB] : [snapB, snapA];
+  const [first, second] = order === 'a-first' ? [snapA, snapB] : [snapB, snapA];
   const firstDoc = await importJob.snapshotToDoc(first);
   const secondDoc = await importJob.snapshotToDoc(second);
 

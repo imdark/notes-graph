@@ -273,7 +273,10 @@ export const useNavigationPanelDocNodeOperations = (
       {
         index: 150,
         view: (
-          <MenuItem prefixIcon={<FolderIcon />} onClick={handleConvertToProject}>
+          <MenuItem
+            prefixIcon={<FolderIcon />}
+            onClick={handleConvertToProject}
+          >
             {t['com.notesgraph.projects.convert-to-project.menu-item']()}
           </MenuItem>
         ),

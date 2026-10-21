@@ -129,7 +129,9 @@ export function toQuestionDto(question: RegistryJobQuestion): QuestionDto {
     answer: question.answer,
     allowed: question.allowed,
     createdAt: question.createdAt.getTime() / 1000,
-    answeredAt: question.answeredAt ? question.answeredAt.getTime() / 1000 : null,
+    answeredAt: question.answeredAt
+      ? question.answeredAt.getTime() / 1000
+      : null,
   };
 }
 
@@ -156,7 +158,10 @@ export interface JobDtoOptions {
   questions?: RegistryJobQuestion[];
 }
 
-export function toJobDto(job: RegistryJob, options: JobDtoOptions = {}): JobDto {
+export function toJobDto(
+  job: RegistryJob,
+  options: JobDtoOptions = {}
+): JobDto {
   return {
     id: job.id,
     deviceKey: job.deviceKey,
@@ -183,7 +188,9 @@ export function toJobDto(job: RegistryJob, options: JobDtoOptions = {}): JobDto 
     tmuxSession: job.tmuxSession,
     claimedBy: job.claimedBy,
     runAfter: job.runAfter ? job.runAfter.getTime() / 1000 : null,
-    leaseExpiresAt: job.leaseExpiresAt ? job.leaseExpiresAt.getTime() / 1000 : null,
+    leaseExpiresAt: job.leaseExpiresAt
+      ? job.leaseExpiresAt.getTime() / 1000
+      : null,
     allowAllTools: job.allowAllTools,
     ...(options.logFrom === undefined
       ? {}
@@ -234,7 +241,9 @@ const jsonBytes = (value: unknown) =>
  * (the stat and commits still say what changed), then the file edits.
  * Anything that isn't an object is dropped.
  */
-export function capChanges(value: unknown): Record<string, unknown> | undefined {
+export function capChanges(
+  value: unknown
+): Record<string, unknown> | undefined {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     return undefined;
   }
@@ -286,7 +295,11 @@ const RUNNER_QUIET_MS = 2 * 60_000;
  * The transcript line for a queued run that no runner is picking up. `marker`
  * is part of it so the note is written once per job.
  */
-function unclaimedNote(job: RegistryJob, host: string, runnerSeenAt: Date | null) {
+function unclaimedNote(
+  job: RegistryJob,
+  host: string,
+  runnerSeenAt: Date | null
+) {
   const marker = `Nothing on ${job.deviceKey} is picking up runs`;
   const seen = runnerSeenAt
     ? `its runner last asked for work at ${runnerSeenAt.toISOString()}`
@@ -320,7 +333,11 @@ function parseOptions(value: unknown): string[] {
     return [];
   }
   const options = value
-    .map(option => String(option ?? '').trim().slice(0, MAX_OPTION))
+    .map(option =>
+      String(option ?? '')
+        .trim()
+        .slice(0, MAX_OPTION)
+    )
     .filter(Boolean);
   return [...new Set(options)].slice(0, MAX_OPTIONS);
 }
@@ -343,7 +360,11 @@ function parseTaskIds(value: unknown): string[] {
 /** A positive amount of dollars, or null for none. */
 function parseUsd(value: unknown): number | null {
   const usd = Number(value);
-  return value !== null && value !== undefined && value !== '' && Number.isFinite(usd) && usd > 0
+  return value !== null &&
+    value !== undefined &&
+    value !== '' &&
+    Number.isFinite(usd) &&
+    usd > 0
     ? Math.round(usd * 10_000) / 10_000
     : null;
 }
@@ -440,7 +461,9 @@ export class RegistryJobService {
       throw new BadRequest('instructions are required');
     }
     if (instructions.length > MAX_INSTRUCTIONS) {
-      throw new BadRequest(`instructions exceed ${MAX_INSTRUCTIONS} characters`);
+      throw new BadRequest(
+        `instructions exceed ${MAX_INSTRUCTIONS} characters`
+      );
     }
     const context = String(body.context ?? '');
     if (context.length > MAX_CONTEXT) {
@@ -452,7 +475,10 @@ export class RegistryJobService {
 
     // A device that hit its session limit can't run anything until it
     // resets, so a job asked for meanwhile waits with the others.
-    const runAfter = await this.models.registryJob.heldUntil(workspaceId, deviceKey);
+    const runAfter = await this.models.registryJob.heldUntil(
+      workspaceId,
+      deviceKey
+    );
 
     const docId = body.docId ? String(body.docId) : null;
     const job = await this.models.registryJob.create({
@@ -555,7 +581,10 @@ export class RegistryJobService {
     ) {
       return job;
     }
-    const device = await this.models.registryDevice.get(job.workspaceId, job.deviceKey);
+    const device = await this.models.registryDevice.get(
+      job.workspaceId,
+      job.deviceKey
+    );
     // No device row: the server's own cloud runner, which isn't polled for.
     if (!device) return job;
     const seen = device.runnerSeenAt;
@@ -568,8 +597,15 @@ export class RegistryJobService {
     return (await this.models.registryJob.get(job.workspaceId, job.id)) ?? job;
   }
 
-  async list(workspaceId: string, deviceKey?: string, status?: string): Promise<JobDto[]> {
-    const jobs = await this.models.registryJob.list(workspaceId, { deviceKey, status });
+  async list(
+    workspaceId: string,
+    deviceKey?: string,
+    status?: string
+  ): Promise<JobDto[]> {
+    const jobs = await this.models.registryJob.list(workspaceId, {
+      deviceKey,
+      status,
+    });
     return jobs.map(job => toJobDto(job));
   }
 
@@ -579,7 +615,9 @@ export class RegistryJobService {
     runnerId: string,
     leaseSeconds?: number
   ): Promise<JobDto | null> {
-    return (await this.claimNext(workspaceId, deviceKey, runnerId, leaseSeconds)).job;
+    return (
+      await this.claimNext(workspaceId, deviceKey, runnerId, leaseSeconds)
+    ).job;
   }
 
   /**
@@ -606,19 +644,26 @@ export class RegistryJobService {
     // Best effort too: unread, the runner's own limit still holds.
     let maxJobs: number | null = null;
     try {
-      const device = await this.models.registryDevice.get(workspaceId, deviceKey);
+      const device = await this.models.registryDevice.get(
+        workspaceId,
+        deviceKey
+      );
       maxJobs = device?.maxJobs ?? null;
     } catch (err) {
       this.logger.warn(`reading ${deviceKey}'s job limit failed: ${err}`);
     }
     if (
       maxJobs !== null &&
-      (await this.models.registryJob.countHeld(workspaceId, deviceKey)) >= maxJobs
+      (await this.models.registryJob.countHeld(workspaceId, deviceKey)) >=
+        maxJobs
     ) {
       return { job: null, maxJobs };
     }
     const job = await this.models.registryJob.claim(
-      workspaceId, deviceKey, runnerId || 'runner', leaseSeconds
+      workspaceId,
+      deviceKey,
+      runnerId || 'runner',
+      leaseSeconds
     );
     if (!job) return { job: null, maxJobs };
     return { job: await this.claimed(job), maxJobs };
@@ -630,7 +675,9 @@ export class RegistryJobService {
     // What earlier runs learned about whoever started this one.
     return {
       ...toJobDto(job),
-      profile: this.memory ? await this.memory.withRecall(job, profile) : profile,
+      profile: this.memory
+        ? await this.memory.withRecall(job, profile)
+        : profile,
     };
   }
 
@@ -643,7 +690,11 @@ export class RegistryJobService {
    */
   private async profile(job: RegistryJob): Promise<AgentProfile | null> {
     const noteSkills =
-      (await this.skillNotes?.forJob(job.workspaceId, job.skills, job.createdBy)) ?? [];
+      (await this.skillNotes?.forJob(
+        job.workspaceId,
+        job.skills,
+        job.createdBy
+      )) ?? [];
     const profile = profileFor(job.model, job.skills, job.access, noteSkills);
     if (!profile || !this.rules) return profile;
     return withAgentRules(
@@ -663,8 +714,10 @@ export class RegistryJobService {
         `status must be one of running, ${JOB_TERMINAL.join(', ')}`
       );
     }
-    const result = body.result === undefined ? undefined : String(body.result ?? '');
-    const error = body.error === undefined ? undefined : String(body.error ?? '');
+    const result =
+      body.result === undefined ? undefined : String(body.result ?? '');
+    const error =
+      body.error === undefined ? undefined : String(body.error ?? '');
     const logAppend = body.logAppend ? String(body.logAppend) : undefined;
 
     // Claude stopped at the device's session limit: nothing was done, so the
@@ -672,7 +725,11 @@ export class RegistryJobService {
     // everything else waiting for that device, rather than failing in turn.
     // A "done" whose whole answer is the limit message counts too.
     const limit =
-      status === 'error' ? error : status === 'done' && (result ?? '').length < 300 ? result : undefined;
+      status === 'error'
+        ? error
+        : status === 'done' && (result ?? '').length < 300
+          ? result
+          : undefined;
     if (limit && isSessionLimit(limit)) {
       const runAfter = sessionLimitRunAfter(limit);
       const note =
@@ -682,11 +739,15 @@ export class RegistryJobService {
         workspaceId,
         id,
         runAfter,
-        (logAppend ?? '') + (logAppend && !logAppend.endsWith('\n') ? '\n' : '') + note
+        (logAppend ?? '') +
+          (logAppend && !logAppend.endsWith('\n') ? '\n' : '') +
+          note
       );
       if (requeued?.status === 'queued') {
         const held = await this.models.registryJob.holdQueued(
-          workspaceId, requeued.deviceKey, runAfter
+          workspaceId,
+          requeued.deviceKey,
+          runAfter
         );
         this.logger.log(
           `job ${id} hit the session limit; ${held} job(s) on ` +
@@ -701,15 +762,20 @@ export class RegistryJobService {
       result,
       error,
       steps: body.steps === undefined ? undefined : Number(body.steps),
-      costUsd: body.costUsd == null || !Number.isFinite(Number(body.costUsd))
-        ? undefined
-        : Math.max(0, Number(body.costUsd)),
-      tokens: body.tokens == null || !Number.isFinite(Number(body.tokens))
-        ? undefined
-        : Math.max(0, Math.round(Number(body.tokens))),
+      costUsd:
+        body.costUsd == null || !Number.isFinite(Number(body.costUsd))
+          ? undefined
+          : Math.max(0, Number(body.costUsd)),
+      tokens:
+        body.tokens == null || !Number.isFinite(Number(body.tokens))
+          ? undefined
+          : Math.max(0, Math.round(Number(body.tokens))),
       logAppend,
-      tmuxSession: body.tmuxSession ? String(body.tmuxSession).slice(0, 200) : undefined,
-      leaseSeconds: body.leaseSeconds === undefined ? undefined : Number(body.leaseSeconds),
+      tmuxSession: body.tmuxSession
+        ? String(body.tmuxSession).slice(0, 200)
+        : undefined,
+      leaseSeconds:
+        body.leaseSeconds === undefined ? undefined : Number(body.leaseSeconds),
       changes: capChanges(body.changes) as Prisma.InputJsonValue | undefined,
     });
     // Whoever queued the job may be waiting on its end (a monitor, say).
@@ -771,8 +837,11 @@ export class RegistryJobService {
     if (!text) {
       throw new BadRequest('text is required');
     }
-    const detail = body.detail ? String(body.detail).slice(0, MAX_DETAIL) : null;
-    const ownTool = kind === 'permission' && ALWAYS_ALLOWED_PERMISSIONS.has(text);
+    const detail = body.detail
+      ? String(body.detail).slice(0, MAX_DETAIL)
+      : null;
+    const ownTool =
+      kind === 'permission' && ALWAYS_ALLOWED_PERMISSIONS.has(text);
     // A read-level agent is refused anything its tool list doesn't cover,
     // without asking anyone.
     const refused =
@@ -796,7 +865,11 @@ export class RegistryJobService {
     });
     this.logger.log(
       `job ${jobId} asked a ${kind}` +
-        (allowAll ? ' (allowed: allow all)' : refused ? ' (refused: read only)' : '')
+        (allowAll
+          ? ' (allowed: allow all)'
+          : refused
+            ? ' (refused: read only)'
+            : '')
     );
     if (!allowAll && !refused) {
       this.notify(push => push.questionAsked(job, question));
@@ -810,7 +883,10 @@ export class RegistryJobService {
    */
   async getQuestion(workspaceId: string, jobId: string, questionId: string) {
     const job = await this.runningJob(workspaceId, jobId);
-    const question = await this.models.registryJob.getQuestion(jobId, questionId);
+    const question = await this.models.registryJob.getQuestion(
+      jobId,
+      questionId
+    );
     if (!question) {
       throw new NotFound(`No question '${questionId}' on job '${jobId}'`);
     }
@@ -831,9 +907,14 @@ export class RegistryJobService {
   ): Promise<QuestionDto> {
     const job = await this.runningJob(workspaceId, jobId);
     if (job.createdBy && job.createdBy !== userId) {
-      throw new ActionForbidden('Only the person who started this run can answer it.');
+      throw new ActionForbidden(
+        'Only the person who started this run can answer it.'
+      );
     }
-    const question = await this.models.registryJob.getQuestion(jobId, questionId);
+    const question = await this.models.registryJob.getQuestion(
+      jobId,
+      questionId
+    );
     // A steer is taken by the runner; answering one would mark it delivered.
     if (!question || question.kind === STEER_KIND) {
       throw new NotFound(`No question '${questionId}' on job '${jobId}'`);
@@ -846,14 +927,18 @@ export class RegistryJobService {
     const allowAll = body.allowAll === true;
     if (question.kind === 'permission') {
       if (typeof body.allowed !== 'boolean') {
-        throw new BadRequest('allowed (true or false) is required for a permission');
+        throw new BadRequest(
+          'allowed (true or false) is required for a permission'
+        );
       }
       if (allowAll && !body.allowed) {
         throw new BadRequest('allowAll only goes with allowed: true');
       }
       input = {
         allowed: body.allowed,
-        answer: body.answer ? String(body.answer).slice(0, MAX_ANSWER) : undefined,
+        answer: body.answer
+          ? String(body.answer).slice(0, MAX_ANSWER)
+          : undefined,
       };
     } else {
       const answer = String(body.answer ?? '').trim();
@@ -864,7 +949,10 @@ export class RegistryJobService {
     }
 
     const answered = await this.models.registryJob.answer(
-      jobId, questionId, input, userId
+      jobId,
+      questionId,
+      input,
+      userId
     );
     if (!answered) {
       throw new BadRequest('That question has already been answered.');
@@ -896,10 +984,14 @@ export class RegistryJobService {
   ): Promise<SteerDto> {
     const job = await this.runningJob(workspaceId, jobId);
     if (job.createdBy && job.createdBy !== userId) {
-      throw new ActionForbidden('Only the person who started this run can message it.');
+      throw new ActionForbidden(
+        'Only the person who started this run can message it.'
+      );
     }
     if ((JOB_TERMINAL as readonly string[]).includes(job.status)) {
-      throw new BadRequest(`Job '${jobId}' is ${job.status}; it can't take a message now.`);
+      throw new BadRequest(
+        `Job '${jobId}' is ${job.status}; it can't take a message now.`
+      );
     }
     const text = String(body.text ?? '').trim();
     if (!text) {
@@ -948,10 +1040,14 @@ export class RegistryJobService {
   ): Promise<JobDto> {
     const job = await this.runningJob(workspaceId, jobId);
     if (job.createdBy && job.createdBy !== userId) {
-      throw new ActionForbidden('Only the person who started this run can allow its tools.');
+      throw new ActionForbidden(
+        'Only the person who started this run can allow its tools.'
+      );
     }
     if ((JOB_TERMINAL as readonly string[]).includes(job.status)) {
-      throw new BadRequest(`Job '${jobId}' is ${job.status}; there is nothing left to allow.`);
+      throw new BadRequest(
+        `Job '${jobId}' is ${job.status}; there is nothing left to allow.`
+      );
     }
     // Any permission already waiting is allowed with it, so its notification
     // goes, unless it deploys, spends or deletes.
@@ -1005,9 +1101,12 @@ export class RegistryJobService {
     userId: string,
     body: Record<string, unknown>
   ): Promise<AgentBudgetDto> {
-    const monthlyUsd = body.monthlyUsd === null ? null : parseUsd(body.monthlyUsd);
+    const monthlyUsd =
+      body.monthlyUsd === null ? null : parseUsd(body.monthlyUsd);
     if (body.monthlyUsd !== null && monthlyUsd === null) {
-      throw new BadRequest('monthlyUsd must be a positive number of dollars, or null for no budget');
+      throw new BadRequest(
+        'monthlyUsd must be a positive number of dollars, or null for no budget'
+      );
     }
     await this.models.registryJob.setBudget(workspaceId, monthlyUsd, userId);
     return this.budget(workspaceId);

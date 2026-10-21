@@ -1,4 +1,11 @@
-import { Button, Checkbox, Input, Loading, Modal, notify } from '@notesgraph/component';
+import {
+  Button,
+  Checkbox,
+  Input,
+  Loading,
+  Modal,
+  notify,
+} from '@notesgraph/component';
 import type {
   DialogComponentProps,
   WORKSPACE_DIALOG_SCHEMA,

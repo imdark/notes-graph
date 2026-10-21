@@ -46,15 +46,30 @@ describe('AgentRunsStore usage', () => {
     const { store, rows } = setup({ r1: { id: 'r1', startedAt: 0 } });
     store.finish(
       'r1',
-      { status: 'done', steps: 2, output: 'ok', usage: { costUsd: 0.42, tokens: 900 } },
+      {
+        status: 'done',
+        steps: 2,
+        output: 'ok',
+        usage: { costUsd: 0.42, tokens: 900 },
+      },
       1000
     );
-    expect(rows.r1).toMatchObject({ status: 'done', costUsd: 0.42, tokens: 900 });
+    expect(rows.r1).toMatchObject({
+      status: 'done',
+      costUsd: 0.42,
+      tokens: 900,
+    });
   });
 
   test('finish without a reported cost leaves an earlier one in place', () => {
-    const { store, rows } = setup({ r1: { id: 'r1', startedAt: 0, costUsd: 0.1 } });
-    store.finish('r1', { status: 'cancelled', steps: 1, usage: { costUsd: null } }, 1000);
+    const { store, rows } = setup({
+      r1: { id: 'r1', startedAt: 0, costUsd: 0.1 },
+    });
+    store.finish(
+      'r1',
+      { status: 'cancelled', steps: 1, usage: { costUsd: null } },
+      1000
+    );
     expect(rows.r1.costUsd).toBe(0.1);
   });
 
@@ -76,15 +91,29 @@ describe('AgentRunsStore usage', () => {
   });
 
   test('a run that ended long ago and is settled again is not put up for review', () => {
-    const { store, rows } = setup({ r1: { id: 'r1', startedAt: 0, status: 'done' } });
+    const { store, rows } = setup({
+      r1: { id: 'r1', startedAt: 0, status: 'done' },
+    });
     store.finish('r1', { status: 'done', steps: 1, output: 'ok' }, 1000);
     expect(rows.r1.reviewPending).toBeFalsy();
   });
 
   test('a new run of the agent on the note takes over the earlier review', () => {
     const { store, rows } = setup({
-      r1: { id: 'r1', agentId: 'a', docId: 'd', startedAt: 0, reviewPending: true },
-      r2: { id: 'r2', agentId: 'b', docId: 'd', startedAt: 0, reviewPending: true },
+      r1: {
+        id: 'r1',
+        agentId: 'a',
+        docId: 'd',
+        startedAt: 0,
+        reviewPending: true,
+      },
+      r2: {
+        id: 'r2',
+        agentId: 'b',
+        docId: 'd',
+        startedAt: 0,
+        reviewPending: true,
+      },
     });
     store.start({ id: 'a', name: 'A' }, { kind: 'doc', docId: 'd' });
     expect(rows.r1.reviewPending).toBe(false);

@@ -20,18 +20,17 @@ export const LinkVisibilityConfirmDialog = ({
   WORKSPACE_DIALOG_SCHEMA['link-visibility-confirm']
 >) => {
   const t = useI18n();
-  const { docsService, projectsService, workspaceDialogService } =
-    useServices({
-      DocsService,
-      ProjectsService,
-      WorkspaceDialogService,
-    });
+  const { docsService, projectsService, workspaceDialogService } = useServices({
+    DocsService,
+    ProjectsService,
+    WorkspaceDialogService,
+  });
 
   const projects = useLiveData(projectsService.projects.projects$);
-  const sourceTitle =
-    useLiveData(docsService.list.doc$(sourceDocId))?.title$.value;
-  const targetTitle =
-    useLiveData(docsService.list.doc$(targetDocId))?.title$.value;
+  const sourceTitle = useLiveData(docsService.list.doc$(sourceDocId))?.title$
+    .value;
+  const targetTitle = useLiveData(docsService.list.doc$(targetDocId))?.title$
+    .value;
 
   const [undoing, setUndoing] = useState(false);
   const [applying, setApplying] = useState(false);

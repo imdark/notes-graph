@@ -11,7 +11,5 @@ test('notification bell is absent from the top bar when signed out', async ({
 }) => {
   await openHomePage(page);
   await waitForEditorLoad(page);
-  await expect(
-    page.getByTestId('header-notification-button')
-  ).toHaveCount(0);
+  await expect(page.getByTestId('header-notification-button')).toHaveCount(0);
 });

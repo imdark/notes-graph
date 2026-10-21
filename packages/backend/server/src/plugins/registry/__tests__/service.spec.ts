@@ -134,15 +134,24 @@ test('rejects an out-of-range port', async t => {
 });
 
 test('the device cap blocks a new device', async t => {
-  const { service } = makeService({ devices: [{ key: 'a' }, { key: 'b' }], max: 2 });
+  const { service } = makeService({
+    devices: [{ key: 'a' }, { key: 'b' }],
+    max: 2,
+  });
   await t.throwsAsync(service.register(workspaceId, userId, { key: 'c' }), {
     message: /max 2/,
   });
 });
 
 test('the device cap does not block re-registering an existing device', async t => {
-  const { service } = makeService({ devices: [{ key: 'a' }, { key: 'b' }], max: 2 });
-  const device = await service.register(workspaceId, userId, { key: 'a', host: 'moved' });
+  const { service } = makeService({
+    devices: [{ key: 'a' }, { key: 'b' }],
+    max: 2,
+  });
+  const device = await service.register(workspaceId, userId, {
+    key: 'a',
+    host: 'moved',
+  });
   t.is(device.host, 'moved');
 });
 
@@ -156,19 +165,39 @@ test('rejects an unknown health state', async t => {
 
 test('status for an unknown device returns null rather than throwing', async t => {
   const { service } = makeService();
-  t.is(await service.recordStatus(workspaceId, 'ghost', { state: 'online' }), null);
+  t.is(
+    await service.recordStatus(workspaceId, 'ghost', { state: 'online' }),
+    null
+  );
 });
 
 test('timestamps cross the wire as epoch seconds', t => {
   const dto = toDeviceDto({
-    id: 'i', workspaceId: 'w', key: 'k', name: 'n', kind: 'machine',
-    host: '', user: '', port: 22, parentKey: null, path: null,
-    recipe: 'generic', repo: null, branch: 'main', channel: 'stable',
-    pin: null, agentTarget: false, labels: {}, state: 'online',
-    statusDetail: null, version: null,
+    id: 'i',
+    workspaceId: 'w',
+    key: 'k',
+    name: 'n',
+    kind: 'machine',
+    host: '',
+    user: '',
+    port: 22,
+    parentKey: null,
+    path: null,
+    recipe: 'generic',
+    repo: null,
+    branch: 'main',
+    channel: 'stable',
+    pin: null,
+    agentTarget: false,
+    labels: {},
+    state: 'online',
+    statusDetail: null,
+    version: null,
     checkedAt: new Date(1_700_000_000_000),
-    checks: [], registeredBy: null,
-    createdAt: new Date(0), updatedAt: new Date(0),
+    checks: [],
+    registeredBy: null,
+    createdAt: new Date(0),
+    updatedAt: new Date(0),
   } as never);
 
   t.is(dto.checkedAt, 1_700_000_000);
@@ -183,9 +212,7 @@ test('jobs at once is a whole number in range, or null for the runner', async t 
     maxJobs: number | null
   ) => {
     set.push(maxJobs);
-    return key === 'cloud'
-      ? { ...toDeviceDtoInput(), key, maxJobs }
-      : null;
+    return key === 'cloud' ? { ...toDeviceDtoInput(), key, maxJobs } : null;
   };
 
   t.is((await service.setMaxJobs(workspaceId, 'cloud', 4))?.maxJobs, 4);

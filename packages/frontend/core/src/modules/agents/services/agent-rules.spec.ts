@@ -67,14 +67,18 @@ describe('agentRulesSection', () => {
     expect(section).toContain(`"${AGENT_RULES_TITLE}"`);
     expect(section).toContain('take precedence over any built-in conventions');
     expect(section).not.toContain('above');
-    expect(section.endsWith('<agent-rules>\nTag research #research\n</agent-rules>')).toBe(true);
+    expect(
+      section.endsWith('<agent-rules>\nTag research #research\n</agent-rules>')
+    ).toBe(true);
   });
 
   test('cuts a long note and says so', () => {
     const section = agentRulesSection('x'.repeat(MAX_AGENT_RULES_CHARS + 10))!;
     expect(section).toContain('x'.repeat(MAX_AGENT_RULES_CHARS));
     expect(section).not.toContain('x'.repeat(MAX_AGENT_RULES_CHARS + 1));
-    expect(section.endsWith('[the rest of the note was cut]\n</agent-rules>')).toBe(true);
+    expect(
+      section.endsWith('[the rest of the note was cut]\n</agent-rules>')
+    ).toBe(true);
   });
 });
 

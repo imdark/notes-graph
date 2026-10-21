@@ -34,11 +34,22 @@ test('a muted machine gets no phone alert; the others still do', t => {
 
 const linux = (disk: number, mem: number, load: number) =>
   healthStatus(
-    [`cpus=4`, `load=${load}`, `disk=${disk}`, `mem=${mem}`, 'uptime=3 days', 'os=Linux 6.8'].join('\n')
+    [
+      `cpus=4`,
+      `load=${load}`,
+      `disk=${disk}`,
+      `mem=${mem}`,
+      'uptime=3 days',
+      'os=Linux 6.8',
+    ].join('\n')
   ).checks;
 
 /** Run `n` health checks through assess, carrying the baselines like the service does. */
-function train(baselines: Map<string, Baseline>, n: number, reading: () => unknown[]) {
+function train(
+  baselines: Map<string, Baseline>,
+  n: number,
+  reading: () => unknown[]
+) {
   for (let i = 0; i < n; i++) {
     const { updates } = assess(reading(), baselines, 3);
     for (const [key, value] of updates) baselines.set(key, value);
@@ -52,11 +63,16 @@ test('reads values and states from health checks and loose wf checks', t => {
     { check: 'Backup age', ok: false, value: 30 },
     { nothing: true },
   ]);
+  t.deepEqual(readings.map(r => `${r.metric}=${r.value}`).sort(), [
+    'backup-age=30',
+    'disk=41',
+    'load=0.5',
+    'memory=60',
+  ]);
   t.deepEqual(
-    readings.map(r => `${r.metric}=${r.value}`).sort(),
-    ['backup-age=30', 'disk=41', 'load=0.5', 'memory=60']
+    states.find(s => s.name === 'Backup age'),
+    { name: 'Backup age', status: 'fail' }
   );
-  t.deepEqual(states.find(s => s.name === 'Backup age'), { name: 'Backup age', status: 'fail' });
 });
 
 test('the baseline follows a steady reading and stays tight', t => {
@@ -82,14 +98,21 @@ test('a jump far above normal is an anomaly; a small wobble is not', t => {
   t.is(warn?.kind, 'anomaly');
   t.is(warn?.severity, 'warn');
   t.regex(warn!.summary, /Disk is 48%; normal here is about 40%/);
-  t.is(judge({ metric: 'disk', label: 'Disk', value: 70 }, b, 3)?.severity, 'critical');
+  t.is(
+    judge({ metric: 'disk', label: 'Disk', value: 70 }, b, 3)?.severity,
+    'critical'
+  );
 });
 
 test('a drop in disk or memory is not news; an unknown metric alarms both ways', t => {
   let b: Baseline | null = null;
   for (let i = 0; i < 30; i++) b = learn(b, 60);
   t.is(judge({ metric: 'memory', label: 'Memory', value: 5 }, b, 3), null);
-  t.is(judge({ metric: 'queue-depth', label: 'Queue depth', value: 5 }, b, 3)?.kind, 'anomaly');
+  t.is(
+    judge({ metric: 'queue-depth', label: 'Queue depth', value: 5 }, b, 3)
+      ?.kind,
+    'anomaly'
+  );
 });
 
 test('a warn state the machine has never been in is new, once it is known', t => {
@@ -100,7 +123,11 @@ test('a warn state the machine has never been in is new, once it is known', t =>
   t.is(fresh?.severity, 'critical');
   // And next time it is known.
   for (const [key, value] of updates) baselines.set(key, value);
-  t.falsy(assess(linux(96, 60, 0.5), baselines, 3).findings.find(f => f.kind === 'new'));
+  t.falsy(
+    assess(linux(96, 60, 0.5), baselines, 3).findings.find(
+      f => f.kind === 'new'
+    )
+  );
 });
 
 test('during the first checks of a machine nothing is new', t => {
@@ -117,18 +144,35 @@ test('an anomaly is learned slowly, so one spike does not become normal', t => {
 
 test('a repeat inside the cooldown is folded unless it got worse or was resolved', t => {
   const now = Date.now();
-  const recent = { severity: 'warn', verdict: null, createdAt: new Date(now - 60_000) };
+  const recent = {
+    severity: 'warn',
+    verdict: null,
+    createdAt: new Date(now - 60_000),
+  };
   t.true(isRepeat({ severity: 'warn' }, recent, now));
   t.false(isRepeat({ severity: 'critical' }, recent, now));
-  t.false(isRepeat({ severity: 'warn' }, { ...recent, verdict: 'resolved' }, now));
-  t.false(isRepeat({ severity: 'warn' }, { ...recent, createdAt: new Date(now - COOLDOWN_MS - 1) }, now));
+  t.false(
+    isRepeat({ severity: 'warn' }, { ...recent, verdict: 'resolved' }, now)
+  );
+  t.false(
+    isRepeat(
+      { severity: 'warn' },
+      { ...recent, createdAt: new Date(now - COOLDOWN_MS - 1) },
+      now
+    )
+  );
   t.false(isRepeat({ severity: 'warn' }, null, now));
 });
 
 test('a triage run is told to stay read-only and answer in a fixed shape', t => {
   const text = triageInstructions(
     { key: 'box-1', name: 'Box 1' },
-    { summary: 'Disk is 96%', metric: 'disk', kind: 'anomaly', severity: 'critical' }
+    {
+      summary: 'Disk is 96%',
+      metric: 'disk',
+      kind: 'anomaly',
+      severity: 'critical',
+    }
   );
   t.regex(text, /read-only commands only/);
   t.regex(text, /Do not change, delete, restart or install/);

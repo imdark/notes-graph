@@ -25,7 +25,9 @@ function makeController(options: { configured?: boolean } = {}) {
   };
   const omniseek: any = {
     configured: options.configured ?? true,
-    listTools: async () => [{ name: 'omniseek_search', description: '', inputSchema: {} }],
+    listTools: async () => [
+      { name: 'omniseek_search', description: '', inputSchema: {} },
+    ],
     callTool: async (name: string, args: unknown) => {
       calls.push({ name, args });
       return `ran ${name}`;
@@ -75,6 +77,12 @@ test('a tool that changes OmniSeek state is refused', async t => {
 
 test('args that are not an object become empty', async t => {
   const { controller, calls } = makeController();
-  await controller.call(user, 'ws-1', 'omniseek_read', { args: ['x'] as any }, req);
+  await controller.call(
+    user,
+    'ws-1',
+    'omniseek_read',
+    { args: ['x'] as any },
+    req
+  );
   t.deepEqual(calls[0].args, {});
 });

@@ -75,7 +75,9 @@ describe('appendDictation', () => {
   });
 
   test('carries on from what the speaker typed', () => {
-    expect(appendDictation('buy milk\n', 'call mom')).toBe('buy milk\ncall mom');
+    expect(appendDictation('buy milk\n', 'call mom')).toBe(
+      'buy milk\ncall mom'
+    );
     expect(appendDictation('buy milk  ', 'and eggs')).toBe('buy milk and eggs');
     expect(appendDictation('buy milk', '  ')).toBe('buy milk');
   });

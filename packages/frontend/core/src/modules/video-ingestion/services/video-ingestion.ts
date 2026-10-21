@@ -35,7 +35,8 @@ export function isYoutubeVideoUrl(url: string): boolean {
     return false;
   }
   const host = u.hostname.replace(/^www\.|^m\./, '');
-  const isId = (id: string | null | undefined) => !!id && /^[\w-]{11}$/.test(id);
+  const isId = (id: string | null | undefined) =>
+    !!id && /^[\w-]{11}$/.test(id);
   if (host === 'youtu.be') return isId(u.pathname.slice(1).split('/')[0]);
   if (host === 'youtube.com' || host === 'youtube-nocookie.com') {
     if (u.pathname === '/watch') return isId(u.searchParams.get('v'));

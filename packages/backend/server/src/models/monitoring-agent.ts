@@ -9,7 +9,12 @@ import type {
 
 import { BaseModel } from './base';
 
-export type { MonitoringAgent, MonitoringBaseline, MonitoringDecision, MonitoringLogCatalog };
+export type {
+  MonitoringAgent,
+  MonitoringBaseline,
+  MonitoringDecision,
+  MonitoringLogCatalog,
+};
 
 /** Decisions kept per workspace; older ones are dropped as new ones land. */
 const DECISIONS_KEPT = 500;
@@ -55,8 +60,14 @@ export class MonitoringAgentModel extends BaseModel {
     });
   }
 
-  async touch(workspaceId: string, data: { lastRunAt?: Date; nextRunAt?: Date }) {
-    return await this.db.monitoringAgent.update({ where: { workspaceId }, data });
+  async touch(
+    workspaceId: string,
+    data: { lastRunAt?: Date; nextRunAt?: Date }
+  ) {
+    return await this.db.monitoringAgent.update({
+      where: { workspaceId },
+      data,
+    });
   }
 
   /** Agents due to check their machines, oldest first. */
@@ -79,10 +90,17 @@ export class MonitoringAgentModel extends BaseModel {
     workspaceId: string,
     deviceKey: string,
     metric: string,
-    data: { mean: number; variance: number; samples: number; lastValue: number | null }
+    data: {
+      mean: number;
+      variance: number;
+      samples: number;
+      lastValue: number | null;
+    }
   ) {
     return await this.db.monitoringBaseline.upsert({
-      where: { workspaceId_deviceKey_metric: { workspaceId, deviceKey, metric } },
+      where: {
+        workspaceId_deviceKey_metric: { workspaceId, deviceKey, metric },
+      },
       create: { workspaceId, deviceKey, metric, ...data },
       update: data,
     });
@@ -106,7 +124,10 @@ export class MonitoringAgentModel extends BaseModel {
     });
     if (cutoff) {
       await this.db.monitoringDecision.deleteMany({
-        where: { workspaceId: input.workspaceId, createdAt: { lt: cutoff.createdAt } },
+        where: {
+          workspaceId: input.workspaceId,
+          createdAt: { lt: cutoff.createdAt },
+        },
       });
     }
     return row;
@@ -149,7 +170,11 @@ export class MonitoringAgentModel extends BaseModel {
   async saveLogCatalog(
     workspaceId: string,
     deviceKey: string,
-    data: { patterns: Prisma.InputJsonValue; scans: number; scannedAt: Date | null }
+    data: {
+      patterns: Prisma.InputJsonValue;
+      scans: number;
+      scannedAt: Date | null;
+    }
   ) {
     return await this.db.monitoringLogCatalog.upsert({
       where: { workspaceId_deviceKey: { workspaceId, deviceKey } },
@@ -167,7 +192,9 @@ export class MonitoringAgentModel extends BaseModel {
   }
 
   async findByTriageJob(jobId: string) {
-    return await this.db.monitoringDecision.findFirst({ where: { triageJobId: jobId } });
+    return await this.db.monitoringDecision.findFirst({
+      where: { triageJobId: jobId },
+    });
   }
 
   async updateDecision(id: string, data: Prisma.MonitoringDecisionUpdateInput) {

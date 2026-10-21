@@ -29,22 +29,22 @@ Back up both before editing (`*.bak-<timestamp>`).
 ## 1. `/opt/notesgraph/compose.yml`
 
 ```yaml
-  embeddings:
-    image: ghcr.io/huggingface/text-embeddings-inference:cpu-1.8
-    container_name: notesgraph_embeddings
-    command:
-      - --model-id=mixedbread-ai/mxbai-embed-large-v1
-      # Chunks over the model's 512 tokens are cut, not refused; a small batch
-      # budget keeps warm-up memory down.
-      - --auto-truncate
-      - --max-batch-tokens=2048
-      - --max-client-batch-size=16
-    volumes:
-      - /opt/notesgraph/data/tei:/data
-    expose:
-      - '80'
-    mem_limit: 2560m
-    restart: unless-stopped
+embeddings:
+  image: ghcr.io/huggingface/text-embeddings-inference:cpu-1.8
+  container_name: notesgraph_embeddings
+  command:
+    - --model-id=mixedbread-ai/mxbai-embed-large-v1
+    # Chunks over the model's 512 tokens are cut, not refused; a small batch
+    # budget keeps warm-up memory down.
+    - --auto-truncate
+    - --max-batch-tokens=2048
+    - --max-client-batch-size=16
+  volumes:
+    - /opt/notesgraph/data/tei:/data
+  expose:
+    - '80'
+  mem_limit: 2560m
+  restart: unless-stopped
 ```
 
 There is no published port: only the server talks to it, over the compose network.

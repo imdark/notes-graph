@@ -122,10 +122,7 @@ const SNAPSHOT_TIMEOUT_MS = 60_000;
 test(
   'snapshot 1 importing',
   async () => {
-    await snapshotTest(
-      'https://test.affineassets.com/test-snapshot-1.zip',
-      25
-    );
+    await snapshotTest('https://test.affineassets.com/test-snapshot-1.zip', 25);
   },
   SNAPSHOT_TIMEOUT_MS
 );

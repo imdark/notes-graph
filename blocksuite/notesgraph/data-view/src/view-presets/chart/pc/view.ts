@@ -83,8 +83,7 @@ export class ChartViewUI extends DataViewUIBase<ChartViewUILogic> {
   }
 
   private onSelect(handler: (value: string) => void) {
-    return (event: Event) =>
-      handler((event.target as HTMLSelectElement).value);
+    return (event: Event) => handler((event.target as HTMLSelectElement).value);
   }
 
   private renderControls() {
@@ -197,8 +196,7 @@ export class ChartViewUI extends DataViewUIBase<ChartViewUILogic> {
                 option =>
                   html`<option
                     value=${option.value}
-                    ?selected=${option.value ===
-                    (settings.dateBucket ?? 'day')}
+                    ?selected=${option.value === (settings.dateBucket ?? 'day')}
                   >
                     ${option.label}
                   </option>`
@@ -293,10 +291,7 @@ export class ChartViewUI extends DataViewUIBase<ChartViewUILogic> {
             buckets,
             bucket => bucket.key,
             bucket =>
-              html`<div
-                class="dv-chart-column"
-                title=${this.tooltip(bucket)}
-              >
+              html`<div class="dv-chart-column" title=${this.tooltip(bucket)}>
                 <div
                   class="dv-chart-column-fill"
                   style=${styleMap({
@@ -403,7 +398,10 @@ export class ChartViewUI extends DataViewUIBase<ChartViewUILogic> {
       <div class="dv-chart-legend">
         ${slices.map(
           (bucket, i) =>
-            html`<div class="dv-chart-legend-item" title=${this.tooltip(bucket)}>
+            html`<div
+              class="dv-chart-legend-item"
+              title=${this.tooltip(bucket)}
+            >
               <span
                 class="dv-chart-swatch"
                 style="background:${color(bucket, i)}"
@@ -423,7 +421,9 @@ export class ChartViewUI extends DataViewUIBase<ChartViewUILogic> {
     const view = this.view;
     const rows = view.rows$.value.length;
     return html`<div class="dv-chart-stat" data-testid="dv-chart-number">
-      <span class="dv-chart-stat-value">${formatChartValue(view.total$.value)}</span>
+      <span class="dv-chart-stat-value"
+        >${formatChartValue(view.total$.value)}</span
+      >
       <span class="dv-chart-stat-caption"
         >${view.metricLabel$.value}${view.metricOp$.value === 'count'
           ? ''

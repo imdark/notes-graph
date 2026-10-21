@@ -57,7 +57,8 @@ export function runCommand(
     const keep = (chunk: Buffer) => {
       output += chunk.toString('utf8');
       // Keep the tail: the end of a failing build says why.
-      if (output.length > OUTPUT_CHARS * 2) output = output.slice(-OUTPUT_CHARS);
+      if (output.length > OUTPUT_CHARS * 2)
+        output = output.slice(-OUTPUT_CHARS);
     };
     child.stdout.on('data', keep);
     child.stderr.on('data', keep);
@@ -128,13 +129,16 @@ export async function runSteps(
     say(`⚙ ${phase} · ${step.name} ✗ ${why} (${seconds}s)`);
     if (result.output.trim()) say(indent(tail(result.output, LOG_TAIL_CHARS)));
     if (!step.optional) {
-      throw new Error(`${phase} step '${step.name}' failed (${why}): ${tail(result.output, 300)}`);
+      throw new Error(
+        `${phase} step '${step.name}' failed (${why}): ${tail(result.output, 300)}`
+      );
     }
   }
 }
 
 /** `path` → `ARG_PATH`, `max-results` → `ARG_MAX_RESULTS`. */
-export const argVar = (name: string) => `ARG_${name.replace(/[^A-Za-z0-9]/g, '_').toUpperCase()}`;
+export const argVar = (name: string) =>
+  `ARG_${name.replace(/[^A-Za-z0-9]/g, '_').toUpperCase()}`;
 
 /**
  * Run one tool call: its command with each param as $ARG_<NAME>. Returns
@@ -154,11 +158,16 @@ export async function runTool(
   }
   const timeout = spec.timeout ?? DEFAULT_TIMEOUT_SECONDS;
   const started = Date.now();
-  const result = await runCommand(render(spec.run, values), timeout, { ...shell, env });
+  const result = await runCommand(render(spec.run, values), timeout, {
+    ...shell,
+    env,
+  });
   const seconds = ((Date.now() - started) / 1000).toFixed(1);
   const ok = result.code === 0;
   say(`⚙ tool · ${spec.name} ${ok ? '✓' : '✗'} (${seconds}s)`);
-  const status = result.timedOut ? `timed out after ${timeout}s` : `exit code ${result.code}`;
+  const status = result.timedOut
+    ? `timed out after ${timeout}s`
+    : `exit code ${result.code}`;
   return { text: `${status}\n${result.output.trimEnd()}`, ok };
 }
 
@@ -180,7 +189,11 @@ export function automationServer(
       }
       return tool(spec.name, spec.description, shape, async args => {
         const { text, ok } = await runTool(
-          spec, args as Record<string, string | undefined>, values, shell, say
+          spec,
+          args as Record<string, string | undefined>,
+          values,
+          shell,
+          say
         );
         return { content: [{ type: 'text' as const, text }], isError: !ok };
       });
@@ -208,4 +221,8 @@ export function jobPlaceholders(
   };
 }
 
-export const emptyAutomation: Automation = { setup: [], tools: [], teardown: [] };
+export const emptyAutomation: Automation = {
+  setup: [],
+  tools: [],
+  teardown: [],
+};

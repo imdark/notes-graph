@@ -77,7 +77,12 @@ export function parseOrgTimestamp(
  */
 export function findOrgTimestamps(
   text: string
-): { keyword: OrgPlanningKeyword; epochMs: number; index: number; length: number }[] {
+): {
+  keyword: OrgPlanningKeyword;
+  epochMs: number;
+  index: number;
+  length: number;
+}[] {
   const re = new RegExp(ORG_TIMESTAMP_RE.source, 'g');
   const results = [];
   let m;
@@ -110,7 +115,12 @@ export interface OrgYText {
 export function findOrgTimestampIn(
   yText: OrgYText,
   keyword: OrgPlanningKeyword
-): { epochMs: number; index: number; length: number; embedded: boolean } | null {
+): {
+  epochMs: number;
+  index: number;
+  length: number;
+  embedded: boolean;
+} | null {
   let offset = 0;
   for (const op of yText.toDelta()) {
     const insert = typeof op.insert === 'string' ? op.insert : '';

@@ -132,5 +132,8 @@ export function docToMarkdown(doc: Y.Doc): string {
   if (!rootId) return '';
   const lines: string[] = [];
   renderBlock(blocks, rootId, 0, lines);
-  return lines.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+  return lines
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
 }

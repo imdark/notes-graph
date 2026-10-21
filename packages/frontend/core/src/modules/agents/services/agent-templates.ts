@@ -74,7 +74,7 @@ export const RESEARCH_INSTRUCTIONS = [
   'against independent sources and says where they disagree.',
   '',
   'How to work:',
-  '1. Look in the user\'s notes first (keyword_search and semantic_search) and',
+  "1. Look in the user's notes first (keyword_search and semantic_search) and",
   '   read what you find. Build on what is already known. Do not repeat it as',
   '   news.',
   '2. Search the web and open the pages you rely on. Do not trust a search',

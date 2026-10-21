@@ -21,7 +21,7 @@ import { useLiveData, useService } from '@notesgraph/infra';
 import { useCallback, useMemo } from 'react';
 
 import * as styles from './publish-site-section.css';
-import { labelStyle,rowContainerStyle } from './styles.css';
+import { labelStyle, rowContainerStyle } from './styles.css';
 
 const COLOR_SCHEMES: { value: SiteTheme['colorScheme']; label: string }[] = [
   { value: 'auto', label: 'Auto' },
@@ -95,7 +95,10 @@ export const PublishSiteSection = ({ disabled }: { disabled?: boolean }) => {
   }, [publishSite, rootId]);
 
   const patch = useAsyncCallback(
-    async (partial: Partial<PublishSiteSettings>, themePart?: Partial<SiteTheme>) => {
+    async (
+      partial: Partial<PublishSiteSettings>,
+      themePart?: Partial<SiteTheme>
+    ) => {
       if (!settings) return;
       await publishSite.updateSiteSettings(rootId, {
         ...settings,

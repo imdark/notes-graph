@@ -60,7 +60,8 @@ function deliverToApp(payload) {
     const comma = dataUrl.indexOf(',');
     const header = dataUrl.slice(0, comma);
     const b64 = dataUrl.slice(comma + 1);
-    const mime = (header.match(/data:([^;]+)/) || [])[1] || 'application/octet-stream';
+    const mime =
+      (header.match(/data:([^;]+)/) || [])[1] || 'application/octet-stream';
     const bin = atob(b64);
     const arr = new Uint8Array(bin.length);
     for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
@@ -213,7 +214,11 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (msg && msg.type === 'clip-active-tab') {
     clipActiveTab().then(
       r => sendResponse({ ok: true, ...r }),
-      e => sendResponse({ ok: false, error: String(e && e.message ? e.message : e) })
+      e =>
+        sendResponse({
+          ok: false,
+          error: String(e && e.message ? e.message : e),
+        })
     );
     return true; // async response
   }

@@ -39,7 +39,8 @@ export function registerDoorDashCommands({
           return;
         }
         try {
-          const orders = await desktopApiService.handler.doordash.importOrders();
+          const orders =
+            await desktopApiService.handler.doordash.importOrders();
           if (!orders || orders.length === 0) {
             notify.warning({
               title: 'No DoorDash orders found',

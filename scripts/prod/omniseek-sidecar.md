@@ -31,18 +31,18 @@ vectors, OCR) pulls torch and model weights — several GB the box (2 vCPU,
 ## 1. `/opt/notesgraph/compose.yml`
 
 ```yaml
-  omniseek:
-    image: ghcr.io/battam1111/omniseek:latest
-    container_name: notesgraph_omniseek
-    environment:
-      - OMNISEEK_HTTP_HOST=0.0.0.0
-    volumes:
-      # Token, profile, cache, recall index and curator state.
-      - /opt/notesgraph/data/omniseek:/root/.omniseek
-    expose:
-      - '8765'
-    mem_limit: 1g
-    restart: unless-stopped
+omniseek:
+  image: ghcr.io/battam1111/omniseek:latest
+  container_name: notesgraph_omniseek
+  environment:
+    - OMNISEEK_HTTP_HOST=0.0.0.0
+  volumes:
+    # Token, profile, cache, recall index and curator state.
+    - /opt/notesgraph/data/omniseek:/root/.omniseek
+  expose:
+    - '8765'
+  mem_limit: 1g
+  restart: unless-stopped
 ```
 
 ## 2. `/opt/notesgraph/.env`

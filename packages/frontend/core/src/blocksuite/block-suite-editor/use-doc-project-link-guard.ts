@@ -45,8 +45,7 @@ export function useDocProjectLinkGuard(docId: string, enabled: boolean) {
           seen.add(targetDocId);
 
           const sourceProject = projectsService.getProjectForDoc(docId);
-          const targetProject =
-            projectsService.getProjectForDoc(targetDocId);
+          const targetProject = projectsService.getProjectForDoc(targetDocId);
           const crossesProjectBoundary =
             (sourceProject || targetProject) &&
             sourceProject?.id !== targetProject?.id;
@@ -67,5 +66,11 @@ export function useDocProjectLinkGuard(docId: string, enabled: boolean) {
       });
 
     return () => subscription.unsubscribe();
-  }, [docId, enabled, docsSearchService, projectsService, workspaceDialogService]);
+  }, [
+    docId,
+    enabled,
+    docsSearchService,
+    projectsService,
+    workspaceDialogService,
+  ]);
 }

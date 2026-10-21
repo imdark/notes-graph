@@ -68,7 +68,8 @@ export function parseFacts(subject: string, markdown: string): MemoryFact[] {
   const facts: MemoryFact[] = [];
   for (const line of markdown.split('\n')) {
     const text = factFromLine(line);
-    if (text) facts.push({ subject, text, date: AS_OF.exec(text)?.[1] ?? null });
+    if (text)
+      facts.push({ subject, text, date: AS_OF.exec(text)?.[1] ?? null });
   }
   return facts;
 }
@@ -133,7 +134,11 @@ export function groupBySubject(
   >();
   const add = (op: MemoryOp, kind: 'create' | 'delete') => {
     const key = op.subject.toLowerCase();
-    const group = groups.get(key) ?? { subject: op.subject, create: [], delete: [] };
+    const group = groups.get(key) ?? {
+      subject: op.subject,
+      create: [],
+      delete: [],
+    };
     group[kind].push(op.fact);
     groups.set(key, group);
   };
@@ -154,7 +159,9 @@ export function applyMemoryOps(
   ops: { create: string[]; delete: string[] },
   today: string
 ): { markdown: string; created: number; deleted: number } {
-  const drop = new Set(ops.delete.map(fact => factKey(fact, subject)).filter(Boolean));
+  const drop = new Set(
+    ops.delete.map(fact => factKey(fact, subject)).filter(Boolean)
+  );
   let deleted = 0;
   const kept = markdown.split('\n').filter(line => {
     const fact = factFromLine(line);
@@ -194,7 +201,12 @@ export function applyMemoryOps(
   const last = head[head.length - 1]?.trim() ?? '';
   // Join the list the facts are already in; otherwise start one.
   const gap = head.length && !LIST_MARKER.test(last) ? [''] : [];
-  const lines = [...head, ...gap, ...added, ...(tail.length ? ['', ...tail] : [])];
+  const lines = [
+    ...head,
+    ...gap,
+    ...added,
+    ...(tail.length ? ['', ...tail] : []),
+  ];
   return { markdown: `${lines.join('\n')}\n`, created: added.length, deleted };
 }
 

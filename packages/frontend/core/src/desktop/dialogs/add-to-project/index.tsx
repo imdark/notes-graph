@@ -25,9 +25,7 @@ export const AddToProjectDialog = ({
 
   const handleSelect = useCallback(
     (projectId: string) => {
-      projectsService
-        .assignDocToProject(docId, projectId)
-        .catch(console.error);
+      projectsService.assignDocToProject(docId, projectId).catch(console.error);
       close();
     },
     [close, docId, projectsService]

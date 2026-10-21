@@ -46,11 +46,56 @@ export async function capture(
 
 // A small stopword list keeps term-overlap scoring meaningful.
 const STOPWORDS = new Set([
-  'the', 'and', 'for', 'are', 'but', 'not', 'you', 'all', 'any', 'can', 'her',
-  'was', 'one', 'our', 'out', 'has', 'have', 'had', 'his', 'him', 'she', 'they',
-  'them', 'this', 'that', 'with', 'from', 'your', 'will', 'what', 'when', 'which',
-  'their', 'there', 'would', 'about', 'into', 'than', 'then', 'some', 'were',
-  'been', 'more', 'also', 'like', 'just', 'over', 'such', 'only', 'other',
+  'the',
+  'and',
+  'for',
+  'are',
+  'but',
+  'not',
+  'you',
+  'all',
+  'any',
+  'can',
+  'her',
+  'was',
+  'one',
+  'our',
+  'out',
+  'has',
+  'have',
+  'had',
+  'his',
+  'him',
+  'she',
+  'they',
+  'them',
+  'this',
+  'that',
+  'with',
+  'from',
+  'your',
+  'will',
+  'what',
+  'when',
+  'which',
+  'their',
+  'there',
+  'would',
+  'about',
+  'into',
+  'than',
+  'then',
+  'some',
+  'were',
+  'been',
+  'more',
+  'also',
+  'like',
+  'just',
+  'over',
+  'such',
+  'only',
+  'other',
 ]);
 
 function terms(text: string): Set<string> {
@@ -59,7 +104,9 @@ function terms(text: string): Set<string> {
 }
 
 function mentions(haystack: string, needle: string): boolean {
-  return needle.length > 2 && haystack.toLowerCase().includes(needle.toLowerCase());
+  return (
+    needle.length > 2 && haystack.toLowerCase().includes(needle.toLowerCase())
+  );
 }
 
 export interface Suggestion {

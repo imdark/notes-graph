@@ -75,7 +75,9 @@ export function appendLinkedDocReference(
   doc.transact(() => {
     const newId = nanoid(10);
     const text = new Y.Text();
-    text.insert(0, ' ', { reference: { type: 'LinkedPage', pageId: targetDocId } });
+    text.insert(0, ' ', {
+      reference: { type: 'LinkedPage', pageId: targetDocId },
+    });
 
     const block = new Y.Map<unknown>();
     block.set('sys:id', newId);

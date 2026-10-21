@@ -37,11 +37,7 @@ import type {
   SlashMenuItemSpec,
   ToolbarItemSpec,
 } from './client';
-import type {
-  Capability,
-  Platform,
-  PluginManifest,
-} from './manifest';
+import type { Capability, Platform, PluginManifest } from './manifest';
 
 export interface HarnessOptions {
   manifest: PluginManifest;

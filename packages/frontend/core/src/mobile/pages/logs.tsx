@@ -1,4 +1,7 @@
-import { logBuffer, type LogLevel } from '@notesgraph/core/bootstrap/log-buffer';
+import {
+  logBuffer,
+  type LogLevel,
+} from '@notesgraph/core/bootstrap/log-buffer';
 import { useState, useSyncExternalStore } from 'react';
 
 const COLORS: Record<LogLevel, string> = {

@@ -234,7 +234,9 @@ export class GroupSetting extends SignalWatcher(
     const property = groups?.find(g => g)?.property;
     if (!property) return null;
     const data = property.data$.value as { options?: SelectTag[] };
-    return Array.isArray(data?.options) ? { property, options: data.options } : null;
+    return Array.isArray(data?.options)
+      ? { property, options: data.options }
+      : null;
   }
 
   private updateLaneOptions(

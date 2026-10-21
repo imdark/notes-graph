@@ -46,8 +46,12 @@ test('lane management: roles, add lane, and the #+SEQ_TODO declaration', async (
   await expect(panel).toBeVisible();
 
   // Default lanes carry inferred roles.
-  await expect(panel.locator('.lane-role-chip', { hasText: 'Start' })).toBeVisible();
-  await expect(panel.locator('.lane-role-chip', { hasText: 'Done' })).toBeVisible();
+  await expect(
+    panel.locator('.lane-role-chip', { hasText: 'Start' })
+  ).toBeVisible();
+  await expect(
+    panel.locator('.lane-role-chip', { hasText: 'Done' })
+  ).toBeVisible();
 
   // Add a Blocked lane — role inferred from the name.
   await panel.locator('.lane-add-input').fill('Blocked');

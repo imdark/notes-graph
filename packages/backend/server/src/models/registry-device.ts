@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import type { Prisma,RegistryDevice } from '@prisma/client';
+import type { Prisma, RegistryDevice } from '@prisma/client';
 
 import { BaseModel } from './base';
 
@@ -64,7 +64,12 @@ export class RegistryDeviceModel extends BaseModel {
     return this.db.registryDevice.upsert({
       where: { workspaceId_key: { workspaceId, key } },
       // Registration never clears a status the device already reported.
-      create: { workspaceId, key, registeredBy: rest.registeredBy ?? null, ...data },
+      create: {
+        workspaceId,
+        key,
+        registeredBy: rest.registeredBy ?? null,
+        ...data,
+      },
       update: data,
     });
   }
@@ -83,7 +88,9 @@ export class RegistryDeviceModel extends BaseModel {
       where: {
         workspaceId,
         ...(filter.kind ? { kind: filter.kind } : {}),
-        ...(filter.agentTarget === undefined ? {} : { agentTarget: filter.agentTarget }),
+        ...(filter.agentTarget === undefined
+          ? {}
+          : { agentTarget: filter.agentTarget }),
       },
       orderBy: { key: 'asc' },
     });

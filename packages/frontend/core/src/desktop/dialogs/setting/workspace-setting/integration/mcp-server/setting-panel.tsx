@@ -271,11 +271,11 @@ const McpServerSetting = () => {
             <div className={styles.sectionTitle}>list-blocks</div>
           </div>
           <div className={styles.sectionDescription}>
-            Query individual task blocks (todo items) across the workspace
-            by inline #tags, #key:value properties and org status — the
-            block-level equivalent of list-documents, powering AI task
-            pickup from query boards. Accepts an optional docId to scope the
-            query to a single document.
+            Query individual task blocks (todo items) across the workspace by
+            inline #tags, #key:value properties and org status — the block-level
+            equivalent of list-documents, powering AI task pickup from query
+            boards. Accepts an optional docId to scope the query to a single
+            document.
           </div>
         </div>
 
@@ -286,8 +286,8 @@ const McpServerSetting = () => {
           <div className={styles.sectionDescription}>
             Read the virtual kanban/table boards defined in a document — each
             board&apos;s saved query scope (#tags, #key:value props, status
-            slice, due-within bound). Agents combine the scope with
-            list-blocks to fetch the board&apos;s tasks.
+            slice, due-within bound). Agents combine the scope with list-blocks
+            to fetch the board&apos;s tasks.
           </div>
         </div>
 
@@ -298,9 +298,9 @@ const McpServerSetting = () => {
           <div className={styles.sectionDescription}>
             Act on one task block without rewriting the document: set its org
             status (in-progress stamps STARTED and claims with @agent, done
-            stamps CLOSED) and/or append a signed progress note under the
-            task. Applied as a surgical CRDT delta, safe alongside concurrent
-            editors. Available when write tools are enabled.
+            stamps CLOSED) and/or append a signed progress note under the task.
+            Applied as a surgical CRDT delta, safe alongside concurrent editors.
+            Available when write tools are enabled.
           </div>
         </div>
 
@@ -309,10 +309,10 @@ const McpServerSetting = () => {
             <div className={styles.sectionTitle}>update-block</div>
           </div>
           <div className={styles.sectionDescription}>
-            Replace the text of one specific block without rewriting the
-            whole document — a surgical CRDT edit, stamped with the standard
-            &quot;Edited via MCP&quot; attribution. Available when write
-            tools are enabled.
+            Replace the text of one specific block without rewriting the whole
+            document — a surgical CRDT edit, stamped with the standard
+            &quot;Edited via MCP&quot; attribution. Available when write tools
+            are enabled.
           </div>
         </div>
 
@@ -345,15 +345,14 @@ const McpServerSetting = () => {
             </div>
           </div>
           <div className={styles.sectionDescription}>
-            Create and edit documents, and link one document under another as
-            a real graph reference (not a plain-text link) — additive only,
-            never removes or replaces existing content or links. Every write
-            appends an &quot;Edited via MCP by &lt;agent&gt;&quot; stamp so
-            AI edits stay attributed in the document and its history, and
-            AI agents can work kanban task lists through org-mode
-            annotations ([ ]/[-]/[X], SCHEDULED/DEADLINE/STARTED/CLOSED)
-            without touching board blocks. Enabled only when this server has
-            MCP write tools turned on.
+            Create and edit documents, and link one document under another as a
+            real graph reference (not a plain-text link) — additive only, never
+            removes or replaces existing content or links. Every write appends
+            an &quot;Edited via MCP by &lt;agent&gt;&quot; stamp so AI edits
+            stay attributed in the document and its history, and AI agents can
+            work kanban task lists through org-mode annotations ([ ]/[-]/[X],
+            SCHEDULED/DEADLINE/STARTED/CLOSED) without touching board blocks.
+            Enabled only when this server has MCP write tools turned on.
           </div>
         </div>
       </div>

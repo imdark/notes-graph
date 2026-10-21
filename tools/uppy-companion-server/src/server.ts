@@ -40,7 +40,9 @@ const PROVIDERS = [
   ['Dropbox', 'COMPANION_DROPBOX_KEY'],
 ] as const;
 
-const enabledProviders = PROVIDERS.filter(([, envKey]) => !!process.env[envKey]);
+const enabledProviders = PROVIDERS.filter(
+  ([, envKey]) => !!process.env[envKey]
+);
 
 if (enabledProviders.length === 0) {
   console.warn(

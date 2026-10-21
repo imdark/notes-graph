@@ -56,9 +56,7 @@ export class KanbanSelectionController implements ReactiveController {
     if (!groupKey) return false;
     const group = this.logic.groups$.value?.find(g => g.key === groupKey);
     if (!group) return false;
-    this.selectCards(
-      group.rows.map(row => ({ cardId: row.rowId, groupKey }))
-    );
+    this.selectCards(group.rows.map(row => ({ cardId: row.rowId, groupKey })));
     return true;
   }
 
@@ -103,9 +101,7 @@ export class KanbanSelectionController implements ReactiveController {
 
     const target = event.target as HTMLElement;
     const groupEl = target.closest('notesgraph-data-view-kanban-group');
-    const cardId = target.closest(
-      'notesgraph-data-view-kanban-card'
-    )?.cardId;
+    const cardId = target.closest('notesgraph-data-view-kanban-card')?.cardId;
     const groupKey = groupEl?.group.key;
     if (!cardId || !groupKey || !groupEl) return;
 
@@ -135,9 +131,7 @@ export class KanbanSelectionController implements ReactiveController {
       anchorIndex <= targetIndex
         ? [anchorIndex, targetIndex]
         : [targetIndex, anchorIndex];
-    const range = ids
-      .slice(lo, hi + 1)
-      .map(id => ({ cardId: id, groupKey }));
+    const range = ids.slice(lo, hi + 1).map(id => ({ cardId: id, groupKey }));
     this.selection = atLeastOne(range)
       ? { selectionType: 'card', cards: range }
       : undefined;

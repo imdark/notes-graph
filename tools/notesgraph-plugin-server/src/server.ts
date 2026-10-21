@@ -41,7 +41,8 @@ const CORS = {
   // outright — the symptom is a bare "Failed to fetch" with no status. Only
   // bites a cross-origin registry (a dev override, or a shared one): in prod
   // the marketplace is same-origin behind /market, so there is no preflight.
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization, x-notesgraph-version',
+  'Access-Control-Allow-Headers':
+    'Content-Type, Authorization, x-notesgraph-version',
 };
 
 type Status = 'pending' | 'approved' | 'rejected';

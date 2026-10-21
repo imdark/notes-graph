@@ -119,7 +119,11 @@
               data instanceof ArrayBuffer
                 ? new Uint8Array(data)
                 : data && data.buffer
-                  ? new Uint8Array(data.buffer, data.byteOffset || 0, data.byteLength)
+                  ? new Uint8Array(
+                      data.buffer,
+                      data.byteOffset || 0,
+                      data.byteLength
+                    )
                   : null;
             if (u8 && rec.bytes + u8.length <= MAX_BYTES) {
               rec.chunks.push(u8.slice(0));
@@ -206,18 +210,18 @@
     }
     let container = (seg.mime.split(';')[0] || 'video/mp4').trim();
     if (!container.startsWith('video/')) container = 'video/mp4';
-    return blobToDataUrl(new Blob([merged], { type: container })).then(function (
-      dataUrl
-    ) {
-      return dataUrl
-        ? {
-            ext: 'mp4',
-            mime: container,
-            hasAudio: false,
-            truncated: seg.bytes >= MAX_BYTES,
-            dataUrl: dataUrl,
-          }
-        : null;
-    });
+    return blobToDataUrl(new Blob([merged], { type: container })).then(
+      function (dataUrl) {
+        return dataUrl
+          ? {
+              ext: 'mp4',
+              mime: container,
+              hasAudio: false,
+              truncated: seg.bytes >= MAX_BYTES,
+              dataUrl: dataUrl,
+            }
+          : null;
+      }
+    );
   };
 })();

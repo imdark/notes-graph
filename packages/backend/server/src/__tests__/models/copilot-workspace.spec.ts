@@ -528,9 +528,11 @@ test('a doc embedded partway still needs embedding until finished', async t => {
     [chunk(1, 'one')],
     { pending: true }
   );
-  await t.context.copilotContext.finishWorkspaceEmbedding(workspace.id, docId, [
-    0, 1,
-  ]);
+  await t.context.copilotContext.finishWorkspaceEmbedding(
+    workspace.id,
+    docId,
+    [0, 1]
+  );
 
   t.false(
     await t.context.copilotWorkspace.checkDocNeedEmbedded(workspace.id, docId)

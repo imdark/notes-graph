@@ -36,7 +36,10 @@ function apply(doc: Y.Doc, edit: { update: Uint8Array | null }) {
 
 /** A block's status as the editor reads it: the chip, else the text. */
 function status(doc: Y.Doc, id: string): string {
-  const text = doc.getMap<Y.Map<unknown>>('blocks').get(id)!.get('prop:text') as Y.Text;
+  const text = doc
+    .getMap<Y.Map<unknown>>('blocks')
+    .get(id)!
+    .get('prop:text') as Y.Text;
   const first = text.toDelta()[0] as { attributes?: { orgStatus?: string } };
   return first?.attributes?.orgStatus ?? text.toString();
 }
@@ -50,7 +53,12 @@ test('queues to-do tasks only', t => {
     plain: { text: 'just a line' },
   });
   const edit = queueTasks(Y.encodeStateAsUpdate(doc), [
-    'typed', 'chip', 'box', 'busy', 'plain', 'missing',
+    'typed',
+    'chip',
+    'box',
+    'busy',
+    'plain',
+    'missing',
   ]);
   apply(doc, edit);
 
@@ -61,7 +69,10 @@ test('queues to-do tasks only', t => {
   t.is(status(doc, 'busy'), '[-]');
   t.is(status(doc, 'plain'), 'just a line');
   // The typed annotation becomes the chip, not chip plus annotation.
-  const typed = doc.getMap<Y.Map<unknown>>('blocks').get('typed')!.get('prop:text') as Y.Text;
+  const typed = doc
+    .getMap<Y.Map<unknown>>('blocks')
+    .get('typed')!
+    .get('prop:text') as Y.Text;
   t.is(typed.toString(), '  write it');
 });
 
@@ -114,7 +125,13 @@ test('reads where tasks ended, skipping blocks that are not tasks', t => {
     plain: { text: 'just a line' },
   });
   t.deepEqual(
-    readStatuses(Y.encodeStateAsUpdate(doc), ['review', 'typed', 'box', 'plain', 'missing']),
+    readStatuses(Y.encodeStateAsUpdate(doc), [
+      'review',
+      'typed',
+      'box',
+      'plain',
+      'missing',
+    ]),
     { review: 'COMMITTED', typed: 'DEPLOYED', box: '[ ]' }
   );
 });

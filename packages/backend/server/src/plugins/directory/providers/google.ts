@@ -124,9 +124,7 @@ export class GoogleDirectoryProvider extends DirectoryProvider {
     };
   }
 
-  async refreshTokens(
-    refreshToken: string
-  ): Promise<DirectoryProviderTokens> {
+  async refreshTokens(refreshToken: string): Promise<DirectoryProviderTokens> {
     const payload = new URLSearchParams({
       refresh_token: refreshToken,
       client_id: this.config.clientId,

@@ -88,9 +88,8 @@ vi.mock('@notesgraph/i18n', () => {
   };
 });
 
-const { DayCalendarSection } = await import(
-  '../desktop/pages/workspace/detail-page/day-calendar-section'
-);
+const { DayCalendarSection } =
+  await import('../desktop/pages/workspace/detail-page/day-calendar-section');
 
 const event = (over: Record<string, unknown> = {}) => ({
   id: 'e1',

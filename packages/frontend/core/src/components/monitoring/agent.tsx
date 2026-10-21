@@ -54,15 +54,14 @@ const DecisionRow = ({
 }) => {
   const fleet = useService(FleetService);
   const [busy, setBusy] = useState(false);
-  const act = useCallback(
-    (what: () => Promise<void>, failure: string) => {
-      setBusy(true);
-      what()
-        .catch(err => notify.error({ title: failure, message: errorMessage(err) }))
-        .finally(() => setBusy(false));
-    },
-    []
-  );
+  const act = useCallback((what: () => Promise<void>, failure: string) => {
+    setBusy(true);
+    what()
+      .catch(err =>
+        notify.error({ title: failure, message: errorMessage(err) })
+      )
+      .finally(() => setBusy(false));
+  }, []);
   const triaging = !!decision.triageJobId && !decision.triage;
 
   return (
@@ -90,20 +89,33 @@ const DecisionRow = ({
         ) : null}
         <span className={styles.meta}>{ago(decision.createdAt, now)}</span>
       </div>
-      {decision.triage ? <pre className={styles.triage}>{decision.triage}</pre> : null}
+      {decision.triage ? (
+        <pre className={styles.triage}>{decision.triage}</pre>
+      ) : null}
       {decision.verdict ? null : (
         <div className={styles.actions}>
           <Button
-            onClick={() => act(() => fleet.triage(decision.id), "Couldn't start the triage")}
+            onClick={() =>
+              act(() => fleet.triage(decision.id), "Couldn't start the triage")
+            }
             disabled={busy || triaging}
             tooltip="Send a read-only Claude run to the machine to find the likely cause"
             data-testid="monitoring-decision-triage"
           >
-            {triaging ? 'Triaging…' : decision.triage ? 'Triage again' : 'Triage with Claude'}
+            {triaging
+              ? 'Triaging…'
+              : decision.triage
+                ? 'Triage again'
+                : 'Triage with Claude'}
           </Button>
           <Button
             variant="plain"
-            onClick={() => act(() => fleet.feedback(decision.id, 'expected'), "Couldn't save that")}
+            onClick={() =>
+              act(
+                () => fleet.feedback(decision.id, 'expected'),
+                "Couldn't save that"
+              )
+            }
             disabled={busy}
             tooltip="This is normal for this machine: the agent learns it and won't flag it again"
             data-testid="monitoring-decision-expected"
@@ -112,7 +124,12 @@ const DecisionRow = ({
           </Button>
           <Button
             variant="plain"
-            onClick={() => act(() => fleet.feedback(decision.id, 'resolved'), "Couldn't save that")}
+            onClick={() =>
+              act(
+                () => fleet.feedback(decision.id, 'resolved'),
+                "Couldn't save that"
+              )
+            }
             disabled={busy}
             tooltip="Fixed: if it comes back, the agent flags it again straight away"
             data-testid="monitoring-decision-resolved"
@@ -128,7 +145,13 @@ const DecisionRow = ({
 /** Patterns shown a machine before "Show all". */
 const PATTERNS_SHOWN = 15;
 
-const PatternRow = ({ deviceKey, pattern }: { deviceKey: string; pattern: LogPattern }) => {
+const PatternRow = ({
+  deviceKey,
+  pattern,
+}: {
+  deviceKey: string;
+  pattern: LogPattern;
+}) => {
   const fleet = useService(FleetService);
   const [busy, setBusy] = useState(false);
   const label = useCallback(
@@ -136,7 +159,12 @@ const PatternRow = ({ deviceKey, pattern }: { deviceKey: string; pattern: LogPat
       setBusy(true);
       fleet
         .labelPattern(deviceKey, pattern.id, next)
-        .catch(err => notify.error({ title: "Couldn't label it", message: errorMessage(err) }))
+        .catch(err =>
+          notify.error({
+            title: "Couldn't label it",
+            message: errorMessage(err),
+          })
+        )
         .finally(() => setBusy(false));
     },
     [fleet, deviceKey, pattern.id]
@@ -174,7 +202,10 @@ const LogPatterns = ({ nameOf }: { nameOf: (key: string) => string }) => {
   const fleet = useService(FleetService);
   const catalogs = useLiveData(fleet.logCatalogs$);
   const [all, setAll] = useState(false);
-  const total = catalogs.reduce((sum, catalog) => sum + catalog.patterns.length, 0);
+  const total = catalogs.reduce(
+    (sum, catalog) => sum + catalog.patterns.length,
+    0
+  );
 
   return (
     <details className={styles.logs} data-testid="monitoring-log-patterns">
@@ -196,12 +227,20 @@ const LogPatterns = ({ nameOf }: { nameOf: (key: string) => string }) => {
               ? ` (new lines count as news after ${AGENT_WARMUP})`
               : ''}
           </span>
-          {(all ? catalog.patterns : catalog.patterns.slice(0, PATTERNS_SHOWN)).map(pattern => (
-            <PatternRow key={pattern.id} deviceKey={catalog.deviceKey} pattern={pattern} />
+          {(all
+            ? catalog.patterns
+            : catalog.patterns.slice(0, PATTERNS_SHOWN)
+          ).map(pattern => (
+            <PatternRow
+              key={pattern.id}
+              deviceKey={catalog.deviceKey}
+              pattern={pattern}
+            />
           ))}
         </div>
       ))}
-      {!all && catalogs.some(catalog => catalog.patterns.length > PATTERNS_SHOWN) ? (
+      {!all &&
+      catalogs.some(catalog => catalog.patterns.length > PATTERNS_SHOWN) ? (
         <Button variant="plain" onClick={() => setAll(true)}>
           Show all
         </Button>
@@ -234,7 +273,10 @@ export const MonitoringAgentPanel = ({
         .configureAgent(settings)
         .then(() => (done ? notify.success({ title: done }) : undefined))
         .catch(err =>
-          notify.error({ title: "Couldn't change the agent", message: errorMessage(err) })
+          notify.error({
+            title: "Couldn't change the agent",
+            message: errorMessage(err),
+          })
         )
         .finally(() => setBusy(false));
     },
@@ -246,14 +288,17 @@ export const MonitoringAgentPanel = ({
     fleet
       .resetAgent()
       .then(() => notify.success({ title: 'The agent starts learning again' }))
-      .catch(err => notify.error({ title: "Couldn't reset", message: errorMessage(err) }))
+      .catch(err =>
+        notify.error({ title: "Couldn't reset", message: errorMessage(err) })
+      )
       .finally(() => setBusy(false));
   }, [fleet]);
 
   // A server without the agent says nothing here.
   if (!agent) return null;
 
-  const nameOf = (key: string) => machines.find(m => m.key === key)?.name ?? key;
+  const nameOf = (key: string) =>
+    machines.find(m => m.key === key)?.name ?? key;
   const open = openDecisions(decisions);
   const { ready, seen } = agentReadiness(agent);
   const mode = AGENT_MODES.find(m => m.value === agent.mode) ?? AGENT_MODES[0];
@@ -275,13 +320,18 @@ export const MonitoringAgentPanel = ({
             <span className={styles.modeNote}>
               The agent learns what normal looks like on each machine from its
               health checks and its logs, flags what&apos;s new, and escalates
-              only what matters. It needs no thresholds. It starts in training and tells
-              nobody anything until you move it to shadow or detect.
+              only what matters. It needs no thresholds. It starts in training
+              and tells nobody anything until you move it to shadow or detect.
             </span>
             <div className={styles.actions}>
               <Button
                 variant="primary"
-                onClick={() => configure({ mode: 'training' }, 'The monitoring agent is learning')}
+                onClick={() =>
+                  configure(
+                    { mode: 'training' },
+                    'The monitoring agent is learning'
+                  )
+                }
                 disabled={busy}
                 data-testid="monitoring-agent-enable"
               >
@@ -301,7 +351,8 @@ export const MonitoringAgentPanel = ({
                   data-active={agent.mode === option.value || undefined}
                   disabled={busy}
                   onClick={() =>
-                    agent.mode !== option.value && configure({ mode: option.value })
+                    agent.mode !== option.value &&
+                    configure({ mode: option.value })
                   }
                   data-testid={`monitoring-agent-mode-${option.value}`}
                 >
@@ -314,8 +365,12 @@ export const MonitoringAgentPanel = ({
               {seen === 0
                 ? 'No health checks seen yet. Check the machines to start it learning.'
                 : `Knows ${ready} of ${seen} ${seen === 1 ? 'machine' : 'machines'}` +
-                  (ready < seen ? ` (each needs ${AGENT_WARMUP} health checks first)` : '')}
-              {agent.lastRunAt ? ` · last checked them ${ago(agent.lastRunAt, now)}` : ''}
+                  (ready < seen
+                    ? ` (each needs ${AGENT_WARMUP} health checks first)`
+                    : '')}
+              {agent.lastRunAt
+                ? ` · last checked them ${ago(agent.lastRunAt, now)}`
+                : ''}
             </span>
             <div className={styles.settings}>
               <label className={styles.setting}>
@@ -324,7 +379,9 @@ export const MonitoringAgentPanel = ({
                   className={styles.select}
                   value={agent.intervalMinutes}
                   disabled={busy}
-                  onChange={e => configure({ intervalMinutes: Number(e.target.value) })}
+                  onChange={e =>
+                    configure({ intervalMinutes: Number(e.target.value) })
+                  }
                   data-testid="monitoring-agent-interval"
                 >
                   {INTERVALS.map(option => (
@@ -340,7 +397,9 @@ export const MonitoringAgentPanel = ({
                   className={styles.select}
                   value={agent.sensitivity}
                   disabled={busy}
-                  onChange={e => configure({ sensitivity: Number(e.target.value) })}
+                  onChange={e =>
+                    configure({ sensitivity: Number(e.target.value) })
+                  }
                   data-testid="monitoring-agent-sensitivity"
                 >
                   {SENSITIVITIES.map(option => (
@@ -354,7 +413,9 @@ export const MonitoringAgentPanel = ({
                 <Checkbox
                   checked={agent.alerts.push}
                   disabled={busy}
-                  onChange={() => configure({ alerts: { push: !agent.alerts.push } })}
+                  onChange={() =>
+                    configure({ alerts: { push: !agent.alerts.push } })
+                  }
                   data-testid="monitoring-agent-push"
                 />
                 Phone alerts
@@ -432,7 +493,9 @@ export const MonitoringAgentPanel = ({
                 ))}
               </div>
             ) : agent.mode !== 'training' ? (
-              <span className={styles.meta}>Nothing out of the ordinary yet.</span>
+              <span className={styles.meta}>
+                Nothing out of the ordinary yet.
+              </span>
             ) : null}
           </>
         )}

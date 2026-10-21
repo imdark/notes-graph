@@ -48,9 +48,7 @@ test('epic cards: child tasks render inside the parent card and toggle', async (
   await expect(epicCard.locator('.card-progress-chip')).toHaveText('0/2');
 
   // Clicking a child toggles it done and updates the progress count.
-  await epicCard
-    .locator('.card-child', { hasText: 'Child one' })
-    .click();
+  await epicCard.locator('.card-child', { hasText: 'Child one' }).click();
   await expect(epicCard.locator('.card-progress-chip')).toHaveText('1/2', {
     timeout: 10000,
   });

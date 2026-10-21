@@ -82,18 +82,21 @@ function normalizeOrder(o: any): DoorDashOrder {
   return {
     id: o.id ?? o.orderUuid ?? o.uuid ?? pick(o, /^id$|uuid/i),
     store:
-      (typeof store === 'object'
-        ? store.name || store.businessName
-        : store) ?? pick(o, /store|merchant|restaurant/i),
+      (typeof store === 'object' ? store.name || store.businessName : store) ??
+      pick(o, /store|merchant|restaurant/i),
     date: pick(o, /created|submitted|delivered|date/i),
     total: pick(o, /grandTotal|orderTotal|^total$|amount/i),
-    itemCount: Array.isArray(o.items) ? o.items.length : pick(o, /itemCount|quantity/i),
+    itemCount: Array.isArray(o.items)
+      ? o.items.length
+      : pick(o, /itemCount|quantity/i),
   };
 }
 
 function extractOrders(captures: unknown[]): DoorDashOrder[] {
   const candidates = captures.flatMap(findOrderArrays);
-  candidates.sort((a, b) => b.score - a.score || b.items.length - a.items.length);
+  candidates.sort(
+    (a, b) => b.score - a.score || b.items.length - a.items.length
+  );
   return (candidates[0]?.items ?? []).map(normalizeOrder);
 }
 
@@ -141,7 +144,9 @@ async function captureOrders(): Promise<DoorDashOrder[]> {
         if (!pending.has(params.requestId)) return;
         pending.delete(params.requestId);
         dbg
-          .sendCommand('Network.getResponseBody', { requestId: params.requestId })
+          .sendCommand('Network.getResponseBody', {
+            requestId: params.requestId,
+          })
           .then((res: any) => {
             const text = res.base64Encoded
               ? Buffer.from(res.body, 'base64').toString('utf8')

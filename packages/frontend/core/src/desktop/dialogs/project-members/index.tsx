@@ -29,7 +29,9 @@ export const ProjectMembersDialog = ({
     [project]
   );
 
-  const workspaceMembers = useLiveData(workspaceMembersService.members.pageMembers$);
+  const workspaceMembers = useLiveData(
+    workspaceMembersService.members.pageMembers$
+  );
 
   useEffect(() => {
     workspaceMembersService.members.revalidate();
@@ -61,7 +63,11 @@ export const ProjectMembersDialog = ({
               }}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <Avatar url={member.avatarUrl ?? undefined} name={member.name} size={24} />
+                <Avatar
+                  url={member.avatarUrl ?? undefined}
+                  name={member.name}
+                  size={24}
+                />
                 <span>{member.name || member.email}</span>
               </div>
               <Button

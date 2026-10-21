@@ -37,7 +37,9 @@ export const PluginsSettings = () => {
         // registry were indistinguishable — say which it is.
         setAvailable([]);
         setMarketplaceError(
-          err instanceof Error ? err.message : 'Could not reach the marketplace.'
+          err instanceof Error
+            ? err.message
+            : 'Could not reach the marketplace.'
         );
       });
   }, [marketplaceService]);

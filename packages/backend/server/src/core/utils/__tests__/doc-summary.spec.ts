@@ -7,7 +7,11 @@ import { buildDocSummary } from '../blocksuite';
 function docWith(children: Record<string, Record<string, unknown>>) {
   const doc = new Y.Doc();
   const blocks = doc.getMap('blocks');
-  const block = (id: string, flavour: string, props: Record<string, unknown>) => {
+  const block = (
+    id: string,
+    flavour: string,
+    props: Record<string, unknown>
+  ) => {
     const map = new Y.Map();
     map.set('sys:id', id);
     map.set('sys:flavour', flavour);
@@ -22,7 +26,9 @@ function docWith(children: Record<string, Record<string, unknown>>) {
     return t;
   };
 
-  const page = block('page', 'notesgraph:page', { 'prop:title': text('Links') });
+  const page = block('page', 'notesgraph:page', {
+    'prop:title': text('Links'),
+  });
   const note = block('note', 'notesgraph:note', {});
   page.set('sys:children', Y.Array.from(['note']));
   note.set('sys:children', Y.Array.from(Object.keys(children)));
@@ -39,7 +45,11 @@ function docWith(children: Record<string, Record<string, unknown>>) {
 }
 
 const linksNote = docWith({
-  p1: { flavour: 'notesgraph:paragraph', 'prop:type': 'text', 'prop:text': 'Reading list' },
+  p1: {
+    flavour: 'notesgraph:paragraph',
+    'prop:type': 'text',
+    'prop:text': 'Reading list',
+  },
   b1: {
     flavour: 'notesgraph:bookmark',
     'prop:url': 'https://example.com/profiling',

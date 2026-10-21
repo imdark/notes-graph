@@ -55,12 +55,18 @@ export function isKeepNote(value: unknown): value is KeepNote {
     'textContent' in v ||
     'listContent' in v ||
     ('title' in v &&
-      ('isTrashed' in v || 'isArchived' in v || 'isPinned' in v || 'color' in v))
+      ('isTrashed' in v ||
+        'isArchived' in v ||
+        'isPinned' in v ||
+        'color' in v))
   );
 }
 
 const firstLine = (text: string): string =>
-  text.split('\n').map(l => l.trim()).find(Boolean) ?? '';
+  text
+    .split('\n')
+    .map(l => l.trim())
+    .find(Boolean) ?? '';
 
 /** Convert one Keep note to markdown + the metadata the importer needs. */
 export function keepNoteToMarkdown(note: KeepNote): KeepConverted {
@@ -100,9 +106,7 @@ export function keepNoteToMarkdown(note: KeepNote): KeepConverted {
   return {
     title,
     markdown,
-    labels: (note.labels ?? [])
-      .map(l => (l.name ?? '').trim())
-      .filter(Boolean),
+    labels: (note.labels ?? []).map(l => (l.name ?? '').trim()).filter(Boolean),
     isTrashed: !!note.isTrashed,
     isArchived: !!note.isArchived,
     isPinned: !!note.isPinned,

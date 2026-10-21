@@ -106,11 +106,10 @@ export class FormulaCell extends BaseCellRenderer<
   }
 }
 
-export const formulaColumnConfig = formulaPropertyModelConfig.createPropertyMeta(
-  {
+export const formulaColumnConfig =
+  formulaPropertyModelConfig.createPropertyMeta({
     icon: createIcon('NumberIcon'),
     cellRenderer: {
       view: createFromBaseCellRenderer(FormulaCell),
     },
-  }
-);
+  });

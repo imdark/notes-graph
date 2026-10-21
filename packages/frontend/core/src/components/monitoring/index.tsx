@@ -150,7 +150,9 @@ const MonitorRow = ({
     <button
       className={styles.monitorRow}
       onClick={() => onOpen(monitor)}
-      title={monitor.lastError ?? `Open the block ${monitor.name} keeps up to date`}
+      title={
+        monitor.lastError ?? `Open the block ${monitor.name} keeps up to date`
+      }
       data-testid="monitoring-monitor"
     >
       <span className={styles.dot} data-state={state} />
@@ -310,7 +312,10 @@ const MachineCard = ({
 
   const check = useCallback(() => {
     fleet.check(device.key).catch(err => {
-      notify.error({ title: `Couldn't check ${device.name}`, message: errorMessage(err) });
+      notify.error({
+        title: `Couldn't check ${device.name}`,
+        message: errorMessage(err),
+      });
     });
   }, [device, fleet]);
 
@@ -347,7 +352,9 @@ const MachineCard = ({
         {device.checkedAt
           ? `Checked ${ago(device.checkedAt, now)}`
           : 'Never checked'}
-        {device.checkedAt && state === 'unknown' ? ' · too long ago to trust' : ''}
+        {device.checkedAt && state === 'unknown'
+          ? ' · too long ago to trust'
+          : ''}
       </span>
       {device.agentTarget ? <JobsAtOnce device={device} /> : null}
       {device.statusDetail && state !== 'online' ? (
@@ -355,7 +362,11 @@ const MachineCard = ({
           {device.statusDetail}
           {state === 'degraded' || state === 'offline' ? (
             <FixItButton
-              failure={machineFailure(device, STATE_LABEL[state].toLowerCase(), state !== 'offline')}
+              failure={machineFailure(
+                device,
+                STATE_LABEL[state].toLowerCase(),
+                state !== 'offline'
+              )}
             />
           ) : null}
         </span>
@@ -446,7 +457,9 @@ export const MonitoringView = () => {
     for (const device of devices) {
       owner.set(
         device.key,
-        device.kind === 'machine' ? device.key : (device.parentKey ?? device.key)
+        device.kind === 'machine'
+          ? device.key
+          : (device.parentKey ?? device.key)
       );
     }
     const map = new Map<string, Monitor[]>();
@@ -455,7 +468,8 @@ export const MonitoringView = () => {
       const key = owner.get(monitor.deviceKey) ?? monitor.deviceKey;
       map.set(key, [...(map.get(key) ?? []), monitor]);
     }
-    for (const list of map.values()) list.sort((a, b) => a.name.localeCompare(b.name));
+    for (const list of map.values())
+      list.sort((a, b) => a.name.localeCompare(b.name));
     return map;
   }, [devices, monitors]);
 
@@ -496,7 +510,10 @@ export const MonitoringView = () => {
         });
       })
       .catch(err => {
-        notify.error({ title: "Couldn't start the checks", message: errorMessage(err) });
+        notify.error({
+          title: "Couldn't start the checks",
+          message: errorMessage(err),
+        });
       });
   }, [fleet]);
 
@@ -514,12 +531,32 @@ export const MonitoringView = () => {
     return <div className={styles.empty}>Loading machines…</div>;
   }
 
-  const tiles: { id: Filter; label: string; value: number; state?: DeviceState }[] = [
+  const tiles: {
+    id: Filter;
+    label: string;
+    value: number;
+    state?: DeviceState;
+  }[] = [
     { id: 'all', label: 'Machines', value: machines.length },
     { id: 'online', label: 'Online', value: summary.online, state: 'online' },
-    { id: 'degraded', label: 'Degraded', value: summary.degraded, state: 'degraded' },
-    { id: 'offline', label: 'Offline', value: summary.offline, state: 'offline' },
-    { id: 'unknown', label: 'Not checked', value: summary.unknown, state: 'unknown' },
+    {
+      id: 'degraded',
+      label: 'Degraded',
+      value: summary.degraded,
+      state: 'degraded',
+    },
+    {
+      id: 'offline',
+      label: 'Offline',
+      value: summary.offline,
+      state: 'offline',
+    },
+    {
+      id: 'unknown',
+      label: 'Not checked',
+      value: summary.unknown,
+      state: 'unknown',
+    },
   ];
 
   return (
@@ -532,7 +569,9 @@ export const MonitoringView = () => {
                 key={tile.id}
                 className={styles.tile}
                 data-active={filter === tile.id || undefined}
-                onClick={() => setFilter(prev => (prev === tile.id ? 'all' : tile.id))}
+                onClick={() =>
+                  setFilter(prev => (prev === tile.id ? 'all' : tile.id))
+                }
                 data-testid={`monitoring-tile-${tile.id}`}
               >
                 <span className={styles.tileValue}>{tile.value}</span>
@@ -573,7 +612,9 @@ export const MonitoringView = () => {
         <div className={styles.sectionTitle}>
           Machines
           <span className={styles.sectionCount}>
-            {filter === 'all' ? machines.length : `${shown.length} of ${machines.length}`}
+            {filter === 'all'
+              ? machines.length
+              : `${shown.length} of ${machines.length}`}
           </span>
         </div>
         {machines.length === 0 ? (

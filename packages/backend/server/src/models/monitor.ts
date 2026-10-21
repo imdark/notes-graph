@@ -70,7 +70,12 @@ export class MonitorModel extends BaseModel {
 
   async addReading(
     monitorId: string,
-    reading: { value: string | null; error?: string | null; changed: boolean; alerted: boolean }
+    reading: {
+      value: string | null;
+      error?: string | null;
+      changed: boolean;
+      alerted: boolean;
+    }
   ) {
     const row = await this.db.monitorReading.create({
       data: { monitorId, ...reading },

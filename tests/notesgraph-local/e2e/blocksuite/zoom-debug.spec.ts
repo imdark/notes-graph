@@ -30,7 +30,9 @@ test('debug zoom handle geometry', async ({ page }) => {
     return {
       handleRect: { x: r.x, y: r.y, w: r.width, h: r.height },
       elementAtPoint: at ? `${at.tagName}.${at.className}` : null,
-      dragRect: drag ? JSON.parse(JSON.stringify(drag.getBoundingClientRect())) : null,
+      dragRect: drag
+        ? JSON.parse(JSON.stringify(drag.getBoundingClientRect()))
+        : null,
       widgetRect: widget
         ? JSON.parse(JSON.stringify(widget.getBoundingClientRect()))
         : null,

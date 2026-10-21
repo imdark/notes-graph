@@ -38,10 +38,8 @@ export function setEndpointTokenReader(
 // indexer requests) could never persist its new token — leaving the worker
 // stuck retrying with the stale one. Workers must override this with a bridge
 // back to the page (see nbstore.worker.ts).
-let endpointTokenWriter: (
-  endpoint: string,
-  token: string
-) => Promise<void> = writeEndpointToken;
+let endpointTokenWriter: (endpoint: string, token: string) => Promise<void> =
+  writeEndpointToken;
 export function setEndpointTokenWriter(
   writer: (endpoint: string, token: string) => Promise<void>
 ) {

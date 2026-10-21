@@ -20,8 +20,7 @@ export interface UpsertDirectoryAccountInput extends DirectoryAccountTokens {
   lastError?: string | null;
 }
 
-export interface UpdateDirectoryAccountTokensInput
-  extends DirectoryAccountTokens {
+export interface UpdateDirectoryAccountTokensInput extends DirectoryAccountTokens {
   status?: string | null;
   lastError?: string | null;
 }

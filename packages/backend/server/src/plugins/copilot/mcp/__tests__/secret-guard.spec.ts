@@ -14,7 +14,13 @@ const GH_PAT = 'github' + '_pat_' + rep('11ABCDEFG0', 30);
 const SLACK = 'xox' + 'b-' + '1234567890-' + rep('abcDEF1234', 24);
 const GOOGLE = 'AI' + 'za' + rep('Sy0aB-_cD9', 35);
 const JWT =
-  'eyJ' + 'hbGciOiJIUzI1NiJ9' + '.' + 'eyJ' + 'zdWIiOiIxMjM0NSJ9' + '.' + rep('Qw3rTy_-', 30);
+  'eyJ' +
+  'hbGciOiJIUzI1NiJ9' +
+  '.' +
+  'eyJ' +
+  'zdWIiOiIxMjM0NSJ9' +
+  '.' +
+  rep('Qw3rTy_-', 30);
 const PEM_BODY = rep('MIIEvQIBADANBgkqhkiG9w0BAQEFAASC', 64);
 const pem = (kind: string) =>
   `-----BEGIN ${kind}PRIVATE KEY-----\n${PEM_BODY}\n-----END ${kind}PRIVATE KEY-----`;
@@ -22,8 +28,16 @@ const pem = (kind: string) =>
 const positives: [string, string, string][] = [
   ['AWS access key', `aws key ${AWS} in prod`, 'an AWS access key'],
   ['AWS STS key', `ASIA: ${STS}`, 'an AWS access key'],
-  ['Anthropic key', `export ANTHROPIC_API_KEY=${ANTHROPIC}`, 'an Anthropic/OpenAI API key (sk-…)'],
-  ['OpenAI key', `use ${OPENAI} for the bot`, 'an Anthropic/OpenAI API key (sk-…)'],
+  [
+    'Anthropic key',
+    `export ANTHROPIC_API_KEY=${ANTHROPIC}`,
+    'an Anthropic/OpenAI API key (sk-…)',
+  ],
+  [
+    'OpenAI key',
+    `use ${OPENAI} for the bot`,
+    'an Anthropic/OpenAI API key (sk-…)',
+  ],
   ['GitHub classic token', `token ${GHP}`, 'a GitHub token'],
   ['GitHub fine-grained PAT', GH_PAT, 'a GitHub token'],
   ['Slack token', `slack: ${SLACK}`, 'a Slack token'],
@@ -47,12 +61,24 @@ for (const [name, text, label] of positives) {
 }
 
 const negatives: [string, string][] = [
-  ['prose about passwords', 'Reset your password from the settings page, then log in again.'],
-  ['labelled field with a plain word', 'Password: required for the admin panel'],
+  [
+    'prose about passwords',
+    'Reset your password from the settings page, then log in again.',
+  ],
+  [
+    'labelled field with a plain word',
+    'Password: required for the admin panel',
+  ],
   ['token prose', 'Token: see the vault entry, never paste it here.'],
-  ['short sk- word', 'We use sk-learn and sk-1 for the model; task-runner too.'],
+  [
+    'short sk- word',
+    'We use sk-learn and sk-1 for the model; task-runner too.',
+  ],
   ['sk- kebab without digits', 'sk-the-quick-brown-fox-jumps-over'],
-  ['markdown about tokens', '## Tokens\n\n- GitHub tokens start with `ghp_`\n- Slack tokens look like `xoxb-your-token-here`\n- AWS keys start with AKIA'],
+  [
+    'markdown about tokens',
+    '## Tokens\n\n- GitHub tokens start with `ghp_`\n- Slack tokens look like `xoxb-your-token-here`\n- AWS keys start with AKIA',
+  ],
   ['short password value', 'password=abc'],
   ['masked value', 'password=********'],
   ['xxx placeholder', 'api_key=xxxxxxxx'],
@@ -62,7 +88,10 @@ const negatives: [string, string][] = [
   ['changeme', 'password=changeme'],
   ['code reference', 'password = os.environ["DB_PASS"]'],
   ['max_tokens is not token', 'max_tokens=4096 and num_tokens: 12345678'],
-  ['PEM header mentioned in prose', 'The file starts with -----BEGIN PRIVATE KEY----- and ends with the END line.'],
+  [
+    'PEM header mentioned in prose',
+    'The file starts with -----BEGIN PRIVATE KEY----- and ends with the END line.',
+  ],
   ['a uuid', 'docId 3f2b8c1e-9a4d-4e2b-8f1a-6c7d8e9f0a1b'],
   ['empty', ''],
 ];
@@ -79,8 +108,12 @@ test('refusal names the kind and never echoes the value', t => {
     t.is(message, secretRefusal(label));
     const value = text.match(/[A-Za-z0-9_\-+/=]{8,}/g) ?? [];
     for (const piece of value) {
-      if (['password', 'Authorization', 'ANTHROPIC_API_KEY'].includes(piece)) continue;
-      t.false(message!.includes(piece), `refusal leaked "${piece.slice(0, 4)}…"`);
+      if (['password', 'Authorization', 'ANTHROPIC_API_KEY'].includes(piece))
+        continue;
+      t.false(
+        message!.includes(piece),
+        `refusal leaked "${piece.slice(0, 4)}…"`
+      );
     }
   }
   t.regex(secretRefusal('a GitHub token'), /^Refused: .*a GitHub token\./);
@@ -88,7 +121,10 @@ test('refusal names the kind and never echoes the value', t => {
 
 test('guardSecrets checks every field and skips undefined', t => {
   t.is(guardSecrets(undefined, 'plain note', ''), null);
-  t.is(guardSecrets('fine title', `body ${AWS}`), secretRefusal('an AWS access key'));
+  t.is(
+    guardSecrets('fine title', `body ${AWS}`),
+    secretRefusal('an AWS access key')
+  );
 });
 
 test('a secret already in the note does not block rewriting it', t => {

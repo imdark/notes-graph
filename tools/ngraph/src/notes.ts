@@ -8,10 +8,7 @@ export async function listNotes(t: Transport): Promise<DocMeta[]> {
   return metas.sort((a, b) => (b.updatedDate ?? 0) - (a.updatedDate ?? 0));
 }
 
-export async function loadDoc(
-  t: Transport,
-  id: string
-): Promise<Y.Doc | null> {
+export async function loadDoc(t: Transport, id: string): Promise<Y.Doc | null> {
   const bin = await t.getDocBin(id);
   if (!bin) return null;
   const doc = new Y.Doc();

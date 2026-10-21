@@ -43,9 +43,7 @@ test('Cmd+K palette offers mass-edit actions on selected blocks', async ({
   await page.keyboard.press('ControlOrMeta+k');
   await expect(page.getByTestId('cmdk-quick-search')).toBeVisible();
   await page.keyboard.type('turn selection into heading');
-  await expect(
-    page.getByText('Turn selection into Heading 1')
-  ).toBeHidden();
+  await expect(page.getByText('Turn selection into Heading 1')).toBeHidden();
 });
 
 test('Cmd+K on a text selection spanning blocks opens the palette, not the link editor', async ({
@@ -94,7 +92,6 @@ test('Cmd+K on a text selection spanning blocks opens the palette, not the link 
   await expect(page.locator('notesgraph-paragraph.quote, .quote')).toHaveCount(
     2
   );
-
 });
 
 test('Cmd+K on a text selection surfaces the selection context menu on top', async ({
@@ -136,9 +133,7 @@ test('Cmd+K on a text selection surfaces the selection context menu on top', asy
   await expect
     .poll(() =>
       page.evaluate(() => {
-        const paragraph = document.querySelector(
-          'notesgraph-paragraph'
-        ) as any;
+        const paragraph = document.querySelector('notesgraph-paragraph') as any;
         const delta = paragraph?.model?.text?.toDelta() ?? [];
         return delta[0]?.attributes?.bold === true;
       })

@@ -59,19 +59,20 @@ function extractClip() {
   pushImg(absUrl(meta('meta[property="og:image"]')));
   pushImg(absUrl(meta('meta[property="og:image:secure_url"]')));
   pushImg(absUrl(meta('meta[name="twitter:image"]')));
-  Array.prototype.forEach.call(document.querySelectorAll('img'), function (img) {
-    const w = Number(img.getAttribute('width'));
-    const h = Number(img.getAttribute('height'));
-    if ((w > 0 && w <= 2) || (h > 0 && h <= 2)) return; // tracking pixel
-    const srcset = img.getAttribute('srcset');
-    pushImg(
-      absUrl(
-        img.getAttribute('src') ||
-          img.dataset.src ||
-          img.dataset.delayedUrl
-      ) || (srcset ? largestFromSrcset(srcset) : null)
-    );
-  });
+  Array.prototype.forEach.call(
+    document.querySelectorAll('img'),
+    function (img) {
+      const w = Number(img.getAttribute('width'));
+      const h = Number(img.getAttribute('height'));
+      if ((w > 0 && w <= 2) || (h > 0 && h <= 2)) return; // tracking pixel
+      const srcset = img.getAttribute('srcset');
+      pushImg(
+        absUrl(
+          img.getAttribute('src') || img.dataset.src || img.dataset.delayedUrl
+        ) || (srcset ? largestFromSrcset(srcset) : null)
+      );
+    }
+  );
 
   // ---- videos (direct sources only; blob:/MSE streams need the capture hook) ----
   const videos = [];
@@ -96,12 +97,9 @@ function extractClip() {
     function (v) {
       pushVid(absUrl(v.getAttribute('src')));
       if (!poster) poster = absUrl(v.getAttribute('poster'));
-      Array.prototype.forEach.call(
-        v.querySelectorAll('source'),
-        function (s) {
-          pushVid(absUrl(s.getAttribute('src')));
-        }
-      );
+      Array.prototype.forEach.call(v.querySelectorAll('source'), function (s) {
+        pushVid(absUrl(s.getAttribute('src')));
+      });
     }
   );
 

@@ -14,14 +14,14 @@ Rendered version of this note (private): https://claude.ai/code/artifact/a77d01e
 This is mostly wiring. The notable find is the execution engine: a complete agentic tool
 loop is implemented in Rust, covered by tests, and wired to no product feature.
 
-| Piece | Where | State |
-| --- | --- | --- |
-| Agentic tool loop — `llmDispatchToolLoopStream`, `maxSteps`, `llmCompileExecutionPlan` | `packages/backend/server/src/native.ts:1558` | implemented, **unused** |
-| 15 MCP tools over docs, blocks, tasks, boards, links | `packages/backend/server/src/plugins/copilot/mcp/provider.ts` | shipped |
-| Block-targeted action surface — `actionToHandler`, `getSelectedTextContent`, AI panel with accept/discard/regenerate | `packages/frontend/core/src/blocksuite/ai/actions` | shipped |
-| Backend split (cloud vs in-browser LLM) selected by `AiBackendService.backend$` | `packages/frontend/core/src/modules/ai-local` | shipped |
-| Yjs-backed ORM that syncs — `folders`, `projects`, `virtualViews`, `comments`, … | `packages/frontend/core/src/modules/db/schema/schema.ts` | shipped |
-| Task semantics — `todoStatus`, `orgStatus`, tags, props, `todoTrail`, deadlines — indexed | indexer + `packages/common/reader` | shipped |
+| Piece                                                                                                                | Where                                                         | State                   |
+| -------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- | ----------------------- |
+| Agentic tool loop — `llmDispatchToolLoopStream`, `maxSteps`, `llmCompileExecutionPlan`                               | `packages/backend/server/src/native.ts:1558`                  | implemented, **unused** |
+| 15 MCP tools over docs, blocks, tasks, boards, links                                                                 | `packages/backend/server/src/plugins/copilot/mcp/provider.ts` | shipped                 |
+| Block-targeted action surface — `actionToHandler`, `getSelectedTextContent`, AI panel with accept/discard/regenerate | `packages/frontend/core/src/blocksuite/ai/actions`            | shipped                 |
+| Backend split (cloud vs in-browser LLM) selected by `AiBackendService.backend$`                                      | `packages/frontend/core/src/modules/ai-local`                 | shipped                 |
+| Yjs-backed ORM that syncs — `folders`, `projects`, `virtualViews`, `comments`, …                                     | `packages/frontend/core/src/modules/db/schema/schema.ts`      | shipped                 |
+| Task semantics — `todoStatus`, `orgStatus`, tags, props, `todoTrail`, deadlines — indexed                            | indexer + `packages/common/reader`                            | shipped                 |
 
 ## 2. Storage: personal and shared, side by side
 
@@ -34,19 +34,19 @@ Which table a row sits in **is** its scope. No `scope` column that can drift out
 with where the data actually lives, and it follows the ORM's own grain (`WorkspaceDBService`
 already exposes `db` and `userdataDB$` side by side — see `modules/db/services/db.ts:103`).
 
-| Field | Type | Notes |
-| --- | --- | --- |
-| `id` | primary key | defaults to `nanoid`, as elsewhere in the schema |
-| `name` | string | shown in menus — "Break into subtasks" |
-| `emoji` | string? | menu icon; `explorerIcon` already stores icons this way |
-| `instructions` | string | the system prompt, authored by the reader |
-| `model` | string? | unset falls through to `AIModelService` |
-| `tools` | string[] | allowlist; read-only names only in phase 1 |
-| `targets` | string[] | `block` / `selection` / `doc` — drives `showWhen` |
-| `output` | string | `panel` in phase 1 |
-| `maxSteps` | number | tool-loop budget, default 8 |
-| `enabled` | boolean | hides from menus without deleting |
-| `createdAt` / `createdBy` | number / string? | author attribution on shared agents |
+| Field                     | Type             | Notes                                                   |
+| ------------------------- | ---------------- | ------------------------------------------------------- |
+| `id`                      | primary key      | defaults to `nanoid`, as elsewhere in the schema        |
+| `name`                    | string           | shown in menus — "Break into subtasks"                  |
+| `emoji`                   | string?          | menu icon; `explorerIcon` already stores icons this way |
+| `instructions`            | string           | the system prompt, authored by the reader               |
+| `model`                   | string?          | unset falls through to `AIModelService`                 |
+| `tools`                   | string[]         | allowlist; read-only names only in phase 1              |
+| `targets`                 | string[]         | `block` / `selection` / `doc` — drives `showWhen`       |
+| `output`                  | string           | `panel` in phase 1                                      |
+| `maxSteps`                | number           | tool-loop budget, default 8                             |
+| `enabled`                 | boolean          | hides from menus without deleting                       |
+| `createdAt` / `createdBy` | number / string? | author attribution on shared agents                     |
 
 `AgentsService` merges both tables into one list, tagging each row with the scope it came
 from. Promoting a personal agent to the workspace is a row copy across schemas — no
@@ -61,10 +61,7 @@ wanted at all.
 ## 3. One target shape for every entry point
 
 ```ts
-type AgentTarget =
-  | { kind: 'block';     docId: string; blockId: string }
-  | { kind: 'selection'; docId: string; blockIds: string[] }
-  | { kind: 'doc';       docId: string };
+type AgentTarget = { kind: 'block'; docId: string; blockId: string } | { kind: 'selection'; docId: string; blockIds: string[] } | { kind: 'doc'; docId: string };
 ```
 
 Context assembly reuses what the editor and indexer already produce:
@@ -85,12 +82,7 @@ interface AgentExecutor {
   run(agent: Agent, target: AgentTarget, signal: AbortSignal): AsyncIterable<AgentEvent>;
 }
 
-type AgentEvent =
-  | { type: 'step';  index: number }
-  | { type: 'tool';  name: string; args: unknown }
-  | { type: 'text';  delta: string }
-  | { type: 'done';  output: string }
-  | { type: 'error'; message: string };
+type AgentEvent = { type: 'step'; index: number } | { type: 'tool'; name: string; args: unknown } | { type: 'text'; delta: string } | { type: 'done'; output: string } | { type: 'error'; message: string };
 ```
 
 - **Local** — loop runs in the tab against `LocalLLMService`, calling MCP tools over GraphQL.
@@ -155,14 +147,14 @@ Mirrors the `modules/projects` layout exactly (`entities/` + `services/` + `stor
 
 ### 8.2 New module — `modules/agents/` — 6 files
 
-| File | Contents |
-| --- | --- |
-| `entities/agents.ts` | `Agents` entity: `agents$` LiveData merging workspace + userdata rows, each tagged `scope: 'workspace' \| 'personal'`; `revalidate()` |
-| `stores/agents.ts` | `AgentsStore`: CRUD against both tables via `WorkspaceDBService.db` and `.userdataDB$`; `create/update/delete/promote(id)` |
-| `stores/agent-runs.ts` | `AgentRunsStore`: append + ring-prune (`MAX_RUNS`), `runsForDoc$(docId)` |
-| `services/agents.ts` | `AgentsService`: `agentsFor(target)` filtering on `targets` + `enabled`; `run(agent, target)` |
-| `services/executor.ts` | `AgentExecutor` interface, `LocalAgentExecutor`, `createAgentExecutor()` branching on `AiBackendService.backend$` |
-| `index.ts` | exports + `configureAgentsModule(framework)` in `WorkspaceScope`, wired like `configureProjectsModule` |
+| File                   | Contents                                                                                                                              |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `entities/agents.ts`   | `Agents` entity: `agents$` LiveData merging workspace + userdata rows, each tagged `scope: 'workspace' \| 'personal'`; `revalidate()` |
+| `stores/agents.ts`     | `AgentsStore`: CRUD against both tables via `WorkspaceDBService.db` and `.userdataDB$`; `create/update/delete/promote(id)`            |
+| `stores/agent-runs.ts` | `AgentRunsStore`: append + ring-prune (`MAX_RUNS`), `runsForDoc$(docId)`                                                              |
+| `services/agents.ts`   | `AgentsService`: `agentsFor(target)` filtering on `targets` + `enabled`; `run(agent, target)`                                         |
+| `services/executor.ts` | `AgentExecutor` interface, `LocalAgentExecutor`, `createAgentExecutor()` branching on `AiBackendService.backend$`                     |
+| `index.ts`             | exports + `configureAgentsModule(framework)` in `WorkspaceScope`, wired like `configureProjectsModule`                                |
 
 Then one line in `modules/index.ts` to call it.
 
@@ -207,12 +199,12 @@ agent can return anything. Worth settling first.
 
 ## 9. Decisions taken
 
-| Question | Decision |
-| --- | --- |
+| Question                      | Decision                                                                        |
+| ----------------------------- | ------------------------------------------------------------------------------- |
 | Personal or workspace agents? | Both. Two tables of one shape; the table is the scope. Promotion is a row copy. |
-| Where do run records live? | Userdata only, ring-pruned. |
-| Mobile in phase 1? | No. Web first → local executor first. |
-| Can agents write? | Not in phase 1. Read-only tools; output is a preview a person accepts. |
+| Where do run records live?    | Userdata only, ring-pruned.                                                     |
+| Mobile in phase 1?            | No. Web first → local executor first.                                           |
+| Can agents write?             | Not in phase 1. Read-only tools; output is a preview a person accepts.          |
 
 ## 10. Open risks
 

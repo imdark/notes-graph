@@ -115,9 +115,7 @@ const Fold = ({ rows, single }: { rows: DiffRow[]; single: boolean }) => {
   }
   return (
     <button type="button" className={styles.fold} onClick={() => setOpen(true)}>
-      <span className={styles.foldLabel}>
-        ⋯ {rows.length} unchanged lines
-      </span>
+      <span className={styles.foldLabel}>⋯ {rows.length} unchanged lines</span>
     </button>
   );
 };

@@ -62,8 +62,7 @@ export const popCardMenu = (
                 ...typedSource.cardTypeOptions().map(option =>
                   menu.action({
                     name: option.label,
-                    isSelected:
-                      typedSource.cardTypeOf?.(rowId) === option.type,
+                    isSelected: typedSource.cardTypeOf?.(rowId) === option.type,
                     prefix: html`<div
                       style="width:10px;height:10px;border-radius:50%;background:${option.color}"
                     ></div>`,

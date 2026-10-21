@@ -57,11 +57,7 @@ import {
 } from '@notesgraph/core/modules/workspace';
 import { DebugLogger } from '@notesgraph/debug';
 import { useI18n } from '@notesgraph/i18n';
-import {
-  useLiveData,
-  useService,
-  useServiceOptional,
-} from '@notesgraph/infra';
+import { useLiveData, useService, useServiceOptional } from '@notesgraph/infra';
 import track from '@notesgraph/track';
 import { cssVar } from '@toeverything/theme';
 import { cssVarV2 } from '@toeverything/theme/v2';

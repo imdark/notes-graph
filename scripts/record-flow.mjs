@@ -67,78 +67,115 @@ const FLOWS = {
    * are consent decisions, and a reviewer is entitled to see a real one.
    */
   'calendar-demo': [
-    ['open the app', async page => {
-      await page.goto(BASE, { waitUntil: 'domcontentloaded' });
-      await page.waitForSelector('[data-testid=settings-modal-trigger]', { timeout: 60_000 });
-      await beat(page, 1500);
-    }],
-    ['open settings', async page => {
-      await page.click('[data-testid=settings-modal-trigger]');
-      await beat(page);
-    }],
+    [
+      'open the app',
+      async page => {
+        await page.goto(BASE, { waitUntil: 'domcontentloaded' });
+        await page.waitForSelector('[data-testid=settings-modal-trigger]', {
+          timeout: 60_000,
+        });
+        await beat(page, 1500);
+      },
+    ],
+    [
+      'open settings',
+      async page => {
+        await page.click('[data-testid=settings-modal-trigger]');
+        await beat(page);
+      },
+    ],
     // A signed-out visitor gets a LOCAL workspace, which has no calendar
     // integration at all. Without this gate the flow sails through every
     // later step - their conditions are all satisfied by the empty starting
     // state - and reports success over a recording of nothing.
-    ['require a signed-in cloud workspace', async page => {
-      const signedIn = () => page.locator('[data-testid=user-info-card]').isVisible();
-      if (!(await signedIn().catch(() => false))) {
-        await handOver(page, 'sign in to your cloud workspace', signedIn);
-      }
-      await beat(page);
-    }],
-    ['connect a Google calendar', async page => {
-      await handOver(
-        page,
-        'Account -> Integrations -> connect Google, sign in, and click Allow',
-        // Progress means a calendar is actually listed to subscribe to, not
-        // merely that the Integrations tab exists. The absence of the empty
-        // state is not enough on its own -- it is equally absent when the
-        // panel never rendered -- so pair it with the panel's Save button,
-        // which that panel always draws.
-        async p => {
-          await p.click('[data-testid="workspace-setting:integrations"]').catch(() => {});
-          const panelUp = await p.getByRole('button', { name: /^Save$/ })
-            .count().then(n => n > 0).catch(() => false);
-          if (!panelUp) return false;
-          return p.locator('text=/No subscribed calendars yet/i').count()
-            .then(n => n === 0);
+    [
+      'require a signed-in cloud workspace',
+      async page => {
+        const signedIn = () =>
+          page.locator('[data-testid=user-info-card]').isVisible();
+        if (!(await signedIn().catch(() => false))) {
+          await handOver(page, 'sign in to your cloud workspace', signedIn);
         }
-      );
-      await beat(page);
-    }],
-    ['choose calendars', async page => {
-      await handOver(
-        page,
-        'tick the calendars you want, then press Save',
-        // Saving clears the dirty state, so the Save button goes disabled.
-        p => p.getByRole('button', { name: /^Save$/ }).isDisabled().catch(() => false)
-      );
-      await beat(page);
-    }],
-    ['show the journal page', async page => {
-      await page.keyboard.press('Escape');
-      await beat(page, 800);
-      const journal = page.getByText(/^Journal$/).first();
-      if (await journal.isVisible().catch(() => false)) await journal.click();
-      await beat(page, 3000);
-      // The payoff shot. If no events rendered there is nothing worth
-      // filming, so say so rather than hand over a useless video.
-      const events = await page.locator('[data-testid=day-calendar-section]').count();
-      if (events === 0) {
-        throw new Error(
-          'journal page shows no calendar events - the demo has no payoff shot'
+        await beat(page);
+      },
+    ],
+    [
+      'connect a Google calendar',
+      async page => {
+        await handOver(
+          page,
+          'Account -> Integrations -> connect Google, sign in, and click Allow',
+          // Progress means a calendar is actually listed to subscribe to, not
+          // merely that the Integrations tab exists. The absence of the empty
+          // state is not enough on its own -- it is equally absent when the
+          // panel never rendered -- so pair it with the panel's Save button,
+          // which that panel always draws.
+          async p => {
+            await p
+              .click('[data-testid="workspace-setting:integrations"]')
+              .catch(() => {});
+            const panelUp = await p
+              .getByRole('button', { name: /^Save$/ })
+              .count()
+              .then(n => n > 0)
+              .catch(() => false);
+            if (!panelUp) return false;
+            return p
+              .locator('text=/No subscribed calendars yet/i')
+              .count()
+              .then(n => n === 0);
+          }
         );
-      }
-    }],
+        await beat(page);
+      },
+    ],
+    [
+      'choose calendars',
+      async page => {
+        await handOver(
+          page,
+          'tick the calendars you want, then press Save',
+          // Saving clears the dirty state, so the Save button goes disabled.
+          p =>
+            p
+              .getByRole('button', { name: /^Save$/ })
+              .isDisabled()
+              .catch(() => false)
+        );
+        await beat(page);
+      },
+    ],
+    [
+      'show the journal page',
+      async page => {
+        await page.keyboard.press('Escape');
+        await beat(page, 800);
+        const journal = page.getByText(/^Journal$/).first();
+        if (await journal.isVisible().catch(() => false)) await journal.click();
+        await beat(page, 3000);
+        // The payoff shot. If no events rendered there is nothing worth
+        // filming, so say so rather than hand over a useless video.
+        const events = await page
+          .locator('[data-testid=day-calendar-section]')
+          .count();
+        if (events === 0) {
+          throw new Error(
+            'journal page shows no calendar events - the demo has no payoff shot'
+          );
+        }
+      },
+    ],
   ],
 
   /** A quick self-test: does recording work at all? */
   smoke: [
-    ['open the app', async page => {
-      await page.goto(BASE, { waitUntil: 'domcontentloaded' });
-      await beat(page, 2500);
-    }],
+    [
+      'open the app',
+      async page => {
+        await page.goto(BASE, { waitUntil: 'domcontentloaded' });
+        await beat(page, 2500);
+      },
+    ],
   ],
 };
 
@@ -151,7 +188,9 @@ if (flowName === '--list' || !flowName) {
 }
 const flow = FLOWS[flowName];
 if (!flow) {
-  console.error(`unknown flow '${flowName}'. known: ${Object.keys(FLOWS).join(', ')}`);
+  console.error(
+    `unknown flow '${flowName}'. known: ${Object.keys(FLOWS).join(', ')}`
+  );
   process.exit(2);
 }
 
@@ -160,7 +199,9 @@ await mkdir(outDir, { recursive: true });
 const videoDir = path.join(outDir, `.raw-${Date.now()}`);
 await mkdir(videoDir, { recursive: true });
 
-console.log(`profile : ${PROFILE}${existsSync(PROFILE) ? '' : ' (new - you will need to sign in)'}`);
+console.log(
+  `profile : ${PROFILE}${existsSync(PROFILE) ? '' : ' (new - you will need to sign in)'}`
+);
 console.log(`target  : ${BASE}`);
 console.log(`flow    : ${flowName}`);
 
@@ -195,5 +236,9 @@ if (!raw) {
 const out = outArg ?? path.join(outDir, `${flowName}-${Date.now()}.webm`);
 await rename(path.join(videoDir, raw), out);
 console.log(`\nvideo: ${out}`);
-console.log('(mp4 if you need it: ffmpeg -i "' + out + '" -c:v libx264 -pix_fmt yuv420p out.mp4)');
+console.log(
+  '(mp4 if you need it: ffmpeg -i "' +
+    out +
+    '" -c:v libx264 -pix_fmt yuv420p out.mp4)'
+);
 process.exit(failure ? 1 : 0);

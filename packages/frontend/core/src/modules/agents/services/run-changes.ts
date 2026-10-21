@@ -28,7 +28,9 @@ export interface RunChanges {
 }
 
 /** Nothing worth showing: no notes, no file edits, no commits or diff. */
-export function changesAreEmpty(changes: RunChanges | null | undefined): boolean {
+export function changesAreEmpty(
+  changes: RunChanges | null | undefined
+): boolean {
   if (!changes) return true;
   const notes = changes.notes;
   return (
@@ -118,11 +120,26 @@ export function parsePatch(patch: string): PatchFile[] {
     }
     if (!hunk) continue;
     if (line.startsWith('+')) {
-      hunk.lines.push({ kind: 'added', text: line.slice(1), oldNo: null, newNo: newNo++ });
+      hunk.lines.push({
+        kind: 'added',
+        text: line.slice(1),
+        oldNo: null,
+        newNo: newNo++,
+      });
     } else if (line.startsWith('-')) {
-      hunk.lines.push({ kind: 'removed', text: line.slice(1), oldNo: oldNo++, newNo: null });
+      hunk.lines.push({
+        kind: 'removed',
+        text: line.slice(1),
+        oldNo: oldNo++,
+        newNo: null,
+      });
     } else if (line.startsWith(' ')) {
-      hunk.lines.push({ kind: 'context', text: line.slice(1), oldNo: oldNo++, newNo: newNo++ });
+      hunk.lines.push({
+        kind: 'context',
+        text: line.slice(1),
+        oldNo: oldNo++,
+        newNo: newNo++,
+      });
     } else if (line.startsWith('\\')) {
       hunk.lines.push({ kind: 'note', text: line, oldNo: null, newNo: null });
     }

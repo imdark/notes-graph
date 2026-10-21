@@ -29,7 +29,7 @@ scripts/send-test-email.sh you@example.com   # send through the app's real SMTP 
 
 - **EC2 blocks outbound port 25** → cannot deliver directly; must relay via SES on **587**.
   Reverse DNS is `…amazonaws.com`, so direct-send would spam-folder anyway.
-- **SES sandbox**: until AWS grants **production access**, mail only reaches *verified*
+- **SES sandbox**: until AWS grants **production access**, mail only reaches _verified_
   recipient addresses. Production access is a **console** step — the API refuses to
   re-submit after a denial (`ConflictException`). Stopgap: verify each recipient with
   `aws sesv2 create-email-identity --email-identity them@x.com --region us-east-2`

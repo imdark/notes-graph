@@ -232,7 +232,9 @@ export const NavigationPanelNotes = () => {
     if (optimisticLinks.size === 0) {
       return edges;
     }
-    const existing = new Set(edges.map(edge => `${edge.source} ${edge.target}`));
+    const existing = new Set(
+      edges.map(edge => `${edge.source} ${edge.target}`)
+    );
     const extra: { source: string; target: string }[] = [];
     for (const [child, parent] of optimisticLinks) {
       const key = `${parent} ${child}`;
@@ -342,7 +344,8 @@ export const NavigationPanelNotes = () => {
     const journalRoots: string[] = [];
     const addRoot = (id: string) => {
       // Project docs live under their project node at the root, not the Inbox.
-      if (id === homeDocId || reachable.has(id) || projectDocIds.has(id)) return;
+      if (id === homeDocId || reachable.has(id) || projectDocIds.has(id))
+        return;
       if (journalDocIds.has(id)) journalRoots.push(id);
       else inboxRoots.push(id);
       visit(id);
@@ -368,7 +371,14 @@ export const NavigationPanelNotes = () => {
       ),
       parentOf,
     };
-  }, [mergedEdges, nonTrashIds, homeDocId, journalDocIds, projectDocIds, titleOf]);
+  }, [
+    mergedEdges,
+    nonTrashIds,
+    homeDocId,
+    journalDocIds,
+    projectDocIds,
+    titleOf,
+  ]);
 
   // Doc ids that have at least one non-trashed child in the note tree — the
   // doc nodes read this (via HasChildrenContext) to show a folder icon.
@@ -431,7 +441,10 @@ export const NavigationPanelNotes = () => {
     if (chain[0] !== homeDocId) {
       // Leftover roots hang off either the Journal node (journal days) or the
       // Inbox node (everything else) — expand the right one.
-      ancestorPath = [...path, journalDocIds.has(chain[0]) ? 'journal' : 'inbox'];
+      ancestorPath = [
+        ...path,
+        journalDocIds.has(chain[0]) ? 'journal' : 'inbox',
+      ];
       navigationPanelService.setCollapsed(ancestorPath, false);
     }
     for (const id of chain) {
@@ -565,7 +578,10 @@ export const NavigationPanelNotes = () => {
                   trailingChildren={
                     <>
                       {journalIds.length > 0 ? (
-                        <JournalNode parentPath={path} journalIds={journalIds} />
+                        <JournalNode
+                          parentPath={path}
+                          journalIds={journalIds}
+                        />
                       ) : null}
                       <InboxNode parentPath={path} orphanIds={orphanIds} />
                     </>

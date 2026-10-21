@@ -29,7 +29,11 @@ const MIME_BY_EXT: Record<string, string> = {
  * box never re-compresses multi-MB bundles per request and browsers cache them
  * immutably. Returns true when it fully handled the response.
  */
-function servePrecompressed(root: string, req: Request, res: Response): boolean {
+function servePrecompressed(
+  root: string,
+  req: Request,
+  res: Response
+): boolean {
   if (req.method !== 'GET' && req.method !== 'HEAD') {
     return false;
   }

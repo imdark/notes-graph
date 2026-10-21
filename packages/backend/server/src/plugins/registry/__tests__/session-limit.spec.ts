@@ -34,12 +34,18 @@ test('leaves other failures alone', t => {
 });
 
 test('reads an epoch reset', t => {
-  t.is(parseSessionReset('Claude AI usage limit reached|1759600800', now), 1759600800_000);
+  t.is(
+    parseSessionReset('Claude AI usage limit reached|1759600800', now),
+    1759600800_000
+  );
 });
 
 test('reads a clock time in the zone given', t => {
   t.is(
-    parseSessionReset("You've hit your limit · resets 3pm (America/Los_Angeles)", now),
+    parseSessionReset(
+      "You've hit your limit · resets 3pm (America/Los_Angeles)",
+      now
+    ),
     Date.parse('2026-10-05T22:00:00Z')
   );
   t.is(
@@ -58,7 +64,10 @@ test('a time already past today is tomorrow', t => {
 
 test('reads a dated reset', t => {
   t.is(
-    parseSessionReset('Weekly limit reached ∙ resets Oct 9, 5pm (Europe/London)', now),
+    parseSessionReset(
+      'Weekly limit reached ∙ resets Oct 9, 5pm (Europe/London)',
+      now
+    ),
     Date.parse('2026-10-09T16:00:00Z')
   );
 });

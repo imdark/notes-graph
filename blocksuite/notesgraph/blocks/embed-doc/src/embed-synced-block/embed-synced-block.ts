@@ -53,7 +53,9 @@ export class EmbedSyncedBlockComponent extends CaptionedBlockComponent<EmbedSync
       user-select: none;
       z-index: 1;
     }
-    notesgraph-embed-synced-block .synced-block-frame:hover .synced-block-badge {
+    notesgraph-embed-synced-block
+      .synced-block-frame:hover
+      .synced-block-badge {
       display: inline-flex;
     }
     notesgraph-embed-synced-block .synced-block-missing {
@@ -220,7 +222,10 @@ export class EmbedSyncedBlockComponent extends CaptionedBlockComponent<EmbedSync
   };
 
   /** Persist the formula editor's expression + refs onto the model. */
-  saveFormula(expression: string, refs: EmbedSyncedBlockModel['props']['refs']) {
+  saveFormula(
+    expression: string,
+    refs: EmbedSyncedBlockModel['props']['refs']
+  ) {
     this.store.captureSync();
     this.model.props.expression = expression.trim() ? expression : null;
     this.model.props.refs = refs && refs.length ? refs : [];

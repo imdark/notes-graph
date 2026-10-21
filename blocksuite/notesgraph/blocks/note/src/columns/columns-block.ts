@@ -4,10 +4,7 @@ import type {
   ColumnsBlockModel,
 } from '@blocksuite/notesgraph-model';
 import { focusTextModel } from '@blocksuite/notesgraph-rich-text';
-import {
-  addColumn,
-  removeColumn,
-} from '@blocksuite/notesgraph-shared/utils';
+import { addColumn, removeColumn } from '@blocksuite/notesgraph-shared/utils';
 import { BlockComponent } from '@blocksuite/std';
 import { css, html, nothing } from 'lit';
 
@@ -186,8 +183,7 @@ export class ColumnBlockComponent extends BlockComponent<ColumnBlockModel> {
     const leftPx = this.getBoundingClientRect().width;
     const rightPx = nextEl.getBoundingClientRect().width;
     const totalPx = leftPx + rightPx;
-    const totalWidth =
-      (this.model.props.width || 1) + (next.props.width || 1);
+    const totalWidth = (this.model.props.width || 1) + (next.props.width || 1);
     let leftShare = leftPx / totalPx;
 
     const onMove = (move: PointerEvent) => {
@@ -228,10 +224,7 @@ export class ColumnBlockComponent extends BlockComponent<ColumnBlockModel> {
             <span>Empty column</span>
             ${readonly
               ? nothing
-              : html`<button
-                  data-testid="column-remove"
-                  @click=${this._remove}
-                >
+              : html`<button data-testid="column-remove" @click=${this._remove}>
                   Remove
                 </button>`}
           </div>`}

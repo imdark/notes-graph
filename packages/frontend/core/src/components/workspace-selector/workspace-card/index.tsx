@@ -332,7 +332,13 @@ export const WorkspaceCard = forwardRef<
         confirmButtonOptions: { variant: 'error' },
         onConfirm: doRemoveWorkspace,
       });
-    }, [openConfirmModal, name, workspaceMetadata.flavour, doRemoveWorkspace, t]);
+    }, [
+      openConfirmModal,
+      name,
+      workspaceMetadata.flavour,
+      doRemoveWorkspace,
+      t,
+    ]);
 
     // deleting is allowed for local workspaces and cloud workspaces you own
     const canDelete =

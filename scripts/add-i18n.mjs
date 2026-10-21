@@ -29,4 +29,6 @@ if (obj[key] === value) {
 const existed = Object.hasOwn(obj, key);
 obj[key] = value;
 writeFileSync(file, JSON.stringify(obj, null, 2) + '\n');
-console.log(`${existed ? 'updated' : 'added'}: ${key} = ${JSON.stringify(value)}`);
+console.log(
+  `${existed ? 'updated' : 'added'}: ${key} = ${JSON.stringify(value)}`
+);

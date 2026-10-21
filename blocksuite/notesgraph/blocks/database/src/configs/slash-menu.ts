@@ -233,7 +233,8 @@ export const databaseSlashMenuConfig: SlashMenuConfig = {
 
     {
       name: 'Task List',
-      description: 'A live list of open tasks matching #tags across the workspace.',
+      description:
+        'A live list of open tasks matching #tags across the workspace.',
       searchAlias: ['database', 'query', 'list', 'tasks', 'todo'],
       icon: DatabaseTableViewIcon(),
       group: '7_Database@6',
@@ -283,7 +284,14 @@ export const databaseSlashMenuConfig: SlashMenuConfig = {
     {
       name: 'Task Chart',
       description: 'Chart of tasks matching #tags, by status, date and more.',
-      searchAlias: ['database', 'query', 'chart', 'graph', 'dashboard', 'tasks'],
+      searchAlias: [
+        'database',
+        'query',
+        'chart',
+        'graph',
+        'dashboard',
+        'tasks',
+      ],
       icon: ChartPanelIcon(),
       group: '7_Database@7',
       when: ({ model }) =>

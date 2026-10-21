@@ -175,10 +175,7 @@ export class NotesApiController {
       typeof body.childDocId === 'string' ? body.childDocId.trim() : '';
     if (!childDocId) throw new BadRequestException('childDocId is required');
     await this.ac.user(user.id).doc(workspaceId, docId).assert('Doc.Update');
-    await this.ac
-      .user(user.id)
-      .doc(workspaceId, childDocId)
-      .assert('Doc.Read');
+    await this.ac.user(user.id).doc(workspaceId, childDocId).assert('Doc.Read');
     await this.docWriter.linkDoc(workspaceId, docId, childDocId, user.id);
     this.logger.log(`linked ${childDocId} under ${workspaceId}/${docId}`);
     return { ok: true };

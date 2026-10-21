@@ -71,7 +71,9 @@ function* assignments(text: string): Generator<string> {
 /** Every secret in `text`: what matched, and its label. */
 function* secrets(text: string): Generator<{ value: string; label: string }> {
   for (const [pattern, label] of TOKEN_PATTERNS) {
-    for (const match of text.matchAll(new RegExp(pattern.source, `${pattern.flags}g`))) {
+    for (const match of text.matchAll(
+      new RegExp(pattern.source, `${pattern.flags}g`)
+    )) {
       yield { value: match[0], label };
     }
   }
@@ -99,9 +101,7 @@ export function secretRefusal(label: string): string {
 }
 
 /** The refusal for the first field that holds a secret, or null. */
-export function guardSecrets(
-  ...texts: (string | undefined)[]
-): string | null {
+export function guardSecrets(...texts: (string | undefined)[]): string | null {
   for (const text of texts) {
     if (!text) continue;
     const label = findSecret(text);

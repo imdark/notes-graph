@@ -4,15 +4,8 @@
   "version": "0.2.0",
   "description": "Machines and folders registered as deployment and agent-execution targets: health, registration and removal.",
   "author": "NotesGraph",
-  "platforms": [
-    "web",
-    "desktop"
-  ],
-  "permissions": [
-    "ui",
-    "net",
-    "workspace"
-  ],
+  "platforms": ["web", "desktop"],
+  "permissions": ["ui", "net", "workspace"],
   "entry": {
     "client": "index.js"
   },

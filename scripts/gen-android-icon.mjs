@@ -33,7 +33,7 @@ const mark = `
   <circle cx="72" cy="72" r="8.6" fill="#E7E7F2"/>
   <circle cx="72" cy="36" r="10.4" fill="url(#ng)"/>`;
 
-const svg = (inner) =>
+const svg = inner =>
   Buffer.from(
     `<svg xmlns="http://www.w3.org/2000/svg" width="108" height="108" viewBox="0 0 108 108">${inner}</svg>`
   );
@@ -41,7 +41,9 @@ const svg = (inner) =>
 // Transparent foreground (for the adaptive icon's foreground layer).
 const foreground = svg(mark);
 // Full icon: dark rounded square + mark (legacy square launcher + splash).
-const full = svg(`<rect width="108" height="108" rx="24" fill="${BG}"/>${mark}`);
+const full = svg(
+  `<rect width="108" height="108" rx="24" fill="${BG}"/>${mark}`
+);
 // Round icon: dark circle + mark (legacy round launcher).
 const round = svg(`<circle cx="54" cy="54" r="54" fill="${BG}"/>${mark}`);
 // Play Store: full-bleed square (no rounded corners — Play applies its own mask).
@@ -49,7 +51,13 @@ const store = svg(`<rect width="108" height="108" fill="${BG}"/>${mark}`);
 
 // density -> px. Launcher rasters are 48dp; adaptive foreground is 108dp.
 const LAUNCHER = { mdpi: 48, hdpi: 72, xhdpi: 96, xxhdpi: 144, xxxhdpi: 192 };
-const FOREGROUND = { mdpi: 108, hdpi: 162, xhdpi: 216, xxhdpi: 324, xxxhdpi: 432 };
+const FOREGROUND = {
+  mdpi: 108,
+  hdpi: 162,
+  xhdpi: 216,
+  xxhdpi: 324,
+  xxxhdpi: 432,
+};
 
 const webp = (buf, px, out) =>
   sharp(buf, { density: 512 })
@@ -75,7 +83,9 @@ for (const [d, px] of Object.entries(LAUNCHER)) {
 for (const [d, px] of Object.entries(FOREGROUND)) {
   const dir = path.join(RES, 'res', `mipmap-${d}`);
   mkdirSync(dir, { recursive: true });
-  jobs.push(webp(foreground, px, path.join(dir, 'ic_launcher_foreground.webp')));
+  jobs.push(
+    webp(foreground, px, path.join(dir, 'ic_launcher_foreground.webp'))
+  );
 }
 jobs.push(png(store, 512, path.join(RES, 'ic_launcher-playstore.png')));
 

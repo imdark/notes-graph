@@ -66,7 +66,12 @@
   --notesgraph-v2-edgeless-group-border-active: #ff2d78;
   --notesgraph-v2-edgeless-group-fontColor-active: #ff2d78;
   --notesgraph-v2-edgeless-selection-selectionMarqueeBorder: #ff2d78;
-  --notesgraph-v2-edgeless-selection-selectionMarqueeBackground: rgba(255, 45, 120, 0.08);
+  --notesgraph-v2-edgeless-selection-selectionMarqueeBackground: rgba(
+    255,
+    45,
+    120,
+    0.08
+  );
 
   /* v2 surfaces */
   --notesgraph-v2-layer-background-primary: #0b0714;
@@ -137,7 +142,12 @@
   --notesgraph-v2-edgeless-group-border-active: #e6165f;
   --notesgraph-v2-edgeless-group-fontColor-active: #e6165f;
   --notesgraph-v2-edgeless-selection-selectionMarqueeBorder: #e6165f;
-  --notesgraph-v2-edgeless-selection-selectionMarqueeBackground: rgba(230, 22, 95, 0.06);
+  --notesgraph-v2-edgeless-selection-selectionMarqueeBackground: rgba(
+    230,
+    22,
+    95,
+    0.06
+  );
 
   /* v2 surfaces */
   --notesgraph-v2-layer-background-primary: #faf9fd;

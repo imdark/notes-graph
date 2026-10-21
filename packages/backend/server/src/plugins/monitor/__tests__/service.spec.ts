@@ -43,7 +43,8 @@ function setup(options: { canWrite?: boolean; monitor?: any } = {}) {
       get: async () => options.monitor ?? null,
       findByPendingJob: async () => options.monitor ?? null,
       update: async (id: string, data: any) => updates.push({ id, ...data }),
-      addReading: async (id: string, reading: any) => readings.push({ id, ...reading }),
+      addReading: async (id: string, reading: any) =>
+        readings.push({ id, ...reading }),
     },
     doc: { getMeta: async () => ({ title: 'Rates' }) },
   };
@@ -51,11 +52,14 @@ function setup(options: { canWrite?: boolean; monitor?: any } = {}) {
     updateBlock: async (...args: any[]) => writes.push(args),
   };
   const notifications: any = {
-    createMonitorAlert: async (input: any, opts: any) => alerts.push({ input, opts }),
+    createMonitorAlert: async (input: any, opts: any) =>
+      alerts.push({ input, opts }),
   };
   const ac: any = {
     user: () => ({
-      workspace: () => ({ doc: () => ({ can: async () => options.canWrite ?? true }) }),
+      workspace: () => ({
+        doc: () => ({ can: async () => options.canWrite ?? true }),
+      }),
     }),
   };
   const jobs: any = {
@@ -65,8 +69,18 @@ function setup(options: { canWrite?: boolean; monitor?: any } = {}) {
     },
   };
   const queue: any = { add: async () => {} };
-  const push: any = { monitorAlert: async (...args: any[]) => pushes.push(args) };
-  const service = new MonitorService(models, writer, notifications, ac, jobs, queue, push);
+  const push: any = {
+    monitorAlert: async (...args: any[]) => pushes.push(args),
+  };
+  const service = new MonitorService(
+    models,
+    writer,
+    notifications,
+    ac,
+    jobs,
+    queue,
+    push
+  );
   return { service, writes, readings, updates, alerts, pushes, queued };
 }
 
@@ -75,9 +89,17 @@ test('a first reading is written to the block and kept, without alerting', async
   await service.record(monitorRow(), '0.92');
   t.is(writes.length, 1);
   const [ws, doc, block, line, editor, editorId] = writes[0];
-  t.deepEqual([ws, doc, block, editor, editorId], ['ws', 'doc', 'blk', 'Monitor: EUR', 'u1']);
+  t.deepEqual(
+    [ws, doc, block, editor, editorId],
+    ['ws', 'doc', 'blk', 'Monitor: EUR', 'u1']
+  );
   t.true(line.startsWith('EUR: 0.92 · checked '));
-  t.deepEqual(readings[0], { id: 'm1', value: '0.92', changed: false, alerted: false });
+  t.deepEqual(readings[0], {
+    id: 'm1',
+    value: '0.92',
+    changed: false,
+    alerted: false,
+  });
   t.is(updates.at(-1).lastValue, '0.92');
   t.is(alerts.length, 0);
 });
@@ -85,7 +107,10 @@ test('a first reading is written to the block and kept, without alerting', async
 test('a changed value alerts by the channels the monitor asks for', async t => {
   const { service, alerts, pushes, readings } = setup();
   await service.record(
-    monitorRow({ lastValue: '0.91', alerts: { inApp: true, push: true, email: true } }),
+    monitorRow({
+      lastValue: '0.91',
+      alerts: { inApp: true, push: true, email: true },
+    }),
     '0.92'
   );
   t.is(alerts.length, 1);
@@ -109,7 +134,9 @@ test('a monitor set to alert nowhere only updates the block', async t => {
 
 test('losing edit access to the note fails the run instead of writing', async t => {
   const { service, writes } = setup({ canWrite: false });
-  await t.throwsAsync(service.record(monitorRow(), '1'), { message: /edit access/ });
+  await t.throwsAsync(service.record(monitorRow(), '1'), {
+    message: /edit access/,
+  });
   t.is(writes.length, 0);
 });
 
@@ -140,7 +167,12 @@ test('a command check queues a device job and waits for it', async t => {
   await service.run({ monitorId: 'm1' });
   const [ws, user, device, body] = queued[0];
   t.deepEqual([ws, user, device], ['ws', 'u1', 'mac']);
-  t.like(body, { model: 'command', instructions: 'echo 42', docId: 'doc', blockId: 'blk' });
+  t.like(body, {
+    model: 'command',
+    instructions: 'echo 42',
+    docId: 'doc',
+    blockId: 'blk',
+  });
   t.is(updates.at(-1).pendingJobId, 'job-1');
 });
 
@@ -164,7 +196,12 @@ test('the device job’s output becomes the reading', async t => {
 });
 
 test('an agent run’s summary is the reading; the agent wrote the block itself', async t => {
-  const monitor = monitorRow({ kind: 'agent', source: null, deviceKey: 'mac', pendingJobId: 'job-1' });
+  const monitor = monitorRow({
+    kind: 'agent',
+    source: null,
+    deviceKey: 'mac',
+    pendingJobId: 'job-1',
+  });
   const { service, writes, readings } = setup({ monitor });
   await service.onJobFinished({
     workspaceId: 'ws',
@@ -190,15 +227,35 @@ test('an agent is told which block to keep current', t => {
 test('validate refuses a check that runs too often or has no URL', t => {
   const { service } = setup();
   t.throws(() =>
-    service.validate({ kind: 'check', source: 'url', spec: { url: 'https://x' }, intervalMinutes: 1 })
+    service.validate({
+      kind: 'check',
+      source: 'url',
+      spec: { url: 'https://x' },
+      intervalMinutes: 1,
+    })
   );
   t.throws(() =>
-    service.validate({ kind: 'check', source: 'url', spec: {}, intervalMinutes: 10 })
+    service.validate({
+      kind: 'check',
+      source: 'url',
+      spec: {},
+      intervalMinutes: 10,
+    })
   );
   t.throws(() =>
-    service.validate({ kind: 'agent', spec: { instructions: 'x' }, deviceKey: 'mac', intervalMinutes: 30 })
+    service.validate({
+      kind: 'agent',
+      spec: { instructions: 'x' },
+      deviceKey: 'mac',
+      intervalMinutes: 30,
+    })
   );
   t.notThrows(() =>
-    service.validate({ kind: 'agent', spec: { instructions: 'x' }, deviceKey: 'mac', intervalMinutes: 60 })
+    service.validate({
+      kind: 'agent',
+      spec: { instructions: 'x' },
+      deviceKey: 'mac',
+      intervalMinutes: 60,
+    })
   );
 });

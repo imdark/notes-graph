@@ -13,8 +13,16 @@ import { GOOGLE_WORKSPACE_INTEGRATION_SCROLL_ANCHOR } from '../../../navigation-
 import { IntegrationSettingHeader } from '../setting';
 import * as styles from './setting-panel.css';
 
-type AvailableGroup = { externalId: string; email: string; name?: string | null };
-type AvailableOrgUnit = { externalId: string; path: string; name?: string | null };
+type AvailableGroup = {
+  externalId: string;
+  email: string;
+  name?: string | null;
+};
+type AvailableOrgUnit = {
+  externalId: string;
+  path: string;
+  name?: string | null;
+};
 
 export const GoogleWorkspaceSettingPanel = () => {
   const t = useI18n();
@@ -76,7 +84,8 @@ export const GoogleWorkspaceSettingPanel = () => {
     } catch (error) {
       console.error('Failed to disconnect Google Workspace', error);
       notify.error({
-        title: t['com.notesgraph.integration.google-workspace.disconnect-error'](),
+        title:
+          t['com.notesgraph.integration.google-workspace.disconnect-error'](),
       });
     } finally {
       setDisconnecting(false);
@@ -99,7 +108,9 @@ export const GoogleWorkspaceSettingPanel = () => {
         console.error('Failed to load Google Workspace groups/OUs', error);
         notify.error({
           title:
-            t['com.notesgraph.integration.google-workspace.load-options-error'](),
+            t[
+              'com.notesgraph.integration.google-workspace.load-options-error'
+            ](),
         });
       })
       .finally(() => setLoadingOptions(false));
@@ -127,7 +138,8 @@ export const GoogleWorkspaceSettingPanel = () => {
     } catch (error) {
       console.error('Failed to create directory sync scope', error);
       notify.error({
-        title: t['com.notesgraph.integration.google-workspace.add-scope-error'](),
+        title:
+          t['com.notesgraph.integration.google-workspace.add-scope-error'](),
       });
     } finally {
       setCreatingScope(false);
@@ -152,7 +164,9 @@ export const GoogleWorkspaceSettingPanel = () => {
         console.error('Failed to remove directory sync scope', error);
         notify.error({
           title:
-            t['com.notesgraph.integration.google-workspace.remove-scope-error'](),
+            t[
+              'com.notesgraph.integration.google-workspace.remove-scope-error'
+            ](),
         });
       } finally {
         setBusyScopeId(null);
@@ -239,7 +253,9 @@ export const GoogleWorkspaceSettingPanel = () => {
                       {projectNameById.get(scope.projectId) ?? scope.projectId}
                       {' · '}
                       {scope.memberCount}{' '}
-                      {t['com.notesgraph.integration.google-workspace.members']()}
+                      {t[
+                        'com.notesgraph.integration.google-workspace.members'
+                      ]()}
                     </div>
                     {scope.lastError ? (
                       <div className={styles.errorText}>{scope.lastError}</div>
@@ -250,13 +266,17 @@ export const GoogleWorkspaceSettingPanel = () => {
                       onClick={() => void handleSyncNow(scope.id)}
                       loading={busyScopeId === scope.id}
                     >
-                      {t['com.notesgraph.integration.google-workspace.sync-now']()}
+                      {t[
+                        'com.notesgraph.integration.google-workspace.sync-now'
+                      ]()}
                     </Button>
                     <Button
                       onClick={() => void handleRemoveScope(scope.id)}
                       loading={busyScopeId === scope.id}
                     >
-                      {t['com.notesgraph.integration.google-workspace.remove-scope']()}
+                      {t[
+                        'com.notesgraph.integration.google-workspace.remove-scope'
+                      ]()}
                     </Button>
                   </div>
                 </div>
@@ -275,10 +295,14 @@ export const GoogleWorkspaceSettingPanel = () => {
                     }}
                   >
                     <option value="group">
-                      {t['com.notesgraph.integration.google-workspace.scope-type.group']()}
+                      {t[
+                        'com.notesgraph.integration.google-workspace.scope-type.group'
+                      ]()}
                     </option>
                     <option value="org_unit">
-                      {t['com.notesgraph.integration.google-workspace.scope-type.org-unit']()}
+                      {t[
+                        'com.notesgraph.integration.google-workspace.scope-type.org-unit'
+                      ]()}
                     </option>
                   </select>
                   <select
@@ -288,7 +312,9 @@ export const GoogleWorkspaceSettingPanel = () => {
                     disabled={loadingOptions}
                   >
                     <option value="">
-                      {t['com.notesgraph.integration.google-workspace.select-source']()}
+                      {t[
+                        'com.notesgraph.integration.google-workspace.select-source'
+                      ]()}
                     </option>
                     {(scopeType === 'group' ? groups : orgUnits).map(option => (
                       <option key={option.externalId} value={option.externalId}>
@@ -302,7 +328,9 @@ export const GoogleWorkspaceSettingPanel = () => {
                     onChange={e => setSelectedProjectId(e.target.value)}
                   >
                     <option value="">
-                      {t['com.notesgraph.integration.google-workspace.select-project']()}
+                      {t[
+                        'com.notesgraph.integration.google-workspace.select-project'
+                      ]()}
                     </option>
                     {(projects ?? []).map(project => (
                       <option key={project.id} value={project.id}>
@@ -321,7 +349,9 @@ export const GoogleWorkspaceSettingPanel = () => {
                     disabled={!selectedExternalId || !selectedProjectId}
                     loading={creatingScope}
                   >
-                    {t['com.notesgraph.integration.google-workspace.add-scope']()}
+                    {t[
+                      'com.notesgraph.integration.google-workspace.add-scope'
+                    ]()}
                   </Button>
                 </div>
               </div>

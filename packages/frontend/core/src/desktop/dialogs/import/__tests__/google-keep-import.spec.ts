@@ -60,9 +60,9 @@ describe('keepNoteToMarkdown', () => {
   });
 
   test('an untitled note falls back to its first line, then "Untitled"', () => {
-    expect(keepNoteToMarkdown({ textContent: 'first line\nsecond' }).title).toBe(
-      'first line'
-    );
+    expect(
+      keepNoteToMarkdown({ textContent: 'first line\nsecond' }).title
+    ).toBe('first line');
     expect(keepNoteToMarkdown({ textContent: '' }).title).toBe('Untitled');
     expect(keepNoteToMarkdown({}).title).toBe('Untitled');
   });

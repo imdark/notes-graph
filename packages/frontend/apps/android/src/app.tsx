@@ -406,8 +406,9 @@ try {
       : `/workspace/${workspaceId}/agents`;
     return true;
   }
-  const workspaceRef =
-    frameworkProvider.get(WorkspacesService).openByWorkspaceId(workspaceId);
+  const workspaceRef = frameworkProvider
+    .get(WorkspacesService)
+    .openByWorkspaceId(workspaceId);
   if (!workspaceRef) return false;
   const { workspace, dispose } = workspaceRef;
   try {

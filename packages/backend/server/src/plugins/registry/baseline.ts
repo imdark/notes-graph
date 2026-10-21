@@ -29,7 +29,11 @@ export interface Finding {
 }
 
 /** The baseline after one more reading; `alpha` is how much that reading counts. */
-export function learn(baseline: Baseline | null, value: number, alpha = ALPHA): Baseline {
+export function learn(
+  baseline: Baseline | null,
+  value: number,
+  alpha = ALPHA
+): Baseline {
   if (!baseline || baseline.samples === 0) {
     return { mean: value, variance: 0, samples: 1, lastValue: value };
   }

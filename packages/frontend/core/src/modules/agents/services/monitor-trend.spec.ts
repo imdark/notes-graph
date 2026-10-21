@@ -32,7 +32,11 @@ describe('readingNumber', () => {
 
 describe('monitorTrend', () => {
   test('puts the server’s newest-first readings oldest first', () => {
-    const trend = monitorTrend([reading('5', 30), reading('2', 20), reading('4', 10)]);
+    const trend = monitorTrend([
+      reading('5', 30),
+      reading('2', 20),
+      reading('4', 10),
+    ]);
     expect(trend?.points.map(p => p.value)).toEqual([4, 2, 5]);
     expect(trend).toMatchObject({ min: 2, max: 5, latest: 5, delta: 1 });
   });

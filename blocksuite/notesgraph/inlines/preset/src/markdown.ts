@@ -300,7 +300,13 @@ export const OrgStatusKeywordMarkdown =
   InlineMarkdownExtension<NotesGraphTextAttributes>({
     name: 'org-status-keyword',
     pattern: new RegExp(`^(${ORG_STATUS_KEYWORDS.join('|')})\\s$`),
-    action: ({ inlineEditor, prefixText, inlineRange, pattern, undoManager }) => {
+    action: ({
+      inlineEditor,
+      prefixText,
+      inlineRange,
+      pattern,
+      undoManager,
+    }) => {
       const match = prefixText.match(pattern);
       if (!match) return;
       const keyword = match[1];

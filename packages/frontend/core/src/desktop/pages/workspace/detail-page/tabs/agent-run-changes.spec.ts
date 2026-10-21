@@ -9,9 +9,8 @@ describe('agent run changes', () => {
   // LitTextRenderer constructs a <text-renderer> nobody had defined yet.
   test('defines <text-renderer> on load', async () => {
     await import('./agent-run-changes');
-    const { TextRenderer } = await import(
-      '@notesgraph/core/blocksuite/ai/components/text-renderer'
-    );
+    const { TextRenderer } =
+      await import('@notesgraph/core/blocksuite/ai/components/text-renderer');
 
     // scripts/setup/lit.ts stubs customElements with mocks.
     expect(customElements.define).toHaveBeenCalledWith(

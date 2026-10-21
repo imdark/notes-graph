@@ -23,7 +23,7 @@ An agent is a saved instruction you run on a block, a selection or a whole note:
 
 - **Where it runs.** On the page in your browser, on the server, on a machine you've registered (Claude Code in
   a worktree of your repo), or as **Research**, with web search and page reading.
-- **How it works.** An agent *answers*, *works in the note* (writes to it, ticks tasks) or *fans out*: on a block
+- **How it works.** An agent _answers_, _works in the note_ (writes to it, ticks tasks) or _fans out_: on a block
   with sub-blocks it starts one run per sub-block, side by side. Task lists are claimed while an agent is on
   them, so two agents don't take the same task.
 - **You stay in the loop.** Watch a run live, steer it while it works, and answer its questions. A finished
@@ -31,7 +31,7 @@ An agent is a saved instruction you run on a block, a selection or a whole note:
   - **Approve** keeps what it did.
   - **Review changes** shows a summary, the notes it created and a diff of the files it changed.
   - **Ask** lets you question the run about what it did.
-- **It learns your conventions.** Every run reads your *Agent rules* note. A note titled `Skill: <name>`
+- **It learns your conventions.** Every run reads your _Agent rules_ note. A note titled `Skill: <name>`
   becomes a skill your agents can use.
 - **Templates to start from.** Research, Goal check, Deal monitor, Compile a source into my notes, a weekly
   Notes health check, and Fix it for failed health checks.
@@ -100,14 +100,14 @@ An agent is a saved instruction you run on a block, a selection or a whole note:
 
 ## Get it
 
-| Platform        | How                                                                                     |
-| --------------- | --------------------------------------------------------------------------------------- |
-| **Web**         | [app.notesgraph.com](https://app.notesgraph.com). Nothing to install.                   |
+| Platform        | How                                                                                                            |
+| --------------- | -------------------------------------------------------------------------------------------------------------- |
+| **Web**         | [app.notesgraph.com](https://app.notesgraph.com). Nothing to install.                                          |
 | **Android**     | [Download the .apk](https://notesgraph.com/download) (arm64), then allow your browser to install unknown apps. |
-| **macOS**       | [Download the .dmg](https://notesgraph.com/download) (Apple Silicon).                   |
-| **Web clipper** | [Download the .zip](https://notesgraph.com/download) for Chrome or Edge.                |
-| iOS             | Coming soon.                                                                             |
-| Windows, Linux  | Coming soon.                                                                             |
+| **macOS**       | [Download the .dmg](https://notesgraph.com/download) (Apple Silicon).                                          |
+| **Web clipper** | [Download the .zip](https://notesgraph.com/download) for Chrome or Edge.                                       |
+| iOS             | Coming soon.                                                                                                   |
+| Windows, Linux  | Coming soon.                                                                                                   |
 
 These are early builds:
 
@@ -163,15 +163,15 @@ yarn dev
 More detail is in [docs/BUILDING.md](docs/BUILDING.md) and [docs/developing-server.md](docs/developing-server.md).
 The `yarn notesgraph` CLI is described in [tools/cli](tools/cli/README.md).
 
-| Task                  | Command                                                         |
-| --------------------- | --------------------------------------------------------------- |
-| Unit tests            | `yarn test` (Vitest)                                            |
-| Server tests          | `yarn workspace @notesgraph/server test` (AVA)                  |
-| End-to-end tests      | `yarn workspace @notesgraph-test/notesgraph-local e2e` (Playwright) |
-| Typecheck one package | `scripts/typecheck.sh packages/frontend/core`                   |
-| Lint                  | `yarn lint`                                                     |
+| Task                  | Command                                                                        |
+| --------------------- | ------------------------------------------------------------------------------ |
+| Unit tests            | `yarn test` (Vitest)                                                           |
+| Server tests          | `yarn workspace @notesgraph/server test` (AVA)                                 |
+| End-to-end tests      | `yarn workspace @notesgraph-test/notesgraph-local e2e` (Playwright)            |
+| Typecheck one package | `scripts/typecheck.sh packages/frontend/core`                                  |
+| Lint                  | `yarn lint`                                                                    |
 | Android APK           | `scripts/build-android.sh`, then `scripts/mobile-emulator.sh up` and `install` |
-| Add a UI string       | `node scripts/add-i18n.mjs "com.notesgraph.some.key" "Text"`    |
+| Add a UI string       | `node scripts/add-i18n.mjs "com.notesgraph.some.key" "Text"`                   |
 
 [CLAUDE.md](CLAUDE.md) has the conventions this repo is worked on with. They apply to people too.
 

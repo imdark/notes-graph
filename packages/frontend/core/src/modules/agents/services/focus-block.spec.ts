@@ -27,14 +27,15 @@ describe('lastBlockTouched', () => {
   });
 
   test("a call without a note is in the run's own note", () => {
-    expect(lastBlockTouched('→ update_task  {"blockId": "b4"}\n', 'd3')).toEqual(
-      { docId: 'd3', blockId: 'b4' }
-    );
+    expect(
+      lastBlockTouched('→ update_task  {"blockId": "b4"}\n', 'd3')
+    ).toEqual({ docId: 'd3', blockId: 'b4' });
     expect(lastBlockTouched('→ update_task  {"blockId": "b4"}\n')).toBeNull();
   });
 
   test('block ids in results or prose are not calls', () => {
-    const log = '← [{"docId": "d1", "blockId": "b9"}]\nworking on "blockId": "x"\n';
+    const log =
+      '← [{"docId": "d1", "blockId": "b9"}]\nworking on "blockId": "x"\n';
     expect(lastBlockTouched(log)).toBeNull();
   });
 });

@@ -91,10 +91,7 @@ export class PageClipboard extends ReadOnlyClipboard {
     const textSelection = this.std.selection.find(TextSelection);
     if (textSelection?.isCollapsed()) {
       const model = this.std.store.getBlock(textSelection.from.blockId)?.model;
-      if (
-        model &&
-        matchModels(model, [ParagraphBlockModel, ListBlockModel])
-      ) {
+      if (model && matchModels(model, [ParagraphBlockModel, ListBlockModel])) {
         this.std.selection.setGroup('note', [
           this.std.selection.create(TextSelection, {
             from: {
