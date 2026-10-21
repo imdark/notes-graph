@@ -295,6 +295,32 @@ export const test = base.extend<{
 
     await page.waitForSelector('v-line');
 
+    // As the web kit does in localStorage (see playwright.ts): edgeless is a
+    // built-in plugin off by default, and the sidebar's Favorites / Tags /
+    // Collections sections are hidden; the suites use them. The desktop app
+    // keeps global state in the main process, so set it there and reload.
+    const changed = await page.evaluate(() => {
+      const state = (window as any).__sharedStorage?.globalState;
+      if (!state) return false;
+      let changed = false;
+      for (const key of [
+        'plugin:builtin-enabled:com.notesgraph.edgeless',
+        'app-sidebar-state:showFavorites',
+        'app-sidebar-state:showTags',
+        'app-sidebar-state:showCollections',
+      ]) {
+        if (state.get(key) === undefined) {
+          state.set(key, true);
+          changed = true;
+        }
+      }
+      return changed;
+    });
+    if (changed) {
+      await page.reload();
+      await page.waitForSelector('v-line');
+    }
+
     await use(page);
   },
   views: async ({ electronApp, page }, use) => {
