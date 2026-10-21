@@ -14,7 +14,10 @@ import {
   updateTaskBlock,
 } from '../../native';
 import { PgWorkspaceDocStorageAdapter } from './adapters/workspace';
-import { appendLinkedDocReference } from './blocksuite-headless';
+import {
+  appendEmbedHtmlBlock,
+  appendLinkedDocReference,
+} from './blocksuite-headless';
 import { fileDocInFolders, foldersDocId } from './folders';
 
 export interface CreateDocResult {
@@ -426,10 +429,43 @@ export class DocWriter {
     this.logger.debug(
       `Linking doc ${childDocId} under ${parentDocId} in workspace ${workspaceId}`
     );
+    return await this.appendBlock(
+      workspaceId,
+      parentDocId,
+      binary => appendLinkedDocReference(binary, parentDocId, childDocId),
+      editorId
+    );
+  }
 
-    const existingDoc = await this.storage.getDoc(workspaceId, parentDocId);
+  /**
+   * Appends an HTML embed (a live widget: sandboxed iframe, scripts allowed)
+   * to the end of a document. Like linkDoc it bypasses markdown, which has
+   * no way to express the block.
+   */
+  async appendHtmlEmbed(
+    workspaceId: string,
+    docId: string,
+    html: string,
+    caption: string | null,
+    editorId?: string
+  ): Promise<UpdateDocResult> {
+    return await this.appendBlock(
+      workspaceId,
+      docId,
+      binary => appendEmbedHtmlBlock(binary, docId, html, caption),
+      editorId
+    );
+  }
+
+  private async appendBlock(
+    workspaceId: string,
+    docId: string,
+    append: (binary: Buffer) => Uint8Array,
+    editorId?: string
+  ): Promise<UpdateDocResult> {
+    const existingDoc = await this.storage.getDoc(workspaceId, docId);
     if (!existingDoc?.bin) {
-      throw new NotFoundException(`Document ${parentDocId} not found`);
+      throw new NotFoundException(`Document ${docId} not found`);
     }
 
     const existingBinary = Buffer.isBuffer(existingDoc.bin)
@@ -439,21 +475,17 @@ export class DocWriter {
           existingDoc.bin.byteOffset,
           existingDoc.bin.byteLength
         );
-    const delta = appendLinkedDocReference(
-      existingBinary,
-      parentDocId,
-      childDocId
-    );
+    const delta = append(existingBinary);
 
     const timestamp = await this.storage.pushDocUpdates(
       workspaceId,
-      parentDocId,
+      docId,
       [delta],
       editorId
     );
     this.emitDocUpdatesPushed({
       spaceId: workspaceId,
-      docId: parentDocId,
+      docId,
       updates: [delta],
       timestamp,
       editor: editorId,
@@ -461,7 +493,7 @@ export class DocWriter {
 
     await this.updateDocProperties(
       workspaceId,
-      parentDocId,
+      docId,
       { updatedBy: editorId },
       editorId
     );

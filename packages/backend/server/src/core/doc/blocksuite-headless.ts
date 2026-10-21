@@ -48,6 +48,51 @@ export function appendLinkedDocReference(
   docId: string,
   targetDocId: string
 ): Uint8Array {
+  return appendToNote(existingBinary, docId, block => {
+    const text = new Y.Text();
+    text.insert(0, ' ', { reference: { type: 'LinkedPage', pageId: targetDocId } });
+    block.set('sys:flavour', 'notesgraph:paragraph');
+    block.set('sys:version', 1);
+    block.set('prop:type', 'text');
+    block.set('prop:text', text);
+    block.set('prop:collapsed', false);
+  });
+}
+
+/**
+ * Appends an HTML embed block (a sandboxed, script-enabled iframe in the
+ * editor) to the end of the doc's note, as the editor's "HTML" embed would.
+ * The props past html/caption are the embed schema's defaults
+ * (`createEmbedBlockSchema`), written out so the block is complete as stored.
+ */
+export function appendEmbedHtmlBlock(
+  existingBinary: Uint8Array,
+  docId: string,
+  html: string,
+  caption: string | null
+): Uint8Array {
+  return appendToNote(existingBinary, docId, block => {
+    block.set('sys:flavour', 'notesgraph:embed-html');
+    block.set('sys:version', 1);
+    block.set('prop:style', 'html');
+    block.set('prop:html', html);
+    block.set('prop:caption', caption);
+    block.set('prop:index', 'a0');
+    block.set('prop:xywh', '[0,0,0,0]');
+    block.set('prop:lockedBySelf', false);
+    block.set('prop:rotate', 0);
+  });
+}
+
+/**
+ * Loads the doc, adds one block (filled in by `fill`) as the last child of
+ * its note, and returns only that change as an update.
+ */
+function appendToNote(
+  existingBinary: Uint8Array,
+  docId: string,
+  fill: (block: Y.Map<unknown>) => void
+): Uint8Array {
   const doc = new Y.Doc();
   Y.applyUpdate(doc, existingBinary);
   const beforeState = Y.encodeStateVector(doc);
@@ -67,23 +112,16 @@ export function appendLinkedDocReference(
   });
   if (!noteBlock) {
     throw new NoteBlockNotFoundError(
-      `Doc ${docId} has no notesgraph:note block to link under.`
+      `Doc ${docId} has no notesgraph:note block to add to.`
     );
   }
 
   doc.transact(() => {
     const newId = nanoid(10);
-    const text = new Y.Text();
-    text.insert(0, ' ', { reference: { type: 'LinkedPage', pageId: targetDocId } });
-
     const block = new Y.Map<unknown>();
     block.set('sys:id', newId);
-    block.set('sys:flavour', 'notesgraph:paragraph');
-    block.set('sys:version', 1);
     block.set('sys:children', new Y.Array<string>());
-    block.set('prop:type', 'text');
-    block.set('prop:text', text);
-    block.set('prop:collapsed', false);
+    fill(block);
 
     blocks.set(newId, block);
     (noteBlock!.get('sys:children') as Y.Array<string>).push([newId]);

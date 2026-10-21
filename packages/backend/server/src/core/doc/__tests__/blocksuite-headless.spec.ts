@@ -3,6 +3,7 @@ import * as Y from 'yjs';
 
 import { createDocWithMarkdown } from '../../../native';
 import {
+  appendEmbedHtmlBlock,
   appendLinkedDocReference,
   NoteBlockNotFoundError,
 } from '../blocksuite-headless';
@@ -75,6 +76,35 @@ test('appendLinkedDocReference adds a reference paragraph without touching exist
     noteBlock.get('sys:children') as Y.Array<string>
   ).toArray();
   t.true(noteChildren.includes(refBlockId!));
+});
+
+test('appendEmbedHtmlBlock adds an html embed as the last block of the note', t => {
+  const docId = 'widget-doc';
+  const original = createDocWithMarkdown('Widgets', 'Intro.', docId);
+  const delta = appendEmbedHtmlBlock(
+    original,
+    docId,
+    '<button>+1</button>',
+    'Counter'
+  );
+
+  const merged = new Y.Doc();
+  Y.applyUpdate(merged, original);
+  Y.applyUpdate(merged, delta);
+  const blocks = merged.getMap('blocks');
+  t.deepEqual(paragraphTexts(blocks), ['Intro.']);
+
+  let note: Y.Map<unknown> | undefined;
+  blocks.forEach(block => {
+    const yBlock = block as Y.Map<unknown>;
+    if (yBlock.get('sys:flavour') === 'notesgraph:note') note = yBlock;
+  });
+  const lastId = (note!.get('sys:children') as Y.Array<string>).toArray().at(-1);
+  const embed = blocks.get(lastId!) as Y.Map<unknown>;
+  t.is(embed.get('sys:flavour'), 'notesgraph:embed-html');
+  t.is(embed.get('prop:html'), '<button>+1</button>');
+  t.is(embed.get('prop:caption'), 'Counter');
+  t.is(embed.get('prop:style'), 'html');
 });
 
 test('appendLinkedDocReference throws NoteBlockNotFoundError for a page with no note', t => {
