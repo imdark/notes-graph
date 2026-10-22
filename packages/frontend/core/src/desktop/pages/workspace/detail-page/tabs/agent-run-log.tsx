@@ -5,6 +5,7 @@ import {
   AgentRunSessionService,
   AgentRunsStore,
   deviceHarnessName,
+  isAskRun,
   openQuestions,
   RemoteAgentRunnerService,
   type RemoteQuestion,
@@ -223,6 +224,8 @@ const targetLabel = (run: AgentRun) => {
     }
     case 'doc':
       return 'The whole note';
+    case 'ask':
+      return 'A run it was asked about';
     default:
       return run.targetKind;
   }
@@ -246,6 +249,8 @@ const ENDED_TABS = [
   ...TABS,
   { value: ASK_TAB, label: 'Ask' },
 ];
+/** A chat about a run changed nothing; its Ask tab goes on with it. */
+const ASK_ROW_TABS = [...TABS, { value: ASK_TAB, label: 'Ask' }];
 
 /**
  * What a run was set up with: the blocks it read, where it ran and on what.
@@ -331,6 +336,15 @@ export const AgentRunLogDialog = ({
     result,
     changes,
   } = useRunLog(run ?? undefined);
+  // For a chat about a run, that run: the chat goes on with its context.
+  const parentRunId = run?.parentRunId;
+  const parent = useLiveData(
+    useMemo(
+      () => (parentRunId ? runsStore.watchRun(parentRunId) : null),
+      [runsStore, parentRunId]
+    )
+  );
+  const askRow = !!run && isAskRun(run);
 
   // A run can be stopped from here when this tab is driving it, or when it
   // is a device job (the server cancels it for whoever asks). An on-device
@@ -430,7 +444,9 @@ export const AgentRunLogDialog = ({
             width="100%"
             value={tab}
             onChange={setTab}
-            items={ended ? ENDED_TABS : TABS}
+            items={
+              askRow ? (ended ? ASK_ROW_TABS : TABS) : ended ? ENDED_TABS : TABS
+            }
             data-testid="agent-run-log-tabs"
           />
         ) : null}
@@ -438,7 +454,16 @@ export const AgentRunLogDialog = ({
         {run?.remoteJobId ? <AgentRunShare jobId={run.remoteJobId} /> : null}
         {run && tab === DETAILS_TAB ? (
           <RunDetails run={run} />
-        ) : run && ended && tab === CHANGES_TAB ? (
+        ) : run && askRow && ended && tab === ASK_TAB ? (
+          parent ? (
+            <AgentRunChat key={run.id} run={parent} resumeAskId={run.id} />
+          ) : (
+            <p className={styles.empty} data-testid="agent-run-chat-orphan">
+              The run this chat was about has been deleted, so it can't go on.
+              What was said is in the Log tab.
+            </p>
+          )
+        ) : run && !askRow && ended && tab === CHANGES_TAB ? (
           <AgentRunChanges
             run={run}
             summary={

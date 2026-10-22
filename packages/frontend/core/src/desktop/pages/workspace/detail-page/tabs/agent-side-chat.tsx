@@ -14,6 +14,7 @@ import {
   type ChatMessage,
   type ChatModel,
   CloudAgentRunnerService,
+  type SavedAskChat,
 } from '@notesgraph/core/modules/agents';
 import { AppThemeService } from '@notesgraph/core/modules/theme';
 import { WorkspaceService } from '@notesgraph/core/modules/workspace';
@@ -45,7 +46,30 @@ interface AttachedFile {
 }
 
 /** A shown turn; the files are listed under the question they came with. */
-type Turn = ChatMessage & { files?: string[] };
+type Turn = SavedAskChat['turns'][number];
+
+/** How a turn ended, for a chat that is recorded. */
+export type SideChatOutcome =
+  | { status: 'done' }
+  | { status: 'error'; error: string }
+  | { status: 'cancelled' };
+
+/**
+ * Where a chat is kept, so it can be found and gone on with later. The chat
+ * calls it; what is stored, and where, is the caller's.
+ */
+export interface SideChatRecord {
+  /** A chat kept earlier, shown and continued; null to start afresh. */
+  load: () => Promise<SavedAskChat | null>;
+  /** A question was sent. */
+  asking: () => void;
+  /** A turn ended: the chat as it now stands, and the turn's own turns. */
+  ended: (
+    chat: SavedAskChat,
+    turn: SavedAskChat['turns'],
+    outcome: SideChatOutcome
+  ) => void;
+}
 
 /**
  * The models behind a side chat (a device's Claude Code, the local model,
@@ -132,6 +156,7 @@ export const AgentSideChat = ({
   opening,
   renderReply = renderFormattedReply,
   openModel,
+  record,
   waiting,
   onClose,
   testId,
@@ -144,6 +169,8 @@ export const AgentSideChat = ({
   renderReply?: (reply: string, streaming: boolean) => ReactNode;
   /** Who answers; the server's model when not given. */
   openModel?: () => Promise<ChatModel>;
+  /** Keep the chat; without it, it is gone once the panel closes. */
+  record?: SideChatRecord;
   /** Why the reply hasn't started, shown under it while it is awaited. */
   waiting?: string | null;
   onClose?: () => void;
@@ -170,9 +197,17 @@ export const AgentSideChat = ({
   const [busy, setBusy] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // A kept chat is shown before anything more can be asked.
+  const [loaded, setLoaded] = useState(!record);
 
   const model = useRef<ChatModel | null>(null);
-  const history = useRef<ChatMessage[]>([]);
+  // The model is sent the opening, then everything since.
+  const opened = useRef<ChatMessage[]>([]);
+  const sent = useRef<ChatMessage[]>([]);
+  // The shown turns as of the last ended turn, without a reply in progress.
+  const shown = useRef<Turn[]>([]);
+  const recordRef = useRef(record);
+  recordRef.current = record;
   const abort = useRef<AbortController | null>(null);
   const listEnd = useRef<HTMLDivElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -182,9 +217,29 @@ export const AgentSideChat = ({
     listEnd.current?.scrollIntoView({ block: 'nearest' });
   }, [turns]);
 
+  useEffect(() => {
+    const kept = recordRef.current;
+    if (!kept) return;
+    let live = true;
+    kept
+      .load()
+      .then(saved => {
+        if (!live || !saved) return;
+        shown.current = saved.turns;
+        sent.current = saved.history;
+        setTurns(saved.turns);
+      })
+      // Unreadable: start afresh rather than not at all.
+      .catch(() => {})
+      .finally(() => live && setLoaded(true));
+    return () => {
+      live = false;
+    };
+  }, []);
+
   const start = useCallback(async (): Promise<ChatModel> => {
     if (model.current) return model.current;
-    history.current = await opening();
+    opened.current = await opening();
     model.current = openModel
       ? await openModel()
       : await cloudRunner.open(workspaceService.workspace.id);
@@ -216,24 +271,36 @@ export const AgentSideChat = ({
       setError(null);
       setText('');
       setFiles([]);
-      setTurns(prev => [
-        ...prev,
-        {
-          role: 'user',
-          content: message,
-          files: attached.map(file => file.name),
-        },
-        { role: 'assistant', content: '' },
-      ]);
+      const question: Turn = {
+        role: 'user',
+        content: message,
+        files: attached.map(file => file.name),
+        at: Date.now(),
+      };
+      const before = shown.current;
+      setTurns([...before, question, { role: 'assistant', content: '' }]);
+      recordRef.current?.asking();
       const controller = new AbortController();
       abort.current = controller;
+      let reply = '';
+      // Keep the question, and the reply if any came; then tell the record.
+      const end = (outcome: SideChatOutcome) => {
+        const answer: Turn[] = reply
+          ? [{ role: 'assistant', content: reply, at: Date.now() }]
+          : [];
+        shown.current = [...before, question, ...answer];
+        recordRef.current?.ended(
+          { turns: shown.current, history: sent.current },
+          [question, ...answer],
+          outcome
+        );
+      };
       try {
         const chat = await start();
-        history.current = [
-          ...history.current,
+        sent.current = [
+          ...sent.current,
           { role: 'user', content: withFiles(message, attached) },
         ];
-        let reply = '';
         // A long reply streams in many small chunks; one render per frame
         // keeps the page responsive instead of one per chunk.
         let frame = 0;
@@ -246,7 +313,10 @@ export const AgentSideChat = ({
           ]);
         };
         try {
-          for await (const delta of chat(history.current, controller.signal)) {
+          for await (const delta of chat(
+            [...opened.current, ...sent.current],
+            controller.signal
+          )) {
             reply += delta;
             if (!frame) frame = requestAnimationFrame(show);
           }
@@ -254,17 +324,18 @@ export const AgentSideChat = ({
           if (frame) cancelAnimationFrame(frame);
         }
         show();
-        history.current = [
-          ...history.current,
-          { role: 'assistant', content: reply },
-        ];
+        sent.current = [...sent.current, { role: 'assistant', content: reply }];
+        end({ status: 'done' });
       } catch (err) {
-        if (controller.signal.aborted) return;
+        if (controller.signal.aborted) {
+          end({ status: 'cancelled' });
+          return;
+        }
+        const message = err instanceof Error ? err.message : String(err);
+        end({ status: 'error', error: message });
         // Drop the empty reply; keep the question so it can be re-asked.
-        setTurns(prev =>
-          prev[prev.length - 1]?.content ? prev : prev.slice(0, -1)
-        );
-        setError(err instanceof Error ? err.message : String(err));
+        setTurns(shown.current);
+        setError(message);
       } finally {
         if (!controller.signal.aborted) setBusy(false);
       }
@@ -272,7 +343,8 @@ export const AgentSideChat = ({
     [start]
   );
 
-  const canSend = (text.trim().length > 0 || files.length > 0) && !busy;
+  const canSend =
+    (text.trim().length > 0 || files.length > 0) && !busy && loaded;
   const send = useCallback(() => {
     if (!canSend) return;
     ask(text.trim(), files).catch(() => {});

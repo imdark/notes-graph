@@ -135,8 +135,10 @@ export {
   type AgentRunStatus,
   AgentRunsStore,
   formatRunCost,
+  isAskRun,
 } from './stores/agent-runs';
-export { AgentRunLogsStore } from './stores/agent-run-logs';
+export { AgentRunLogsStore, type SavedAskChat } from './stores/agent-run-logs';
+export { askTranscript } from './services/run-chat';
 export {
   type ProjectSpend,
   projectFromProps,

@@ -1,6 +1,8 @@
 import { Store } from '@notesgraph/infra';
 import { type IDBPDatabase, openDB } from 'idb';
 
+import type { ChatMessage } from '../services/cloud-runner';
+
 const DB_NAME = 'notesgraph-agent-run-logs';
 const DB_VERSION = 1;
 const LOGS = 'logs';
@@ -12,6 +14,29 @@ interface AgentRunLog {
   runId: string;
   text: string;
 }
+
+/**
+ * An ask chat's turns, to show it again and go on with it. `history` is what
+ * the model was sent after the opening, attached files' text included.
+ */
+export interface SavedAskChat {
+  turns: {
+    role: 'user' | 'assistant';
+    content: string;
+    files?: string[];
+    /** When it was asked or answered. */
+    at?: number;
+  }[];
+  history: ChatMessage[];
+}
+
+interface AgentRunChat {
+  runId: string;
+  chat: SavedAskChat;
+}
+
+/** Kept beside the run's transcript, under its own key. */
+const chatKey = (runId: string) => `${runId}:chat`;
 
 /**
  * Transcripts of runs that happened in this browser.
@@ -54,10 +79,30 @@ export class AgentRunLogsStore extends Store {
     await db.put(LOGS, { runId, text: kept } satisfies AgentRunLog);
   }
 
+  async getChat(runId: string): Promise<SavedAskChat | undefined> {
+    const db = await this.getDB();
+    return ((await db.get(LOGS, chatKey(runId))) as AgentRunChat | undefined)
+      ?.chat;
+  }
+
+  async putChat(runId: string, chat: SavedAskChat): Promise<void> {
+    const db = await this.getDB();
+    await db.put(LOGS, {
+      runId: chatKey(runId),
+      chat,
+    } satisfies AgentRunChat);
+  }
+
   async delete(runIds: string[]): Promise<void> {
     if (runIds.length === 0) return;
     const db = await this.getDB();
     const tx = db.transaction(LOGS, 'readwrite');
-    await Promise.all([...runIds.map(id => tx.store.delete(id)), tx.done]);
+    await Promise.all([
+      ...runIds.flatMap(id => [
+        tx.store.delete(id),
+        tx.store.delete(chatKey(id)),
+      ]),
+      tx.done,
+    ]);
   }
 }
