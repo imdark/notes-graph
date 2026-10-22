@@ -88,7 +88,7 @@ test('read_comments returns open comments with quote and text', async t => {
   const { tool } = await commentTools(['d1']);
   const result = await tool('read_comments')({ docId: 'd1' });
   t.falsy(result.isError);
-  const { comments } = JSON.parse(result.content[0].text);
+  const { comments } = JSON.parse((result.content[0] as { text: string }).text);
   t.is(comments.length, 1);
   t.like(comments[0], {
     id: 'c1',
@@ -99,7 +99,7 @@ test('read_comments returns open comments with quote and text', async t => {
   });
 
   const all = await tool('read_comments')({ docId: 'd1', includeResolved: true });
-  t.is(JSON.parse(all.content[0].text).comments.length, 2);
+  t.is(JSON.parse((all.content[0] as { text: string }).text).comments.length, 2);
 
   const hidden = await tool('read_comments')({ docId: 'd2' });
   t.true(hidden.isError);
@@ -124,6 +124,6 @@ test('reply_to_comment refuses nothing to do and hidden comments', async t => {
   const { tool, replies, resolved } = await commentTools([]);
   t.true((await tool('reply_to_comment')({ commentId: 'c1' })).isError);
   const hidden = await tool('reply_to_comment')({ commentId: 'c1', text: 'x' });
-  t.regex(hidden.content[0].text, /not found/);
+  t.regex((hidden.content[0] as { text: string }).text, /not found/);
   t.is(replies.length + resolved.length, 0);
 });
