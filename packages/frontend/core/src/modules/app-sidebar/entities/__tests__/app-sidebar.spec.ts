@@ -47,6 +47,27 @@ describe('AppSidebar', () => {
     expect(sidebar.resizing$.value).toBe(true);
   });
 
+  test('operations section is on and every button shows by default', () => {
+    expect(sidebar.showOperations$.value).toBe(true);
+    expect(sidebar.hiddenButtons$.value).toEqual([]);
+  });
+
+  test('operations section and button visibility persist', () => {
+    sidebar.setShowOperations(false);
+    expect(sidebar.showOperations$.value).toBe(false);
+    expect(memento.get('showOperations')).toBe(false);
+
+    sidebar.setButtonShown('agents', false);
+    sidebar.setButtonShown('graph', false);
+    // Hiding twice does not list the button twice.
+    sidebar.setButtonShown('graph', false);
+    expect(sidebar.hiddenButtons$.value).toEqual(['agents', 'graph']);
+    expect(memento.get('hiddenButtons')).toEqual(['agents', 'graph']);
+
+    sidebar.setButtonShown('agents', true);
+    expect(sidebar.hiddenButtons$.value).toEqual(['graph']);
+  });
+
   test('getCachedAppSidebarOpenState', () => {
     sidebar.setOpen(false);
     expect(sidebar.getCachedAppSidebarOpenState()).toBe(false);

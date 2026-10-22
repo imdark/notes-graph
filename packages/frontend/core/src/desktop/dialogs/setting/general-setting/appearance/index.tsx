@@ -6,7 +6,11 @@ import {
   SettingWrapper,
 } from '@notesgraph/component/setting-components';
 import { LanguageMenu } from '@notesgraph/core/components/notesgraph/language-menu';
-import { AppSidebarService } from '@notesgraph/core/modules/app-sidebar';
+import {
+  AppSidebarService,
+  SIDEBAR_BUTTONS,
+  type SidebarButton,
+} from '@notesgraph/core/modules/app-sidebar';
 import { TraySettingService } from '@notesgraph/core/modules/editor-setting/services/tray-settings';
 import { FeatureFlagService } from '@notesgraph/core/modules/feature-flag';
 import { useI18n } from '@notesgraph/i18n';
@@ -161,6 +165,7 @@ const SidebarSectionsSetting = () => {
   const showTags = useLiveData(appSidebar.showTags$);
   const showCollections = useLiveData(appSidebar.showCollections$);
   const showProjects = useLiveData(appSidebar.showProjects$);
+  const showOperations = useLiveData(appSidebar.showOperations$);
 
   return (
     <>
@@ -220,7 +225,58 @@ const SidebarSectionsSetting = () => {
           onChange={checked => appSidebar.setShowProjects(checked)}
         />
       </SettingRow>
+      <SettingRow
+        name={t['com.notesgraph.appearanceSettings.sidebarOperations.title']()}
+        desc={t[
+          'com.notesgraph.appearanceSettings.sidebarOperations.description'
+        ]()}
+        data-testid="sidebar-operations-trigger"
+      >
+        <Switch
+          checked={showOperations}
+          onChange={checked => appSidebar.setShowOperations(checked)}
+        />
+      </SettingRow>
     </>
+  );
+};
+
+const SidebarButtonsSetting = () => {
+  const t = useI18n();
+  const appSidebar = useService(AppSidebarService).sidebar;
+  const hiddenButtons = useLiveData(appSidebar.hiddenButtons$);
+
+  // Agents, Deployments and Monitoring have no translations in the sidebar
+  // either, so they use the same English labels here.
+  const labels: Record<SidebarButton, string> = {
+    graph: t['com.notesgraph.workspaceSubPath.graph'](),
+    discover: t['com.notesgraph.discover.title'](),
+    journals: t['com.notesgraph.journal.app-sidebar-title'](),
+    agents: 'Agents',
+    deployments: 'Deployments',
+    monitoring: 'Monitoring',
+  };
+
+  return (
+    <SettingWrapper
+      title={t['com.notesgraph.appearanceSettings.sidebarButtons.title']()}
+    >
+      {SIDEBAR_BUTTONS.map(button => (
+        <SettingRow
+          key={button}
+          name={labels[button]}
+          desc={t[
+            'com.notesgraph.appearanceSettings.sidebarButtons.description'
+          ]()}
+          data-testid={`sidebar-button-${button}-trigger`}
+        >
+          <Switch
+            checked={!hiddenButtons.includes(button)}
+            onChange={checked => appSidebar.setButtonShown(button, checked)}
+          />
+        </SettingRow>
+      ))}
+    </SettingWrapper>
   );
 };
 
@@ -360,6 +416,7 @@ export const AppearanceSettings = () => {
         </SettingRow>
         <SidebarSectionsSetting />
       </SettingWrapper>
+      <SidebarButtonsSetting />
 
       {BUILD_CONFIG.isElectron ? <MenubarSetting /> : null}
     </>
