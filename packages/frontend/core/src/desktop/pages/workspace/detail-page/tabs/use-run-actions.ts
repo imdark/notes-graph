@@ -48,7 +48,7 @@ export const useRunActions = ({ openDoc }: { openDoc: boolean }) => {
       if (openDoc) workbench.openDoc(run.docId, { at: 'active' });
       workbench.openSidebar();
       workbench.activeView$.value.activeSidebarTab('agents');
-      void sessionService.start(agent, target);
+      sessionService.start(agent, target).catch(console.error);
     },
     [agentsService, openDoc, runsStore, sessionService, workbench]
   );

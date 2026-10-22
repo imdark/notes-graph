@@ -1,7 +1,6 @@
 import { expect } from '@playwright/test';
 
 import { dragBetweenCoords } from '../utils/actions/drag.js';
-import { shiftClick } from '../utils/actions/edgeless.js';
 import {
   pressArrowDown,
   pressArrowDownWithShiftKey,
@@ -12,7 +11,9 @@ import {
   pressBackspace,
   pressEnter,
   pressEscape,
+  SHORT_KEY,
   type,
+  withPressKey,
 } from '../utils/actions/keyboard.js';
 import {
   enterPlaygroundRoom,
@@ -523,10 +524,11 @@ test.describe('kanban view selection', () => {
       cardIndex: 0,
     });
     const box = await getBoundingBox(card);
-    await shiftClick(page, {
-      x: box.x + box.width / 2,
-      y: box.y + box.height / 2,
-    });
+    // NotesGraph: shift-click range-selects within one column; cmd/ctrl-click
+    // adds a card from another column to the selection.
+    await withPressKey(page, SHORT_KEY, () =>
+      page.mouse.click(box.x + box.width / 2, box.y + box.height / 2)
+    );
 
     await assertKanbanCardSelected(page, {
       groupIndex: 0,

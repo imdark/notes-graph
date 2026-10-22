@@ -123,27 +123,29 @@ test('clientBorder value should disable by default on window', async ({
 test('app theme', async ({ page, electronApp }) => {
   const root = page.locator('html');
   {
+    // NotesGraph starts dark (theme-provider's defaultTheme), whatever the
+    // system says.
     const themeMode = await root.evaluate(element => element.dataset.theme);
-    expect(themeMode).toBe('light');
+    expect(themeMode).toBe('dark');
 
     const theme = await electronApp.evaluate(({ nativeTheme }) => {
       return nativeTheme.shouldUseDarkColors ? 'dark' : 'light';
     });
 
-    expect(theme).toBe('light');
+    expect(theme).toBe('dark');
   }
 
   {
     await page.getByTestId('settings-modal-trigger').click();
     await page.getByTestId('appearance-panel-trigger').click();
     await page.waitForTimeout(50);
-    await page.getByTestId('dark-theme-trigger').click();
+    await page.getByTestId('light-theme-trigger').click();
     const themeMode = await root.evaluate(element => element.dataset.theme);
-    expect(themeMode).toBe('dark');
+    expect(themeMode).toBe('light');
     const theme = await electronApp.evaluate(({ nativeTheme }) => {
       return nativeTheme.shouldUseDarkColors ? 'dark' : 'light';
     });
-    expect(theme).toBe('dark');
+    expect(theme).toBe('light');
   }
 });
 

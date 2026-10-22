@@ -207,7 +207,7 @@ export class FixTaskService extends Service {
     blockId: string,
     running: Promise<void>
   ): Promise<string | null> {
-    const recorded = this.sessions.sessions$.pipe(
+    const recorded$ = this.sessions.sessions$.pipe(
       map(
         sessions =>
           sessions.find(
@@ -222,7 +222,7 @@ export class FixTaskService extends Service {
     );
     return firstValueFrom(
       race(
-        recorded,
+        recorded$,
         timer(RUN_RECORD_WAIT_MS).pipe(map(() => null)),
         running.then(() => null)
       )

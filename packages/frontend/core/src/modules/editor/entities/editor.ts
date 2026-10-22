@@ -299,7 +299,10 @@ export class Editor extends Entity {
 
     if (initialFocusAt !== null) {
       this.handleFocusAt(initialFocusAt);
-    } else if (this.mode$.value === 'page' && this.scrollPosition.page !== null) {
+    } else if (
+      this.mode$.value === 'page' &&
+      this.scrollPosition.page !== null
+    ) {
       scrollViewport?.scrollTo(0, this.scrollPosition.page);
     } else if (
       this.mode$.value === 'edgeless' &&

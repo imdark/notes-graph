@@ -43,13 +43,13 @@ that the first poll then takes away.
 
 ## Pieces
 
-| Where | What |
-| --- | --- |
-| `server/src/plugins/registry/push.ts` | Builds and sends the FCM data message; drops dead tokens |
-| `server/src/plugins/registry/jobs.ts` | Pushes on `ask`, clears on `answer` (fire-and-forget) |
-| `POST /api/registry/push-tokens` (`/remove`) | A phone registers / unregisters its FCM token for the signed-in user |
-| `android/.../push/` | FCM service, notification, action receiver, question screen, authed HTTP |
-| `android/src/agent-push-glue.ts` | Registers with every signed-in server; sign-out unregisters (`app.tsx`) |
+| Where                                        | What                                                                     |
+| -------------------------------------------- | ------------------------------------------------------------------------ |
+| `server/src/plugins/registry/push.ts`        | Builds and sends the FCM data message; drops dead tokens                 |
+| `server/src/plugins/registry/jobs.ts`        | Pushes on `ask`, clears on `answer` (fire-and-forget)                    |
+| `POST /api/registry/push-tokens` (`/remove`) | A phone registers / unregisters its FCM token for the signed-in user     |
+| `android/.../push/`                          | FCM service, notification, action receiver, question screen, authed HTTP |
+| `android/src/agent-push-glue.ts`             | Registers with every signed-in server; sign-out unregisters (`app.tsx`)  |
 
 ## Turning it on
 

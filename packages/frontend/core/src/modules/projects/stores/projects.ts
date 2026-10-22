@@ -135,9 +135,7 @@ export class ProjectsStore extends Store {
 
   async convertDocToProject(input: ConvertDocToProjectInput) {
     if (this.isLocal) {
-      const docIds = Array.from(
-        new Set([input.docId, ...input.relatedDocIds])
-      );
+      const docIds = Array.from(new Set([input.docId, ...input.relatedDocIds]));
       const project = await this.createProject(input.workspaceId, input.name);
       for (const docId of docIds) {
         await this.assignDocToProject(input.workspaceId, docId, project.id);

@@ -1,7 +1,14 @@
 import { BlockComponent } from '@blocksuite/notesgraph/std';
 import { toReactNode } from '@notesgraph/component';
 import { useLiveData, useService } from '@notesgraph/infra';
-import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from 'react';
 
 import type { ActivePeekView } from '../entities/peek-view';
 import { PeekViewService } from '../services/peek-view';

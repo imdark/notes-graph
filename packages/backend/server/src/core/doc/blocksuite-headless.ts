@@ -182,6 +182,7 @@ function appendToNote(
     );
   }
 
+  const note = noteBlock;
   const addBlock = (spec: BlockSpec): string => {
     const childIds = (spec.children ?? []).map(addBlock);
     const newId = nanoid(10);
@@ -196,9 +197,7 @@ function appendToNote(
   };
 
   doc.transact(() => {
-    (noteBlock!.get('sys:children') as Y.Array<string>).push(
-      specs.map(addBlock)
-    );
+    (note.get('sys:children') as Y.Array<string>).push(specs.map(addBlock));
   });
 
   return Y.encodeStateAsUpdate(doc, beforeState);

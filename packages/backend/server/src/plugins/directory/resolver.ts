@@ -7,10 +7,7 @@ import {
   Resolver,
 } from '@nestjs/graphql';
 
-import {
-  GraphqlBadRequest,
-  UnknownOauthProvider,
-} from '../../base';
+import { GraphqlBadRequest, UnknownOauthProvider } from '../../base';
 import { CurrentUser } from '../../core/auth';
 import { PermissionAccess } from '../../core/permission';
 import { WorkspaceType } from '../../core/workspaces';

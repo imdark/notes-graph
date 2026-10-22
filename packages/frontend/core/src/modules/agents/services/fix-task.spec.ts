@@ -8,13 +8,13 @@ import { DocsService } from '../../doc';
 import type { Agent } from '../stores/agents';
 import { AgentsService } from './agents';
 import {
+  findFixAgent,
   FIX_AGENT_INSTRUCTIONS,
   FIX_AGENT_NAME,
   FIX_UPS_DOC_TITLE,
-  findFixAgent,
   fixKey,
-  fixTaskTitle,
   FixTaskService,
+  fixTaskTitle,
 } from './fix-task';
 import { AgentRunSessionService } from './run-session';
 
@@ -37,17 +37,17 @@ const setup = (existingDocId?: string) => {
   const createDoc = vi.fn(() => ({ id: 'new-doc' }));
   const docsService = {
     list: {
-      docs$: {
-        value: existingDocId
+      docs$: new LiveData(
+        existingDocId
           ? [
               {
                 id: existingDocId,
-                trash$: { value: false },
-                title$: { value: FIX_UPS_DOC_TITLE },
+                trash$: new LiveData(false),
+                title$: new LiveData(FIX_UPS_DOC_TITLE),
               },
             ]
-          : [],
-      },
+          : []
+      ),
     },
     createDoc,
     open: () => ({
@@ -56,7 +56,7 @@ const setup = (existingDocId?: string) => {
     }),
   };
   const agentsService = {
-    agents$: { value: [fixAgent] },
+    agents$: new LiveData([fixAgent]),
     create: vi.fn(),
   };
   // A run that gets its record at once and then keeps going: fix() must

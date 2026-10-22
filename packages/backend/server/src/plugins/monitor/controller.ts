@@ -16,8 +16,8 @@ import { PermissionAccess } from '../../core/permission';
 import { Models } from '../../models';
 import {
   type MonitorAlerts,
-  type MonitorSpec,
   MonitorService,
+  type MonitorSpec,
 } from './service';
 
 /** Wire shape for a monitor. Times are epoch seconds, like the job DTOs. */
@@ -76,7 +76,10 @@ function parseDefinition(body: Record<string, any>, partial: boolean) {
   const out: Record<string, unknown> = {};
   const take = (key: string, parse: (value: any) => unknown) => {
     if (body[key] !== undefined) out[key] = parse(body[key]);
-    else if (!partial && ['name', 'docId', 'blockId', 'kind', 'intervalMinutes'].includes(key)) {
+    else if (
+      !partial &&
+      ['name', 'docId', 'blockId', 'kind', 'intervalMinutes'].includes(key)
+    ) {
       throw new BadRequest(`${key} is required`);
     }
   };
@@ -89,7 +92,11 @@ function parseDefinition(body: Record<string, any>, partial: boolean) {
   take('spec', v => (v && typeof v === 'object' ? v : {}));
   take('intervalMinutes', Number);
   take('condition', v => (v && typeof v === 'object' ? v : { type: 'change' }));
-  take('alerts', v => ({ inApp: !!v?.inApp, push: !!v?.push, email: !!v?.email }));
+  take('alerts', v => ({
+    inApp: !!v?.inApp,
+    push: !!v?.push,
+    email: !!v?.email,
+  }));
   take('enabled', Boolean);
   if (out.name === '') throw new BadRequest('name is required');
   return out;
@@ -107,8 +114,16 @@ export class MonitorController {
     private readonly monitors: MonitorService
   ) {}
 
-  private async assertCanWrite(user: CurrentUserType, workspaceId: string, docId: string) {
-    await this.ac.user(user.id).workspace(workspaceId).doc(docId).assert('Doc.Update');
+  private async assertCanWrite(
+    user: CurrentUserType,
+    workspaceId: string,
+    docId: string
+  ) {
+    await this.ac
+      .user(user.id)
+      .workspace(workspaceId)
+      .doc(docId)
+      .assert('Doc.Update');
   }
 
   @Get('/')
@@ -141,7 +156,9 @@ export class MonitorController {
       createdBy: user.id,
       ...definition,
       spec: (definition.spec ?? {}) as Prisma.InputJsonValue,
-      condition: (definition.condition ?? { type: 'change' }) as Prisma.InputJsonValue,
+      condition: (definition.condition ?? {
+        type: 'change',
+      }) as Prisma.InputJsonValue,
       alerts: (definition.alerts ?? {}) as Prisma.InputJsonValue,
     });
     // First reading straight away, rather than at the next cron tick.
@@ -163,7 +180,10 @@ export class MonitorController {
     this.monitors.validate({
       kind: changes.kind ?? existing.kind,
       source: changes.source !== undefined ? changes.source : existing.source,
-      deviceKey: changes.deviceKey !== undefined ? changes.deviceKey : existing.deviceKey,
+      deviceKey:
+        changes.deviceKey !== undefined
+          ? changes.deviceKey
+          : existing.deviceKey,
       spec: changes.spec ?? (existing.spec as MonitorSpec),
       intervalMinutes: changes.intervalMinutes ?? existing.intervalMinutes,
     });

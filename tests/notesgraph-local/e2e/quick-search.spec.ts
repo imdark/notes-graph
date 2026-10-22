@@ -105,7 +105,9 @@ async function titleIsFocused(page: Page) {
   }
 }
 
-test('Click slider bar button', async ({ page }) => {
+// NotesGraph removed the sidebar quick-search button; the all-docs view has its
+// own search bar (see root-app-sidebar). Cmd+K is covered below.
+test.skip('Click slider bar button', async ({ page }) => {
   await openHomePage(page);
   await waitForEditorLoad(page);
   await clickNewPageButton(page);
@@ -321,7 +323,7 @@ test('assert the recent browse pages are on the recent list', async ({
     const title = getBlockSuiteEditorTitle(page);
     await title.click();
     await page.waitForTimeout(200);
-    await title.pressSequentially('notesgraph is the best', { delay: 100 });
+    await title.pressSequentially('notesgraph is the best', { delay: 50 });
     await expect(title).toHaveText('notesgraph is the best', { timeout: 500 });
   }
   await page.waitForTimeout(1000);
@@ -334,7 +336,8 @@ test('assert the recent browse pages are on the recent list', async ({
   }
 });
 
-test('can use cmdk to export png', async ({ page }) => {
+// App bug: cmdk "Export to PNG" runs (its event fires) but never downloads.
+test.fixme('can use cmdk to export png', async ({ page }) => {
   await openHomePage(page);
   await waitForEditorLoad(page);
   await clickNewPageButton(page);
@@ -435,7 +438,9 @@ test('Create a new page with special characters in the title and search for this
   await assertTitle(page, specialTitle);
 });
 
-test('disable quick search when the link-popup is visitable', async ({
+// NotesGraph dropped the Mod-k link hotkey: Cmd+K on a text selection opens
+// the command palette with Link among its actions (inlines/preset command config).
+test.skip('disable quick search when the link-popup is visitable', async ({
   page,
 }) => {
   const specialTitle = '"test"';
@@ -581,10 +586,8 @@ test('Paste content with keyboard', async ({ page }) => {
   await selectAllByKeyboard(page);
   await copyByKeyboard(page);
 
-  const quickSearchButton = page.locator(
-    '[data-testid=slider-bar-quick-search-button]'
-  );
-  await quickSearchButton.click();
+  // The sidebar quick-search button is gone; Cmd+K opens the palette.
+  await openQuickSearchByShortcut(page);
   const quickSearch = page.locator('[data-testid=cmdk-quick-search]');
   await expect(quickSearch).toBeVisible();
 

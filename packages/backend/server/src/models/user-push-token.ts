@@ -37,6 +37,8 @@ export class UserPushTokenModel extends BaseModel {
   /** Drop tokens FCM has said are gone (app uninstalled, data cleared). */
   async removeTokens(tokens: string[]): Promise<void> {
     if (tokens.length === 0) return;
-    await this.db.userPushToken.deleteMany({ where: { token: { in: tokens } } });
+    await this.db.userPushToken.deleteMany({
+      where: { token: { in: tokens } },
+    });
   }
 }

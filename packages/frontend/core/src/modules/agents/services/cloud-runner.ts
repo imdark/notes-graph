@@ -1,5 +1,5 @@
-import { Service } from '@notesgraph/infra';
 import { ServerFeature } from '@notesgraph/graphql';
+import { Service } from '@notesgraph/infra';
 
 import {
   CopilotClient,

@@ -150,8 +150,7 @@ export const NavigationPanelVirtualViewNode = ({
 
   const isTracker = view.type === 'tracker';
   const unit = typeof view.config.unit === 'string' ? view.config.unit : '';
-  const sourceUrl =
-    typeof view.config.url === 'string' ? view.config.url : '';
+  const sourceUrl = typeof view.config.url === 'string' ? view.config.url : '';
   const latest = dataPoints.at(-1);
   const previous = dataPoints.at(-2);
   const trend =
@@ -225,9 +224,7 @@ export const NavigationPanelVirtualViewNode = ({
               setCollapsed={() => {}}
               collapsible={false}
               reorderable={false}
-              onClick={() =>
-                item.url && urlService.openPopupWindow(item.url)
-              }
+              onClick={() => item.url && urlService.openPopupWindow(item.url)}
               data-testid={`virtual-item-${item.id}`}
             />
           ))}

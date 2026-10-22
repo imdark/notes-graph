@@ -10,6 +10,7 @@
   "author": "toeverything",
   "license": "MIT",
   "dependencies": {
+    "@blocksuite/global": "workspace:*",
     "@blocksuite/notesgraph-components": "workspace:*",
     "@blocksuite/notesgraph-ext-loader": "workspace:*",
     "@blocksuite/notesgraph-inline-comment": "workspace:*",

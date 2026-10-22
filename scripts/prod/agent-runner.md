@@ -47,18 +47,18 @@ container, holding none of the server's secrets.
 ## 1. `/opt/notesgraph/compose.yml`
 
 ```yaml
-  agent-runner:
-    image: notesgraph-agent-runner:prod
-    container_name: notesgraph_agent_runner
-    env_file: .env.agent-runner
-    volumes:
-      # Job directories, and the repo mirror kept between jobs.
-      - /opt/notesgraph/data/agent-runner:/work
-    networks: [agents]
-    mem_limit: 2g
-    pids_limit: 512
-    restart: unless-stopped
-    depends_on: [notesgraph]
+agent-runner:
+  image: notesgraph-agent-runner:prod
+  container_name: notesgraph_agent_runner
+  env_file: .env.agent-runner
+  volumes:
+    # Job directories, and the repo mirror kept between jobs.
+    - /opt/notesgraph/data/agent-runner:/work
+  networks: [agents]
+  mem_limit: 2g
+  pids_limit: 512
+  restart: unless-stopped
+  depends_on: [notesgraph]
 ```
 
 Add `agents` to the `networks:` of `notesgraph`, and of `omniseek` (see

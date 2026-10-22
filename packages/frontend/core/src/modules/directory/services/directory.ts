@@ -15,10 +15,7 @@ export class DirectoryService extends Service {
 
   directory = this.framework.createEntity(Directory);
 
-  async connectAccount(
-    provider: DirectoryProviderType,
-    redirectUri?: string
-  ) {
+  async connectAccount(provider: DirectoryProviderType, redirectUri?: string) {
     return await this.store.connectDirectoryAccount({
       workspaceId: this.workspaceService.workspace.id,
       provider,

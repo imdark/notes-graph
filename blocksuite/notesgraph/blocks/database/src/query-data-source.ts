@@ -1,3 +1,4 @@
+import { RefNodeSlotsProvider } from '@blocksuite/notesgraph-inline-reference';
 import type { DatabaseBlockModel } from '@blocksuite/notesgraph-model';
 import {
   type BlockTaskFilter,
@@ -25,8 +26,6 @@ import {
   type Signal,
   signal,
 } from '@preact/signals-core';
-
-import { RefNodeSlotsProvider } from '@blocksuite/notesgraph-inline-reference';
 
 import { EditorHostKey } from './context/host-context.js';
 import {
@@ -515,7 +514,7 @@ export class QueryListDataSource extends OrgTaskRowsDataSource {
   protected override sourceRowModels$: ReadonlySignal<BlockModel[]> = computed(
     () => {
       // Status/deadline live in the items' text — re-filter on text edits.
-      this.sourceTextVersion$.value;
+      void this.sourceTextVersion$.value;
       return this.hitModels$.value.filter(model => this.matchesCriteria(model));
     }
   );

@@ -42,7 +42,10 @@ export const aiImageGenSupported = () =>
   typeof navigator !== 'undefined' && 'gpu' in navigator;
 
 /** Downscale a generated image to a small, self-contained data URL icon. */
-export async function blobToIconDataUrl(blob: Blob, size = 128): Promise<string> {
+export async function blobToIconDataUrl(
+  blob: Blob,
+  size = 128
+): Promise<string> {
   const bitmap = await createImageBitmap(blob);
   const canvas = document.createElement('canvas');
   canvas.width = size;
@@ -57,7 +60,7 @@ export async function blobToIconDataUrl(blob: Blob, size = 128): Promise<string>
 function useDocTitle(docId: string) {
   const docsService = useService(DocsService);
   const record = useLiveData(docsService.list.doc$(docId));
-  return useLiveData(useMemo(() => record?.title$, [record])) || '';
+  return useLiveData(record?.title$) || '';
 }
 
 function useGenerationStatusText(busy: boolean) {
@@ -236,7 +239,7 @@ export const DocBannerGenerateButton = ({
   };
 
   const applyPreset = (preset: BannerPreset) => {
-    void apply({ blob: bannerPresetToBlob(preset), url: '' });
+    apply({ blob: bannerPresetToBlob(preset), url: '' }).catch(console.error);
   };
 
   const handleOpenChange = (next: boolean) => {
@@ -252,7 +255,7 @@ export const DocBannerGenerateButton = ({
     input.onchange = () => {
       const file = input.files?.[0];
       if (!file) return;
-      void apply({ blob: file, url: '' });
+      apply({ blob: file, url: '' }).catch(console.error);
     };
     input.click();
   };
@@ -263,11 +266,7 @@ export const DocBannerGenerateButton = ({
       contentOptions={{ side: 'bottom', align: 'start', sideOffset: 4 }}
       items={
         <div className={styles.menuPanel}>
-          <Button
-            variant="secondary"
-            size="default"
-            onClick={uploadBanner}
-          >
+          <Button variant="secondary" size="default" onClick={uploadBanner}>
             Upload an image…
           </Button>
           {hasBanner ? (
@@ -314,7 +313,9 @@ export const DocBannerGenerateButton = ({
                 size="default"
                 disabled={busy}
                 onClick={() => {
-                  void generate(prompt.trim() || defaultPrompt, BANNER_SIZE);
+                  generate(prompt.trim() || defaultPrompt, BANNER_SIZE).catch(
+                    console.error
+                  );
                 }}
               >
                 {candidates.length > 0 ? 'Regenerate' : 'Generate'}
@@ -333,7 +334,7 @@ export const DocBannerGenerateButton = ({
                   alt={`candidate ${i + 1}`}
                   className={`${styles.candidate} ${styles.candidateBanner}`}
                   onClick={() => {
-                    void apply(c);
+                    apply(c).catch(console.error);
                   }}
                 />
               ))}
@@ -437,7 +438,7 @@ export const AiIconGenerator = ({
         disabled={busy}
         prefix={<AiOutlineIcon />}
         onClick={() => {
-          void generate(iconPrompt, ICON_SIZE);
+          generate(iconPrompt, ICON_SIZE).catch(console.error);
         }}
       >
         {candidates.length > 0 ? 'Regenerate' : 'Generate icon'}
@@ -448,7 +449,7 @@ export const AiIconGenerator = ({
           size="default"
           disabled={emojiBusy || busy}
           onClick={() => {
-            void suggestEmojis();
+            suggestEmojis().catch(console.error);
           }}
         >
           {emojiCandidates.length > 0 ? 'More emoji' : 'AI emoji'}
@@ -485,7 +486,7 @@ export const AiIconGenerator = ({
               alt={`icon candidate ${i + 1}`}
               className={`${styles.candidate} ${styles.candidateIcon}`}
               onClick={() => {
-                void applyImage(c);
+                applyImage(c).catch(console.error);
               }}
             />
           ))}

@@ -7,7 +7,9 @@ test.beforeEach(async ({ page }) => {
   await loginUser(page, user);
 });
 
-test('import from template should work', async ({ page }) => {
+// The renamed URL was AFFiNE's template gallery; notesgraph.com has none
+// to import from. Unskip once NotesGraph publishes a gallery.
+test.skip('import from template should work', async ({ page }) => {
   await page.goto('https://notesgraph.com/templates', { waitUntil: 'load' });
 
   await page.click('.template-list > a:first-child');

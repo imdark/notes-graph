@@ -67,7 +67,16 @@ const DAY_MS = 24 * 60 * 60 * 1000;
  * dropped; an empty result means the title says nothing to compare.
  */
 export function titleKey(title: string): string {
-  const filler = new Set(['a', 'an', 'the', 'on', 'of', 'and', 'copy', 'untitled']);
+  const filler = new Set([
+    'a',
+    'an',
+    'the',
+    'on',
+    'of',
+    'and',
+    'copy',
+    'untitled',
+  ]);
   const words = title
     .normalize('NFKD')
     .replace(/[̀-ͯ]/g, '')
@@ -86,8 +95,13 @@ export function asOfDate(text: string): { asOf: string; date: Date } | null {
   const match = /\bas of (\d{4})-(\d{2})(?:-(\d{2}))?\b/i.exec(text);
   if (!match) return null;
   const [, year, month, day] = match;
-  const date = new Date(Date.UTC(Number(year), Number(month) - 1, Number(day ?? '1')));
-  if (Number.isNaN(date.getTime()) || date.getUTCMonth() !== Number(month) - 1) {
+  const date = new Date(
+    Date.UTC(Number(year), Number(month) - 1, Number(day ?? '1'))
+  );
+  if (
+    Number.isNaN(date.getTime()) ||
+    date.getUTCMonth() !== Number(month) - 1
+  ) {
     return null;
   }
   return { asOf: day ? `${year}-${month}-${day}` : `${year}-${month}`, date };
@@ -107,7 +121,9 @@ export function notesHealth(
 
   // A note linking to itself doesn't make it reachable.
   const linkedTo = new Set(
-    input.links.filter(link => link.fromDocId !== link.toDocId).map(link => link.toDocId)
+    input.links
+      .filter(link => link.fromDocId !== link.toDocId)
+      .map(link => link.toDocId)
   );
   const orphans = input.docs
     .filter(doc => !doc.journal && !linkedTo.has(doc.docId))
@@ -149,7 +165,9 @@ export function notesHealth(
     const doc = byId.get(block.docId);
     const stamp = asOfDate(block.text);
     if (!doc || !stamp) continue;
-    const ageDays = Math.floor((options.now.getTime() - stamp.date.getTime()) / DAY_MS);
+    const ageDays = Math.floor(
+      (options.now.getTime() - stamp.date.getTime()) / DAY_MS
+    );
     if (ageDays <= staleDays) continue;
     staleFacts.push({
       ...ref(doc),

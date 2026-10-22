@@ -57,7 +57,7 @@ describe('oauth flow mode', () => {
         'https://app.notesgraph.com'
       )
     ).toBe(
-      'https://app.notesgraph.com/redirect-proxy?redirect_uri=https%3A%2F%2Fgithub.com%2Ftoeverything%2FNotesGraph'
+      'https://app.notesgraph.com/redirect-proxy?redirect_uri=https%3A%2F%2Fgithub.com%2Fnotesgraph%2Fnotesgraph'
     );
   });
 });

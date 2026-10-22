@@ -22,7 +22,8 @@ if (newE2E) {
  * -> hooks.js). Without it ava runs the specs as plain ESM, and the first
  * extensionless import in the prelude fails with ERR_MODULE_NOT_FOUND.
  */
-const tsLoader = new URL('../../../tools/cli/register.js', import.meta.url).href;
+const tsLoader = new URL('../../../tools/cli/register.js', import.meta.url)
+  .href;
 
 export default {
   nodeArguments: [`--import=${tsLoader}`],

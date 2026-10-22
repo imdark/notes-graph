@@ -603,7 +603,9 @@ export class DocResolver {
     if (!policy || policy.visibility !== 'public') {
       return null;
     }
-    return policy.publicRole === 'commenter' ? DocRole.Commenter : DocRole.Reader;
+    return policy.publicRole === 'commenter'
+      ? DocRole.Commenter
+      : DocRole.Reader;
   }
 
   @ResolveField(() => PublicUserType, {

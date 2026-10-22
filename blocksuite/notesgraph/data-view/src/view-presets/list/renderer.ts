@@ -7,6 +7,5 @@ import { ListViewUILogic } from './pc/view.js';
 
 export const listViewMeta = listViewModel.createMeta({
   icon: createIcon('CheckBoxCheckLinearIcon'),
-  pcLogic: () =>
-    ListViewUILogic as unknown as DataViewUILogicBaseConstructor,
+  pcLogic: () => ListViewUILogic as unknown as DataViewUILogicBaseConstructor,
 });

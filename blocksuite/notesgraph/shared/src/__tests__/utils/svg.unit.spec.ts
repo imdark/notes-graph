@@ -110,9 +110,9 @@ describe('sanitizeSvg', () => {
       expect(containsUnsafeCss('fill: url(#grad)')).toBe(false);
       expect(containsUnsafeCss(`fill: url("#grad")`)).toBe(false);
       expect(containsUnsafeCss('fill: url( #grad )')).toBe(false);
-      expect(containsUnsafeCss('.node rect { fill: #1f2020; stroke: #ccc; }')).toBe(
-        false
-      );
+      expect(
+        containsUnsafeCss('.node rect { fill: #1f2020; stroke: #ccc; }')
+      ).toBe(false);
     });
 
     test('flags external, protocol, and data url() refs', () => {
@@ -128,9 +128,9 @@ describe('sanitizeSvg', () => {
 
     test('flags @import, javascript:, expression(), and -moz-binding', () => {
       expect(containsUnsafeCss('@import "https://x/y.css"')).toBe(true);
-      expect(containsUnsafeCss('background: url(#a); x: javascript:alert(1)')).toBe(
-        true
-      );
+      expect(
+        containsUnsafeCss('background: url(#a); x: javascript:alert(1)')
+      ).toBe(true);
       expect(containsUnsafeCss('width: expression(alert(1))')).toBe(true);
       expect(containsUnsafeCss('-moz-binding: url(#a)')).toBe(true);
     });

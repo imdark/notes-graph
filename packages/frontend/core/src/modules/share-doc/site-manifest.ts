@@ -1,4 +1,4 @@
-import { type Doc as YDoc, Map as YMap } from 'yjs';
+import type { Doc as YDoc, Map as YMap } from 'yjs';
 
 import { SITE_MAP_KEY, type SiteManifest } from './publish-site-types';
 
@@ -13,8 +13,7 @@ import { SITE_MAP_KEY, type SiteManifest } from './publish-site-types';
  *  - `manifest` — JSON {@link SiteManifest} (present on the root doc only)
  */
 
-const siteMap = (yDoc: YDoc): YMap<string> =>
-  yDoc.getMap<string>(SITE_MAP_KEY);
+const siteMap = (yDoc: YDoc): YMap<string> => yDoc.getMap<string>(SITE_MAP_KEY);
 
 /**
  * Every write here has to be a no-op when the stored value already matches.

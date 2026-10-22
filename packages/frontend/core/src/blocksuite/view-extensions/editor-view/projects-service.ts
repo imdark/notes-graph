@@ -1,7 +1,7 @@
 import {
   type ProjectInfo,
-  type ProjectsService as EditorProjectsService,
   ProjectsProvider,
+  type ProjectsService as EditorProjectsService,
 } from '@blocksuite/notesgraph/shared/services';
 import type { ExtensionType } from '@blocksuite/notesgraph/store';
 import { ProjectsService } from '@notesgraph/core/modules/projects';
@@ -19,6 +19,7 @@ export function patchProjectsService(
   const projectsService = framework.get(ProjectsService);
 
   const impl: EditorProjectsService = {
+    // eslint-disable-next-line rxjs/finnish -- name fixed by the editor ProjectsService interface
     projects$: () =>
       new Observable<ProjectInfo[]>(subscriber => {
         const subscription = projectsService.projects.projects$.subscribe(

@@ -577,10 +577,11 @@ test.describe('slash search', () => {
 
     // search should active the first item
     await type(page, 'co');
-    await expect(slashItems).toHaveCount(5);
+    // NotesGraph adds the 2/3/4 Columns layout items
+    await expect(slashItems).toHaveCount(8);
     await expect(slashItems.nth(0).locator('.text')).toHaveText(['Copy']);
-    await expect(slashItems.nth(1).locator('.text')).toHaveText(['Code Block']);
-    await expect(slashItems.nth(2).locator('.text')).toHaveText(['Callout']);
+    await expect(slashItems.nth(4).locator('.text')).toHaveText(['Code Block']);
+    await expect(slashItems.nth(5).locator('.text')).toHaveText(['Callout']);
     await expect(slashItems.nth(0)).toHaveAttribute('hover', 'true');
 
     await type(page, 'p');
@@ -589,10 +590,11 @@ test.describe('slash search', () => {
 
     // assert backspace works
     await pressBackspace(page);
-    await expect(slashItems).toHaveCount(5);
+    // NotesGraph adds the 2/3/4 Columns layout items
+    await expect(slashItems).toHaveCount(8);
     await expect(slashItems.nth(0).locator('.text')).toHaveText(['Copy']);
-    await expect(slashItems.nth(1).locator('.text')).toHaveText(['Code Block']);
-    await expect(slashItems.nth(2).locator('.text')).toHaveText(['Callout']);
+    await expect(slashItems.nth(4).locator('.text')).toHaveText(['Code Block']);
+    await expect(slashItems.nth(5).locator('.text')).toHaveText(['Callout']);
     await expect(slashItems.nth(0)).toHaveAttribute('hover', 'true');
   });
 
@@ -608,15 +610,18 @@ test.describe('slash search', () => {
     await expect(slashMenu).toBeVisible();
 
     await type(page, 'c');
-    await expect(slashItems).toHaveCount(12);
+    // NotesGraph adds Columns, Chart View, Task Chart and Align center items
+    await expect(slashItems).toHaveCount(17);
     await expect(slashItems.nth(0).locator('.text')).toHaveText(['Copy']);
     await expect(slashItems.nth(1).locator('.text')).toHaveText(['Italic']);
     await expect(slashItems.nth(2).locator('.text')).toHaveText(['Callout']);
     await expect(slashItems.nth(3).locator('.text')).toHaveText(['New Doc']);
-    await expect(slashItems.nth(4).locator('.text')).toHaveText(['Duplicate']);
-    await expect(slashItems.nth(5).locator('.text')).toHaveText(['Code Block']);
-    await expect(slashItems.nth(6).locator('.text')).toHaveText(['Linked Doc']);
-    await expect(slashItems.nth(7).locator('.text')).toHaveText(['Attachment']);
+    await expect(slashItems.nth(7).locator('.text')).toHaveText(['Duplicate']);
+    await expect(slashItems.nth(8).locator('.text')).toHaveText(['Code Block']);
+    await expect(slashItems.nth(9).locator('.text')).toHaveText(['Linked Doc']);
+    await expect(slashItems.nth(10).locator('.text')).toHaveText([
+      'Attachment',
+    ]);
     await type(page, 'b');
     await expect(slashItems.nth(0).locator('.text')).toHaveText(['Code Block']);
   });
@@ -632,13 +637,18 @@ test.describe('slash search', () => {
 
     const slashItems = slashMenu.locator('icon-button');
     await type(page, 'database');
-    await expect(slashItems).toHaveCount(3);
-    await expect(slashItems.nth(0).locator('.text')).toHaveText(['Table View']);
-    await expect(slashItems.nth(1).locator('.text')).toHaveText([
+    // NotesGraph adds more database-backed views (query/task/gantt/chart)
+    await expect(slashItems.locator('.text')).toHaveText([
+      'Table View',
+      'Query Table',
+      'Task List',
+      'Task Chart',
       'Kanban View',
-    ]);
-    await expect(slashItems.nth(2).locator('.text')).toHaveText([
+      'Task Report',
       'Calendar View',
+      'Gantt View',
+      'Chart View',
+      'Query Board',
     ]);
     await type(page, 'v');
     await expect(slashItems).toHaveCount(0);

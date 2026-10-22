@@ -77,7 +77,12 @@ const styles = {
     borderRadius: 4,
     background: 'rgba(128,128,128,0.18)',
   },
-  empty: { padding: '18px 12px', fontSize: 13, opacity: 0.65, textAlign: 'center' },
+  empty: {
+    padding: '18px 12px',
+    fontSize: 13,
+    opacity: 0.65,
+    textAlign: 'center',
+  },
   notice: { padding: 14, fontSize: 13, opacity: 0.8, lineHeight: 1.6 },
   button: {
     fontSize: 12,
@@ -263,7 +268,8 @@ function DeviceList({ title, devices, emptyText, onRemove }) {
               h('span', {
                 style: {
                   ...styles.dot,
-                  background: STATE_COLORS[device.state] ?? STATE_COLORS.unknown,
+                  background:
+                    STATE_COLORS[device.state] ?? STATE_COLORS.unknown,
                 },
               }),
               h(
@@ -384,22 +390,25 @@ function createDevicesPage(ctx) {
       return `/api/registry/workspaces/${encodeURIComponent(workspace.id)}/devices${suffix}`;
     };
 
-    const register = useCallback(async input => {
-      const res = await ctx.net.fetch(await writeUrl(''), {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(input),
-      });
-      if (!res.ok) {
-        const body = await res.json().catch(() => null);
-        throw new Error(
-          (body && (body.message || body.error)) ||
-            `Could not register the device (${res.status}).`
-        );
-      }
-      setAdding(false);
-      load();
-    }, [load]);
+    const register = useCallback(
+      async input => {
+        const res = await ctx.net.fetch(await writeUrl(''), {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(input),
+        });
+        if (!res.ok) {
+          const body = await res.json().catch(() => null);
+          throw new Error(
+            (body && (body.message || body.error)) ||
+              `Could not register the device (${res.status}).`
+          );
+        }
+        setAdding(false);
+        load();
+      },
+      [load]
+    );
 
     const remove = useCallback(
       async device => {
@@ -500,7 +509,10 @@ export default {
         try {
           const workspace = await ctx.workspace.getCurrent();
           if (!workspace) {
-            ctx.ui.notify({ title: 'Open a workspace first', theme: 'warning' });
+            ctx.ui.notify({
+              title: 'Open a workspace first',
+              theme: 'warning',
+            });
             return;
           }
           const res = await ctx.net.fetch(

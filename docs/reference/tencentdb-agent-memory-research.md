@@ -24,6 +24,7 @@ three Node services:
 
   Retrieval is BM25 + vector + RRF. It works without embeddings and is
   limited by item count, character budget and timeout.
+
 - **Skills** are reusable workflows extracted from conversations and tool
   calls. Each has a version, resources, trigger boundaries, steps and
   validation rules.
@@ -38,9 +39,9 @@ three Node services:
 
 Each memory layer has a fixed place in the prompt:
 
-| Layer | Size | How the model gets it |
-| --- | --- | --- |
-| L2 scenarios, L3 profile | small, stable | injected into the system prompt |
+| Layer                      | Size                  | How the model gets it                              |
+| -------------------------- | --------------------- | -------------------------------------------------- |
+| L2 scenarios, L3 profile   | small, stable         | injected into the system prompt                    |
 | L0 conversations, L1 facts | large, query-specific | read-only tools the model calls when it needs them |
 
 The prompt prefix stays stable, which keeps the upstream KV cache valid, and

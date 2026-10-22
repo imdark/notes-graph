@@ -4,8 +4,8 @@ import * as Y from 'yjs';
 import { profileFor } from '../agent-profiles';
 import {
   AGENT_RULES_TITLE,
-  agentRulesSection,
   AgentRules,
+  agentRulesSection,
   MAX_AGENT_RULES_CHARS,
   withAgentRules,
 } from '../agent-rules';
@@ -63,7 +63,9 @@ function makeRules(options: {
     getDocMarkdown: async (_ws: string, docId: string) => {
       asked.read.push(docId);
       const markdown = options.docs?.[docId];
-      return markdown === undefined ? null : { title: AGENT_RULES_TITLE, markdown };
+      return markdown === undefined
+        ? null
+        : { title: AGENT_RULES_TITLE, markdown };
     },
   };
   const ac: any = {
@@ -90,7 +92,10 @@ test('no note, or an empty one, adds nothing', t => {
 
 test('the note is appended after the built-in conventions and said to win', t => {
   const profile = profileFor('claude-code')!;
-  const ruled = withAgentRules(profile, '- Research notes go under "Research".');
+  const ruled = withAgentRules(
+    profile,
+    '- Research notes go under "Research".'
+  );
   t.true(ruled.systemPrompt.startsWith(profile.systemPrompt));
   t.regex(
     ruled.systemPrompt,
@@ -111,7 +116,12 @@ test('reads the first note of that title the user can open and has text', async 
   const { rules, asked } = makeRules({
     ids: ['secret', 'empty', 'rules', 'later'],
     readable: ['empty', 'rules', 'later'],
-    docs: { secret: 'hidden', empty: '  ', rules: ' Tag research #research \n', later: 'no' },
+    docs: {
+      secret: 'hidden',
+      empty: '  ',
+      rules: ' Tag research #research \n',
+      later: 'no',
+    },
   });
   t.is(await rules.read(workspaceId, 'user-1'), 'Tag research #research');
   t.is(asked.title, AGENT_RULES_TITLE);
@@ -179,7 +189,10 @@ test('a claimed job gets the rules in its profile; a job of no Claude model gets
     ).claim(workspaceId, 'laptop', 'runner');
 
   const claimed = await claimWith('claude-code');
-  t.regex(claimed?.profile?.systemPrompt ?? '', /<agent-rules>\nName notes in sentence case\.\n<\/agent-rules>/);
+  t.regex(
+    claimed?.profile?.systemPrompt ?? '',
+    /<agent-rules>\nName notes in sentence case\.\n<\/agent-rules>/
+  );
   t.deepEqual(reads, ['user-1']);
 
   t.is((await claimWith(null))?.profile, null);

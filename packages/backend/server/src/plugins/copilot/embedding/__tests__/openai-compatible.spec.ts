@@ -20,7 +20,7 @@ function fakeEndpoint(dims = EMBEDDING_DIMENSIONS, status = 200) {
       data: (body.input as string[])
         .map((_, index) => ({
           index,
-          embedding: new Array(dims).fill(index / 10),
+          embedding: Array.from({ length: dims }, () => index / 10),
         }))
         .reverse(), // servers may answer out of order; index is what counts
     });
@@ -84,7 +84,7 @@ test('sends one request at a time, however many jobs ask', async t => {
     return Response.json({
       data: (body.input as string[]).map((_, index) => ({
         index,
-        embedding: new Array(EMBEDDING_DIMENSIONS).fill(0),
+        embedding: Array.from({ length: EMBEDDING_DIMENSIONS }, () => 0),
       })),
     });
   }) as unknown as typeof fetch;

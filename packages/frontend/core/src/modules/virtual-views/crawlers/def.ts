@@ -40,7 +40,9 @@ export interface Crawler {
    * on the view. Optional — crawlers with structured credentials (IMAP, Gmail)
    * are added via dedicated service methods instead.
    */
-  parse?(input: string): Promise<{ config: Record<string, unknown>; name?: string }>;
+  parse?(
+    input: string
+  ): Promise<{ config: Record<string, unknown>; name?: string }>;
   /** For `list` crawlers. */
   crawl?(config: Record<string, unknown>): Promise<CrawlResult>;
   /** For `timeseries` crawlers. */

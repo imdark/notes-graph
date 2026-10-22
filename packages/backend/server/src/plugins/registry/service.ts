@@ -119,7 +119,9 @@ export class RegistryService {
       registeredBy: userId,
     });
 
-    this.logger.log(`registered registry device ${workspaceId}/${key} (${kind})`);
+    this.logger.log(
+      `registered registry device ${workspaceId}/${key} (${kind})`
+    );
     return toDeviceDto(device);
   }
 
@@ -132,7 +134,10 @@ export class RegistryService {
   }
 
   async get(workspaceId: string, key: string): Promise<DeviceDto | null> {
-    const device = await this.models.registryDevice.get(workspaceId, this.normalizeKey(key));
+    const device = await this.models.registryDevice.get(
+      workspaceId,
+      this.normalizeKey(key)
+    );
     return device ? toDeviceDto(device) : null;
   }
 
@@ -147,7 +152,11 @@ export class RegistryService {
   ): Promise<DeviceDto | null> {
     if (
       maxJobs !== null &&
-      !(Number.isInteger(maxJobs) && (maxJobs as number) >= 1 && (maxJobs as number) <= MAX_DEVICE_JOBS)
+      !(
+        Number.isInteger(maxJobs) &&
+        (maxJobs as number) >= 1 &&
+        (maxJobs as number) <= MAX_DEVICE_JOBS
+      )
     ) {
       throw new BadRequest(
         `maxJobs must be a whole number from 1 to ${MAX_DEVICE_JOBS}, or null for the runner's own setting`
@@ -162,7 +171,10 @@ export class RegistryService {
   }
 
   async remove(workspaceId: string, key: string): Promise<number> {
-    return this.models.registryDevice.delete(workspaceId, this.normalizeKey(key));
+    return this.models.registryDevice.delete(
+      workspaceId,
+      this.normalizeKey(key)
+    );
   }
 
   async recordStatus(
@@ -183,7 +195,9 @@ export class RegistryService {
         statusDetail: body.statusDetail ?? null,
         version: body.version ?? null,
         // The CLI sends epoch seconds; a missing or unusable value means now.
-        checkedAt: body.checkedAt ? new Date(body.checkedAt * 1000) : new Date(),
+        checkedAt: body.checkedAt
+          ? new Date(body.checkedAt * 1000)
+          : new Date(),
         checks: (Array.isArray(body.checks) ? body.checks : []) as never,
       }
     );

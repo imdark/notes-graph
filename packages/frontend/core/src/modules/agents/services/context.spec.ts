@@ -6,7 +6,10 @@ import { projectOf } from './context';
 /** Blocks by id, each with its text and parent. */
 const storeOf = (blocks: Record<string, { text: string; parent?: string }>) => {
   const model = (id: string) =>
-    ({ id, text: { toString: () => blocks[id].text } }) as unknown as BlockModel;
+    ({
+      id,
+      text: { toString: () => blocks[id].text },
+    }) as unknown as BlockModel;
   const store = {
     getParent: (child: BlockModel) => {
       const parent = blocks[child.id]?.parent;

@@ -85,7 +85,9 @@ export function deviceChecks(device: Pick<RegistryDevice, 'checks'>) {
     const check = raw as Record<string, unknown>;
     const name = String(check.name ?? check.check ?? check.id ?? '').trim();
     if (!name) return [];
-    const status = String(check.status ?? check.state ?? (check.ok === false ? 'fail' : 'ok')).toLowerCase();
+    const status = String(
+      check.status ?? check.state ?? (check.ok === false ? 'fail' : 'ok')
+    ).toLowerCase();
     return [
       {
         name,
@@ -130,23 +132,24 @@ export function fleetSummary(
 
 export type AgentMode = 'training' | 'shadow' | 'detect';
 
-export const AGENT_MODES: { value: AgentMode; label: string; note: string }[] = [
-  {
-    value: 'training',
-    label: 'Training',
-    note: 'Learns what normal looks like on each machine. Flags nothing.',
-  },
-  {
-    value: 'shadow',
-    label: 'Shadow',
-    note: 'Decides what it would escalate and logs it below, but tells nobody. Use it to see whether it can be trusted.',
-  },
-  {
-    value: 'detect',
-    label: 'Detect',
-    note: 'Escalates what matters: a phone alert, and a read-only Claude triage on the machine if you turn it on.',
-  },
-];
+export const AGENT_MODES: { value: AgentMode; label: string; note: string }[] =
+  [
+    {
+      value: 'training',
+      label: 'Training',
+      note: 'Learns what normal looks like on each machine. Flags nothing.',
+    },
+    {
+      value: 'shadow',
+      label: 'Shadow',
+      note: 'Decides what it would escalate and logs it below, but tells nobody. Use it to see whether it can be trusted.',
+    },
+    {
+      value: 'detect',
+      label: 'Detect',
+      note: 'Escalates what matters: a phone alert, and a read-only Claude triage on the machine if you turn it on.',
+    },
+  ];
 
 /** Health checks a machine needs before the agent judges it (WARMUP on the server). */
 export const AGENT_WARMUP = 10;
@@ -217,7 +220,10 @@ export interface LogCatalog {
 export const LOG_METRIC_PREFIX = 'log:';
 
 export type AgentSettings = Partial<
-  Pick<MonitoringAgent, 'mode' | 'sensitivity' | 'intervalMinutes' | 'autoTriage'>
+  Pick<
+    MonitoringAgent,
+    'mode' | 'sensitivity' | 'intervalMinutes' | 'autoTriage'
+  >
 > & {
   /** Only the parts given change. */
   alerts?: Partial<MonitoringAgent['alerts']>;
@@ -299,7 +305,9 @@ export class FleetService extends Service {
   private fetchService(): FetchService {
     const server = this.workspaceServerService.server;
     if (!server) {
-      throw new Error('Machines are kept on a server, and this workspace is local.');
+      throw new Error(
+        'Machines are kept on a server, and this workspace is local.'
+      );
     }
     return server.scope.get(FetchService);
   }
@@ -354,8 +362,10 @@ export class FleetService extends Service {
     const next = new Map(checking);
     for (const [key, askedAt] of checking) {
       const device = devices.find(d => d.key === key);
-      const reported = !!device?.checkedAt && device.checkedAt * 1000 >= askedAt;
-      if (!device || reported || now - askedAt > CHECK_WAIT_MS) next.delete(key);
+      const reported =
+        !!device?.checkedAt && device.checkedAt * 1000 >= askedAt;
+      if (!device || reported || now - askedAt > CHECK_WAIT_MS)
+        next.delete(key);
     }
     this.setChecking(next);
   }
@@ -393,7 +403,10 @@ export class FleetService extends Service {
    * setting. A run waiting on its starter still holds its slot, so a machine
    * whose slots are all waiting starts nothing else, side chats included.
    */
-  async setMaxJobs(key: string, maxJobs: number | null): Promise<RegistryDevice> {
+  async setMaxJobs(
+    key: string,
+    maxJobs: number | null
+  ): Promise<RegistryDevice> {
     const { device } = await this.json<{ device: RegistryDevice }>(
       `/devices/${encodeURIComponent(key)}/max-jobs`,
       { method: 'POST', body: JSON.stringify({ maxJobs }) }
@@ -407,7 +420,9 @@ export class FleetService extends Service {
   async revalidateAgent(): Promise<void> {
     const [{ agent }, { decisions }] = await Promise.all([
       this.json<{ agent: MonitoringAgent }>('/monitoring-agent'),
-      this.json<{ decisions: MonitoringDecision[] }>('/monitoring-agent/decisions?limit=50'),
+      this.json<{ decisions: MonitoringDecision[] }>(
+        '/monitoring-agent/decisions?limit=50'
+      ),
     ]);
     this.agent$.setValue(agent);
     this.decisions$.setValue(decisions);
@@ -416,12 +431,18 @@ export class FleetService extends Service {
   }
 
   async revalidateLogs(): Promise<void> {
-    const { catalogs } = await this.json<{ catalogs: LogCatalog[] }>('/monitoring-agent/logs');
+    const { catalogs } = await this.json<{ catalogs: LogCatalog[] }>(
+      '/monitoring-agent/logs'
+    );
     this.logCatalogs$.setValue(catalogs);
   }
 
   /** "known": this pattern is never news; null: judge it again. */
-  async labelPattern(deviceKey: string, patternId: string, label: 'known' | null): Promise<void> {
+  async labelPattern(
+    deviceKey: string,
+    patternId: string,
+    label: 'known' | null
+  ): Promise<void> {
     const { pattern } = await this.json<{ pattern: LogPattern }>(
       `/monitoring-agent/logs/${encodeURIComponent(deviceKey)}/${encodeURIComponent(patternId)}/label`,
       { method: 'POST', body: JSON.stringify({ label }) }
@@ -429,7 +450,12 @@ export class FleetService extends Service {
     this.logCatalogs$.setValue(
       this.logCatalogs$.value.map(catalog =>
         catalog.deviceKey === deviceKey
-          ? { ...catalog, patterns: catalog.patterns.map(p => (p.id === pattern.id ? pattern : p)) }
+          ? {
+              ...catalog,
+              patterns: catalog.patterns.map(p =>
+                p.id === pattern.id ? pattern : p
+              ),
+            }
           : catalog
       )
     );
@@ -437,20 +463,26 @@ export class FleetService extends Service {
 
   /** Turn the agent on, or change its mode or settings. */
   async configureAgent(settings: AgentSettings): Promise<MonitoringAgent> {
-    const { agent } = await this.json<{ agent: MonitoringAgent }>('/monitoring-agent', {
-      method: 'POST',
-      body: JSON.stringify(settings),
-    });
+    const { agent } = await this.json<{ agent: MonitoringAgent }>(
+      '/monitoring-agent',
+      {
+        method: 'POST',
+        body: JSON.stringify(settings),
+      }
+    );
     this.agent$.setValue(agent);
     return agent;
   }
 
   /** Forget what it learned; it goes back to training. */
   async resetAgent(): Promise<void> {
-    const { agent } = await this.json<{ agent: MonitoringAgent }>('/monitoring-agent/reset', {
-      method: 'POST',
-      body: '{}',
-    });
+    const { agent } = await this.json<{ agent: MonitoringAgent }>(
+      '/monitoring-agent/reset',
+      {
+        method: 'POST',
+        body: '{}',
+      }
+    );
     this.agent$.setValue(agent);
   }
 
@@ -470,14 +502,18 @@ export class FleetService extends Service {
   }
 
   /** "expected" teaches it this is normal; "resolved" lets it alert again. */
-  async feedback(decisionId: string, verdict: 'expected' | 'resolved'): Promise<void> {
+  async feedback(
+    decisionId: string,
+    verdict: 'expected' | 'resolved'
+  ): Promise<void> {
     const { decision } = await this.json<{ decision: MonitoringDecision }>(
       `/monitoring-agent/decisions/${encodeURIComponent(decisionId)}/feedback`,
       { method: 'POST', body: JSON.stringify({ verdict }) }
     );
     this.replaceDecision(decision);
     // "expected" on a log finding labels its pattern known.
-    if (decision.metric.startsWith(LOG_METRIC_PREFIX)) this.revalidateLogs().catch(() => {});
+    if (decision.metric.startsWith(LOG_METRIC_PREFIX))
+      this.revalidateLogs().catch(() => {});
   }
 
   /** Check every machine that takes jobs; says which were skipped and why. */

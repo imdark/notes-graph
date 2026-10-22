@@ -384,8 +384,7 @@ const copyAsSyncedBlock = {
   icon: DualLinkIcon(),
   when({ std }) {
     const sel = std.selection.find(TextSelection);
-    const blockId =
-      sel?.blockId ?? std.selection.find(BlockSelection)?.blockId;
+    const blockId = sel?.blockId ?? std.selection.find(BlockSelection)?.blockId;
     if (!blockId) return false;
     const model = std.store.getBlock(blockId)?.model;
     return (
@@ -397,8 +396,7 @@ const copyAsSyncedBlock = {
   run({ host }) {
     const std = host.std;
     const sel = std.selection.find(TextSelection);
-    const blockId =
-      sel?.blockId ?? std.selection.find(BlockSelection)?.blockId;
+    const blockId = sel?.blockId ?? std.selection.find(BlockSelection)?.blockId;
     if (!blockId) return;
     const model = std.store.getBlock(blockId)?.model;
     if (!model?.text) return;

@@ -43,9 +43,16 @@ test('appendLinkedDocReference adds a reference paragraph without touching exist
   const blocks = merged.getMap('blocks');
 
   const mergedTexts = paragraphTexts(blocks);
-  t.is(mergedTexts.length, 3, 'original two paragraphs plus the new reference one');
+  t.is(
+    mergedTexts.length,
+    3,
+    'original two paragraphs plus the new reference one'
+  );
   for (const text of originalTexts) {
-    t.true(mergedTexts.includes(text), `original paragraph preserved: "${text}"`);
+    t.true(
+      mergedTexts.includes(text),
+      `original paragraph preserved: "${text}"`
+    );
   }
 
   let noteId: string | undefined;
@@ -100,7 +107,9 @@ test('appendEmbedHtmlBlock adds an html embed as the last block of the note', t 
     const yBlock = block as Y.Map<unknown>;
     if (yBlock.get('sys:flavour') === 'notesgraph:note') note = yBlock;
   });
-  const lastId = (note!.get('sys:children') as Y.Array<string>).toArray().at(-1);
+  const lastId = (note!.get('sys:children') as Y.Array<string>)
+    .toArray()
+    .at(-1);
   const embed = blocks.get(lastId!) as Y.Map<unknown>;
   t.is(embed.get('sys:flavour'), 'notesgraph:embed-html');
   t.is(embed.get('prop:html'), '<button>+1</button>');

@@ -86,7 +86,10 @@ test('create_widget makes a new doc when no docId is given', async t => {
   const { call, writes } = await appendTool('create_widget', {});
   t.true((await call({ html: '<p>x</p>' })).isError);
   const result = await call({ title: 'Quiz', html: '<p>x</p>' });
-  t.is(JSON.parse((result.content[0] as { text: string }).text).docId, 'new-doc');
+  t.is(
+    JSON.parse((result.content[0] as { text: string }).text).docId,
+    'new-doc'
+  );
   t.deepEqual(
     writes.map(w => `${w.op}:${w.docId}`),
     ['create:new-doc', 'widget:new-doc']
@@ -106,7 +109,9 @@ test('create_widget refuses unknown docs and secrets without writing', async t =
 });
 
 test('create_flashcards stamps an existing doc and appends one-line cards', async t => {
-  const { call, writes } = await appendTool('create_flashcards', { d1: 'Intro.' });
+  const { call, writes } = await appendTool('create_flashcards', {
+    d1: 'Intro.',
+  });
   const result = await call({
     docId: 'd1',
     cards: [
@@ -135,7 +140,10 @@ test('create_flashcards needs a title for a new doc and refuses empty cards', as
   );
   t.is(writes.length, 0);
   const result = await call({ title: 'Deck', cards: [card] });
-  t.is(JSON.parse((result.content[0] as { text: string }).text).docId, 'new-doc');
+  t.is(
+    JSON.parse((result.content[0] as { text: string }).text).docId,
+    'new-doc'
+  );
   t.deepEqual(
     writes.map(w => `${w.op}:${w.docId}`),
     ['create:new-doc', 'cards:new-doc']

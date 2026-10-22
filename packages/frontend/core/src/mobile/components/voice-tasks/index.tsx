@@ -4,9 +4,9 @@ import { EditorService } from '@notesgraph/core/modules/editor';
 import {
   appendDictation,
   insertTasks,
-  splitDictatedTasks,
   type SpeechToTextError,
   type SpeechToTextSession,
+  splitDictatedTasks,
   VoiceTasksService,
 } from '@notesgraph/core/modules/voice-tasks';
 import { useI18n } from '@notesgraph/i18n';
@@ -84,11 +84,14 @@ export const VoiceTasksSheet = () => {
   // Opening the sheet is the request to listen; closing it ends listening.
   useEffect(() => {
     if (!open) return;
+    // A counter, not a DOM ref: cleanup must bump the live value, so it holds
+    // the ref object rather than a snapshot of `.current`.
+    const generation = generationRef;
     setText('');
     setPartial('');
     start();
     return () => {
-      generationRef.current++;
+      generation.current++;
       stop();
     };
   }, [open, start, stop]);

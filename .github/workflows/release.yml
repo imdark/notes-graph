@@ -1,9 +1,8 @@
 name: Release
 
 on:
-  schedule:
-    - cron: '0 9 * * *'
-
+  # Manual only: the scheduled run built images for AFFiNE's registry and
+  # deployed to their cluster. NotesGraph deploys with scripts/deploy-bg.sh.
   workflow_dispatch:
     inputs:
       web:

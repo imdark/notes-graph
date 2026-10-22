@@ -21,7 +21,10 @@ import {
   getTextSelectionCommand,
   retainFirstModelCommand,
 } from '@blocksuite/notesgraph-shared/commands';
-import { EmbedOptionProvider } from '@blocksuite/notesgraph-shared/services';
+import {
+  EmbedOptionProvider,
+  ParseDocUrlProvider,
+} from '@blocksuite/notesgraph-shared/services';
 import {
   isValidUrl,
   matchModels,
@@ -91,10 +94,7 @@ export class PageClipboard extends ReadOnlyClipboard {
     const textSelection = this.std.selection.find(TextSelection);
     if (textSelection?.isCollapsed()) {
       const model = this.std.store.getBlock(textSelection.from.blockId)?.model;
-      if (
-        model &&
-        matchModels(model, [ParagraphBlockModel, ListBlockModel])
-      ) {
+      if (model && matchModels(model, [ParagraphBlockModel, ListBlockModel])) {
         this.std.selection.setGroup('note', [
           this.std.selection.create(TextSelection, {
             from: {
@@ -182,6 +182,12 @@ export class PageClipboard extends ReadOnlyClipboard {
       urls.length === 0 ||
       !urls.every(url => /^https?:\/\/\S+$/i.test(url) && isValidUrl(url))
     ) {
+      return false;
+    }
+    // A link to a doc in this workspace isn't a web page to bookmark: leave it
+    // to the normal paste, which turns it into a doc reference.
+    const parseDocUrl = this.std.getOptional(ParseDocUrlProvider);
+    if (parseDocUrl && urls.some(url => parseDocUrl.parseDocUrl(url))) {
       return false;
     }
 

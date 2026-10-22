@@ -63,8 +63,7 @@ const fakeExecutor = () => {
       if (await ended) yield { type: 'done', output: 'ok' };
     },
   };
-  const { calls, claimedAgain, reverted, claim, open, children } =
-    fakeClaim();
+  const { calls, claimedAgain, reverted, claim, open, children } = fakeClaim();
   const framework = new Framework();
   framework.service(AgentExecutorService, executor as any);
   framework.service(AgentTaskClaimService, claim as any);

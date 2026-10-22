@@ -1,12 +1,13 @@
-import { LiveData, Service } from '@notesgraph/infra';
+import type { LiveData } from '@notesgraph/infra';
+import { Service } from '@notesgraph/infra';
 
 import type { Agents } from '../entities/agents';
 import {
   type Agent,
   type AgentDraft,
   type AgentScope,
-  DEFAULT_MAX_STEPS,
   type AgentsStore,
+  DEFAULT_MAX_STEPS,
 } from '../stores/agents';
 import type { AgentTarget } from './target';
 

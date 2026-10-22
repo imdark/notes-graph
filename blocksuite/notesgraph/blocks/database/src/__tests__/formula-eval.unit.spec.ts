@@ -1,9 +1,8 @@
-import { describe, expect, test } from 'vitest';
-
 import {
   evaluateFormula,
   type FormulaValue,
 } from '@blocksuite/notesgraph-shared/utils';
+import { describe, expect, test } from 'vitest';
 
 const env = (values: Record<string, FormulaValue>) => (name: string) => {
   const key = Object.keys(values).find(

@@ -1,7 +1,9 @@
 import { expect, type Locator, type Page } from '@playwright/test';
 
 export async function expandCollapsibleSection(page: Page, name: string) {
-  const divider = page.locator(`[data-collapsible]:has-text("${name}")`);
+  // A section's header, not a doc row: those are data-collapsible="false",
+  // and one is "How to use folder and Tags".
+  const divider = page.locator(`[data-collapsible="true"]:has-text("${name}")`);
   // oxlint-disable-next-line prefer-dom-node-dataset
   if ((await divider.getAttribute('data-collapsed')) === 'true') {
     await divider.click();

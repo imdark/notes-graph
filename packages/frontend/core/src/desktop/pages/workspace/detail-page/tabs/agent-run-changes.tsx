@@ -7,8 +7,8 @@ import { useAISpecs } from '@notesgraph/core/components/hooks/notesgraph/use-ai-
 import {
   type AgentRun,
   changesAreEmpty,
-  type PatchFile,
   parsePatch,
+  type PatchFile,
   type RunChanges,
 } from '@notesgraph/core/modules/agents';
 import { DocDisplayMetaService } from '@notesgraph/core/modules/doc-display-meta';
@@ -88,7 +88,11 @@ const PatchFileView = ({
           {file.path}
         </span>
         <span className={diffStyles.stats}>
-          {file.status === 'added' ? 'new · ' : file.status === 'deleted' ? 'deleted · ' : ''}
+          {file.status === 'added'
+            ? 'new · '
+            : file.status === 'deleted'
+              ? 'deleted · '
+              : ''}
           {stat ? (
             <>
               <span className={diffStyles.added}>+{stat.added}</span>{' '}
@@ -176,7 +180,9 @@ const GitChanges = ({ git }: { git: NonNullable<RunChanges['git']> }) => {
           {unshown.length > 0 ? (
             <span className={styles.hint}>
               Also changed, diff too large to keep:{' '}
-              {unshown.map(s => `${s.path} (+${s.added} −${s.removed})`).join(', ')}
+              {unshown
+                .map(s => `${s.path} (+${s.added} −${s.removed})`)
+                .join(', ')}
             </span>
           ) : null}
           {git.truncated ? (
@@ -248,7 +254,10 @@ export const AgentRunChanges = ({
         {run.status === 'error' && run.error ? (
           <p className={styles.error}>{run.error}</p>
         ) : null}
-        <div className={styles.forkReplyText} data-testid="agent-changes-summary">
+        <div
+          className={styles.forkReplyText}
+          data-testid="agent-changes-summary"
+        >
           {summary?.trim() ? (
             <LitTextRenderer
               answer={summary.trim()}
@@ -267,8 +276,8 @@ export const AgentRunChanges = ({
         <p className={styles.empty}>Loading what it changed…</p>
       ) : changes === undefined ? (
         <p className={styles.empty}>
-          This run didn't record what it changed. Runs on a device or in the
-          cloud do; the log shows what this one did.
+          This run didn&apos;t record what it changed. Runs on a device or in
+          the cloud do; the log shows what this one did.
         </p>
       ) : changesAreEmpty(changes) ? (
         <p className={styles.empty} data-testid="agent-changes-none">

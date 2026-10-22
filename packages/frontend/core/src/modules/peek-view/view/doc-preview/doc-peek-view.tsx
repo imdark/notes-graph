@@ -140,11 +140,17 @@ function DocPeekPreviewEditor({
         // chat panel open is already handled in <DetailPageImpl />
       }
     };
-    void import('@notesgraph/core/blocksuite/ai').then(({ AIAppEvents }) => {
-      if (cancelled) return;
-      disposables.push(AIAppEvents.requestOpenWithChat.subscribe(openHandler));
-      disposables.push(AIAppEvents.requestSendWithChat.subscribe(openHandler));
-    });
+    import('@notesgraph/core/blocksuite/ai')
+      .then(({ AIAppEvents }) => {
+        if (cancelled) return;
+        disposables.push(
+          AIAppEvents.requestOpenWithChat.subscribe(openHandler)
+        );
+        disposables.push(
+          AIAppEvents.requestSendWithChat.subscribe(openHandler)
+        );
+      })
+      .catch(console.error);
     return () => {
       cancelled = true;
       disposables.forEach(d => d.unsubscribe());

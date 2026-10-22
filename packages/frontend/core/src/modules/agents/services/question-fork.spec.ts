@@ -36,9 +36,13 @@ describe('forkMessages', () => {
     );
     expect(system.role).toBe('system');
     expect(system.content).toContain('Suggested answer:');
-    expect(user.content).toContain('The agent asks: Which branch should I use?');
+    expect(user.content).toContain(
+      'The agent asks: Which branch should I use?'
+    );
     expect(user.content).toContain('Choices it offered: main | dev');
-    expect(user.content).toContain('<transcript>\ndid some work\n</transcript>');
+    expect(user.content).toContain(
+      '<transcript>\ndid some work\n</transcript>'
+    );
   });
 
   test('a permission asks for allow or deny, not a suggested answer', () => {

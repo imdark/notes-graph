@@ -312,7 +312,7 @@ export class DocsSearchService extends Service {
         tokens.some(text => text.toLowerCase().includes(needle))
       );
     };
-    const required$ = [
+    const requiredQueries = [
       ...filters.tags.map(tag =>
         this.docIdsWithBlock$('tags', tag, prefer, tokens =>
           tokens.includes(tag)
@@ -325,7 +325,7 @@ export class DocsSearchService extends Service {
       ),
       ...filters.include.map(containing),
     ];
-    const excluded$ = filters.exclude.map(containing);
+    const excludedQueries = filters.exclude.map(containing);
 
     let docs: Set<string> | undefined;
     if (filters.docs.length) {
@@ -343,8 +343,8 @@ export class DocsSearchService extends Service {
     }
 
     return combineLatest([
-      required$.length ? combineLatest(required$) : of([]),
-      excluded$.length ? combineLatest(excluded$) : of([]),
+      requiredQueries.length ? combineLatest(requiredQueries) : of([]),
+      excludedQueries.length ? combineLatest(excludedQueries) : of([]),
     ]).pipe(
       map(([required, excludedSets]) => {
         let allowed = docs;

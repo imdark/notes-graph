@@ -9,7 +9,10 @@ import { MAX_RESULT_CHARS, resultText, rpcReply } from '../omniseek';
  */
 
 test('a plain JSON reply is read as is', t => {
-  const reply = rpcReply('{"jsonrpc":"2.0","id":1,"result":{"tools":[]}}', 'application/json');
+  const reply = rpcReply(
+    '{"jsonrpc":"2.0","id":1,"result":{"tools":[]}}',
+    'application/json'
+  );
   t.deepEqual(reply.result, { tools: [] });
 });
 
@@ -47,7 +50,10 @@ test('a tool result is its text parts, joined', t => {
 
 test('a failed tool says so', t => {
   t.is(
-    resultText({ isError: true, content: [{ type: 'text', text: 'rate limited' }] }),
+    resultText({
+      isError: true,
+      content: [{ type: 'text', text: 'rate limited' }],
+    }),
     'Error: rate limited'
   );
 });

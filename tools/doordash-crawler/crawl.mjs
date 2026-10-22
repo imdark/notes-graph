@@ -18,11 +18,12 @@
  * Run from the repo root (Playwright + Chromium resolve from ./node_modules):
  *   node tools/doordash-crawler/crawl.mjs
  */
-import { chromium } from 'playwright';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import readline from 'node:readline';
+
+import { chromium } from 'playwright';
 
 // A persistent profile keeps you logged in between runs and looks like a normal
 // browser to DoorDash's bot checks.
@@ -32,8 +33,16 @@ const HOME_URL = 'https://www.doordash.com/';
 const ORDERS_URL = 'https://www.doordash.com/orders';
 
 function prompt(question) {
-  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-  return new Promise(resolve => rl.question(question, answer => { rl.close(); resolve(answer); }));
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+  return new Promise(resolve =>
+    rl.question(question, answer => {
+      rl.close();
+      resolve(answer);
+    })
+  );
 }
 
 /** Scroll + click "show more"-style buttons until the order list stops growing. */
@@ -46,13 +55,21 @@ async function loadAllOrders(page) {
       'button:has-text("more orders"), button:has-text("Show more"), button:has-text("Load more")'
     );
     if (await more.count().catch(() => 0)) {
-      await more.first().click().catch(() => {});
+      await more
+        .first()
+        .click()
+        .catch(() => {});
     }
     await page.mouse.wheel(0, 20000);
     await page.waitForTimeout(1200);
-    const height = await page.evaluate(() => document.body.scrollHeight).catch(() => 0);
+    const height = await page
+      .evaluate(() => document.body.scrollHeight)
+      .catch(() => 0);
     if (height === lastHeight) stable++;
-    else { stable = 0; lastHeight = height; }
+    else {
+      stable = 0;
+      lastHeight = height;
+    }
   }
 }
 
@@ -83,14 +100,17 @@ function findOrderArrays(root) {
     Object.values(value).forEach(walk);
   };
   walk(root);
-  return results.sort((a, b) => b.score - a.score || b.items.length - a.items.length);
+  return results.sort(
+    (a, b) => b.score - a.score || b.items.length - a.items.length
+  );
 }
 
 /** Best-effort normalization of a raw order object into a flat record. */
 function normalizeOrder(o) {
   const pick = (obj, re) => {
     for (const [k, v] of Object.entries(obj)) {
-      if (re.test(k) && (typeof v === 'string' || typeof v === 'number')) return v;
+      if (re.test(k) && (typeof v === 'string' || typeof v === 'number'))
+        return v;
     }
     return undefined;
   };
@@ -102,7 +122,9 @@ function normalizeOrder(o) {
       pick(o, /store|merchant|restaurant/i),
     date: pick(o, /created|submitted|delivered|date/i),
     total: pick(o, /grandTotal|orderTotal|^total$|amount/i),
-    itemCount: Array.isArray(o.items) ? o.items.length : pick(o, /itemCount|quantity/i),
+    itemCount: Array.isArray(o.items)
+      ? o.items.length
+      : pick(o, /itemCount|quantity/i),
     raw: o,
   };
 }
@@ -140,8 +162,12 @@ page.on('response', async res => {
 await page.goto(HOME_URL, { waitUntil: 'domcontentloaded' }).catch(() => {});
 
 console.log('\n=== DoorDash order crawler ===');
-console.log('A browser window opened. Log in to DoorDash there if you are not already.');
-await prompt('When you can see your account (logged in), press Enter here to continue... ');
+console.log(
+  'A browser window opened. Log in to DoorDash there if you are not already.'
+);
+await prompt(
+  'When you can see your account (logged in), press Enter here to continue... '
+);
 
 console.log('Loading your order history...');
 await page.goto(ORDERS_URL, { waitUntil: 'domcontentloaded' }).catch(() => {});
@@ -150,7 +176,10 @@ await loadAllOrders(page);
 await page.waitForTimeout(1500);
 
 await fs.mkdir(OUT_DIR, { recursive: true });
-await fs.writeFile(path.join(OUT_DIR, 'api-captures.json'), JSON.stringify(captures, null, 2));
+await fs.writeFile(
+  path.join(OUT_DIR, 'api-captures.json'),
+  JSON.stringify(captures, null, 2)
+);
 await fs.writeFile(
   path.join(OUT_DIR, 'orders-page.html'),
   await page.content().catch(() => '')
@@ -160,12 +189,21 @@ await fs.writeFile(
 const candidates = captures.flatMap(c => findOrderArrays(c.body));
 const best = candidates[0];
 const orders = best ? best.items.map(normalizeOrder) : [];
-await fs.writeFile(path.join(OUT_DIR, 'orders.json'), JSON.stringify(orders, null, 2));
+await fs.writeFile(
+  path.join(OUT_DIR, 'orders.json'),
+  JSON.stringify(orders, null, 2)
+);
 
 console.log('\n--- done ---');
-console.log(`DoorDash JSON endpoints seen:\n  ${[...seenUrls].join('\n  ') || '(none)'}`);
-console.log(`Captured ${captures.length} JSON responses -> ${path.join(OUT_DIR, 'api-captures.json')}`);
-console.log(`Extracted ${orders.length} candidate orders -> ${path.join(OUT_DIR, 'orders.json')}`);
+console.log(
+  `DoorDash JSON endpoints seen:\n  ${[...seenUrls].join('\n  ') || '(none)'}`
+);
+console.log(
+  `Captured ${captures.length} JSON responses -> ${path.join(OUT_DIR, 'api-captures.json')}`
+);
+console.log(
+  `Extracted ${orders.length} candidate orders -> ${path.join(OUT_DIR, 'orders.json')}`
+);
 if (!orders.length) {
   console.log(
     '\nNo orders auto-extracted (DoorDash likely changed its schema).\n' +

@@ -63,8 +63,8 @@ describe('combineTitleBodyScore', () => {
   });
 
   test('no signal at all returns null', () => {
-    expect(combineTitleBodyScore(signals(null, null), signals(null, null))).toBe(
-      null
-    );
+    expect(
+      combineTitleBodyScore(signals(null, null), signals(null, null))
+    ).toBe(null);
   });
 });

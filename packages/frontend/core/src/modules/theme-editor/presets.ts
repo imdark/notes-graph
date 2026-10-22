@@ -56,7 +56,12 @@ export const THEME_PRESETS: ThemePreset[] = [
   preset('rose', 'Rose', ['#E11D48', '#BE123C'], ['#FB7185', '#FDA4AF']),
   preset('teal', 'Teal', ['#0D9488', '#0F766E'], ['#2DD4BF', '#5EEAD4']),
   preset('indigo', 'Indigo', ['#4F46E5', '#4338CA'], ['#818CF8', '#A5B4FC']),
-  preset('graphite', 'Graphite', ['#475569', '#334155'], ['#94A3B8', '#CBD5E1']),
+  preset(
+    'graphite',
+    'Graphite',
+    ['#475569', '#334155'],
+    ['#94A3B8', '#CBD5E1']
+  ),
 ];
 
 /** The primary-color token used to detect which preset (if any) is active. */

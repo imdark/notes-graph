@@ -20,7 +20,9 @@ function frontmatter(text: string) {
   for (const line of match[1].split('\n')) {
     const at = line.indexOf(':');
     const value = line.slice(at + 1).trim();
-    fields[line.slice(0, at)] = value.startsWith('"') ? JSON.parse(value) : value;
+    fields[line.slice(0, at)] = value.startsWith('"')
+      ? JSON.parse(value)
+      : value;
   }
   return { fields, body: text.slice(match[0].length) };
 }
@@ -74,7 +76,8 @@ test('a list or quote counts as the first paragraph; code and headings do not', 
   const fromList = frontmatter(
     renderSkillMd({
       title: 'Skill: Check',
-      markdown: '## Steps\n\n```sh\nrm -rf /\n```\n\n- [ ] Look at the logs\n- Fix it\n',
+      markdown:
+        '## Steps\n\n```sh\nrm -rf /\n```\n\n- [ ] Look at the logs\n- Fix it\n',
     })!
   );
   t.is(fromList.fields.description, 'Look at the logs Fix it');
@@ -85,7 +88,9 @@ test('a list or quote counts as the first paragraph; code and headings do not', 
 });
 
 test('an empty skill note still renders, with a description of its own', t => {
-  const { fields, body } = frontmatter(renderSkillMd({ title: 'Skill: Empty', markdown: '' })!);
+  const { fields, body } = frontmatter(
+    renderSkillMd({ title: 'Skill: Empty', markdown: '' })!
+  );
   t.is(fields.name, 'empty');
   t.is(fields.description, 'Empty, from a NotesGraph note.');
   t.is(body, '\n# Empty\n\n\n');
@@ -108,7 +113,10 @@ test('skill note refs and where their SKILL.md is served', t => {
   t.is(noteSkillDocId('note:doc-1'), 'doc-1');
   t.is(noteSkillDocId('note:'), null);
   t.is(noteSkillDocId('antislop'), null);
-  t.is(noteSkillPath('ws 1', 'doc/1'), '/api/registry/workspaces/ws%201/skills/doc%2F1/SKILL.md');
+  t.is(
+    noteSkillPath('ws 1', 'doc/1'),
+    '/api/registry/workspaces/ws%201/skills/doc%2F1/SKILL.md'
+  );
 });
 
 test('a job gets only the skill notes it names that are skills in its workspace', t => {
@@ -123,16 +131,37 @@ test('a job gets only the skill notes it names that are skills in its workspace'
     notes
   );
   t.deepEqual(picked, [
-    { ref: 'note:c', skill: { name: 'triage', url: '/api/registry/workspaces/ws-1/skills/c/SKILL.md' } },
-    { ref: 'note:a', skill: { name: 'deploy', url: '/api/registry/workspaces/ws-1/skills/a/SKILL.md' } },
+    {
+      ref: 'note:c',
+      skill: {
+        name: 'triage',
+        url: '/api/registry/workspaces/ws-1/skills/c/SKILL.md',
+      },
+    },
+    {
+      ref: 'note:a',
+      skill: {
+        name: 'deploy',
+        url: '/api/registry/workspaces/ws-1/skills/a/SKILL.md',
+      },
+    },
   ]);
 });
 
 test('profileFor takes catalog skills and the looked-up skill notes, nothing else', t => {
-  const noteSkills = pickNoteSkills('ws-1', ['note:a'], [{ docId: 'a', title: 'Skill: Deploy' }]);
+  const noteSkills = pickNoteSkills(
+    'ws-1',
+    ['note:a'],
+    [{ docId: 'a', title: 'Skill: Deploy' }]
+  );
   const profile = profileFor(
     'claude-code',
-    ['antislop-ui', 'note:a', 'note:elsewhere', 'https://evil.example/SKILL.md'],
+    [
+      'antislop-ui',
+      'note:a',
+      'note:elsewhere',
+      'https://evil.example/SKILL.md',
+    ],
     null,
     noteSkills
   );
@@ -142,11 +171,16 @@ test('profileFor takes catalog skills and the looked-up skill notes, nothing els
   ]);
   // A skill note the job didn't name isn't added.
   t.deepEqual(
-    profileFor('claude-code', ['antislop-ui'], null, noteSkills)?.skills.map(s => s.name),
+    profileFor('claude-code', ['antislop-ui'], null, noteSkills)?.skills.map(
+      s => s.name
+    ),
     ['antislop-ui']
   );
   // Without a list of its own the job keeps the model's defaults.
-  t.deepEqual(profileFor('claude-code', null, null, noteSkills), profileFor('claude-code'));
+  t.deepEqual(
+    profileFor('claude-code', null, null, noteSkills),
+    profileFor('claude-code')
+  );
 });
 
 test('a claimed job gets its skill notes from its own workspace, readable by its starter', async t => {
@@ -172,7 +206,11 @@ test('a claimed job gets its skill notes from its own workspace, readable by its
       }),
     },
     doc: {
-      findByTitlePrefix: async (workspaceId: string, prefix: string, docIds?: string[]) => {
+      findByTitlePrefix: async (
+        workspaceId: string,
+        prefix: string,
+        docIds?: string[]
+      ) => {
         asked.push({ workspaceId, prefix, docIds });
         return [
           { docId: 'a', title: 'Skill: Deploy' },
@@ -199,7 +237,9 @@ test('a claimed job gets its skill notes from its own workspace, readable by its
     skillNotes
   );
   const claimed = await service.claim('ws-1', 'cloud', 'runner');
-  t.deepEqual(asked, [{ workspaceId: 'ws-1', prefix: 'skill', docIds: ['a', 'secret'] }]);
+  t.deepEqual(asked, [
+    { workspaceId: 'ws-1', prefix: 'skill', docIds: ['a', 'secret'] },
+  ]);
   t.deepEqual(claimed?.profile?.skills, [
     SKILL_CATALOG.find(s => s.name === 'antislop'),
     { name: 'deploy', url: '/api/registry/workspaces/ws-1/skills/a/SKILL.md' },

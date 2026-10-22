@@ -459,8 +459,8 @@ export const AgentRunLogDialog = ({
             <AgentRunChat key={run.id} run={parent} resumeAskId={run.id} />
           ) : (
             <p className={styles.empty} data-testid="agent-run-chat-orphan">
-              The run this chat was about has been deleted, so it can't go on.
-              What was said is in the Log tab.
+              The run this chat was about has been deleted, so it can&apos;t go
+              on. What was said is in the Log tab.
             </p>
           )
         ) : run && !askRow && ended && tab === CHANGES_TAB ? (

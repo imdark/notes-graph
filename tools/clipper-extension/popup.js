@@ -15,7 +15,10 @@ btn.addEventListener('click', () => {
       setStatus(chrome.runtime.lastError.message, 'err');
     } else if (res && res.ok) {
       const bits = `${res.images} image${res.images === 1 ? '' : 's'}${res.video ? ' + video' : ''}`;
-      setStatus(`Sent to NotesGraph (${bits}). Finish in the opened tab.`, 'ok');
+      setStatus(
+        `Sent to NotesGraph (${bits}). Finish in the opened tab.`,
+        'ok'
+      );
     } else {
       setStatus((res && res.error) || 'Failed to clip.', 'err');
     }

@@ -221,8 +221,7 @@ export const WorkspacePropertyRow = ({
   if (propertyInfo.type === 'docPrimaryMode' && docModes.length < 2)
     return null;
   // Edgeless theme is meaningless without the edgeless mode to apply it to.
-  if (propertyInfo.type === 'edgelessTheme' && docModes.length < 2)
-    return null;
+  if (propertyInfo.type === 'edgelessTheme' && docModes.length < 2) return null;
 
   return (
     <PropertyRoot

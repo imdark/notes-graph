@@ -83,7 +83,9 @@ export class NotesGraphError extends Error {
  * older server) leaves it to the runner's own setting.
  */
 const asMaxJobs = (value: unknown): number | null =>
-  typeof value === 'number' && Number.isInteger(value) && value >= 1 ? value : null;
+  typeof value === 'number' && Number.isInteger(value) && value >= 1
+    ? value
+    : null;
 
 export class NotesGraphApi {
   constructor(
@@ -153,11 +155,10 @@ export class NotesGraphApi {
     const { job, maxJobs } = await this.request<{
       job: Job | null;
       maxJobs?: number | null;
-    }>(
-      'POST',
-      `${this.base(workspaceId)}/devices/${deviceKey}/jobs/claim`,
-      { runnerId, leaseSeconds }
-    );
+    }>('POST', `${this.base(workspaceId)}/devices/${deviceKey}/jobs/claim`, {
+      runnerId,
+      leaseSeconds,
+    });
     return { job: job ?? null, maxJobs: asMaxJobs(maxJobs) };
   }
 
@@ -165,11 +166,13 @@ export class NotesGraphApi {
    * What the device is set to run at once in the app, without claiming: for
    * a runner whose slots are full to notice that it may take more.
    */
-  async maxJobs(workspaceId: string, deviceKey: string): Promise<number | null> {
-    const { device } = await this.request<{ device: { maxJobs?: number | null } }>(
-      'GET',
-      `${this.base(workspaceId)}/devices/${deviceKey}`
-    );
+  async maxJobs(
+    workspaceId: string,
+    deviceKey: string
+  ): Promise<number | null> {
+    const { device } = await this.request<{
+      device: { maxJobs?: number | null };
+    }>('GET', `${this.base(workspaceId)}/devices/${deviceKey}`);
     return asMaxJobs(device?.maxJobs);
   }
 

@@ -279,6 +279,7 @@ export const PackageList = [
       'blocksuite/notesgraph/blocks/surface',
       'blocksuite/notesgraph/components',
       'blocksuite/notesgraph/ext-loader',
+      'blocksuite/notesgraph/inlines/preset',
       'blocksuite/notesgraph/inlines/reference',
       'blocksuite/notesgraph/model',
       'blocksuite/notesgraph/rich-text',
@@ -816,6 +817,7 @@ export const PackageList = [
     location: 'blocksuite/notesgraph/inlines/preset',
     name: '@blocksuite/notesgraph-inline-preset',
     workspaceDependencies: [
+      'blocksuite/framework/global',
       'blocksuite/notesgraph/components',
       'blocksuite/notesgraph/ext-loader',
       'blocksuite/notesgraph/inlines/comment',
@@ -1461,6 +1463,11 @@ export const PackageList = [
     workspaceDependencies: ['blocksuite/notesgraph/all', 'packages/common/env'],
   },
   {
+    location: 'tools/agent-runner',
+    name: '@notesgraph/agent-runner',
+    workspaceDependencies: ['tools/cli'],
+  },
+  {
     location: 'tools/changelog',
     name: '@notesgraph/changelog',
     workspaceDependencies: [],
@@ -1491,6 +1498,11 @@ export const PackageList = [
     workspaceDependencies: ['packages/common/link-card', 'tools/cli'],
   },
   {
+    location: 'tools/ngraph',
+    name: '@notesgraph/ngraph',
+    workspaceDependencies: ['tools/cli'],
+  },
+  {
     location: 'tools/notesgraph-plugin-server',
     name: '@notesgraph/plugin-server',
     workspaceDependencies: ['packages/common/plugin-sdk', 'tools/cli'],
@@ -1503,6 +1515,11 @@ export const PackageList = [
   {
     location: 'tools/revert-update',
     name: '@notesgraph/revert-update',
+    workspaceDependencies: ['tools/cli'],
+  },
+  {
+    location: 'tools/uppy-companion-server',
+    name: '@notesgraph/uppy-companion-server',
     workspaceDependencies: ['tools/cli'],
   },
   {
@@ -1629,13 +1646,16 @@ export type PackageName =
   | '@notesgraph-test/notesgraph-mobile'
   | '@types/build-config'
   | '@types/notesgraph__env'
+  | '@notesgraph/agent-runner'
   | '@notesgraph/changelog'
   | '@notesgraph-tools/cli'
   | '@notesgraph/commitlint-config'
   | '@notesgraph/copilot-result'
   | '@notesgraph/doc-diff'
   | '@notesgraph/link-card-server'
+  | '@notesgraph/ngraph'
   | '@notesgraph/plugin-server'
   | '@notesgraph/playstore-auto-bump'
   | '@notesgraph/revert-update'
+  | '@notesgraph/uppy-companion-server'
   | '@notesgraph-tools/utils';

@@ -58,9 +58,7 @@ test('task report inserts status-sliced sections for a scope', async ({
   await expect(databases.nth(0)).not.toContainText('Open item');
 
   // Due soon is empty — no deadlines set.
-  await expect(
-    databases.nth(1).locator('data-view-table-row')
-  ).toHaveCount(0);
+  await expect(databases.nth(1).locator('data-view-table-row')).toHaveCount(0);
 
   await expect(
     databases.nth(2).locator('data-view-table-row', { hasText: 'Open item' })

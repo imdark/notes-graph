@@ -27,7 +27,9 @@ export const RESEARCH_TOOL_RULES = [
 interface ServerTool {
   name: string;
   description: string;
-  inputSchema?: { properties?: Record<string, { description?: string; type?: unknown }> };
+  inputSchema?: {
+    properties?: Record<string, { description?: string; type?: unknown }>;
+  };
 }
 
 /** A tool as the fenced-block protocol shows it: its args, with a hint each. */
@@ -38,7 +40,10 @@ export const toToolSpec = (tool: ServerTool): AgentToolSpec => ({
   args: Object.fromEntries(
     Object.entries(tool.inputSchema?.properties ?? {}).map(([key, prop]) => [
       key,
-      (prop.description || (typeof prop.type === 'string' ? prop.type : 'value'))
+      (
+        prop.description ||
+        (typeof prop.type === 'string' ? prop.type : 'value')
+      )
         .split(/(?<=\.)\s/)[0]
         .slice(0, 120),
     ])
@@ -73,7 +78,9 @@ export class ResearchToolsService extends Service {
       );
     }
     if (!response.ok) {
-      throw new Error(`Research call failed (${response.status}): ${(await response.text()).slice(0, 200)}`);
+      throw new Error(
+        `Research call failed (${response.status}): ${(await response.text()).slice(0, 200)}`
+      );
     }
     return (await response.json()) as T;
   }

@@ -59,12 +59,10 @@ export function useIsParentless(docId: string | undefined): boolean {
     // Default `false` (has a parent) so the banner never flashes before the
     // backlink query resolves.
     return LiveData.from(
-      docsSearch
-        .watchBacklinksFrom(docId)
-        .pipe(
-          map(backlinks => backlinks.length === 0),
-          orElse(false)
-        ),
+      docsSearch.watchBacklinksFrom(docId).pipe(
+        map(backlinks => backlinks.length === 0),
+        orElse(false)
+      ),
       false
     );
   }, [docsSearch, docId]);
@@ -84,14 +82,12 @@ export function useCurrentParents(
   const parents$ = useMemo(() => {
     if (!docId) return new LiveData<ParentCandidate[]>([]);
     return LiveData.from(
-      docsSearch
-        .watchBacklinksFrom(docId)
-        .pipe(
-          map(parents =>
-            parents.map(p => ({ docId: p.docId, title: p.title || 'Untitled' }))
-          ),
-          orElse([] as ParentCandidate[])
+      docsSearch.watchBacklinksFrom(docId).pipe(
+        map(parents =>
+          parents.map(p => ({ docId: p.docId, title: p.title || 'Untitled' }))
         ),
+        orElse([] as ParentCandidate[])
+      ),
       []
     );
   }, [docsSearch, docId]);
@@ -133,7 +129,7 @@ export function useParentChain(
       );
     };
     return LiveData.from(walk(docId, new Set([docId]), maxDepth), []);
-  }, [docsSearch, docId]);
+  }, [docsSearch, docId, maxDepth]);
   return useLiveData(chain$);
 }
 
@@ -166,15 +162,15 @@ export function useSuggestedParents(
           if (query.length < 2) return of([] as ParentCandidate[]);
           return combineLatest([
             docsSearch.searchTitle$(query).pipe(orElse([] as string[])),
-            docsSearch.search$(query).pipe(
-              orElse([] as { docId: string; title: string }[])
-            ),
-            docsSearch.watchBacklinksFrom(docId).pipe(
-              orElse([] as { docId: string }[])
-            ),
-            docsSearch.watchRefsFrom(docId).pipe(
-              orElse([] as { docId: string }[])
-            ),
+            docsSearch
+              .search$(query)
+              .pipe(orElse([] as { docId: string; title: string }[])),
+            docsSearch
+              .watchBacklinksFrom(docId)
+              .pipe(orElse([] as { docId: string }[])),
+            docsSearch
+              .watchRefsFrom(docId)
+              .pipe(orElse([] as { docId: string }[])),
             // Journal (daily) pages are a poor parent — a note doesn't belong
             // "under" a calendar day — so exclude every journal doc from the
             // suggestions. Uses the app's first-class journal marker; date-titled
@@ -187,10 +183,7 @@ export function useSuggestedParents(
               for (const c of children) exclude.add(c.docId);
               for (const j of journalIds) exclude.add(j);
 
-              const ordered = [
-                ...titleIds,
-                ...bodyMatches.map(m => m.docId),
-              ];
+              const ordered = [...titleIds, ...bodyMatches.map(m => m.docId)];
               const seen = new Set<string>();
               const out: ParentCandidate[] = [];
               for (const id of ordered) {
@@ -225,7 +218,7 @@ function editDistance(a: string, b: string): number {
   if (a.length === 0) return b.length;
   if (b.length === 0) return a.length;
   let prev = Array.from({ length: b.length + 1 }, (_, i) => i);
-  let curr = new Array<number>(b.length + 1);
+  let curr = Array.from({ length: b.length + 1 }, () => 0);
   for (let i = 1; i <= a.length; i++) {
     curr[0] = i;
     for (let j = 1; j <= b.length; j++) {
@@ -400,7 +393,9 @@ function extractTopics(
   for (const [key, entry] of ranked) {
     if (out.length >= limit) break;
     const words = ` ${key} `;
-    if (picked.some(p => words.includes(` ${p} `) || ` ${p} `.includes(words))) {
+    if (
+      picked.some(p => words.includes(` ${p} `) || ` ${p} `.includes(words))
+    ) {
       continue;
     }
     picked.push(key);
@@ -527,8 +522,8 @@ export function useSuggestedTopics(
     // note content — they change only when you rename the note. Fixes the
     // distracting "changes while typing" churn.
     const title$ = record$.pipe(
-      switchMap((record): Observable<string> =>
-        record ? record.title$ : of('')
+      switchMap(
+        (record): Observable<string> => (record ? record.title$ : of(''))
       ),
       map(rawTitle => (rawTitle ?? '').trim()),
       debounceTime(800),

@@ -15,19 +15,29 @@ test('a level narrows or widens the profile it starts from', t => {
   t.false(read.allowedTools.includes('mcp__notesgraph__update_document'));
   t.true(read.allowedTools.includes('WebSearch'));
 
-  t.deepEqual(profileFor('claude-code', undefined, 'write')!.allowedTools, base.allowedTools);
+  t.deepEqual(
+    profileFor('claude-code', undefined, 'write')!.allowedTools,
+    base.allowedTools
+  );
 
   const manage = profileFor('claude-code', undefined, 'manage')!;
   t.true(manage.allowedTools.includes('Edit'));
   t.false(manage.allowedTools.includes('Bash'));
 
   // Research keeps OmniSeek, which only reads, at every level.
-  t.true(profileFor('research', undefined, 'read')!.allowedTools.includes('mcp__omniseek'));
+  t.true(
+    profileFor('research', undefined, 'read')!.allowedTools.includes(
+      'mcp__omniseek'
+    )
+  );
 });
 
 test('an unknown level leaves the profile as it is', t => {
   t.is(parseAccess('root'), null);
-  t.deepEqual(profileFor('claude-code', undefined, 'root'), profileFor('claude-code'));
+  t.deepEqual(
+    profileFor('claude-code', undefined, 'root'),
+    profileFor('claude-code')
+  );
   t.is(profileFor('command', undefined, 'full'), null);
 });
 
@@ -60,11 +70,16 @@ test('pushing a branch and everyday work are covered by "Allow all"', t => {
   ]) {
     t.false(alwaysAsks('Allow Bash?', bash(command)), command);
   }
-  t.false(alwaysAsks('Allow Edit?', JSON.stringify({ file_path: 'deploy.md' })));
+  t.false(
+    alwaysAsks('Allow Edit?', JSON.stringify({ file_path: 'deploy.md' }))
+  );
   t.false(alwaysAsks('Allow mcp__notesgraph__update_document?', '{}'));
   t.false(alwaysAsks('What should I name it?', null));
 });
 
 test('the budget month starts on the 1st, UTC', t => {
-  t.is(monthStart(new Date('2026-10-14T23:30:00-07:00')).toISOString(), '2026-10-01T00:00:00.000Z');
+  t.is(
+    monthStart(new Date('2026-10-14T23:30:00-07:00')).toISOString(),
+    '2026-10-01T00:00:00.000Z'
+  );
 });

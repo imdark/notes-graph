@@ -9,6 +9,9 @@ import {
 } from '@notesgraph-test/kit/utils/workspace';
 import { expect } from '@playwright/test';
 
+/** The onboarding template's two docs, and the Home doc every workspace gets. */
+const SHOWCASE_DOCS = 3;
+
 test('just one item in the workspace list at first', async ({
   page,
   workspace,
@@ -45,11 +48,11 @@ test('create one workspace in the workspace list', async ({
   await clickSideBarAllPageButton(page);
   await page.waitForTimeout(2000);
   const result = await getPagesCount(page);
-  expect(result).toBe(2);
+  expect(result).toBe(SHOWCASE_DOCS);
   await page.reload();
   await page.waitForTimeout(4000);
   const result1 = await getPagesCount(page);
-  expect(result1).toBe(2);
+  expect(result1).toBe(SHOWCASE_DOCS);
   const currentWorkspace = await workspace.current();
 
   expect(currentWorkspace.meta.flavour).toContain('local');

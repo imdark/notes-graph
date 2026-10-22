@@ -74,6 +74,30 @@
             "concurrency": 4
           }
         },
+        "queues.directory": {
+          "type": "object",
+          "description": "The config for directory sync job queue\n@default {\"concurrency\":2}",
+          "properties": {
+            "concurrency": {
+              "type": "number"
+            }
+          },
+          "default": {
+            "concurrency": 2
+          }
+        },
+        "queues.monitor": {
+          "type": "object",
+          "description": "The config for the monitor job queue (scheduled checks)\n@default {\"concurrency\":4}",
+          "properties": {
+            "concurrency": {
+              "type": "number"
+            }
+          },
+          "default": {
+            "concurrency": 4
+          }
+        },
         "queues.doc": {
           "type": "object",
           "description": "The config for doc job queue\n@default {\"concurrency\":1}",
@@ -177,8 +201,8 @@
         },
         "newAccountShareActionDelay": {
           "type": "number",
-          "description": "Minimum account age in seconds before new accounts can invite members or create share links.\n@default 86400",
-          "default": 86400
+          "description": "Minimum account age in seconds before new accounts can invite members or create share links. 0 disables this (default) — it is a public-cloud anti-abuse gate and is inappropriate for self-hosted instances, where the just-created admin must be able to share immediately.\n@default 0",
+          "default": 0
         },
         "passwordRequirements": {
           "type": "object",
@@ -1011,6 +1035,16 @@
       "type": "object",
       "description": "Configuration for copilot module",
       "properties": {
+        "embedding.url": {
+          "type": "string",
+          "description": "Base URL of an OpenAI-compatible embeddings API, e.g. http://ollama:11434/v1. When set, doc embeddings use it instead of the hosted default model.\n@default \"\"\n@environment `NOTESGRAPH_EMBEDDING_URL`",
+          "default": ""
+        },
+        "embedding.model": {
+          "type": "string",
+          "description": "The model to ask the embeddings API at embedding.url for.\n@default \"qwen3-embedding:0.6b\"\n@environment `NOTESGRAPH_EMBEDDING_MODEL`",
+          "default": "qwen3-embedding:0.6b"
+        },
         "enabled": {
           "type": "boolean",
           "description": "Whether to enable the copilot plugin. <br> Document: <a href=\"https://docs.notesgraph.com/self-host-notesgraph/administer/ai\" target=\"_blank\">https://docs.notesgraph.com/self-host-notesgraph/administer/ai</a>\n@default false",
@@ -1410,6 +1444,105 @@
         }
       }
     },
+    "directory": {
+      "type": "object",
+      "description": "Configuration for directory module",
+      "properties": {
+        "google": {
+          "type": "object",
+          "description": "Google Workspace directory sync integration config\n@default {\"enabled\":false,\"clientId\":\"\",\"clientSecret\":\"\",\"requestTimeoutMs\":10000}\n@link https://developers.google.com/admin-sdk/directory/v1/guides/delegation",
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "clientId": {
+              "type": "string"
+            },
+            "clientSecret": {
+              "type": "string"
+            },
+            "requestTimeoutMs": {
+              "type": "number"
+            }
+          },
+          "default": {
+            "enabled": false,
+            "clientId": "",
+            "clientSecret": "",
+            "requestTimeoutMs": 10000
+          }
+        }
+      }
+    },
+    "registry": {
+      "type": "object",
+      "description": "Configuration for registry module",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Enable the device registry API for deployment and agent targets.\n@default false\n@environment `NOTESGRAPH_REGISTRY_ENABLED`",
+          "_def": {
+            "typeName": "ZodBoolean",
+            "coerce": false
+          },
+          "default": false,
+          "~standard": {
+            "version": 1,
+            "vendor": "zod"
+          }
+        },
+        "maxDevicesPerWorkspace": {
+          "type": "number",
+          "description": "Maximum number of registry devices a single workspace may hold.\n@default 500\n@environment `NOTESGRAPH_REGISTRY_MAX_DEVICES`",
+          "_def": {
+            "checks": [
+              {
+                "kind": "int"
+              },
+              {
+                "kind": "min",
+                "value": 0,
+                "inclusive": false
+              }
+            ],
+            "typeName": "ZodNumber",
+            "coerce": false
+          },
+          "default": 500,
+          "~standard": {
+            "version": 1,
+            "vendor": "zod"
+          }
+        },
+        "fcmServiceAccount": {
+          "type": "string",
+          "description": "Firebase service-account JSON for pushing agent questions to phones. Empty disables push.\n@default \"\"\n@environment `NOTESGRAPH_FCM_SERVICE_ACCOUNT`",
+          "_def": {
+            "checks": [],
+            "typeName": "ZodString",
+            "coerce": false
+          },
+          "default": "",
+          "~standard": {
+            "version": 1,
+            "vendor": "zod"
+          }
+        },
+        "agentMemory": {
+          "type": "boolean",
+          "description": "Save what agent runs learn about the user into the \"Agent memory\" notes, and recall it into later runs.\n@default true\n@environment `NOTESGRAPH_AGENT_MEMORY`",
+          "_def": {
+            "typeName": "ZodBoolean",
+            "coerce": false
+          },
+          "default": true,
+          "~standard": {
+            "version": 1,
+            "vendor": "zod"
+          }
+        }
+      }
+    },
     "oauth": {
       "type": "object",
       "description": "Configuration for oauth module",
@@ -1526,6 +1659,40 @@
             "webhookAuth": "",
             "environment": "production",
             "productMap": {}
+          }
+        }
+      }
+    },
+    "research": {
+      "type": "object",
+      "description": "Configuration for research module",
+      "properties": {
+        "omniseekUrl": {
+          "type": "string",
+          "description": "Base URL of the OmniSeek MCP service, e.g. http://omniseek:8765. Empty disables research.\n@default \"\"\n@environment `NOTESGRAPH_OMNISEEK_URL`",
+          "_def": {
+            "checks": [],
+            "typeName": "ZodString",
+            "coerce": false
+          },
+          "default": "",
+          "~standard": {
+            "version": 1,
+            "vendor": "zod"
+          }
+        },
+        "omniseekToken": {
+          "type": "string",
+          "description": "Bearer token for OmniSeek (its ~/.omniseek/credentials/omniseek_http.json 'token').\n@default \"\"\n@environment `NOTESGRAPH_OMNISEEK_TOKEN`",
+          "_def": {
+            "checks": [],
+            "typeName": "ZodString",
+            "coerce": false
+          },
+          "default": "",
+          "~standard": {
+            "version": 1,
+            "vendor": "zod"
           }
         }
       }

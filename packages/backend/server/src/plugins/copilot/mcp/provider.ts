@@ -39,8 +39,6 @@ import {
   svgToPng,
 } from './canvas';
 import { commentText, replyContent } from './comments';
-import { applyBudget, fuseRanked } from './rrf';
-import { findSecret, guardSecrets, secretRefusal } from './secret-guard';
 import {
   DEFAULT_STALE_DAYS,
   DEFAULT_STUB_CHARS,
@@ -52,6 +50,8 @@ import {
   type OutlineSource,
   readSection,
 } from './outline';
+import { applyBudget, fuseRanked } from './rrf';
+import { findSecret, guardSecrets, secretRefusal } from './secret-guard';
 
 function first(value: unknown): string {
   const item = Array.isArray(value) ? value[0] : value;
@@ -1251,7 +1251,7 @@ export class WorkspaceMcpProvider {
       name: 'read_comments',
       title: 'Read Comments',
       description:
-        "Read the comments people left on a document: feedback and instructions on its text, newest first, each with the text it is anchored to (quote), its replies and whether it is resolved. Read them before you revise a note you wrote, and treat an open comment as a request to you. Answer or close one with reply_to_comment; reading does not resolve it. Open comments only unless includeResolved is set.",
+        'Read the comments people left on a document: feedback and instructions on its text, newest first, each with the text it is anchored to (quote), its replies and whether it is resolved. Read them before you revise a note you wrote, and treat an open comment as a request to you. Answer or close one with reply_to_comment; reading does not resolve it. Open comments only unless includeResolved is set.',
       parser: z.object({
         docId: z.string(),
         includeResolved: z.boolean().optional(),
@@ -2129,7 +2129,10 @@ export class WorkspaceMcpProvider {
             }
             if (resolve) {
               await docAccess.assert('Doc.Comments.Resolve');
-              await this.models.comment.resolve({ id: commentId, resolved: true });
+              await this.models.comment.resolve({
+                id: commentId,
+                resolved: true,
+              });
             }
             publishCommentChanged(this.realtime, workspaceId, comment.docId);
             return toolText(
@@ -2280,7 +2283,6 @@ export class WorkspaceMcpProvider {
           }
         },
       });
-
 
       const createFlashcards = defineTool({
         name: 'create_flashcards',

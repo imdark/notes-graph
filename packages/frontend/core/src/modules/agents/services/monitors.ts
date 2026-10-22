@@ -159,7 +159,8 @@ export class MonitorsService extends Service {
         message = JSON.parse(text).message ?? message;
       } catch {
         // Not JSON: an older server without monitors answers with its app page.
-        if (response.status === 404) message = 'This server has no monitors yet.';
+        if (response.status === 404)
+          message = 'This server has no monitors yet.';
       }
       throw new Error(message);
     }
@@ -210,7 +211,9 @@ export class MonitorsService extends Service {
   async runNow(id: string): Promise<void> {
     await this.json(`/${id}/run`, { method: 'POST' });
     // A url check takes a few seconds; look again shortly after.
-    setTimeout(() => this.revalidate().catch(() => {}), 5000);
+    setTimeout(() => {
+      this.revalidate().catch(() => {});
+    }, 5000);
   }
 
   async readings(id: string): Promise<MonitorReading[]> {

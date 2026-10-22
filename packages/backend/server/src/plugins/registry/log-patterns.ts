@@ -64,7 +64,8 @@ const MAX_TEMPLATE_CHARS = 160;
 const WILDCARD = '<*>';
 
 /** The words that make a new pattern critical rather than a warning. */
-const CRITICAL = /\b(fatal|panic|critical|emerg(ency)?|segfault|segmentation fault|out of memory|oom[- ]?kill(er|ed)?|kernel bug|corrupt(ed|ion)?)\b/i;
+const CRITICAL =
+  /\b(fatal|panic|critical|emerg(ency)?|segfault|segmentation fault|out of memory|oom[- ]?kill(er|ed)?|kernel bug|corrupt(ed|ion)?)\b/i;
 
 const REDACTIONS: [RegExp, string][] = [
   // JWTs
@@ -117,7 +118,10 @@ export function mask(line: string): string {
 
 /** The words a line is mined as. */
 export function words(line: string): string[] {
-  return mask(line.slice(0, MAX_LINE_CHARS)).split(/\s+/).filter(Boolean).slice(0, MAX_WORDS);
+  return mask(line.slice(0, MAX_LINE_CHARS))
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, MAX_WORDS);
 }
 
 /** Share of a pattern's fixed words a line has in the same places. */
@@ -131,7 +135,10 @@ function similarity(template: string[], line: string[]) {
 }
 
 /** The pattern a line belongs to, if any is close enough. */
-export function matchPattern(patterns: LogPattern[], line: string[]): LogPattern | null {
+export function matchPattern(
+  patterns: LogPattern[],
+  line: string[]
+): LogPattern | null {
   let best: LogPattern | null = null;
   let bestScore = 0;
   for (const pattern of patterns) {
@@ -168,7 +175,10 @@ export const isKnown = (pattern: Pick<LogPattern, 'label' | 'count'>) =>
 /** How far above its usual rate a pattern is, in standard deviations. */
 export function rateScore(rate: Baseline, perHour: number) {
   // Counts are noisy like a Poisson process: never trust a spread below √mean.
-  const std = Math.max(Math.sqrt(rate.variance), Math.sqrt(Math.max(rate.mean, 1)));
+  const std = Math.max(
+    Math.sqrt(rate.variance),
+    Math.sqrt(Math.max(rate.mean, 1))
+  );
   return (perHour - rate.mean) / std;
 }
 
@@ -217,7 +227,9 @@ export function ingestLogs(
         rate: { mean: 0, variance: 0, samples: 0, lastValue: null },
       };
       // Two templates can hash alike only if they are the same; keep ids unique anyway.
-      while (patterns.some(p => p.id === pattern!.id)) pattern.id = patternId(pattern.id);
+      const fresh = pattern;
+      while (patterns.some(p => p.id === fresh.id))
+        fresh.id = patternId(fresh.id);
       patterns.push(pattern);
       created.add(pattern.id);
     }
@@ -233,7 +245,9 @@ export function ingestLogs(
   for (const pattern of patterns) {
     const count = counts.get(pattern.id) ?? 0;
     const perHour = count / hours;
-    const severity: Severity = CRITICAL.test(pattern.example) ? 'critical' : 'warn';
+    const severity: Severity = CRITICAL.test(pattern.example)
+      ? 'critical'
+      : 'warn';
     const shown = clip(pattern.template, MAX_TEMPLATE_CHARS);
 
     if (created.has(pattern.id)) {
@@ -258,7 +272,10 @@ export function ingestLogs(
         findings.push({
           metric: LOG_METRIC_PREFIX + pattern.id,
           kind: 'anomaly',
-          severity: severity === 'critical' || z >= opts.sensitivity * 2 ? 'critical' : 'warn',
+          severity:
+            severity === 'critical' || z >= opts.sensitivity * 2
+              ? 'critical'
+              : 'warn',
           value: round(perHour),
           baseline: round(pattern.rate.mean),
           score: round(z),
@@ -286,7 +303,10 @@ export function ingestLogs(
 }
 
 /** "Expected" on a log finding: the pattern is normal, at this rate too. */
-export function acceptPattern(pattern: LogPattern, perHour: number | null): LogPattern {
+export function acceptPattern(
+  pattern: LogPattern,
+  perHour: number | null
+): LogPattern {
   let rate = pattern.rate;
   if (perHour !== null && rate.samples > 0) {
     rate = learn(rate, perHour, 0.5);
@@ -335,6 +355,9 @@ export function readCatalog(raw: unknown): LogPattern[] {
   if (!Array.isArray(raw)) return [];
   return raw.filter(
     (p): p is LogPattern =>
-      !!p && typeof p === 'object' && typeof p.id === 'string' && typeof p.template === 'string'
+      !!p &&
+      typeof p === 'object' &&
+      typeof p.id === 'string' &&
+      typeof p.template === 'string'
   );
 }

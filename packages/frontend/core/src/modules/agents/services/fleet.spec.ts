@@ -13,9 +13,9 @@ import {
   deviceState,
   FleetService,
   fleetSummary,
-  type RegistryDevice,
   type MonitoringDecision,
   openDecisions,
+  type RegistryDevice,
   STALE_AFTER_SECONDS,
 } from './fleet';
 
@@ -43,13 +43,18 @@ const device = (over: Partial<RegistryDevice>): RegistryDevice => ({
 });
 
 /** A service over a fake server answering with `respond`. */
-const setup = (respond: (path: string, init: any) => { status?: number; body: unknown }) => {
+const setup = (
+  respond: (path: string, init: any) => { status?: number; body: unknown }
+) => {
   const calls: { path: string; init: any }[] = [];
   const fetchService = {
     fetchRaw: async (path: string, init: any) => {
       calls.push({ path, init });
       const { status = 200, body } = respond(path, init);
-      return new Response(typeof body === 'string' ? body : JSON.stringify(body), { status });
+      return new Response(
+        typeof body === 'string' ? body : JSON.stringify(body),
+        { status }
+      );
     },
   };
   const framework = new Framework();
@@ -97,7 +102,13 @@ describe('fleet helpers', () => {
       deviceChecks(
         device({
           checks: [
-            { name: 'Disk', status: 'warn', value: 88, unit: '%', detail: '88% used' },
+            {
+              name: 'Disk',
+              status: 'warn',
+              value: 88,
+              unit: '%',
+              detail: '88% used',
+            },
             { name: 'http', ok: false, detail: 'refused', duration_ms: 3 },
             { name: 'ssh', ok: true, detail: '' },
             { nothing: 'here' },
@@ -106,9 +117,27 @@ describe('fleet helpers', () => {
         })
       )
     ).toEqual([
-      { name: 'Disk', status: 'warn', value: 88, unit: '%', detail: '88% used' },
-      { name: 'http', status: 'fail', value: undefined, unit: undefined, detail: 'refused' },
-      { name: 'ssh', status: 'ok', value: undefined, unit: undefined, detail: '' },
+      {
+        name: 'Disk',
+        status: 'warn',
+        value: 88,
+        unit: '%',
+        detail: '88% used',
+      },
+      {
+        name: 'http',
+        status: 'fail',
+        value: undefined,
+        unit: undefined,
+        detail: 'refused',
+      },
+      {
+        name: 'ssh',
+        status: 'ok',
+        value: undefined,
+        unit: undefined,
+        detail: '',
+      },
     ]);
   });
 });
@@ -136,7 +165,9 @@ describe('monitoring agent helpers', () => {
 
 describe('FleetService', () => {
   test('lists the workspace’s devices', async () => {
-    const { service, calls } = setup(() => ({ body: { devices: [device({})] } }));
+    const { service, calls } = setup(() => ({
+      body: { devices: [device({})] },
+    }));
     await service.revalidate();
     expect(calls[0].path).toBe('/api/registry/workspaces/ws/devices');
     expect(service.devices$.value.map(d => d.key)).toEqual(['box']);
@@ -148,7 +179,9 @@ describe('FleetService', () => {
     vi.setSystemTime(NOW * 1000);
     let checkedAt = NOW - 600;
     const { service, calls } = setup((_path, init) =>
-      init.method === 'POST' ? { body: { job: { id: 'j1' } } } : { body: { devices: [device({ checkedAt })] } }
+      init.method === 'POST'
+        ? { body: { job: { id: 'j1' } } }
+        : { body: { devices: [device({ checkedAt })] } }
     );
     await service.check('box');
     expect(calls[0].path).toBe('/api/registry/workspaces/ws/devices/box/check');
@@ -165,16 +198,22 @@ describe('FleetService', () => {
 
   test('jobs at once is saved for one machine and shown in the list', async () => {
     const { service, calls } = setup((_path, init) => ({
-      body: { device: device({ maxJobs: JSON.parse(String(init.body)).maxJobs }) },
+      body: {
+        device: device({ maxJobs: JSON.parse(String(init.body)).maxJobs }),
+      },
     }));
     service.devices$.setValue([device({}), device({ key: 'other' })]);
     await service.setMaxJobs('box', 4);
-    expect(calls[0].path).toBe('/api/registry/workspaces/ws/devices/box/max-jobs');
+    expect(calls[0].path).toBe(
+      '/api/registry/workspaces/ws/devices/box/max-jobs'
+    );
     expect(JSON.parse(String(calls[0].init.body))).toEqual({ maxJobs: 4 });
-    expect(service.devices$.value.map(d => [d.key, d.maxJobs ?? null])).toEqual([
-      ['box', 4],
-      ['other', null],
-    ]);
+    expect(service.devices$.value.map(d => [d.key, d.maxJobs ?? null])).toEqual(
+      [
+        ['box', 4],
+        ['other', null],
+      ]
+    );
 
     await service.setMaxJobs('box', null);
     expect(service.devices$.value[0].maxJobs).toBeNull();
@@ -182,7 +221,10 @@ describe('FleetService', () => {
 
   test('checking all marks the machines the server queued', async () => {
     const { service } = setup(() => ({
-      body: { queued: ['a', 'b'], skipped: [{ key: 'c', reason: 'not an agent target' }] },
+      body: {
+        queued: ['a', 'b'],
+        skipped: [{ key: 'c', reason: 'not an agent target' }],
+      },
     }));
     const result = await service.checkAll();
     expect(result.skipped).toHaveLength(1);
@@ -192,16 +234,26 @@ describe('FleetService', () => {
 
   test('loads the monitoring agent and its decisions', async () => {
     const agent = { enabled: true, mode: 'shadow', learning: [] };
-    const decision = { id: 'd1', deviceKey: 'box', verdict: null, summary: 'Disk is 96%' };
+    const decision = {
+      id: 'd1',
+      deviceKey: 'box',
+      verdict: null,
+      summary: 'Disk is 96%',
+    };
     const { service, calls } = setup(path =>
       path.endsWith('/decisions?limit=50')
         ? { body: { decisions: [decision] } }
-        : { body: { agent } }
+        : path.endsWith('/logs')
+          ? { body: { catalogs: [] } }
+          : { body: { agent } }
     );
     await service.revalidateAgent();
+    // The log catalogs are read alongside, without holding the rest up.
+    await vi.waitFor(() => expect(calls).toHaveLength(3));
     expect(calls.map(c => c.path)).toEqual([
       '/api/registry/workspaces/ws/monitoring-agent',
       '/api/registry/workspaces/ws/monitoring-agent/decisions?limit=50',
+      '/api/registry/workspaces/ws/monitoring-agent/logs',
     ]);
     expect(service.agent$.value?.mode).toBe('shadow');
     expect(service.decisions$.value).toHaveLength(1);
@@ -209,17 +261,29 @@ describe('FleetService', () => {
 
   test('feedback on a decision replaces it in the list', async () => {
     const { service, calls } = setup((_path, init) => ({
-      body: { decision: { id: 'd1', verdict: JSON.parse(String(init.body)).verdict } },
+      body: {
+        decision: {
+          id: 'd1',
+          metric: 'disk',
+          verdict: JSON.parse(String(init.body)).verdict,
+        },
+      },
     }));
-    service.decisions$.setValue([{ id: 'd1', verdict: null } as MonitoringDecision]);
+    service.decisions$.setValue([
+      { id: 'd1', metric: 'disk', verdict: null } as MonitoringDecision,
+    ]);
     await service.feedback('d1', 'expected');
-    expect(calls[0].path).toBe('/api/registry/workspaces/ws/monitoring-agent/decisions/d1/feedback');
+    expect(calls[0].path).toBe(
+      '/api/registry/workspaces/ws/monitoring-agent/decisions/d1/feedback'
+    );
     expect(service.decisions$.value[0].verdict).toBe('expected');
   });
 
   test('a server without the registry says so', async () => {
     const { service } = setup(() => ({ status: 404, body: '<!doctype html>' }));
-    await expect(service.revalidate()).rejects.toThrow('This server has no machine registry.');
+    await expect(service.revalidate()).rejects.toThrow(
+      'This server has no machine registry.'
+    );
     expect(service.loaded$.value).toBe(true);
   });
 });

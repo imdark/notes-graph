@@ -59,7 +59,10 @@ export function orgStatusText(label: string): string {
     return canonical.text;
   }
   // Any other kanban option becomes an org TODO keyword.
-  return label.toUpperCase().replace(/[^A-Z0-9]+/g, '-').replace(/^-|-$/g, '');
+  return label
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, '-')
+    .replace(/^-|-$/g, '');
 }
 
 /**

@@ -14,8 +14,9 @@ const escapedSnapshotAttributes = new Set([
 ]);
 
 function nanoidReplacementString(snapshotString: string) {
+  // The id:id form must not take a flavour: "notesgraph:attachment" is 10:10.
   const re =
-    /("block:[A-Za-z0-9-_]{10}")|("[A-Za-z0-9-_]{10}")|("[A-Za-z0-9-_]{35}")|("[A-Za-z0-9-_]{10}:[A-Za-z0-9-_]{10}")|("var\(--notesgraph-v2-chip-label-[a-z]{3,10}\)")|("[A-Za-z0-9-_=]{44}")/g;
+    /("block:[A-Za-z0-9-_]{10}")|("[A-Za-z0-9-_]{10}")|("[A-Za-z0-9-_]{35}")|("(?!notesgraph:)[A-Za-z0-9-_]{10}:[A-Za-z0-9-_]{10}")|("var\(--notesgraph-v2-chip-label-[a-z]{3,10}\)")|("[A-Za-z0-9-_=]{44}")/g;
   const matches = snapshotString.matchAll(re);
   const matchesReplaceMap = new Map();
   let escapedNumber = 0;

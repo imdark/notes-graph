@@ -36,7 +36,7 @@
             "index": "a0",
             "lockedBySelf": false,
             "rotate": 0,
-            "style": "horizontal",
+            "style": "vertical",
             "title": null,
             "url": "http://localhost",
             "xywh": "[0,0,0,0]"

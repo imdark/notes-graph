@@ -30,9 +30,7 @@ const dismissed = new Set<string>();
 
 export const SuggestedParentBanner = ({ docId }: { docId: string }) => {
   const featureFlagService = useService(FeatureFlagService);
-  const enabled = useLiveData(
-    featureFlagService.flags.enable_suggest_parent.$
-  );
+  const enabled = useLiveData(featureFlagService.flags.enable_suggest_parent.$);
 
   const parents = useCurrentParents(docId);
   const suggestions = useSuggestedParents(docId, 3);
@@ -108,9 +106,7 @@ export const SuggestedParentBanner = ({ docId }: { docId: string }) => {
       {/* Another note with the same title — offer to combine into it. */}
       {duplicates.length > 0 ? (
         <div className={styles.group}>
-          <div className={styles.groupLabel}>
-            Duplicate node? Combine with:
-          </div>
+          <div className={styles.groupLabel}>Duplicate node? Combine with:</div>
           <div className={styles.chips}>
             {duplicates.map(d => (
               <div
@@ -191,14 +187,13 @@ export const SuggestedParentBanner = ({ docId }: { docId: string }) => {
               <ParentPickerContent
                 docId={docId}
                 excludeIds={excludeIds}
-                onSelect={(parentId, title) => setParent(parentId, docId, title)}
+                onSelect={(parentId, title) =>
+                  setParent(parentId, docId, title)
+                }
               />
             }
           >
-            <div
-              role="button"
-              className={`${styles.chip} ${styles.addChip}`}
-            >
+            <div role="button" className={`${styles.chip} ${styles.addChip}`}>
               <span className={styles.chipIcon}>
                 <SearchIcon />
               </span>

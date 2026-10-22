@@ -93,6 +93,10 @@ vi.mock('./calendar/setting-panel', () => ({
   CalendarSettingPanel: () => null,
 }));
 
+vi.mock('./google-workspace/setting-panel', () => ({
+  GoogleWorkspaceSettingPanel: () => null,
+}));
+
 vi.mock('./mcp-server/setting-panel', () => ({
   McpServerSettingPanel: () => null,
 }));

@@ -228,7 +228,7 @@ const CODE_AUTOMATION: Automation = {
     {
       name: 'install_deps',
       description:
-        'Install the repo\'s dependencies (corepack + yarn install). Needed once ' +
+        "Install the repo's dependencies (corepack + yarn install). Needed once " +
         'before run_tests or typecheck; takes several minutes.',
       run: 'cd "$AGENT_CWD" && corepack enable && yarn install --mode=skip-build',
       timeout: 2400,
@@ -239,7 +239,12 @@ const CODE_AUTOMATION: Automation = {
         'Run the vitest tests at a path in the repo (e.g. packages/frontend/core/src/modules/agents) ' +
         'and return the output. Run install_deps first.',
       run: 'cd "$AGENT_CWD" && yarn vitest run "$ARG_PATH"',
-      params: { path: { description: 'File or directory to test, relative to the repo root.', required: true } },
+      params: {
+        path: {
+          description: 'File or directory to test, relative to the repo root.',
+          required: true,
+        },
+      },
       timeout: 1200,
     },
     {
@@ -248,7 +253,12 @@ const CODE_AUTOMATION: Automation = {
         'Typecheck a package of the repo (e.g. packages/frontend/core) with scripts/typecheck.sh. ' +
         'Run install_deps first.',
       run: 'cd "$AGENT_CWD" && scripts/typecheck.sh "$ARG_PACKAGE"',
-      params: { package: { description: 'Package directory, relative to the repo root.', required: true } },
+      params: {
+        package: {
+          description: 'Package directory, relative to the repo root.',
+          required: true,
+        },
+      },
       timeout: 1200,
     },
   ],
@@ -321,13 +331,15 @@ const RESEARCH_AUTOMATION: Automation = {
     {
       name: 'fetch_source',
       description:
-        'Download a URL (a PDF, a dataset, a page) into this run\'s sources folder and ' +
+        "Download a URL (a PDF, a dataset, a page) into this run's sources folder and " +
         'return where it was saved, so you can Read it.',
       run:
         'cd {job_dir}/sources && name="$(basename "${ARG_URL%%\\?*}")" && ' +
         'curl -fsSL --max-time 120 --max-filesize 52428800 -o "${name:-source}" "$ARG_URL" && ' +
         'echo "saved {job_dir}/sources/${name:-source} ($(wc -c < "${name:-source}") bytes)"',
-      params: { url: { description: 'The http(s) URL to download.', required: true } },
+      params: {
+        url: { description: 'The http(s) URL to download.', required: true },
+      },
       timeout: 180,
     },
   ],
@@ -377,7 +389,9 @@ export const ACCESS_LEVELS = ['read', 'write', 'manage', 'full'] as const;
 export type AccessLevel = (typeof ACCESS_LEVELS)[number];
 
 export const parseAccess = (value: unknown): AccessLevel | null =>
-  (ACCESS_LEVELS as readonly unknown[]).includes(value) ? (value as AccessLevel) : null;
+  (ACCESS_LEVELS as readonly unknown[]).includes(value)
+    ? (value as AccessLevel)
+    : null;
 
 const NOTESGRAPH_READ_TOOLS = [
   'keyword_search',
@@ -438,7 +452,9 @@ export function profileFor(
     ...profile,
     skills: [
       ...SKILL_CATALOG.filter(skill => skills.includes(skill.name)),
-      ...noteSkills.filter(note => skills.includes(note.ref)).map(note => note.skill),
+      ...noteSkills
+        .filter(note => skills.includes(note.ref))
+        .map(note => note.skill),
     ],
   };
 }
@@ -463,23 +479,32 @@ const ALWAYS_ASK_COMMANDS: RegExp[] = [
 ];
 
 // Tools whose every call deletes or spends, whatever their input.
-const ALWAYS_ASK_TOOL = /(delete|remove|destroy|purchase|checkout|payment|transfer|deploy)/i;
+const ALWAYS_ASK_TOOL =
+  /(delete|remove|destroy|purchase|checkout|payment|transfer|deploy)/i;
 
 /**
  * Whether a permission (its "Allow <tool>?" text and the tool input as JSON)
  * deploys, spends or deletes, so "Allow all" and the full level don't cover it.
  */
-export function alwaysAsks(text: string, detail: string | null | undefined): boolean {
+export function alwaysAsks(
+  text: string,
+  detail: string | null | undefined
+): boolean {
   const tool = /^Allow (\S+)\?$/.exec(text.trim())?.[1] ?? '';
   if (!tool) return false;
   if (tool === 'Bash') {
     let command = detail ?? '';
     try {
-      command = String((JSON.parse(command) as { command?: unknown }).command ?? '');
+      command = String(
+        (JSON.parse(command) as { command?: unknown }).command ?? ''
+      );
     } catch {
       // Not JSON: look at it as it came.
     }
     return ALWAYS_ASK_COMMANDS.some(pattern => pattern.test(command));
   }
-  return tool.startsWith('mcp__') && ALWAYS_ASK_TOOL.test(tool.split('__').pop() ?? '');
+  return (
+    tool.startsWith('mcp__') &&
+    ALWAYS_ASK_TOOL.test(tool.split('__').pop() ?? '')
+  );
 }

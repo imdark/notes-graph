@@ -150,7 +150,7 @@ export class DocEmbedder extends Service {
     const embeddings = await this.embedding.embed(chunks);
     const dim = embeddings[0]?.length ?? 0;
     if (!dim) return null;
-    const mean = new Array<number>(dim).fill(0);
+    const mean = Array.from({ length: dim }, () => 0);
     for (const embedding of embeddings) {
       for (let i = 0; i < dim; i++) mean[i] += embedding[i];
     }
@@ -288,11 +288,7 @@ export function combineTitleBodyScore(
         ? null
         : 0;
   const bodyScore =
-    a.body && b.body
-      ? cosine(a.body, b.body)
-      : !a.body && !b.body
-        ? null
-        : 0;
+    a.body && b.body ? cosine(a.body, b.body) : !a.body && !b.body ? null : 0;
   if (titleScore === null && bodyScore === null) return null;
   if (bodyScore === null) return titleScore;
   if (titleScore === null) return bodyScore;

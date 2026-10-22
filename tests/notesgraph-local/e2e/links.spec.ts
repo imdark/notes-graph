@@ -502,7 +502,12 @@ test('linked doc should show markdown preview in the backlink section', async ({
     })
     .click();
 
-  await page.getByRole('button', { name: 'source page' }).click();
+  // The breadcrumb, parent chip and peek label also name 'source page'; click
+  // the backlink entry inside the editor.
+  await page
+    .locator('[data-testid^="editor-"]')
+    .getByRole('button', { name: 'source page', exact: true })
+    .click();
 
   await expect(page.locator('text-renderer')).toContainText(
     'some inline content'
@@ -919,13 +924,13 @@ test('should save open doc mode of internal links', async ({ page }) => {
   const openDocMenu = toolbar.getByLabel('Open doc menu');
 
   const openThisDocBtn = openDocMenu.getByLabel('Open this doc');
-  // In Desktop
+  // NotesGraph offers split view on the web too (editor-view/open-doc.ts)
   const openInSplitViewBtn = openDocMenu.getByLabel('Open in split view');
   const openInNewTabBtn = openDocMenu.getByLabel('Open in new tab');
   const openInCenterPeekBtn = openDocMenu.getByLabel('Open in center peek');
 
   await expect(openThisDocBtn).toBeVisible();
-  await expect(openInSplitViewBtn).toBeHidden();
+  await expect(openInSplitViewBtn).toBeVisible();
   await expect(openInNewTabBtn).toBeVisible();
   await expect(openInCenterPeekBtn).toBeVisible();
 
@@ -1152,7 +1157,7 @@ test('should add HTTP protocol into link automatically', async ({ page }) => {
 
   await page.keyboard.press('Space');
 
-  const link = 'https://github.com/notesgraph/notesgraph';
+  const link = 'https://github.com/toeverything/notesgraph';
 
   const { toolbar, switchViewBtn, cardViewBtn } = toolbarButtons(page);
 

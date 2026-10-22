@@ -55,7 +55,10 @@ export function removeColumn(store: Store, column: BlockModel): string | null {
  * Replace a row with the contents of its columns, in reading order. Returns
  * the last block moved out, if any.
  */
-export function unwrapColumns(store: Store, columns: BlockModel): string | null {
+export function unwrapColumns(
+  store: Store,
+  columns: BlockModel
+): string | null {
   const parent = store.getParent(columns);
   if (!parent) return null;
   const blocks = columns.children.flatMap(column => column.children);

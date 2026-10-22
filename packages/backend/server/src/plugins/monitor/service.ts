@@ -60,7 +60,8 @@ const PENDING_STALE_MS = 2 * 60 * 60_000;
 /** How much of a page or API response is read. */
 const MAX_FETCH_BYTES = 5 * 1024 * 1024;
 /** Who the block's "Edited by" stamp names. */
-const editorName = (monitor: Pick<Monitor, 'name'>) => `Monitor: ${monitor.name}`;
+const editorName = (monitor: Pick<Monitor, 'name'>) =>
+  `Monitor: ${monitor.name}`;
 
 /**
  * Runs monitors and keeps their blocks current.
@@ -101,9 +102,12 @@ export class MonitorService {
 
     if (monitor.pendingJobId) {
       const stale =
-        monitor.lastRunAt && now.getTime() - monitor.lastRunAt.getTime() > PENDING_STALE_MS;
+        monitor.lastRunAt &&
+        now.getTime() - monitor.lastRunAt.getTime() > PENDING_STALE_MS;
       if (!stale) {
-        this.logger.debug(`monitor ${monitor.id} still waiting on job ${monitor.pendingJobId}`);
+        this.logger.debug(
+          `monitor ${monitor.id} still waiting on job ${monitor.pendingJobId}`
+        );
         return;
       }
       await this.models.monitor.update(monitor.id, { pendingJobId: null });
@@ -113,7 +117,10 @@ export class MonitorService {
     try {
       if (monitor.kind === 'check' && monitor.source === 'url') {
         const body = await this.fetch(spec.url ?? '');
-        await this.record(monitor, extract(body, spec.extract ?? { type: 'number' }));
+        await this.record(
+          monitor,
+          extract(body, spec.extract ?? { type: 'number' })
+        );
         return;
       }
       if (monitor.kind === 'check' && monitor.source === 'command') {
@@ -141,7 +148,8 @@ export class MonitorService {
 
   /** The page or API response, through the SSRF guard. */
   private async fetch(url: string): Promise<string> {
-    if (!/^https?:\/\//i.test(url)) throw new Error('The URL must start with http(s)://');
+    if (!/^https?:\/\//i.test(url))
+      throw new Error('The URL must start with http(s)://');
     const response = await safeFetch(
       url,
       {
@@ -160,18 +168,28 @@ export class MonitorService {
 
   private async queueDeviceJob(
     monitor: Monitor,
-    body: { model: string; instructions: string; agentName: string; tools?: string[] }
+    body: {
+      model: string;
+      instructions: string;
+      agentName: string;
+      tools?: string[];
+    }
   ) {
     if (!monitor.deviceKey) throw new Error('No device chosen to run this on');
-    const job = await this.jobs.enqueue(monitor.workspaceId, monitor.createdBy, monitor.deviceKey, {
-      ...body,
-      agentId: `monitor:${monitor.id}`,
-      title: monitor.name,
-      targetKind: 'block',
-      docId: monitor.docId,
-      blockId: monitor.blockId,
-      context: `Monitor "${monitor.name}" on block ${monitor.blockId} of doc ${monitor.docId}.`,
-    });
+    const job = await this.jobs.enqueue(
+      monitor.workspaceId,
+      monitor.createdBy,
+      monitor.deviceKey,
+      {
+        ...body,
+        agentId: `monitor:${monitor.id}`,
+        title: monitor.name,
+        targetKind: 'block',
+        docId: monitor.docId,
+        blockId: monitor.blockId,
+        context: `Monitor "${monitor.name}" on block ${monitor.blockId} of doc ${monitor.docId}.`,
+      }
+    );
     await this.models.monitor.update(monitor.id, {
       pendingJobId: job.id,
       lastRunAt: new Date(),
@@ -192,11 +210,16 @@ export class MonitorService {
       if (monitor.kind === 'agent') {
         // The agent wrote the block itself; its closing answer is the reading.
         const summary = result.trim() || '(no summary)';
-        await this.record(monitor, summary.slice(0, MAX_VALUE_CHARS), { write: false });
+        await this.record(monitor, summary.slice(0, MAX_VALUE_CHARS), {
+          write: false,
+        });
         return;
       }
       const spec = monitor.spec as MonitorSpec;
-      await this.record(monitor, extract(result, spec.extract ?? { type: 'text' }));
+      await this.record(
+        monitor,
+        extract(result, spec.extract ?? { type: 'text' })
+      );
     } catch (err) {
       await this.fail(monitor, err);
     }
@@ -209,7 +232,11 @@ export class MonitorService {
   async record(monitor: Monitor, value: string, { write = true } = {}) {
     const previous = monitor.lastValue;
     const now = new Date();
-    const verdict = evaluate(monitor.condition as unknown as Condition, value, previous);
+    const verdict = evaluate(
+      monitor.condition as unknown as Condition,
+      value,
+      previous
+    );
 
     if (write) {
       const allowed = await this.ac
@@ -218,7 +245,7 @@ export class MonitorService {
         .doc(monitor.docId)
         .can('Doc.Update');
       if (!allowed) {
-        throw new Error("You no longer have edit access to the monitored note");
+        throw new Error('You no longer have edit access to the monitored note');
       }
       await this.writer.updateBlock(
         monitor.workspaceId,
@@ -230,7 +257,9 @@ export class MonitorService {
       );
     }
 
-    const alerted = verdict.alert ? await this.alert(monitor, value, previous, verdict.reason) : false;
+    const alerted = verdict.alert
+      ? await this.alert(monitor, value, previous, verdict.reason)
+      : false;
     await this.models.monitor.addReading(monitor.id, {
       value,
       changed: previous !== null && previous !== value,
@@ -276,7 +305,13 @@ export class MonitorService {
   private async alert(
     monitor: Pick<
       Monitor,
-      'id' | 'name' | 'workspaceId' | 'createdBy' | 'docId' | 'blockId' | 'alerts'
+      | 'id'
+      | 'name'
+      | 'workspaceId'
+      | 'createdBy'
+      | 'docId'
+      | 'blockId'
+      | 'alerts'
     >,
     value: string | null,
     previous: string | null,
@@ -286,9 +321,13 @@ export class MonitorService {
     if (!alerts.inApp && !alerts.push && !alerts.email) return false;
     try {
       if (alerts.inApp || alerts.email) {
-        const meta = await this.models.doc.getMeta(monitor.workspaceId, monitor.docId, {
-          select: { title: true },
-        });
+        const meta = await this.models.doc.getMeta(
+          monitor.workspaceId,
+          monitor.docId,
+          {
+            select: { title: true },
+          }
+        );
         await this.notifications.createMonitorAlert(
           {
             userId: monitor.createdBy,
@@ -325,7 +364,9 @@ export class MonitorService {
       return true;
     } catch (err) {
       // An alert that can't go out is no reason to lose the reading.
-      this.logger.warn(`monitor ${monitor.id} alert failed: ${(err as Error).message}`);
+      this.logger.warn(
+        `monitor ${monitor.id} alert failed: ${(err as Error).message}`
+      );
       return false;
     }
   }
@@ -343,7 +384,10 @@ export class MonitorService {
       throw new BadRequest("kind must be 'check' or 'agent'");
     }
     const minimum = MIN_INTERVAL_MINUTES[kind];
-    if (!Number.isInteger(input.intervalMinutes) || input.intervalMinutes < minimum) {
+    if (
+      !Number.isInteger(input.intervalMinutes) ||
+      input.intervalMinutes < minimum
+    ) {
       throw new BadRequest(`A ${kind} runs at most every ${minimum} minutes`);
     }
     if (kind === 'check') {
@@ -352,21 +396,30 @@ export class MonitorService {
           throw new BadRequest('A URL check needs an http(s):// URL');
         }
       } else if (input.source === 'command') {
-        if (!input.spec.command?.trim()) throw new BadRequest('A command check needs a command');
-        if (!input.deviceKey) throw new BadRequest('A command check needs a device');
+        if (!input.spec.command?.trim())
+          throw new BadRequest('A command check needs a command');
+        if (!input.deviceKey)
+          throw new BadRequest('A command check needs a device');
       } else {
         throw new BadRequest("A check's source must be 'url' or 'command'");
       }
       const type = input.spec.extract?.type ?? 'number';
       if (!['number', 'regex', 'jsonpath', 'text'].includes(type)) {
-        throw new BadRequest('extract.type must be number, regex, jsonpath or text');
+        throw new BadRequest(
+          'extract.type must be number, regex, jsonpath or text'
+        );
       }
-      if ((type === 'regex' || type === 'jsonpath') && !input.spec.extract?.pattern) {
+      if (
+        (type === 'regex' || type === 'jsonpath') &&
+        !input.spec.extract?.pattern
+      ) {
         throw new BadRequest(`A ${type} extractor needs a pattern`);
       }
     } else {
-      if (!input.spec.instructions?.trim()) throw new BadRequest('An agent monitor needs instructions');
-      if (!input.deviceKey) throw new BadRequest('An agent monitor needs a device');
+      if (!input.spec.instructions?.trim())
+        throw new BadRequest('An agent monitor needs instructions');
+      if (!input.deviceKey)
+        throw new BadRequest('An agent monitor needs a device');
     }
   }
 
@@ -374,7 +427,10 @@ export class MonitorService {
   async test(spec: MonitorSpec): Promise<string> {
     if (!spec.url) throw new BadRequest('Only a URL check can be tested here');
     try {
-      return extract(await this.fetch(spec.url), spec.extract ?? { type: 'number' });
+      return extract(
+        await this.fetch(spec.url),
+        spec.extract ?? { type: 'number' }
+      );
     } catch (err) {
       throw new BadRequest((err as Error).message);
     }
@@ -382,7 +438,11 @@ export class MonitorService {
 
   async getOwned(workspaceId: string, userId: string, id: string) {
     const monitor = await this.models.monitor.get(id);
-    if (!monitor || monitor.workspaceId !== workspaceId || monitor.createdBy !== userId) {
+    if (
+      !monitor ||
+      monitor.workspaceId !== workspaceId ||
+      monitor.createdBy !== userId
+    ) {
       throw new NotFound('No such monitor');
     }
     return monitor;
@@ -393,13 +453,16 @@ export class MonitorService {
  * What an agent monitor is told each run: its own instructions, and to keep
  * the one block current through NotesGraph's update_block tool.
  */
-export function agentInstructions(monitor: Pick<Monitor, 'docId' | 'blockId' | 'name'>, spec: MonitorSpec) {
+export function agentInstructions(
+  monitor: Pick<Monitor, 'docId' | 'blockId' | 'name'>,
+  spec: MonitorSpec
+) {
   return [
     (spec.instructions ?? '').trim(),
     '',
     `This is a scheduled run of the monitor "${monitor.name}". Keep one block`,
     `up to date: block ${monitor.blockId} in doc ${monitor.docId}. When you`,
-    'have the answer, replace that block\'s text with a short summary of it',
+    "have the answer, replace that block's text with a short summary of it",
     '(one line, with the key numbers and the source) using the NotesGraph',
     'update_block tool. Do not ask questions; work with what you can find.',
     'Finish with that same one-line summary.',

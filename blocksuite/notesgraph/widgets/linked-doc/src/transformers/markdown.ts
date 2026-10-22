@@ -530,7 +530,10 @@ async function importMarkdownWithAssets({
         fileName: name,
       });
     } else {
-      const file = blob instanceof File ? blob : new File([blob], name, { type: blob.type });
+      const file =
+        blob instanceof File
+          ? blob
+          : new File([blob], name, { type: blob.type });
       const blobId = await collection.blobSync.set(file);
       const id = `ngatt${footnoteRefs.length}`;
       footnoteRefs.push(`[^${id}]`);

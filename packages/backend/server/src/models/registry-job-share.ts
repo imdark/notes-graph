@@ -37,7 +37,9 @@ export class RegistryJobShareModel extends BaseModel {
     workspaceId: string,
     jobId: string
   ): Promise<RegistryJobShare | null> {
-    const share = await this.db.registryJobShare.findUnique({ where: { jobId } });
+    const share = await this.db.registryJobShare.findUnique({
+      where: { jobId },
+    });
     return share && share.workspaceId === workspaceId ? share : null;
   }
 

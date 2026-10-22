@@ -12,7 +12,7 @@ const embedUrl = 'https://github.com/toeverything/blocksuite/pull/7217';
 
 test.beforeEach(async ({ page }) => {
   await page.route(
-    'https://notesgraph-worker.toeverything.workers.dev/api/worker/link-preview',
+    'https://affine-worker.toeverything.workers.dev/api/worker/link-preview',
     async route => {
       await route.fulfill({
         json: {},
@@ -76,7 +76,12 @@ test(
         const note = doc.addBlock('notesgraph:note', {}, rootId);
         doc.addBlock('notesgraph:code', {}, note);
         doc.addBlock('notesgraph:divider', {}, note);
-        doc.addBlock('notesgraph:bookmark', { url: bookMarkUrl }, note);
+        // NotesGraph defaults bookmarks to the tall 'vertical' card
+        doc.addBlock(
+          'notesgraph:bookmark',
+          { url: bookMarkUrl, style: 'horizontal' },
+          note
+        );
         await new Promise(res => setTimeout(res, 200));
         const pageRoot = document.querySelector('notesgraph-page-root');
         if (!pageRoot) throw new Error('Cannot find doc page');

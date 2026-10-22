@@ -27,7 +27,12 @@ type Part = {
 };
 
 /** NotesGraph's tools that find notes, whose results get a count. */
-const NOTE_SEARCH_TOOLS = new Set(['semantic_search', 'keyword_search', 'search_blocks', 'list_blocks']);
+const NOTE_SEARCH_TOOLS = new Set([
+  'semantic_search',
+  'keyword_search',
+  'search_blocks',
+  'list_blocks',
+]);
 
 const searchToolName = (name: string) => {
   const match = /^mcp__notesgraph__(\w+)$/.exec(name);
@@ -54,9 +59,12 @@ function collectDocIds(value: unknown, into: Set<string>) {
  */
 export function countFound(content: unknown): { notes: number; docs: number } {
   const parts = (
-    Array.isArray(content) ? content.map(part => toolResultText([part])) : [String(content ?? '')]
+    Array.isArray(content)
+      ? content.map(part => toolResultText([part]))
+      : [String(content ?? '')]
   ).filter(part => part.trim());
-  if (parts.length === 1 && /^No matching/i.test(parts[0].trim())) return { notes: 0, docs: 0 };
+  if (parts.length === 1 && /^No matching/i.test(parts[0].trim()))
+    return { notes: 0, docs: 0 };
   const docIds = new Set<string>();
   let notes = 0;
   for (const part of parts) {
@@ -79,7 +87,9 @@ export function countFound(content: unknown): { notes: number; docs: number } {
 
 export const foundLine = ({ notes, docs }: { notes: number; docs: number }) => {
   const n = `${notes} ${notes === 1 ? 'note' : 'notes'}`;
-  return docs ? `Found ${n} across ${docs} ${docs === 1 ? 'doc' : 'docs'}` : `Found ${n}`;
+  return docs
+    ? `Found ${n} across ${docs} ${docs === 1 ? 'doc' : 'docs'}`
+    : `Found ${n}`;
 };
 
 export class Narrator {
@@ -100,7 +110,14 @@ export class Narrator {
   ) {}
 
   private line(text: string, sub: boolean) {
-    this.say(sub ? text.split('\n').map(l => `    ↳ ${l}`).join('\n') : text);
+    this.say(
+      sub
+        ? text
+            .split('\n')
+            .map(l => `    ↳ ${l}`)
+            .join('\n')
+        : text
+    );
   }
 
   feed(message: SDKMessage): void {
@@ -109,7 +126,11 @@ export class Narrator {
       message?: { content?: Part[] | string };
     };
     const sub = !!event.parent_tool_use_id;
-    if (event.type === 'system' && 'subtype' in event && event.subtype === 'init') {
+    if (
+      event.type === 'system' &&
+      'subtype' in event &&
+      event.subtype === 'init'
+    ) {
       if (sub) return;
       if (this.started) {
         // The same run picking up again after background work.
@@ -121,7 +142,9 @@ export class Narrator {
       this.say(`▶ started · model ${init.model ?? '?'} · ${init.cwd ?? ''}`);
     } else if (event.type === 'assistant') {
       if (!sub) this.steps += 1;
-      const parts = Array.isArray(event.message?.content) ? event.message.content : [];
+      const parts = Array.isArray(event.message?.content)
+        ? event.message.content
+        : [];
       for (const part of parts) {
         if (part.type === 'text' && part.text?.trim()) {
           this.line(part.text.trimEnd(), sub);
@@ -129,7 +152,8 @@ export class Narrator {
           const name = part.name ?? 'tool';
           if (name.endsWith('__ask_user')) {
             // The question is the event worth seeing, not the call.
-            const question = (part.input as { question?: string } | undefined)?.question ?? '';
+            const question =
+              (part.input as { question?: string } | undefined)?.question ?? '';
             this.line(`? asking you: ${question}  (answer in NotesGraph)`, sub);
           } else {
             this.line(`→ ${name}  ${short(part.input ?? {})}`, sub);
@@ -139,22 +163,37 @@ export class Narrator {
         }
       }
     } else if (event.type === 'user') {
-      const parts = Array.isArray(event.message?.content) ? event.message.content : [];
+      const parts = Array.isArray(event.message?.content)
+        ? event.message.content
+        : [];
       for (const part of parts) {
         if (part.type === 'tool_result') {
           const mark = part.is_error ? '✗' : '←';
-          this.line(`  ${mark} ${short(toolResultText(part.content), TOOL_RESULT_CHARS)}`, sub);
-          this.changes?.onToolResult(part.tool_use_id, part.content, part.is_error);
-          const search = part.tool_use_id ? this.searches.get(part.tool_use_id) : undefined;
+          this.line(
+            `  ${mark} ${short(toolResultText(part.content), TOOL_RESULT_CHARS)}`,
+            sub
+          );
+          this.changes?.onToolResult(
+            part.tool_use_id,
+            part.content,
+            part.is_error
+          );
+          const search = part.tool_use_id
+            ? this.searches.get(part.tool_use_id)
+            : undefined;
           if (search) {
             this.searches.delete(part.tool_use_id!);
-            if (!part.is_error) this.line(`  ${foundLine(countFound(part.content))}`, sub);
+            if (!part.is_error)
+              this.line(`  ${foundLine(countFound(part.content))}`, sub);
           }
         }
       }
     } else if (event.type === 'result' && !sub) {
       this.steps = event.num_turns || this.steps;
-      this.cost = typeof event.total_cost_usd === 'number' ? event.total_cost_usd : this.cost;
+      this.cost =
+        typeof event.total_cost_usd === 'number'
+          ? event.total_cost_usd
+          : this.cost;
       // modelUsage covers subagents too; `usage` is the main loop only.
       const usage = Object.values(event.modelUsage ?? {});
       if (usage.length) {
@@ -177,8 +216,12 @@ export class Narrator {
       } else if (event.is_error || event.subtype !== 'success') {
         this.result = null;
         const reason =
-          ('result' in event && typeof event.result === 'string' && event.result) ||
-          ('errors' in event && Array.isArray(event.errors) && event.errors.join('; ')) ||
+          ('result' in event &&
+            typeof event.result === 'string' &&
+            event.result) ||
+          ('errors' in event &&
+            Array.isArray(event.errors) &&
+            event.errors.join('; ')) ||
           event.subtype;
         this.error =
           event.subtype === 'error_max_budget_usd'
@@ -195,7 +238,9 @@ export class Narrator {
   finish(): void {
     const tail = this.cost === null ? '' : ` · $${this.cost.toFixed(4)}`;
     if (this.error !== null) {
-      this.say(`✗ failed after ${this.steps} turns${tail}: ${short(this.error, 300)}`);
+      this.say(
+        `✗ failed after ${this.steps} turns${tail}: ${short(this.error, 300)}`
+      );
     } else if (this.result !== null) {
       this.say(`✓ finished in ${this.steps} turns${tail}`);
     }

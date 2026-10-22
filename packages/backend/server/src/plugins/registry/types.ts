@@ -5,7 +5,12 @@ export const DEVICE_KINDS = ['machine', 'folder'] as const;
 export type DeviceKind = (typeof DEVICE_KINDS)[number];
 
 /** Health states, mirroring the `wf` CLI's registry vocabulary. */
-export const DEVICE_STATES = ['online', 'degraded', 'offline', 'unknown'] as const;
+export const DEVICE_STATES = [
+  'online',
+  'degraded',
+  'offline',
+  'unknown',
+] as const;
 export type DeviceState = (typeof DEVICE_STATES)[number];
 
 export interface RegisterDeviceBody {

@@ -16,9 +16,8 @@ Nearly every tool uses the same four layers, from coarsest to finest:
 2. **A named mode or profile** that bundles a policy: `plan` / `read-only` /
    `chat only` / `ask`. One switch, easy to understand.
 3. **Per-call rules with argument matchers**: allow / ask / deny on a tool
-   *plus* a pattern on its input (a path glob, a command prefix, a regex).
-   This is where "limited write" lives: *can edit `*.md`*, *can run `git status`
-   but not `git push`*.
+   _plus_ a pattern on its input (a path glob, a command prefix, a regex).
+   This is where "limited write" lives: _can edit `_.md`*, *can run `git status`but not`git push`\*.
 4. **An enforcement boundary below the model**: an OS sandbox, a scoped token,
    or a server that drops write tools from its own tool list. This is the only
    layer that holds if the model or the client gets confused.
@@ -55,8 +54,8 @@ Two independent knobs in `~/.codex/config.toml`:
   `workspace-write` takes `writable_roots` and `network_access`.
 - `approval_policy`: when to ask (`untrusted`, `on-request`, `never`, …).
 
-Saved as **profiles** (`codex --profile review`). The key idea: *approval
-never grants what the sandbox lacks*. "Never ask" plus "read-only" is a safe,
+Saved as **profiles** (`codex --profile review`). The key idea: _approval
+never grants what the sandbox lacks_. "Never ask" plus "read-only" is a safe,
 fully autonomous reviewer.
 
 ### Gemini CLI: policy engine
@@ -110,7 +109,7 @@ the MCP `readOnlyHint` annotation**: tools not marked read-only go to
 ### OpenAI Agents SDK
 
 - MCP `tool_filter`: `create_static_tool_filter(allowed_tool_names=[…],
-  blocked_tool_names=[…])` or a dynamic callable.
+blocked_tool_names=[…])` or a dynamic callable.
 - `needs_approval` on function tools (`True` or a per-call predicate), and
   `require_approval={"always": {...}, "never": {...}}` per MCP server. Pending
   calls surface as `interruptions`; the run state is serializable, so a paused
@@ -120,22 +119,22 @@ the MCP `readOnlyHint` annotation**: tools not marked read-only go to
 ### MCP itself: tool annotations
 
 The MCP spec lets a server tag tools with `readOnlyHint`, `destructiveHint`,
-`idempotentHint` and `openWorldHint`. These are *hints* (clients must not
+`idempotentHint` and `openWorldHint`. These are _hints_ (clients must not
 trust them from untrusted servers), but they're what lets a client like Goose
 build a "read-only" preset without a hand-maintained list.
 
 ## 3. Patterns worth copying
 
-| Pattern | Seen in | Why it matters |
-| --- | --- | --- |
-| Hide, don't just block | GitHub MCP, Copilot `tools:`, Claude `tools:` | The model can't call or keep retrying a tool it never sees. |
-| Mode = named policy bundle | Claude `plan`, Codex profiles, Gemini plan.toml, Roo modes, Goose | One choice a person understands ("Read-only", "Can edit notes"). |
-| Argument-scoped rules | Claude `Edit(docs/**)`, Roo `fileRegex`, Gemini `argsPattern` | Gives limited write instead of all-or-nothing. |
-| Deny always wins; lower layers can't widen | Claude, Gemini tiers, GitHub MCP read-only | An agent definition can't override a workspace or admin "no writes". |
-| Enforcement below the model | Codex sandbox, Copilot branch-scoped token, GitHub MCP server-side | Holds even when the client or prompt is wrong. |
-| Tool metadata drives defaults | MCP annotations → Goose Smart Approve | New tools get classified automatically. |
-| Headless `ask` resolves to a default | Gemini `interactive`, Codex `never` | An unattended run doesn't hang on a prompt nobody will see. |
-| Sticky "allow all" scoped to one run | OpenAI `always_approve`, NotesGraph "Allow all" | Cuts prompt fatigue without widening the agent for good. |
+| Pattern                                    | Seen in                                                            | Why it matters                                                       |
+| ------------------------------------------ | ------------------------------------------------------------------ | -------------------------------------------------------------------- |
+| Hide, don't just block                     | GitHub MCP, Copilot `tools:`, Claude `tools:`                      | The model can't call or keep retrying a tool it never sees.          |
+| Mode = named policy bundle                 | Claude `plan`, Codex profiles, Gemini plan.toml, Roo modes, Goose  | One choice a person understands ("Read-only", "Can edit notes").     |
+| Argument-scoped rules                      | Claude `Edit(docs/**)`, Roo `fileRegex`, Gemini `argsPattern`      | Gives limited write instead of all-or-nothing.                       |
+| Deny always wins; lower layers can't widen | Claude, Gemini tiers, GitHub MCP read-only                         | An agent definition can't override a workspace or admin "no writes". |
+| Enforcement below the model                | Codex sandbox, Copilot branch-scoped token, GitHub MCP server-side | Holds even when the client or prompt is wrong.                       |
+| Tool metadata drives defaults              | MCP annotations → Goose Smart Approve                              | New tools get classified automatically.                              |
+| Headless `ask` resolves to a default       | Gemini `interactive`, Codex `never`                                | An unattended run doesn't hang on a prompt nobody will see.          |
+| Sticky "allow all" scoped to one run       | OpenAI `always_approve`, NotesGraph "Allow all"                    | Cuts prompt fatigue without widening the agent for good.             |
 
 ## 4. Where NotesGraph is today
 
@@ -157,8 +156,8 @@ build a "read-only" preset without a hand-maintained list.
    `destructiveHint`. It's cheap, and Claude Code, Goose and others can use it
    right away; it also gives NotesGraph one source of truth for "which tools
    are reads".
-2. **Agent "access" preset** in the agent editor: *Read-only* · *Can comment /
-   append notes* · *Can edit* · *Full*. Each preset expands to a tools
+2. **Agent "access" preset** in the agent editor: _Read-only_ · _Can comment /
+   append notes_ · _Can edit_ · _Full_. Each preset expands to a tools
    allowlist (and, for device agents, Claude Code `permissions` +
    `permissionMode`). Read-only maps to `plan` mode with Edit/Write/Bash denied.
 3. **Enforce on the server, not just the runner.** Mint the run's MCP token

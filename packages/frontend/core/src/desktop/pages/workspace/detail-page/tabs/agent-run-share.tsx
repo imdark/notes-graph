@@ -43,7 +43,9 @@ export const AgentRunShare = ({ jobId }: { jobId: string }) => {
       navigator.clipboard
         .writeText(url)
         .then(() =>
-          notify.success({ title: t['com.notesgraph.agent-run.share.copied']() })
+          notify.success({
+            title: t['com.notesgraph.agent-run.share.copied'](),
+          })
         )
         .catch(() => notify.error({ title: "Couldn't copy" })),
     [t]
@@ -72,7 +74,9 @@ export const AgentRunShare = ({ jobId }: { jobId: string }) => {
       .unshare(workspaceId, jobId)
       .then(() => {
         setShare(null);
-        notify.success({ title: t['com.notesgraph.agent-run.share.revoked']() });
+        notify.success({
+          title: t['com.notesgraph.agent-run.share.revoked'](),
+        });
       })
       .catch(err =>
         notify.error({

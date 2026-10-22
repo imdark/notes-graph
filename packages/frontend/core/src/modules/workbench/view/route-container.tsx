@@ -7,9 +7,9 @@ import { Outlet } from 'react-router-dom';
 
 import { AppSidebarService } from '../../app-sidebar';
 import { SidebarSwitch } from '../../app-sidebar/views/sidebar-header';
-import { HeaderNotificationButton } from './header-notification';
 import { ViewService } from '../services/view';
 import { WorkbenchService } from '../services/workbench';
+import { HeaderNotificationButton } from './header-notification';
 import * as styles from './route-container.css';
 import { useViewPosition } from './use-view-position';
 import { ViewBodyTarget, ViewHeaderTarget } from './view-islands';

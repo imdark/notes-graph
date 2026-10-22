@@ -287,7 +287,12 @@ export class AIChatComposer extends SignalWatcher(
    */
   private readonly addOpenDocChip = async (startChat = false) => {
     const docId = this.docId;
-    if (!this.includeOpenDoc || this.independentMode || !docId || !this.runtime) {
+    if (
+      !this.includeOpenDoc ||
+      this.independentMode ||
+      !docId ||
+      !this.runtime
+    ) {
       return;
     }
     // Adding context starts a chat on the server. A new chat isn't started

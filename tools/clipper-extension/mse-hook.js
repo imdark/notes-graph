@@ -18,30 +18,30 @@
   if (window.__ngMseHooked) return;
   window.__ngMseHooked = true;
 
-  var MAX_BYTES = 80 * 1024 * 1024;
+  const MAX_BYTES = 80 * 1024 * 1024;
 
-  var store = (window.__ngCapturedMedia = window.__ngCapturedMedia || {
+  const store = (window.__ngCapturedMedia = window.__ngCapturedMedia || {
     segBuffers: [], // fallback: raw MSE segments (video-only)
     recordings: [], // preferred: MediaRecorder webm (video + audio)
   });
 
   // ---------- preferred path: record the playing element (audio + video) ------
   function pickRecorderMime() {
-    var candidates = [
+    const candidates = [
       'video/webm;codecs=vp9,opus',
       'video/webm;codecs=vp8,opus',
       'video/webm',
       'video/mp4',
     ];
-    for (var i = 0; i < candidates.length; i++) {
+    for (const candidate of candidates) {
       try {
         if (
           typeof MediaRecorder !== 'undefined' &&
-          MediaRecorder.isTypeSupported(candidates[i])
+          MediaRecorder.isTypeSupported(candidate)
         ) {
-          return candidates[i];
+          return candidate;
         }
-      } catch (e) {}
+      } catch {}
     }
     return '';
   }
@@ -56,15 +56,15 @@
       return;
     }
     try {
-      var stream = video.captureStream();
+      const stream = video.captureStream();
       if (!stream || !stream.getTracks || stream.getTracks().length === 0) {
         return;
       }
-      var mime = pickRecorderMime();
-      var rec = mime
+      const mime = pickRecorderMime();
+      const rec = mime
         ? new MediaRecorder(stream, { mimeType: mime })
         : new MediaRecorder(stream);
-      var entry = {
+      const entry = {
         chunks: [],
         bytes: 0,
         mime: rec.mimeType || mime || 'video/webm',
@@ -78,7 +78,7 @@
           if (entry.bytes >= MAX_BYTES) {
             try {
               rec.stop();
-            } catch (x) {}
+            } catch {}
           }
         }
       };
@@ -89,7 +89,7 @@
       video.__ngRec = entry;
       entry.recorder = rec;
       store.recordings.push(entry);
-    } catch (e) {
+    } catch {
       /* tainted stream / not allowed — fall back to segment capture */
     }
   }
@@ -98,7 +98,7 @@
   document.addEventListener(
     'play',
     function (e) {
-      var t = e.target;
+      const t = e.target;
       if (t && t.tagName === 'VIDEO') startRecording(t);
     },
     true
@@ -106,29 +106,33 @@
 
   // ---------- fallback path: copy MSE segments (video track only) -------------
   if (typeof MediaSource !== 'undefined' && MediaSource.prototype) {
-    var origAdd = MediaSource.prototype.addSourceBuffer;
+    const origAdd = MediaSource.prototype.addSourceBuffer;
     MediaSource.prototype.addSourceBuffer = function (mime) {
-      var sb = origAdd.call(this, mime);
-      var rec = { mime: String(mime || ''), chunks: [], bytes: 0 };
+      const sb = origAdd.call(this, mime);
+      const rec = { mime: String(mime || ''), chunks: [], bytes: 0 };
       store.segBuffers.push(rec);
       try {
-        var origAppend = sb.appendBuffer;
+        const origAppend = sb.appendBuffer;
         sb.appendBuffer = function (data) {
           try {
-            var u8 =
+            const u8 =
               data instanceof ArrayBuffer
                 ? new Uint8Array(data)
                 : data && data.buffer
-                  ? new Uint8Array(data.buffer, data.byteOffset || 0, data.byteLength)
+                  ? new Uint8Array(
+                      data.buffer,
+                      data.byteOffset || 0,
+                      data.byteLength
+                    )
                   : null;
             if (u8 && rec.bytes + u8.length <= MAX_BYTES) {
               rec.chunks.push(u8.slice(0));
               rec.bytes += u8.length;
             }
-          } catch (e) {}
+          } catch {}
           return origAppend.call(this, data);
         };
-      } catch (e) {}
+      } catch {}
       return sb;
     };
   }
@@ -136,7 +140,7 @@
   // ---------- assembly --------------------------------------------------------
   function blobToDataUrl(blob) {
     return new Promise(function (resolve) {
-      var fr = new FileReader();
+      const fr = new FileReader();
       fr.onload = function () {
         resolve(fr.result);
       };
@@ -154,15 +158,14 @@
    */
   window.__ngAssembleCapturedVideo = function () {
     // 1) best MediaRecorder recording (audio + video)
-    var best = null;
-    for (var i = 0; i < store.recordings.length; i++) {
-      var r = store.recordings[i];
+    let best = null;
+    for (const r of store.recordings) {
       if (r.bytes > 0 && (!best || r.bytes > best.bytes)) best = r;
     }
     if (best) {
-      var finish = function () {
-        var blob = new Blob(best.chunks, { type: best.mime });
-        var ext = /mp4/.test(best.mime) ? 'mp4' : 'webm';
+      const finish = function () {
+        const blob = new Blob(best.chunks, { type: best.mime });
+        const ext = /mp4/.test(best.mime) ? 'mp4' : 'webm';
         return blobToDataUrl(blob).then(function (dataUrl) {
           return dataUrl
             ? {
@@ -183,7 +186,7 @@
           });
           try {
             best.recorder.stop();
-          } catch (e) {
+          } catch {
             finish().then(resolve);
           }
         });
@@ -192,34 +195,33 @@
     }
 
     // 2) fallback: concat the largest video SourceBuffer's segments (no audio)
-    var seg = null;
-    for (var j = 0; j < store.segBuffers.length; j++) {
-      var b = store.segBuffers[j];
+    let seg = null;
+    for (const b of store.segBuffers) {
       if (!b.bytes) continue;
       if (/audio\//i.test(b.mime)) continue;
       if (!seg || b.bytes > seg.bytes) seg = b;
     }
     if (!seg) return Promise.resolve(null);
-    var merged = new Uint8Array(seg.bytes);
-    var off = 0;
-    for (var k = 0; k < seg.chunks.length; k++) {
-      merged.set(seg.chunks[k], off);
-      off += seg.chunks[k].length;
+    const merged = new Uint8Array(seg.bytes);
+    let off = 0;
+    for (const chunk of seg.chunks) {
+      merged.set(chunk, off);
+      off += chunk.length;
     }
-    var container = (seg.mime.split(';')[0] || 'video/mp4').trim();
-    if (!/^video\//.test(container)) container = 'video/mp4';
-    return blobToDataUrl(new Blob([merged], { type: container })).then(function (
-      dataUrl
-    ) {
-      return dataUrl
-        ? {
-            ext: 'mp4',
-            mime: container,
-            hasAudio: false,
-            truncated: seg.bytes >= MAX_BYTES,
-            dataUrl: dataUrl,
-          }
-        : null;
-    });
+    let container = (seg.mime.split(';')[0] || 'video/mp4').trim();
+    if (!container.startsWith('video/')) container = 'video/mp4';
+    return blobToDataUrl(new Blob([merged], { type: container })).then(
+      function (dataUrl) {
+        return dataUrl
+          ? {
+              ext: 'mp4',
+              mime: container,
+              hasAudio: false,
+              truncated: seg.bytes >= MAX_BYTES,
+              dataUrl: dataUrl,
+            }
+          : null;
+      }
+    );
   };
 })();

@@ -32,26 +32,24 @@ export { MIRROR_ROW_FLAVOUR };
  * {@link OrgTaskRowsDataSource} base.
  */
 export class MirrorListDataSource extends OrgTaskRowsDataSource {
-  private readonly sourceStore$: ReadonlySignal<Store | null> = computed(
-    () => {
-      const docId = this._model.props.mirrorDocId$.value;
-      if (!docId || docId === this._model.store.id) {
-        return this._model.store;
-      }
-      const doc = this._model.store.workspace.getDoc(docId);
-      if (!doc) return null;
-      if (!doc.loaded) {
-        try {
-          doc.load();
-        } catch (e) {
-          console.error(e);
-          return null;
-        }
-      }
-      // Stable id — bare getStore() would mint a fresh empty Store per call.
-      return doc.getStore({ id: docId });
+  private readonly sourceStore$: ReadonlySignal<Store | null> = computed(() => {
+    const docId = this._model.props.mirrorDocId$.value;
+    if (!docId || docId === this._model.store.id) {
+      return this._model.store;
     }
-  );
+    const doc = this._model.store.workspace.getDoc(docId);
+    if (!doc) return null;
+    if (!doc.loaded) {
+      try {
+        doc.load();
+      } catch (e) {
+        console.error(e);
+        return null;
+      }
+    }
+    // Stable id — bare getStore() would mint a fresh empty Store per call.
+    return doc.getStore({ id: docId });
+  });
 
   protected override watchedStores$: ReadonlySignal<Store[]> = computed(() => {
     const store = this.sourceStore$.value;
@@ -81,10 +79,7 @@ export class MirrorListDataSource extends OrgTaskRowsDataSource {
       const index = siblings.findIndex(v => v.id === anchor.id);
       if (index < 0) return [];
       let start = index;
-      while (
-        start > 0 &&
-        siblings[start - 1]?.flavour === MIRROR_ROW_FLAVOUR
-      ) {
+      while (start > 0 && siblings[start - 1]?.flavour === MIRROR_ROW_FLAVOUR) {
         start--;
       }
       let end = index;
@@ -100,8 +95,7 @@ export class MirrorListDataSource extends OrgTaskRowsDataSource {
 
   override readonly$: ReadonlySignal<boolean> = computed(() => {
     return (
-      this._model.store.readonly ||
-      (this.sourceStore$.value?.readonly ?? true)
+      this._model.store.readonly || (this.sourceStore$.value?.readonly ?? true)
     );
   });
 

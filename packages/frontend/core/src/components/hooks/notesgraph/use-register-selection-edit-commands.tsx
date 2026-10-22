@@ -28,11 +28,11 @@ import {
   updateBlockAlign,
   updateBlockType,
 } from '@blocksuite/notesgraph/blocks/note';
-import {
-  textConversionConfigs,
-  textAlignConfigs,
-} from '@blocksuite/notesgraph/rich-text';
 import { textFormatConfigs } from '@blocksuite/notesgraph/inlines/preset';
+import {
+  textAlignConfigs,
+  textConversionConfigs,
+} from '@blocksuite/notesgraph/rich-text';
 import { getSelectedModelsCommand } from '@blocksuite/notesgraph/shared/commands';
 import {
   ToolbarContext,
@@ -265,7 +265,7 @@ export function useRegisterSelectionEditCommands(
       if (paletteSelection.blockIds.length > 0) return true;
       const s = std();
       if (!s) return false;
-      if (s.selection.filter(BlockSelection).length > 0) return true;
+      if (s.selection.value.some(sel => sel.is(BlockSelection))) return true;
       const text = s.selection.find(TextSelection);
       return !!text && !text.isCollapsed();
     };
@@ -277,8 +277,8 @@ export function useRegisterSelectionEditCommands(
       const s = std();
       if (!s) return;
       if (
-        s.selection.filter(BlockSelection).length > 0 ||
-        s.selection.find(TextSelection)
+        s.selection.value.some(sel => sel.is(BlockSelection)) ||
+        s.selection.value.some(sel => sel.is(TextSelection))
       ) {
         return; // still intact
       }
@@ -312,7 +312,7 @@ export function useRegisterSelectionEditCommands(
         availableToolbarActions = new Map();
         return;
       }
-      const blockSel = s.selection.filter(BlockSelection).length > 0;
+      const blockSel = s.selection.value.some(sel => sel.is(BlockSelection));
       const textSel = s.selection.find(TextSelection);
       const hasText = !!textSel && !textSel.isCollapsed();
       paletteSelection =
@@ -363,8 +363,7 @@ export function useRegisterSelectionEditCommands(
         unsubs.push(
           registerNotesGraphCommand({
             id: `editor:selection-toolbar-${action.id}`,
-            preconditionStrategy: () =>
-              availableToolbarActions.has(action.id),
+            preconditionStrategy: () => availableToolbarActions.has(action.id),
             category: 'editor:selection',
             icon: <EditIcon />,
             label: action.label,

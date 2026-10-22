@@ -58,7 +58,9 @@ export const useCommentAccount = (): CommentAccount | null => {
   const rawAccount = useLiveData(session.account$);
   const isLocal = workspaceService.workspace.flavour === 'local';
   return useMemo(
-    () => rawAccount ?? (isLocal ? { id: 'local', label: 'You', avatar: null } : null),
+    () =>
+      rawAccount ??
+      (isLocal ? { id: 'local', label: 'You', avatar: null } : null),
     [rawAccount, isLocal]
   );
 };

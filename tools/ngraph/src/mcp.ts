@@ -13,12 +13,7 @@ import {
   viewNote,
 } from './notes';
 import type { Transport } from './transport';
-import {
-  capture,
-  findOrphans,
-  suggestLinks,
-  summarizeBacklinks,
-} from './wiki';
+import { capture, findOrphans, suggestLinks, summarizeBacklinks } from './wiki';
 
 function text(value: string) {
   return { content: [{ type: 'text' as const, text: value }] };
@@ -49,9 +44,8 @@ export async function runMcp(transport: Transport): Promise<void> {
     async () => {
       const notes = await listNotes(transport);
       return text(
-        notes
-          .map(n => `${n.id}\t${n.title || '(untitled)'}`)
-          .join('\n') || '(no notes)'
+        notes.map(n => `${n.id}\t${n.title || '(untitled)'}`).join('\n') ||
+          '(no notes)'
       );
     }
   );
@@ -94,9 +88,8 @@ export async function runMcp(transport: Transport): Promise<void> {
     async ({ id }) => {
       const out = await links(transport, id);
       return text(
-        out
-          .map(l => `${l.pageId}\t${l.title || '(untitled)'}`)
-          .join('\n') || '(no outgoing links)'
+        out.map(l => `${l.pageId}\t${l.title || '(untitled)'}`).join('\n') ||
+          '(no outgoing links)'
       );
     }
   );
@@ -108,9 +101,8 @@ export async function runMcp(transport: Transport): Promise<void> {
     async ({ id }) => {
       const back = await backlinks(transport, id);
       return text(
-        back
-          .map(b => `${b.id}\t${b.title || '(untitled)'}`)
-          .join('\n') || '(no backlinks)'
+        back.map(b => `${b.id}\t${b.title || '(untitled)'}`).join('\n') ||
+          '(no backlinks)'
       );
     }
   );
@@ -133,7 +125,9 @@ export async function runMcp(transport: Transport): Promise<void> {
       const suggestions = await suggestLinks(transport, id, { limit });
       return text(
         suggestions
-          .map(s => `${s.id}\t${s.title || '(untitled)'}\t${s.reason} (${s.score})`)
+          .map(
+            s => `${s.id}\t${s.title || '(untitled)'}\t${s.reason} (${s.score})`
+          )
           .join('\n') || '(no suggestions)'
       );
     }
@@ -165,9 +159,8 @@ export async function runMcp(transport: Transport): Promise<void> {
     async () => {
       const orphans = await findOrphans(transport);
       return text(
-        orphans
-          .map(o => `${o.id}\t${o.title || '(untitled)'}`)
-          .join('\n') || '(no orphans)'
+        orphans.map(o => `${o.id}\t${o.title || '(untitled)'}`).join('\n') ||
+          '(no orphans)'
       );
     }
   );

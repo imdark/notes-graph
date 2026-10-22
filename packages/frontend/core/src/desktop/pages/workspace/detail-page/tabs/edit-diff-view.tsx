@@ -2,9 +2,9 @@ import clsx from 'clsx';
 import { useMemo, useState } from 'react';
 
 import {
+  diffLines,
   type DiffRow,
   type DiffSpan,
-  diffLines,
   type EditPreview,
   type FileEdit,
 } from './edit-diff';
@@ -115,9 +115,7 @@ const Fold = ({ rows, single }: { rows: DiffRow[]; single: boolean }) => {
   }
   return (
     <button type="button" className={styles.fold} onClick={() => setOpen(true)}>
-      <span className={styles.foldLabel}>
-        ⋯ {rows.length} unchanged lines
-      </span>
+      <span className={styles.foldLabel}>⋯ {rows.length} unchanged lines</span>
     </button>
   );
 };

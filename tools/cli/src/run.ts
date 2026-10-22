@@ -118,12 +118,6 @@ export class RunCommand extends PackageCommand {
       throw new Error(`Script ${scriptName} not found in ${pkg.name}`);
     }
 
-    const rawArgs = [...rawScript.split(' '), ...args];
-
-    const { args: extractedArgs, envs } = this.extractEnvs(rawArgs);
-
-    args = extractedArgs;
-
     if (opts.includeDependencies) {
       const depsRun = Promise.all(
         pkg.deps.map(dep => {
@@ -147,6 +141,25 @@ export class RunCommand extends PackageCommand {
         });
       }
     }
+
+    // "notesgraph x && b" runs the parts in turn, as a shell would, so the
+    // `notesgraph` part still runs here with -p (it used to get "&& b" as
+    // arguments). Other scripts go to the shell whole, as before. Extra
+    // arguments go to the last part.
+    const parts = rawScript.split(/\s+&&\s+/);
+    const lines = parts.some(part => part.startsWith('notesgraph '))
+      ? parts
+      : [rawScript];
+    for (const [i, line] of lines.entries()) {
+      await this.runScriptLine(pkg, [
+        ...line.split(' '),
+        ...(i === lines.length - 1 ? args : []),
+      ]);
+    }
+  }
+
+  private async runScriptLine(pkg: Package, rawArgs: string[]) {
+    const { args, envs } = this.extractEnvs(rawArgs);
 
     const isNotesGraphCommand = args[0] === 'notesgraph';
     if (isNotesGraphCommand) {

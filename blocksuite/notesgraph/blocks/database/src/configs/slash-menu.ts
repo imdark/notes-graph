@@ -12,8 +12,8 @@ import {
   TelemetryProvider,
 } from '@blocksuite/notesgraph-shared/services';
 import { isInsideBlockByFlavour } from '@blocksuite/notesgraph-shared/utils';
-import type { BlockStdScope } from '@blocksuite/std';
 import { type SlashMenuConfig } from '@blocksuite/notesgraph-widget-slash-menu';
+import type { BlockStdScope } from '@blocksuite/std';
 
 import { insertDatabaseBlockCommand } from '../commands';
 import {
@@ -188,18 +188,20 @@ export const databaseSlashMenuConfig: SlashMenuConfig = {
       when: ({ model }) =>
         !isInsideBlockByFlavour(model.store, model, 'notesgraph:edgeless-text'),
       action: ({ std, model }) => {
-        promptQueryFilter(std, 'Query Board').then(filter => {
-          if (!filter) return;
-          insertQueryDatabase(
-            std.host,
-            viewPresets.kanbanViewMeta.type,
-            model,
-            filter
-          );
-          std
-            .getOptional(TelemetryProvider)
-            ?.track('BlockCreated', { blockType: 'notesgraph:database' });
-        });
+        promptQueryFilter(std, 'Query Board')
+          .then(filter => {
+            if (!filter) return;
+            insertQueryDatabase(
+              std.host,
+              viewPresets.kanbanViewMeta.type,
+              model,
+              filter
+            );
+            std
+              .getOptional(TelemetryProvider)
+              ?.track('BlockCreated', { blockType: 'notesgraph:database' });
+          })
+          .catch(console.error);
       },
     },
 
@@ -212,42 +214,47 @@ export const databaseSlashMenuConfig: SlashMenuConfig = {
       when: ({ model }) =>
         !isInsideBlockByFlavour(model.store, model, 'notesgraph:edgeless-text'),
       action: ({ std, model }) => {
-        promptQueryFilter(std, 'Query Table').then(filter => {
-          if (!filter) return;
-          insertQueryDatabase(
-            std.host,
-            viewPresets.tableViewMeta.type,
-            model,
-            filter
-          );
-          std
-            .getOptional(TelemetryProvider)
-            ?.track('BlockCreated', { blockType: 'notesgraph:database' });
-        });
+        promptQueryFilter(std, 'Query Table')
+          .then(filter => {
+            if (!filter) return;
+            insertQueryDatabase(
+              std.host,
+              viewPresets.tableViewMeta.type,
+              model,
+              filter
+            );
+            std
+              .getOptional(TelemetryProvider)
+              ?.track('BlockCreated', { blockType: 'notesgraph:database' });
+          })
+          .catch(console.error);
       },
     },
 
     {
       name: 'Task List',
-      description: 'A live list of open tasks matching #tags across the workspace.',
+      description:
+        'A live list of open tasks matching #tags across the workspace.',
       searchAlias: ['database', 'query', 'list', 'tasks', 'todo'],
       icon: DatabaseTableViewIcon(),
       group: '7_Database@6',
       when: ({ model }) =>
         !isInsideBlockByFlavour(model.store, model, 'notesgraph:edgeless-text'),
       action: ({ std, model }) => {
-        promptQueryFilter(std, 'Task List').then(filter => {
-          if (!filter) return;
-          insertQueryDatabase(
-            std.host,
-            viewPresets.listViewMeta.type,
-            model,
-            filter
-          );
-          std
-            .getOptional(TelemetryProvider)
-            ?.track('BlockCreated', { blockType: 'notesgraph:database' });
-        });
+        promptQueryFilter(std, 'Task List')
+          .then(filter => {
+            if (!filter) return;
+            insertQueryDatabase(
+              std.host,
+              viewPresets.listViewMeta.type,
+              model,
+              filter
+            );
+            std
+              .getOptional(TelemetryProvider)
+              ?.track('BlockCreated', { blockType: 'notesgraph:database' });
+          })
+          .catch(console.error);
       },
     },
 
@@ -260,39 +267,50 @@ export const databaseSlashMenuConfig: SlashMenuConfig = {
       when: ({ model }) =>
         !isInsideBlockByFlavour(model.store, model, 'notesgraph:edgeless-text'),
       action: ({ std, model }) => {
-        promptQueryFilter(std, 'Task Report').then(filter => {
-          if (!filter) return;
-          insertTaskReport(std.host, model, filter, {
-            table: viewPresets.tableViewMeta.type,
-            kanban: viewPresets.kanbanViewMeta.type,
-          });
-          std
-            .getOptional(TelemetryProvider)
-            ?.track('BlockCreated', { blockType: 'notesgraph:database' });
-        });
+        promptQueryFilter(std, 'Task Report')
+          .then(filter => {
+            if (!filter) return;
+            insertTaskReport(std.host, model, filter, {
+              table: viewPresets.tableViewMeta.type,
+              kanban: viewPresets.kanbanViewMeta.type,
+            });
+            std
+              .getOptional(TelemetryProvider)
+              ?.track('BlockCreated', { blockType: 'notesgraph:database' });
+          })
+          .catch(console.error);
       },
     },
     {
       name: 'Task Chart',
       description: 'Chart of tasks matching #tags, by status, date and more.',
-      searchAlias: ['database', 'query', 'chart', 'graph', 'dashboard', 'tasks'],
+      searchAlias: [
+        'database',
+        'query',
+        'chart',
+        'graph',
+        'dashboard',
+        'tasks',
+      ],
       icon: ChartPanelIcon(),
       group: '7_Database@7',
       when: ({ model }) =>
         !isInsideBlockByFlavour(model.store, model, 'notesgraph:edgeless-text'),
       action: ({ std, model }) => {
-        promptQueryFilter(std, 'Task Chart').then(filter => {
-          if (!filter) return;
-          insertQueryDatabase(
-            std.host,
-            viewPresets.chartViewMeta.type,
-            model,
-            filter
-          );
-          std
-            .getOptional(TelemetryProvider)
-            ?.track('BlockCreated', { blockType: 'notesgraph:database' });
-        });
+        promptQueryFilter(std, 'Task Chart')
+          .then(filter => {
+            if (!filter) return;
+            insertQueryDatabase(
+              std.host,
+              viewPresets.chartViewMeta.type,
+              model,
+              filter
+            );
+            std
+              .getOptional(TelemetryProvider)
+              ?.track('BlockCreated', { blockType: 'notesgraph:database' });
+          })
+          .catch(console.error);
       },
     },
   ],

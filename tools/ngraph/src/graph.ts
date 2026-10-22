@@ -74,10 +74,7 @@ export async function links(t: Transport, id: string): Promise<Link[]> {
 export interface Backlink extends DocMeta {}
 
 /** Notes that reference `id` (scans the whole workspace). */
-export async function backlinks(
-  t: Transport,
-  id: string
-): Promise<Backlink[]> {
+export async function backlinks(t: Transport, id: string): Promise<Backlink[]> {
   const metas = await listNotes(t);
   const hits: Backlink[] = [];
   for (const meta of metas) {

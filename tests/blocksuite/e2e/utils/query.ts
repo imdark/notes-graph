@@ -34,7 +34,7 @@ export function getFormatBar(page: Page) {
   const codeBlockBtn = formatBar.getByRole('button', { name: 'Code Block' });
 
   const moreBtn = formatBar.getByRole('button', { name: 'More' });
-  const copyBtn = formatBar.getByRole('button', { name: 'Copy' });
+  const copyBtn = formatBar.getByRole('button', { name: 'Copy', exact: true });
   const duplicateBtn = formatBar.getByRole('button', { name: 'Duplicate' });
   const deleteBtn = formatBar.getByRole('button', { name: 'Delete' });
   const openMoreMenu = async () => {

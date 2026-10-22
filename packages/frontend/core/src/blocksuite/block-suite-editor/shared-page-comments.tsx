@@ -169,7 +169,7 @@ const AnonymousComments = ({ onSignIn }: { onSignIn: () => void }) => {
           variant="primary"
           disabled={busy || !draft.trim()}
           onClick={() => {
-            void post();
+            post().catch(console.error);
           }}
         >
           Post anonymously

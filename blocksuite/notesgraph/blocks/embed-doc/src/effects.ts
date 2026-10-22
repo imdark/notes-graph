@@ -1,7 +1,7 @@
 import { EmbedLinkedDocBlockComponent } from './embed-linked-doc-block';
+import { EmbedEdgelessLinkedDocBlockComponent } from './embed-linked-doc-block/embed-edgeless-linked-doc-block';
 import { EmbedSyncedBlockComponent } from './embed-synced-block';
 import { SyncedFormulaEditor } from './embed-synced-block/synced-formula-editor';
-import { EmbedEdgelessLinkedDocBlockComponent } from './embed-linked-doc-block/embed-edgeless-linked-doc-block';
 import { EmbedSyncedDocBlockComponent } from './embed-synced-doc-block';
 import { EmbedSyncedDocCard } from './embed-synced-doc-block/components/embed-synced-doc-card';
 import { EmbedEdgelessSyncedDocBlockComponent } from './embed-synced-doc-block/embed-edgeless-synced-doc-block';

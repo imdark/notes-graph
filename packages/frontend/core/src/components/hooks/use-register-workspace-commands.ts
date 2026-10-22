@@ -28,11 +28,11 @@ import { useEffect } from 'react';
 import { usePageHelper } from '../../blocksuite/block-suite-page-list/utils';
 import {
   PreconditionStrategy,
+  registerDoorDashCommands,
   registerLocalAiGoBoardCommands,
   registerLocalAiIconCommands,
   registerLocalAiImageCommands,
   registerLocalAiVoiceCommands,
-  registerDoorDashCommands,
   registerNotesGraphCommand,
   registerNotesGraphCreationCommands,
   registerNotesGraphHelpCommands,

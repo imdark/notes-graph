@@ -1689,7 +1689,8 @@ test('should be able to manage context', async t => {
           contextId: session.id,
           workspaceId: session.workspaceId,
           fileId: file.id,
-          chunkSize: 1,
+          // Oversized chunks are split for the embedding model (130fc8ad).
+          chunkSize: 3,
         },
       ]);
 

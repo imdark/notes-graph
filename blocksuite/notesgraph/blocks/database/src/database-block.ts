@@ -41,8 +41,8 @@ import {
   CommentProviderIdentifier,
   DocModeProvider,
   FeatureFlagService,
-  ProjectsProvider,
   NotificationProvider,
+  ProjectsProvider,
   type TelemetryEventMap,
   TelemetryProvider,
 } from '@blocksuite/notesgraph-shared/services';
@@ -64,13 +64,6 @@ import { popSideDetail } from './components/layout.js';
 import { DatabaseConfigExtension } from './config.js';
 import { EditorHostKey } from './context/host-context.js';
 import { DatabaseBlockDataSource } from './data-source.js';
-import { MirrorListDataSource } from './mirror-data-source.js';
-import { OrgTaskRowsDataSource } from './org-task-rows-data-source.js';
-import {
-  parseQueryTokens,
-  QueryListDataSource,
-  queryTokensString,
-} from './query-data-source.js';
 import {
   databaseBlockStyles,
   databaseContentListStyles,
@@ -91,6 +84,13 @@ import {
 } from './database-block-styles.js';
 import { BlockRenderer } from './detail-panel/block-renderer.js';
 import { NoteRenderer } from './detail-panel/note-renderer.js';
+import { MirrorListDataSource } from './mirror-data-source.js';
+import { OrgTaskRowsDataSource } from './org-task-rows-data-source.js';
+import {
+  parseQueryTokens,
+  QueryListDataSource,
+  queryTokensString,
+} from './query-data-source.js';
 import { DatabaseSelection } from './selection.js';
 import { currentViewStorage } from './utils/current-view.js';
 import { getSingleDocIdFromText } from './utils/title-doc.js';

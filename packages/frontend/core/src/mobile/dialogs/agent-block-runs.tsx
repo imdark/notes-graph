@@ -12,8 +12,8 @@ import {
   AgentRunSessionService,
   AgentRunsStore,
   AgentsService,
-  AgentTaskClaimService,
   agentTargetKey,
+  AgentTaskClaimService,
   RemoteAgentRunnerService,
 } from '@notesgraph/core/modules/agents';
 import type { DialogComponentProps } from '@notesgraph/core/modules/dialogs';
@@ -66,7 +66,7 @@ const useReassign = (runs: AgentRun[]) => {
           if (session) return sessionService.stop(session.id);
           return run.remoteJobId
             ? remoteRunner.cancel(workspaceId, run.remoteJobId)
-            : undefined;
+            : Promise.resolve();
         })
       );
       const key = agentTargetKey(target);
@@ -77,8 +77,11 @@ const useReassign = (runs: AgentRun[]) => {
       }
       // A device job hands its tasks back on the server; let that reach
       // here before the next agent claims them.
-      await taskClaim.reopen(target, going.some(run => run.remoteJobId));
-      void sessionService.start(agent, target);
+      await taskClaim.reopen(
+        target,
+        going.some(run => run.remoteJobId)
+      );
+      sessionService.start(agent, target).catch(console.error);
     },
     [going, remoteRunner, sessionService, target, taskClaim, workspaceService]
   );

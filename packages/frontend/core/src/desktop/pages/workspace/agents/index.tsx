@@ -31,11 +31,11 @@ import {
   RunStatusBadge,
   useMinuteTick,
 } from '../detail-page/tabs/agent-run-row';
+import { useRunActions } from '../detail-page/tabs/use-run-actions';
 import {
   displayStatus,
   useRemoteRunStates,
 } from '../detail-page/tabs/use-run-questions';
-import { useRunActions } from '../detail-page/tabs/use-run-actions';
 import * as styles from './agents-page.css';
 import { BudgetLine } from './budget-line';
 import { MonitorsSection } from './monitors-section';

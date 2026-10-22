@@ -119,6 +119,8 @@ jobs:
           git checkout packages/frontend/i18n/src/i18n-completenesses.json
           if git status --porcelain | grep -q .; then
             echo "Run 'yarn notesgraph @notesgraph/i18n build' and make sure all generated i18n changes are submitted"
+            git status --porcelain
+            git diff | head -200
             exit 1
           else
             echo "All generated i18n changes are submitted"
@@ -130,6 +132,8 @@ jobs:
           yarn notesgraph bs-docs build
           if git status --porcelain | grep -q .; then
             echo "Run 'yarn typecheck && yarn notesgraph bs-docs build' and make sure all changes are submitted"
+            git status --porcelain
+            git diff | head -200
             exit 1
           else
             echo "All changes are submitted"
@@ -359,6 +363,8 @@ jobs:
           git checkout packages/frontend/i18n/src/i18n-completenesses.json
           if git status --porcelain | grep -q .; then
             echo "Run 'yarn notesgraph init && yarn notesgraph gql build && yarn notesgraph i18n build && yarn notesgraph server genconfig' and make sure all changes are submitted"
+            git status --porcelain
+            git diff | head -200
             exit 1
           else
             echo "All changes are submitted"
@@ -998,7 +1004,17 @@ jobs:
 
       - name: Decide test scope
         id: decision
+        env:
+          # Without a model config the copilot tests can only time out.
+          HAS_SERVER_CONFIG: ${{ secrets.TEST_SERVER_CONFIG != '' }}
         run: |
+          if [[ "$HAS_SERVER_CONFIG" != "true" ]]; then
+            echo "TEST_SERVER_CONFIG is not set; skipping copilot tests"
+            echo "run_api=false" >> "$GITHUB_OUTPUT"
+            echo "run_e2e=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
           if [[ "${{ steps.copilot-filter.outputs.api }}" == "true" ]]; then
             echo "run_api=true" >> "$GITHUB_OUTPUT"
           else

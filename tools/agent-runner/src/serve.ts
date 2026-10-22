@@ -5,7 +5,7 @@
 import type { query as sdkQuery } from '@anthropic-ai/claude-agent-sdk';
 
 import { type Job, type NotesGraphApi, NotesGraphError } from './api';
-import { type RunnerSettings, RunFailed, runJob } from './run-job';
+import { RunFailed, runJob, type RunnerSettings } from './run-job';
 import { JobCancelled } from './run-tools';
 
 export const LEASE_SECONDS = 300;
@@ -128,7 +128,9 @@ export async function runClaimed(
         status: 'error',
         error: String(err instanceof Error ? err.message : err).slice(0, 2000),
         ...(err instanceof RunFailed ? err.usage : {}),
-        ...(err instanceof RunFailed && err.changes ? { changes: err.changes } : {}),
+        ...(err instanceof RunFailed && err.changes
+          ? { changes: err.changes }
+          : {}),
         ...(logAppend ? { logAppend } : {}),
       })
       .catch(() => {});
@@ -164,7 +166,8 @@ export async function serve(opts: ServeOptions): Promise<void> {
     return set.length ? Math.max(...set) : ownMax;
   };
   const setLimit = (workspaceId: string, limit: number | null) => {
-    if (setInApp.has(workspaceId) && setInApp.get(workspaceId) === limit) return;
+    if (setInApp.has(workspaceId) && setInApp.get(workspaceId) === limit)
+      return;
     setInApp.set(workspaceId, limit);
     log(
       limit === null
@@ -181,7 +184,10 @@ export async function serve(opts: ServeOptions): Promise<void> {
       let job: Job | null;
       try {
         const claim = await opts.api.claim(
-          workspaceId, opts.deviceKey, opts.runnerId, LEASE_SECONDS
+          workspaceId,
+          opts.deviceKey,
+          opts.runnerId,
+          LEASE_SECONDS
         );
         setLimit(workspaceId, claim.maxJobs);
         job = claim.job;
@@ -198,7 +204,9 @@ export async function serve(opts: ServeOptions): Promise<void> {
         err => log(`failed ${job.id}: ${err}`)
       );
       running.add(work);
-      void work.finally(() => running.delete(work));
+      work
+        .finally(() => running.delete(work))
+        .catch(err => log(`failed ${job.id}: ${err}`));
     }
     if (running.size >= maxJobs()) {
       // Wait for a slot to free up, and meanwhile notice, without claiming,
@@ -207,7 +215,10 @@ export async function serve(opts: ServeOptions): Promise<void> {
       for (const workspaceId of opts.workspaces) {
         if (running.size < maxJobs() || opts.signal?.aborted) break;
         try {
-          setLimit(workspaceId, await opts.api.maxJobs(workspaceId, opts.deviceKey));
+          setLimit(
+            workspaceId,
+            await opts.api.maxJobs(workspaceId, opts.deviceKey)
+          );
         } catch (err) {
           log(`reading jobs at once failed: ${err}`);
         }

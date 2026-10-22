@@ -23,7 +23,10 @@ export interface PageArchive {
   videos: string[];
 }
 
-const absUrl = (href: string | null | undefined, base: string): string | null => {
+const absUrl = (
+  href: string | null | undefined,
+  base: string
+): string | null => {
   if (!href) return null;
   const v = href.trim();
   if (!v || v.startsWith('data:') || v.startsWith('blob:')) return null;
@@ -57,6 +60,7 @@ interface El {
   getAttribute(name: string): string | null;
   querySelectorAll(selector: string): Iterable<El>;
   textContent: string | null;
+  dataset: Record<string, string | undefined>;
 }
 
 const isTrackingPixel = (el: El): boolean => {
@@ -95,9 +99,7 @@ export function extractArchive(html: string, baseUrl: string): PageArchive {
     const srcset = img.getAttribute('srcset');
     pushImg(
       absUrl(
-        img.getAttribute('src') ??
-          img.getAttribute('data-src') ??
-          img.getAttribute('data-delayed-url'),
+        img.getAttribute('src') ?? img.dataset.src ?? img.dataset.delayedUrl,
         baseUrl
       ) ?? (srcset ? largestFromSrcset(srcset, baseUrl) : null)
     );
@@ -129,10 +131,14 @@ export function extractArchive(html: string, baseUrl: string): PageArchive {
     }
   }
 
-  let title = (meta('meta[property="og:title"]') ??
+  let title = (
+    meta('meta[property="og:title"]') ??
     meta('meta[name="twitter:title"]') ??
     document.querySelector('title')?.textContent ??
-    '')!.replace(/\s+/g, ' ').trim();
+    ''
+  )
+    .replace(/\s+/g, ' ')
+    .trim();
 
   let text = '';
   try {

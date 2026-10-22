@@ -1,3 +1,4 @@
+import { NotificationIcon } from '@blocksuite/icons/rc';
 import { IconButton, Menu } from '@notesgraph/component';
 import { NotificationList } from '@notesgraph/core/components/notification/list';
 import { AuthService } from '@notesgraph/core/modules/cloud';
@@ -5,7 +6,6 @@ import { NotificationCountService } from '@notesgraph/core/modules/notification'
 import { useI18n } from '@notesgraph/i18n';
 import { useLiveData, useService } from '@notesgraph/infra';
 import { track } from '@notesgraph/track';
-import { NotificationIcon } from '@blocksuite/icons/rc';
 import { useCallback, useState } from 'react';
 
 import * as styles from './index.css';

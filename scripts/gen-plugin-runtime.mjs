@@ -10,17 +10,14 @@
  * written out rather than forwarded dynamically, and a stale list means a
  * plugin importing a newer hook fails to load.
  */
-import { createRequire } from 'node:module';
 import { mkdirSync, writeFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const require = createRequire(import.meta.url);
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
-const outDir = join(
-  repoRoot,
-  'packages/frontend/core/public/plugin-runtime'
-);
+const outDir = join(repoRoot, 'packages/frontend/core/public/plugin-runtime');
 
 const IDENT = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
 const namedExports = mod =>

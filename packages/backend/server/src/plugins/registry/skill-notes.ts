@@ -21,7 +21,9 @@ const MAX_DESCRIPTION = 1024;
 const NOTE_REF = 'note:';
 
 /** What the note after "Skill:" is called, or null for any other note. */
-export function skillNoteTitle(title: string | null | undefined): string | null {
+export function skillNoteTitle(
+  title: string | null | undefined
+): string | null {
   return TITLE.exec(title ?? '')?.[1] ?? null;
 }
 
@@ -77,7 +79,8 @@ function plain(text: string): string {
     .trim();
 }
 
-const DESCRIPTION_LINE = /^\s*(?:[*_]{1,2})?description(?:[*_]{1,2})?\s*:(?:[*_]{1,2})?\s*(.*)$/i;
+const DESCRIPTION_LINE =
+  /^\s*(?:[*_]{1,2})?description(?:[*_]{1,2})?\s*:(?:[*_]{1,2})?\s*(.*)$/i;
 
 /**
  * The description Claude Code shows for the skill and decides by when to
@@ -89,7 +92,7 @@ function describe(body: string, fallback: string) {
   const lines = body.split('\n');
   const at = lines.findIndex(line => DESCRIPTION_LINE.test(line));
   if (at >= 0) {
-    const description = plain(DESCRIPTION_LINE.exec(lines[at])![1]);
+    const description = plain(DESCRIPTION_LINE.exec(lines[at])?.[1] ?? '');
     if (description) {
       lines.splice(at, 1);
       return { description, body: lines.join('\n') };
@@ -105,12 +108,18 @@ function describe(body: string, fallback: string) {
     }
     if (fence) continue;
     const text = line.trim();
-    if (!text || /^#{1,6}\s/.test(text) || /^(-{3,}|\*{3,}|_{3,})$/.test(text)) {
+    if (
+      !text ||
+      /^#{1,6}\s/.test(text) ||
+      /^(-{3,}|\*{3,}|_{3,})$/.test(text)
+    ) {
       if (paragraph.length) break;
       continue;
     }
     // A list or quote item counts as text, without its marker.
-    paragraph.push(text.replace(/^(?:[-*+]\s+(?:\[[ xX]\]\s+)?|\d+[.)]\s+|>\s?)/, ''));
+    paragraph.push(
+      text.replace(/^(?:[-*+]\s+(?:\[[ xX]\]\s+)?|\d+[.)]\s+|>\s?)/, '')
+    );
   }
   return { description: plain(paragraph.join(' ')) || fallback, body };
 }
@@ -119,7 +128,10 @@ function describe(body: string, fallback: string) {
  * A skill note as a Claude Code SKILL.md: frontmatter with its name and
  * description, then the note. Null for a note that isn't a skill.
  */
-export function renderSkillMd(note: { title: string; markdown: string }): string | null {
+export function renderSkillMd(note: {
+  title: string;
+  markdown: string;
+}): string | null {
   const name = skillNoteName(note.title);
   const shown = skillNoteTitle(note.title);
   if (!name || !shown) return null;
@@ -127,11 +139,18 @@ export function renderSkillMd(note: { title: string; markdown: string }): string
   // The note's own title, if the markdown repeats it, is the heading below.
   const lines = body.split('\n');
   const first = lines.findIndex(line => line.trim());
-  if (first >= 0 && /^#\s/.test(lines[first]) && lines[first].replace(/^#\s+/, '').trim() === note.title.trim()) {
+  if (
+    first >= 0 &&
+    /^#\s/.test(lines[first]) &&
+    lines[first].replace(/^#\s+/, '').trim() === note.title.trim()
+  ) {
     lines.splice(first, 1);
     body = lines.join('\n');
   }
-  const { description, body: rest } = describe(body, `${shown}, from a NotesGraph note.`);
+  const { description, body: rest } = describe(
+    body,
+    `${shown}, from a NotesGraph note.`
+  );
   const clipped =
     description.length > MAX_DESCRIPTION
       ? `${description.slice(0, MAX_DESCRIPTION - 1).trimEnd()}…`
@@ -161,7 +180,10 @@ export function pickNoteSkills(
     const note = docId ? byId.get(docId) : undefined;
     const name = note && skillNoteName(note.title);
     if (!docId || !name || picked.some(p => p.ref === ref)) continue;
-    picked.push({ ref, skill: { name, url: noteSkillPath(workspaceId, docId) } });
+    picked.push({
+      ref,
+      skill: { name, url: noteSkillPath(workspaceId, docId) },
+    });
   }
   return picked;
 }
@@ -196,7 +218,12 @@ export class SkillNoteService {
         .doc(workspaceId, note.docId)
         .can('Doc.Read');
       if (!readable) continue;
-      skills.push({ ref: noteSkillRef(note.docId), name, title: note.title, docId: note.docId });
+      skills.push({
+        ref: noteSkillRef(note.docId),
+        name,
+        title: note.title,
+        docId: note.docId,
+      });
     }
     return skills.sort((a, b) => a.name.localeCompare(b.name));
   }
@@ -213,12 +240,19 @@ export class SkillNoteService {
       .filter((id): id is string => !!id);
     if (!docIds.length) return [];
     try {
-      const notes = await this.models.doc.findByTitlePrefix(workspaceId, 'skill', docIds);
+      const notes = await this.models.doc.findByTitlePrefix(
+        workspaceId,
+        'skill',
+        docIds
+      );
       const readable = [];
       for (const note of notes) {
         if (
           !createdBy ||
-          (await this.ac.user(createdBy).doc(workspaceId, note.docId).can('Doc.Read'))
+          (await this.ac
+            .user(createdBy)
+            .doc(workspaceId, note.docId)
+            .can('Doc.Read'))
         ) {
           readable.push(note);
         }
@@ -232,7 +266,10 @@ export class SkillNoteService {
   }
 
   /** A skill note's SKILL.md; null when it's missing or not a skill. */
-  async render(workspaceId: string, docId: string): Promise<{ name: string; text: string } | null> {
+  async render(
+    workspaceId: string,
+    docId: string
+  ): Promise<{ name: string; text: string } | null> {
     const doc = await this.docReader.getDocMarkdown(workspaceId, docId, false);
     if (!doc) return null;
     const text = renderSkillMd(doc);

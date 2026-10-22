@@ -8,8 +8,8 @@
 //
 // New keys are appended; other locales are filled by the normal i18n sync.
 import { readFileSync, writeFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const [key, ...rest] = process.argv.slice(2);
 const value = rest.join(' ');
@@ -29,4 +29,6 @@ if (obj[key] === value) {
 const existed = Object.hasOwn(obj, key);
 obj[key] = value;
 writeFileSync(file, JSON.stringify(obj, null, 2) + '\n');
-console.log(`${existed ? 'updated' : 'added'}: ${key} = ${JSON.stringify(value)}`);
+console.log(
+  `${existed ? 'updated' : 'added'}: ${key} = ${JSON.stringify(value)}`
+);

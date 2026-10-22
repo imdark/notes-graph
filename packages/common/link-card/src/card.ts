@@ -1,4 +1,6 @@
+import type { Resvg as ResvgClass } from '@resvg/resvg-js';
 import satori from 'satori';
+import type Sharp from 'sharp';
 
 import { UA } from './constants';
 import { extract } from './extract';
@@ -14,8 +16,8 @@ import type { LinkPreview, RenderCardOptions } from './types';
 // otherwise crash the whole app on launch; here it only fails the render.
 let nativesPromise:
   | Promise<{
-      sharp: typeof import('sharp').default;
-      Resvg: typeof import('@resvg/resvg-js').Resvg;
+      sharp: typeof Sharp;
+      Resvg: typeof ResvgClass;
     }>
   | undefined;
 function loadNatives() {

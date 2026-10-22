@@ -1,7 +1,7 @@
 import { NotesGraphContext } from '@notesgraph/core/components/context';
+import { ErrorReporter } from '@notesgraph/core/components/error-reporter';
 import { AppFallback } from '@notesgraph/core/mobile/components/app-fallback';
 import { DebugConsole } from '@notesgraph/core/mobile/components/debug-console';
-import { ErrorReporter } from '@notesgraph/core/components/error-reporter';
 import { configureMobileModules } from '@notesgraph/core/mobile/modules';
 import { HapticProvider } from '@notesgraph/core/mobile/modules/haptics';
 import { VirtualKeyboardProvider } from '@notesgraph/core/mobile/modules/virtual-keyboard';

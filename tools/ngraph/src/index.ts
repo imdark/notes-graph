@@ -18,12 +18,7 @@ import {
 } from './notes';
 import { RemoteTransport } from './remote';
 import { LocalTransport, type Transport } from './transport';
-import {
-  capture,
-  findOrphans,
-  suggestLinks,
-  summarizeBacklinks,
-} from './wiki';
+import { capture, findOrphans, suggestLinks, summarizeBacklinks } from './wiki';
 
 interface Args {
   flags: Record<string, string | boolean>;
@@ -150,12 +145,13 @@ async function login(flags: Args['flags']) {
       headers: { authorization: `Bearer ${token}` },
     });
     if (!res.ok) {
-      throw new Error(`Login failed — server ${res.status}: ${await res.text()}`);
+      throw new Error(
+        `Login failed — server ${res.status}: ${await res.text()}`
+      );
     }
     const { user, workspaceIds } = (await res.json()) as SessionResponse;
 
-    let workspace =
-      typeof flags.workspace === 'string' ? flags.workspace : '';
+    let workspace = typeof flags.workspace === 'string' ? flags.workspace : '';
     if (!workspace) {
       if (workspaceIds.length === 0) {
         throw new Error('This account has no workspaces.');
@@ -283,16 +279,20 @@ async function main() {
       console.log(`Updated ${id}`);
     } else if (cmd === 'append') {
       const id = rest[0];
-      if (!id) throw new Error('Usage: ngraph append <id> [--body <md> | stdin]');
+      if (!id)
+        throw new Error('Usage: ngraph append <id> [--body <md> | stdin]');
       const markdown =
         typeof flags.body === 'string' ? flags.body : await readStdin();
-      if (!markdown.trim()) throw new Error('Nothing to append (pass --body or pipe stdin)');
+      if (!markdown.trim())
+        throw new Error('Nothing to append (pass --body or pipe stdin)');
       await appendNote(transport, id, markdown);
       console.log(`Appended to ${id}`);
     } else if (cmd === 'connect') {
       const [fromId, toId] = rest;
       if (!fromId || !toId) {
-        throw new Error('Usage: ngraph connect <from-id> <to-id> [--label <text>]');
+        throw new Error(
+          'Usage: ngraph connect <from-id> <to-id> [--label <text>]'
+        );
       }
       const label = typeof flags.label === 'string' ? flags.label : 'Related:';
       await connectNotes(transport, fromId, toId, label);

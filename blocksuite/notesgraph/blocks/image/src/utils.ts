@@ -250,7 +250,9 @@ async function buildAllPropsWith(std: BlockStdScope, files: File[]) {
     return await Promise.all(files.map(file => buildPropsWith(std, file)));
   } catch (err) {
     console.error(err);
-    if (!(err instanceof Error && err.message === 'Failed to read image size')) {
+    if (
+      !(err instanceof Error && err.message === 'Failed to read image size')
+    ) {
       toast(std.host, 'Failed to read the selected image, please try again');
     }
     return null;

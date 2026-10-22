@@ -281,7 +281,10 @@ export class AgentAssignWidget extends WidgetComponent {
       workbench.openSidebar();
       workbench.activeView$.value.activeSidebarTab('agents');
     }
-    void framework.get(AgentRunSessionService).start(agent, this._target);
+    framework
+      .get(AgentRunSessionService)
+      .start(agent, this._target)
+      .catch(console.error);
   }
 
   private _createAndAssign() {

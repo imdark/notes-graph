@@ -35,14 +35,20 @@ export async function skillsPlugin(
       loaded += 1;
       say(`⚙ skill · ${name} ✓`);
     } catch (err) {
-      say(`⚙ skill · ${name} ✗ couldn't fetch it (${err}); going on without it`);
+      say(
+        `⚙ skill · ${name} ✗ couldn't fetch it (${err}); going on without it`
+      );
     }
   }
   if (!loaded) return null;
   await mkdir(join(root, '.claude-plugin'), { recursive: true });
   await writeFile(
     join(root, '.claude-plugin', 'plugin.json'),
-    JSON.stringify({ name: 'notesgraph-skills', version: '1.0.0', description: 'Skills from the agent profile' })
+    JSON.stringify({
+      name: 'notesgraph-skills',
+      version: '1.0.0',
+      description: 'Skills from the agent profile',
+    })
   );
   return root;
 }

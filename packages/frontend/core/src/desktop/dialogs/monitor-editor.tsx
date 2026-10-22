@@ -34,8 +34,16 @@ type What = 'url' | 'command' | 'agent';
 
 const WHAT: { value: What; label: string; note: string }[] = [
   { value: 'url', label: 'A website or API', note: 'Fetched by the server' },
-  { value: 'command', label: 'A command on a device', note: 'Shell, or a DB via psql/sqlite3' },
-  { value: 'agent', label: 'An agent', note: 'Searches and rewrites the block itself' },
+  {
+    value: 'command',
+    label: 'A command on a device',
+    note: 'Shell, or a DB via psql/sqlite3',
+  },
+  {
+    value: 'agent',
+    label: 'An agent',
+    note: 'Searches and rewrites the block itself',
+  },
 ];
 
 /** What an agent monitor runs as on its device. */
@@ -63,9 +71,21 @@ const runAs = (agent: Agent) =>
     : { model: agent.model ?? CLAUDE_CODE_MODEL, tools: agent.tools };
 
 const EXTRACTORS: { value: ExtractType; label: string; hint: string }[] = [
-  { value: 'number', label: 'A number', hint: 'The price on a shop page, or the first number' },
-  { value: 'jsonpath', label: 'JSON path', hint: 'e.g. rates.EUR or data[0].price' },
-  { value: 'regex', label: 'Regex', hint: 'The first capture group, e.g. fixed\\s+([\\d.]+)%' },
+  {
+    value: 'number',
+    label: 'A number',
+    hint: 'The price on a shop page, or the first number',
+  },
+  {
+    value: 'jsonpath',
+    label: 'JSON path',
+    hint: 'e.g. rates.EUR or data[0].price',
+  },
+  {
+    value: 'regex',
+    label: 'Regex',
+    hint: 'The first capture group, e.g. fixed\\s+([\\d.]+)%',
+  },
   { value: 'text', label: 'Text', hint: 'The whole output, trimmed' },
 ];
 
@@ -78,7 +98,8 @@ const CONDITIONS: { value: ConditionType; label: string }[] = [
 
 const INTERVALS = [5, 15, 30, 60, 180, 360, 720, 1440, WEEK_MINUTES];
 
-const SEARCH_ENGINES = /(^|\.)(google|bing|duckduckgo|yahoo|baidu|yandex|ecosia|search\.brave)\.[a-z.]+$/i;
+const SEARCH_ENGINES =
+  /(^|\.)(google|bing|duckduckgo|yahoo|baidu|yandex|ecosia|search\.brave)\.[a-z.]+$/i;
 
 /**
  * A search engine's own page: fetching it reads its home page, it doesn't
@@ -131,14 +152,21 @@ export const MonitorEditorDialog = ({
     () =>
       allAgents.filter(
         (a: Agent) =>
-          a.harness === 'research' || (a.harness === 'remote' && isDeviceClaudeModel(a.model))
+          a.harness === 'research' ||
+          (a.harness === 'remote' && isDeviceClaudeModel(a.model))
       ),
     [allAgents]
   );
 
-  const [name, setName] = useState(existing?.name ?? (text?.trim().slice(0, 60) || 'Monitor'));
+  const [name, setName] = useState(
+    existing?.name ?? (text?.trim().slice(0, 60) || 'Monitor')
+  );
   const [what, setWhat] = useState<What>(
-    existing ? (existing.kind === 'agent' ? 'agent' : (existing.source ?? 'url')) : 'url'
+    existing
+      ? existing.kind === 'agent'
+        ? 'agent'
+        : (existing.source ?? 'url')
+      : 'url'
   );
   const [url, setUrl] = useState(existing?.spec.url ?? '');
   const [command, setCommand] = useState(existing?.spec.command ?? '');
@@ -147,7 +175,9 @@ export const MonitorEditorDialog = ({
   );
   const [pattern, setPattern] = useState(existing?.spec.extract?.pattern ?? '');
   const [agentId, setAgentId] = useState<string>('');
-  const [instructions, setInstructions] = useState(existing?.spec.instructions ?? '');
+  const [instructions, setInstructions] = useState(
+    existing?.spec.instructions ?? ''
+  );
   const [model, setModel] = useState(existing?.spec.model ?? CLAUDE_CODE_MODEL);
   const [deviceKey, setDeviceKey] = useState(existing?.deviceKey ?? '');
   const [interval, setInterval] = useState(existing?.intervalMinutes ?? 60);
@@ -155,7 +185,9 @@ export const MonitorEditorDialog = ({
     existing?.condition.type ?? 'change'
   );
   const [conditionValue, setConditionValue] = useState(
-    existing?.condition.value !== undefined ? String(existing.condition.value) : ''
+    existing?.condition.value !== undefined
+      ? String(existing.condition.value)
+      : ''
   );
   const [alerts, setAlerts] = useState({
     inApp: existing?.alerts.inApp ?? true,
@@ -212,13 +244,20 @@ export const MonitorEditorDialog = ({
       deviceKey: needsDevice ? deviceKey || null : null,
       spec:
         what === 'url'
-          ? { url: url.trim(), extract: { type: extractType, pattern: pattern || undefined } }
+          ? {
+              url: url.trim(),
+              extract: { type: extractType, pattern: pattern || undefined },
+            }
           : what === 'command'
-            ? { command: command.trim(), extract: { type: extractType, pattern: pattern || undefined } }
+            ? {
+                command: command.trim(),
+                extract: { type: extractType, pattern: pattern || undefined },
+              }
             : {
                 instructions: instructions.trim(),
                 model,
-                tools: (agent ? runAs(agent).tools : existing?.spec.tools) ?? [],
+                tools:
+                  (agent ? runAs(agent).tools : existing?.spec.tools) ?? [],
               },
       intervalMinutes: Math.max(interval, minimum),
       condition:
@@ -228,9 +267,27 @@ export const MonitorEditorDialog = ({
       alerts,
     };
   }, [
-    agentId, alerts, blockId, command, conditionType, conditionValue, deviceAgents,
-    deviceKey, docId, existing, extractType, instructions, interval, kind, minimum,
-    model, name, needsDevice, pattern, url, what,
+    agentId,
+    alerts,
+    blockId,
+    command,
+    conditionType,
+    conditionValue,
+    deviceAgents,
+    deviceKey,
+    docId,
+    existing,
+    extractType,
+    instructions,
+    interval,
+    kind,
+    minimum,
+    model,
+    name,
+    needsDevice,
+    pattern,
+    url,
+    what,
   ]);
 
   const test = useCallback(async () => {
@@ -292,8 +349,12 @@ export const MonitorEditorDialog = ({
       : what === 'command'
         ? !!command.trim() && !!deviceKey
         : !!instructions.trim() && !!deviceKey;
-  const patternOk = what === 'agent' || !['regex', 'jsonpath'].includes(extractType) || !!pattern;
-  const canSave = !!name.trim() && sourceOk && patternOk && thresholdOk && !busy;
+  const patternOk =
+    what === 'agent' ||
+    !['regex', 'jsonpath'].includes(extractType) ||
+    !!pattern;
+  const canSave =
+    !!name.trim() && sourceOk && patternOk && thresholdOk && !busy;
 
   return (
     <Modal
@@ -307,21 +368,31 @@ export const MonitorEditorDialog = ({
         <Scrollable.Viewport className={styles.editorBody}>
           <div className={styles.field}>
             <span className={styles.label}>Name</span>
-            <Input value={name} onChange={setName} placeholder="RTX 5090 price" data-testid="monitor-name" />
+            <Input
+              value={name}
+              onChange={setName}
+              placeholder="RTX 5090 price"
+              data-testid="monitor-name"
+            />
           </div>
 
           <div className={styles.field}>
             <span className={styles.label}>Watch</span>
             <div className={styles.checkGrid} role="radiogroup">
               {WHAT.map(option => (
-                <label key={option.value} className={styles.check} title={option.note}>
+                <label
+                  key={option.value}
+                  className={styles.check}
+                  title={option.note}
+                >
                   <Checkbox
                     role="radio"
                     aria-checked={what === option.value}
                     checked={what === option.value}
                     onChange={() => {
                       setWhat(option.value);
-                      if (option.value === 'agent' && interval < 60) setInterval(360);
+                      if (option.value === 'agent' && interval < 60)
+                        setInterval(360);
                     }}
                     data-testid={`monitor-what-${option.value}`}
                   />
@@ -341,9 +412,12 @@ export const MonitorEditorDialog = ({
                 data-testid="monitor-url"
               />
               {isSearchEngine(url) ? (
-                <span className={styles.hint} data-testid="monitor-url-search-engine">
-                  The server fetches this page; it doesn&apos;t search. To have something
-                  look this up, watch with an agent instead.{' '}
+                <span
+                  className={styles.hint}
+                  data-testid="monitor-url-search-engine"
+                >
+                  The server fetches this page; it doesn&apos;t search. To have
+                  something look this up, watch with an agent instead.{' '}
                   <Button
                     variant="plain"
                     onClick={() => {
@@ -365,7 +439,10 @@ export const MonitorEditorDialog = ({
               <span className={styles.label}>Command</span>
               <textarea
                 className={styles.textarea}
-                style={{ minHeight: 60, fontFamily: 'var(--notesgraph-font-code-family, monospace)' }}
+                style={{
+                  minHeight: 60,
+                  fontFamily: 'var(--notesgraph-font-code-family, monospace)',
+                }}
                 value={command}
                 onChange={e => setCommand(e.target.value)}
                 placeholder={"sqlite3 ~/data.db 'select count(*) from orders'"}
@@ -426,7 +503,8 @@ export const MonitorEditorDialog = ({
                   data-testid="monitor-instructions"
                 />
                 <span className={styles.hint}>
-                  Each run, the agent researches this and rewrites the block with a one-line summary.
+                  Each run, the agent researches this and rewrites the block
+                  with a one-line summary.
                 </span>
               </div>
             </>
@@ -441,7 +519,9 @@ export const MonitorEditorDialog = ({
                 onChange={e => setDeviceKey(e.target.value)}
                 data-testid="monitor-device"
               >
-                {devices.length === 0 ? <option value="">No devices accept agent work</option> : null}
+                {devices.length === 0 ? (
+                  <option value="">No devices accept agent work</option>
+                ) : null}
                 {devices.map(device => (
                   <option key={device.key} value={device.key}>
                     {device.name || device.key}
@@ -470,7 +550,11 @@ export const MonitorEditorDialog = ({
                 <Input
                   value={pattern}
                   onChange={setPattern}
-                  placeholder={extractType === 'jsonpath' ? 'rates.EUR' : 'fixed\\s+([\\d.]+)%'}
+                  placeholder={
+                    extractType === 'jsonpath'
+                      ? 'rates.EUR'
+                      : 'fixed\\s+([\\d.]+)%'
+                  }
                   data-testid="monitor-pattern"
                 />
               ) : null}
@@ -479,10 +563,16 @@ export const MonitorEditorDialog = ({
               </span>
               {what === 'url' ? (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <Button onClick={() => void test()} disabled={!sourceOk || busy} data-testid="monitor-test">
+                  <Button
+                    onClick={() => void test()}
+                    disabled={!sourceOk || busy}
+                    data-testid="monitor-test"
+                  >
                     Test
                   </Button>
-                  {testResult ? <span className={styles.hint}>{testResult}</span> : null}
+                  {testResult ? (
+                    <span className={styles.hint}>{testResult}</span>
+                  ) : null}
                 </div>
               ) : null}
             </div>
@@ -537,7 +627,9 @@ export const MonitorEditorDialog = ({
                 <label key={key} className={styles.check}>
                   <Checkbox
                     checked={alerts[key]}
-                    onChange={() => setAlerts(prev => ({ ...prev, [key]: !prev[key] }))}
+                    onChange={() =>
+                      setAlerts(prev => ({ ...prev, [key]: !prev[key] }))
+                    }
                     data-testid={`monitor-alert-${key}`}
                   />
                   {label}
@@ -545,24 +637,41 @@ export const MonitorEditorDialog = ({
               ))}
             </div>
             <span className={styles.hint}>
-              The block is always kept current; these say how else to tell you. Untick all for block-only.
+              The block is always kept current; these say how else to tell you.
+              Untick all for block-only.
             </span>
           </div>
         </Scrollable.Viewport>
         <Scrollable.Scrollbar />
       </Scrollable.Root>
 
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 16 }}>
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          marginTop: 16,
+        }}
+      >
         <div>
           {existing ? (
-            <Button variant="error" onClick={() => void remove()} disabled={busy} data-testid="monitor-delete">
+            <Button
+              variant="error"
+              onClick={() => void remove()}
+              disabled={busy}
+              data-testid="monitor-delete"
+            >
               Delete
             </Button>
           ) : null}
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           <Button onClick={() => close()}>Cancel</Button>
-          <Button variant="primary" onClick={() => void save()} disabled={!canSave} data-testid="monitor-save">
+          <Button
+            variant="primary"
+            onClick={() => void save()}
+            disabled={!canSave}
+            data-testid="monitor-save"
+          >
             {existing ? 'Save' : 'Start monitoring'}
           </Button>
         </div>

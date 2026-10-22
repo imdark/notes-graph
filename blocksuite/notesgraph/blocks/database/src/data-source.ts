@@ -31,7 +31,6 @@ import { type BlockModel } from '@blocksuite/store';
 import { computed, type ReadonlySignal, signal } from '@preact/signals-core';
 
 import { getIcon } from './block-icons.js';
-import { focusCreatedBlock } from './utils/focus-block.js';
 import {
   databaseBlockProperties,
   databasePropertyConverts,
@@ -50,6 +49,7 @@ import {
   updateProperty,
   updateView,
 } from './utils/block-utils.js';
+import { focusCreatedBlock } from './utils/focus-block.js';
 import {
   databaseBlockViewConverts,
   databaseBlockViewMap,

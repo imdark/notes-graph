@@ -1,9 +1,9 @@
-import { Transactional } from '@nestjs-cls/transactional';
 import { Injectable } from '@nestjs/common';
+import { Transactional } from '@nestjs-cls/transactional';
 import {
+  Prisma,
   type RegistryJob,
   type RegistryJobQuestion,
-  Prisma,
 } from '@prisma/client';
 
 import { BaseModel } from './base';
@@ -296,7 +296,10 @@ export class RegistryJobModel extends BaseModel {
   }
 
   /** The latest time a device's queued jobs are held to, if still ahead. */
-  async heldUntil(workspaceId: string, deviceKey: string): Promise<Date | null> {
+  async heldUntil(
+    workspaceId: string,
+    deviceKey: string
+  ): Promise<Date | null> {
     const held = await this.db.registryJob.findFirst({
       where: {
         workspaceId,
@@ -424,7 +427,11 @@ export class RegistryJobModel extends BaseModel {
    * work up. Once per job (the transcript must not already carry `marker`),
    * and only while it is still queued.
    */
-  async noteUnclaimed(id: string, marker: string, note: string): Promise<boolean> {
+  async noteUnclaimed(
+    id: string,
+    marker: string,
+    note: string
+  ): Promise<boolean> {
     const written = await this.appendLog(
       id,
       note,
@@ -461,7 +468,11 @@ export class RegistryJobModel extends BaseModel {
         detail: input.detail ?? null,
         options: input.options ?? [],
         ...(allowed
-          ? { allowed: true, answeredBy: input.allowedBy, answeredAt: new Date() }
+          ? {
+              allowed: true,
+              answeredBy: input.allowedBy,
+              answeredAt: new Date(),
+            }
           : {}),
         ...(input.refused !== undefined
           ? { allowed: false, answer: input.refused, answeredAt: new Date() }
@@ -486,7 +497,12 @@ export class RegistryJobModel extends BaseModel {
       data: { allowAllTools: true },
     });
     await this.db.registryJobQuestion.updateMany({
-      where: { jobId, kind: 'permission', answeredAt: null, id: { notIn: except } },
+      where: {
+        jobId,
+        kind: 'permission',
+        answeredAt: null,
+        id: { notIn: except },
+      },
       data: { allowed: true, answeredBy: userId, answeredAt: new Date() },
     });
   }
@@ -532,7 +548,9 @@ export class RegistryJobModel extends BaseModel {
     if (count === 0) {
       return null;
     }
-    return this.db.registryJobQuestion.findUnique({ where: { id: questionId } });
+    return this.db.registryJobQuestion.findUnique({
+      where: { id: questionId },
+    });
   }
 
   /** Queue a message for a running job; its runner takes it on its next step. */
@@ -576,11 +594,15 @@ export class RegistryJobModel extends BaseModel {
       return null;
     }
     if ((JOB_TERMINAL as readonly string[]).includes(job.status)) {
-      return job;   // already finished; nothing to cancel
+      return job; // already finished; nothing to cancel
     }
     return this.db.registryJob.update({
       where: { id },
-      data: { status: 'cancelled', finishedAt: new Date(), leaseExpiresAt: null },
+      data: {
+        status: 'cancelled',
+        finishedAt: new Date(),
+        leaseExpiresAt: null,
+      },
     });
   }
 
@@ -596,7 +618,11 @@ export class RegistryJobModel extends BaseModel {
   /** Runs created since `since` that have ended, newest first, for spend reports. */
   async endedSince(workspaceId: string, since: Date, limit: number) {
     return this.db.registryJob.findMany({
-      where: { workspaceId, createdAt: { gte: since }, finishedAt: { not: null } },
+      where: {
+        workspaceId,
+        createdAt: { gte: since },
+        finishedAt: { not: null },
+      },
       select: {
         docId: true,
         status: true,
@@ -612,7 +638,9 @@ export class RegistryJobModel extends BaseModel {
   }
 
   async getBudget(workspaceId: string): Promise<number | null> {
-    const row = await this.db.registryAgentBudget.findUnique({ where: { workspaceId } });
+    const row = await this.db.registryAgentBudget.findUnique({
+      where: { workspaceId },
+    });
     return row?.monthlyUsd ?? null;
   }
 

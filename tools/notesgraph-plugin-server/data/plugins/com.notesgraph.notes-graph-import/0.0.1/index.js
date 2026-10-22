@@ -93,7 +93,11 @@ async function importGraph(ctx, data) {
     try {
       docId = await ensureDoc(sourceId, title);
     } catch (err) {
-      console.error('[notes-graph-import] failed to create doc for', sourceId, err);
+      console.error(
+        '[notes-graph-import] failed to create doc for',
+        sourceId,
+        err
+      );
       continue;
     }
 
@@ -109,7 +113,11 @@ async function importGraph(ctx, data) {
           await ctx.docs.insertBlock(docId, { ...block, parent });
         }
       } catch (err) {
-        console.error('[notes-graph-import] failed to fill doc for', sourceId, err);
+        console.error(
+          '[notes-graph-import] failed to fill doc for',
+          sourceId,
+          err
+        );
       }
     }
   }
@@ -132,7 +140,13 @@ async function importGraph(ctx, data) {
         parent: note && note.id,
       });
     } catch (err) {
-      console.error('[notes-graph-import] failed to link', sourceKey, '->', targetKey, err);
+      console.error(
+        '[notes-graph-import] failed to link',
+        sourceKey,
+        '->',
+        targetKey,
+        err
+      );
     }
   }
 

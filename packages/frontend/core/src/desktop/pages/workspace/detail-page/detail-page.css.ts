@@ -50,9 +50,12 @@ export const suggestedParentBanner = style({
 // The banner carries its own mobile margins — neutralize them inside the
 // aligned desktop column. The attribute selector lifts specificity above the
 // banner's own class so stylesheet order can't flip the result.
-globalStyle(`${suggestedParentBanner} > [data-testid="suggested-parent-banner"]`, {
-  margin: 0,
-});
+globalStyle(
+  `${suggestedParentBanner} > [data-testid="suggested-parent-banner"]`,
+  {
+    margin: 0,
+  }
+);
 // brings styles of .notesgraph-page-viewport from blocksuite
 export const notesgraphDocViewport = style({
   display: 'flex',

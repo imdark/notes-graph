@@ -9,9 +9,7 @@ function feedTitle(xml: string): string | undefined {
 
 function parseAtomEntry(entry: string): CrawledItem {
   const id = tagText(entry, 'id');
-  const alt = entry.match(
-    /<link[^>]*rel="alternate"[^>]*href="([^"]*)"/
-  )?.[1];
+  const alt = entry.match(/<link[^>]*rel="alternate"[^>]*href="([^"]*)"/)?.[1];
   const url = alt ?? tagAttr(entry, 'link', 'href') ?? '';
   const title = tagText(entry, 'title') ?? 'Untitled';
   const summary =

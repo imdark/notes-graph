@@ -32,7 +32,9 @@ export const nativeSpeechToText: SpeechToTextProvider = {
     const end = (error?: SpeechToTextError) => {
       if (ended) return;
       ended = true;
-      listeners.forEach(listener => listener.remove().catch(console.error));
+      listeners.forEach(listener => {
+        listener.remove().catch(console.error);
+      });
       handlers.onEnd(error);
     };
 

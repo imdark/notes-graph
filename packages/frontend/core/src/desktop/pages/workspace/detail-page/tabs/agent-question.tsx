@@ -198,8 +198,8 @@ export const AgentQuestionCard = ({
           </div>
           {!isPermission ? (
             <span className={styles.hint}>
-              The agent saves what you tell it to your notes, so it won't ask
-              again.
+              The agent saves what you tell it to your notes, so it won&apos;t
+              ask again.
             </span>
           ) : null}
         </>

@@ -48,14 +48,22 @@ export async function ask(
   text: string,
   extra: { detail?: string | null; options?: string[] } = {}
 ): Promise<Question> {
-  const question = await ctx.api.ask(ctx.workspaceId, ctx.jobId, { kind, text, ...extra });
+  const question = await ctx.api.ask(ctx.workspaceId, ctx.jobId, {
+    kind,
+    text,
+    ...extra,
+  });
   if (question.answeredAt) return question; // allowed by "Allow all"
   for (;;) {
     if (ctx.signal?.aborted) throw new JobCancelled('the run was stopped');
     await sleep(ctx.pollMs ?? 2000, ctx.signal);
     let current: { question: Question; jobStatus: string };
     try {
-      current = await ctx.api.getQuestion(ctx.workspaceId, ctx.jobId, question.id);
+      current = await ctx.api.getQuestion(
+        ctx.workspaceId,
+        ctx.jobId,
+        question.id
+      );
     } catch (err) {
       // A server blip while someone is thinking is not an answer; keep waiting.
       if (err instanceof NotesGraphError && err.status === undefined) continue;
@@ -104,7 +112,12 @@ export function steerHooks(ctx: RunContext): Options['hooks'] {
           async () => {
             const note = await takeSteerNote(ctx);
             return note
-              ? { hookSpecificOutput: { hookEventName: 'PostToolUse', additionalContext: note } }
+              ? {
+                  hookSpecificOutput: {
+                    hookEventName: 'PostToolUse',
+                    additionalContext: note,
+                  },
+                }
               : {};
           },
         ],
@@ -150,11 +163,15 @@ export function runServer(ctx: RunContext) {
           'or stop), pass them as options so they can pick with one click; ' +
           'they can still type something else.',
         {
-          question: z.string().describe('The question, as you would ask it in person.'),
+          question: z
+            .string()
+            .describe('The question, as you would ask it in person.'),
           options: z
             .array(z.string())
             .optional()
-            .describe('Optional short choices, e.g. ["Yes, open the PR", "No, stop here"]. At most 10.'),
+            .describe(
+              'Optional short choices, e.g. ["Yes, open the PR", "No, stop here"]. At most 10.'
+            ),
         },
         async ({ question, options }) => {
           const asked = question.trim();
@@ -175,12 +192,20 @@ export function runServer(ctx: RunContext) {
           'text of the block it started from. Call it once you know what you ' +
           'are doing, with a few words a person would recognise; call it ' +
           'again if the work turns out to be something else.',
-        { title: z.string().describe('A short title, e.g. "Pick a show to watch with Cosmo".') },
+        {
+          title: z
+            .string()
+            .describe('A short title, e.g. "Pick a show to watch with Cosmo".'),
+        },
         async ({ title }) => {
           const name = title.split(/\s+/).filter(Boolean).join(' ');
           if (!name) return text('title is required', true);
           try {
-            const kept = await ctx.api.setTitle(ctx.workspaceId, ctx.jobId, name);
+            const kept = await ctx.api.setTitle(
+              ctx.workspaceId,
+              ctx.jobId,
+              name
+            );
             return await withSteers(ctx, `Run renamed to: ${kept}`);
           } catch (err) {
             return text(`Could not rename the run (${err}); carry on.`, true);
@@ -214,7 +239,10 @@ export function permissionPrompt(ctx: RunContext): CanUseTool {
     } catch (err) {
       return {
         behavior: 'deny',
-        message: err instanceof JobCancelled ? `Stop: ${err.message}.` : `Could not ask: ${err}`,
+        message:
+          err instanceof JobCancelled
+            ? `Stop: ${err.message}.`
+            : `Could not ask: ${err}`,
         interrupt: err instanceof JobCancelled,
       };
     }

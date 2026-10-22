@@ -107,7 +107,15 @@ export function buildDocSummary(
   docSnapshot: Uint8Array,
   maxSummaryLength: number
 ): PageDocContent | null {
-  const result = parseYDocFromBinary(Buffer.from(docSnapshot), docId);
+  let result: ReturnType<typeof parseYDocFromBinary> | undefined;
+  try {
+    result = parseYDocFromBinary(Buffer.from(docSnapshot), docId);
+  } catch (err) {
+    // Not a page doc (no blocks): the page parser this replaced says null
+    // for it, so callers get "no content", not a 500. Anything else throws.
+    if (parsePageDoc(docSnapshot) === null) return null;
+    throw err;
+  }
   if (!result) return null;
 
   const full = maxSummaryLength < 0;

@@ -104,9 +104,19 @@ function createRunner(replies: ((logFrom: number) => RemoteJob)[]) {
       if (init?.method === 'POST') {
         return new Response('{}', { status: 200 });
       }
-      const logFrom = Number(new URL(url, 'http://x').searchParams.get('logFrom'));
-      const reply = replies[Math.min(requests.filter(r => r.method === 'GET').length - 1, replies.length - 1)];
-      return new Response(JSON.stringify({ job: reply(logFrom) }), { status: 200 });
+      const logFrom = Number(
+        new URL(url, 'http://x').searchParams.get('logFrom')
+      );
+      const reply =
+        replies[
+          Math.min(
+            requests.filter(r => r.method === 'GET').length - 1,
+            replies.length - 1
+          )
+        ];
+      return new Response(JSON.stringify({ job: reply(logFrom) }), {
+        status: 200,
+      });
     },
   };
   const workspaceServerService = {
@@ -122,18 +132,32 @@ function createRunner(replies: ((logFrom: number) => RemoteJob)[]) {
   const framework = new Framework();
   framework.service(WorkspaceServerService, workspaceServerService as any);
   framework.service(RemoteAgentRunnerService, [WorkspaceServerService]);
-  return { runner: framework.provider().get(RemoteAgentRunnerService), requests };
+  return {
+    runner: framework.provider().get(RemoteAgentRunnerService),
+    requests,
+  };
 }
 
 describe('RemoteAgentRunnerService.watch', () => {
   test('asks only for new transcript text and yields it as a delta', async () => {
     const { runner, requests } = createRunner([
       () => job({ log: '→ Read\n', logFrom: 0, logEnd: 7 }),
-      () => job({ status: 'done', result: 'ok', log: '✓ done\n', logFrom: 7, logEnd: 14 }),
+      () =>
+        job({
+          status: 'done',
+          result: 'ok',
+          log: '✓ done\n',
+          logFrom: 7,
+          logEnd: 14,
+        }),
     ]);
 
     const updates = [];
-    for await (const update of runner.watch('ws-1', 'job-1', new AbortController().signal)) {
+    for await (const update of runner.watch(
+      'ws-1',
+      'job-1',
+      new AbortController().signal
+    )) {
       updates.push(update);
     }
 
@@ -194,11 +218,16 @@ describe('RemoteAgentRunnerService.watch through a server outage', () => {
     const { runner } = createRunner([
       () => job({ log: 'working\n', logFrom: 0, logEnd: 8 }),
       serverError(500, ''),
-      () => job({ status: 'done', result: 'ok', log: '', logFrom: 8, logEnd: 8 }),
+      () =>
+        job({ status: 'done', result: 'ok', log: '', logFrom: 8, logEnd: 8 }),
     ]);
 
     const statuses = [];
-    for await (const { job: update } of runner.watch('ws-1', 'job-1', new AbortController().signal)) {
+    for await (const { job: update } of runner.watch(
+      'ws-1',
+      'job-1',
+      new AbortController().signal
+    )) {
       statuses.push(update.status);
     }
     expect(statuses).toEqual(['running', 'done']);
@@ -207,9 +236,14 @@ describe('RemoteAgentRunnerService.watch through a server outage', () => {
   test('a job that is gone is reported at once', async () => {
     const { runner } = createRunner([serverError(404, 'No job job-1')]);
     const watching = (async () => {
-      for await (const _ of runner.watch('ws-1', 'job-1', new AbortController().signal, {
-        cancelOnAbort: false,
-      })) {
+      for await (const _ of runner.watch(
+        'ws-1',
+        'job-1',
+        new AbortController().signal,
+        {
+          cancelOnAbort: false,
+        }
+      )) {
         // nothing arrives
       }
     })();
@@ -233,12 +267,21 @@ describe('RemoteAgentRunnerService questions', () => {
     const { runner } = createRunner([
       () => job({ log: '', logEnd: 0 }),
       () => job({ log: '', logEnd: 0, questions: [question] }),
-      () => job({ log: '', logEnd: 0, questions: [{ ...question, answer: 'My son, 7', answeredAt: 1 }] }),
+      () =>
+        job({
+          log: '',
+          logEnd: 0,
+          questions: [{ ...question, answer: 'My son, 7', answeredAt: 1 }],
+        }),
       () => job({ status: 'done', result: 'Bluey', log: '', logEnd: 0 }),
     ]);
 
     const open: string[][] = [];
-    for await (const { job: update } of runner.watch('ws-1', 'job-1', new AbortController().signal)) {
+    for await (const { job: update } of runner.watch(
+      'ws-1',
+      'job-1',
+      new AbortController().signal
+    )) {
       open.push(openQuestions(update).map(q => q.text));
     }
 
@@ -250,13 +293,21 @@ describe('RemoteAgentRunnerService questions', () => {
     const { runner, requests } = createRunner([() => job({})]);
     await runner.answer('ws-1', 'job-1', 'q1', { answer: 'My son, 7' });
     expect(requests).toEqual([
-      { url: '/api/registry/workspaces/ws-1/jobs/job-1/questions/q1/answer', method: 'POST' },
+      {
+        url: '/api/registry/workspaces/ws-1/jobs/job-1/questions/q1/answer',
+        method: 'POST',
+      },
     ]);
   });
 });
 
 describe('RemoteAgentRunnerService steering', () => {
-  const steer = { id: 's1', text: 'Skip tests', createdAt: 0, deliveredAt: null };
+  const steer = {
+    id: 's1',
+    text: 'Skip tests',
+    createdAt: 0,
+    deliveredAt: null,
+  };
 
   test('sending a run a message posts to its steer route', async () => {
     const { runner, requests } = createRunner([() => job({})]);
@@ -274,7 +325,11 @@ describe('RemoteAgentRunnerService steering', () => {
       () => job({ status: 'done', result: 'ok', log: '', logEnd: 0 }),
     ]);
     const waiting: string[][] = [];
-    for await (const { job: update } of runner.watch('ws-1', 'job-1', new AbortController().signal)) {
+    for await (const { job: update } of runner.watch(
+      'ws-1',
+      'job-1',
+      new AbortController().signal
+    )) {
       waiting.push(waitingSteers(update).map(s => s.text));
     }
     expect(waiting).toEqual([[], ['Skip tests'], [], []]);

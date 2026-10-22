@@ -1,3 +1,5 @@
+// The kit's `test` turns on the Edgeless plugin (off by default in NotesGraph).
+import { test } from '@notesgraph-test/kit/playwright';
 import {
   clickEdgelessModeButton,
   locateEditorContainer,
@@ -9,7 +11,7 @@ import {
   type,
   waitForEmptyEditor,
 } from '@notesgraph-test/kit/utils/page-logic';
-import { expect, type Page, test } from '@playwright/test';
+import { expect, type Page } from '@playwright/test';
 
 const TEST_SPOTIFY_URL =
   'https://open.spotify.com/episode/7makk4oTQel546B0PZlDM5';

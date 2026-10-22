@@ -9,15 +9,15 @@ from scratch on a new environment.
 The server sends mail with **nodemailer over SMTP**, configured entirely from
 env vars (`core/mail`):
 
-| env | example | notes |
-|-----|---------|-------|
-| `MAILER_HOST` | `email-smtp.us-east-2.amazonaws.com` | SES SMTP endpoint |
-| `MAILER_PORT` | `587` | STARTTLS submission |
-| `MAILER_USER` | `AKIA…` | SES SMTP username (IAM access key id) |
-| `MAILER_PASSWORD` | *(derived)* | SES SMTP password (derived from the IAM secret) |
-| `MAILER_SENDER` | `NotesGraph <no-reply@notesgraph.com>` | From address |
-| `MAILER_SERVERNAME` | *(optional)* | SMTP HELO name |
-| `MAILER_IGNORE_TLS` | *(optional)* | `true` only for self-signed relays |
+| env                 | example                                | notes                                           |
+| ------------------- | -------------------------------------- | ----------------------------------------------- |
+| `MAILER_HOST`       | `email-smtp.us-east-2.amazonaws.com`   | SES SMTP endpoint                               |
+| `MAILER_PORT`       | `587`                                  | STARTTLS submission                             |
+| `MAILER_USER`       | `AKIA…`                                | SES SMTP username (IAM access key id)           |
+| `MAILER_PASSWORD`   | _(derived)_                            | SES SMTP password (derived from the IAM secret) |
+| `MAILER_SENDER`     | `NotesGraph <no-reply@notesgraph.com>` | From address                                    |
+| `MAILER_SERVERNAME` | _(optional)_                           | SMTP HELO name                                  |
+| `MAILER_IGNORE_TLS` | _(optional)_                           | `true` only for self-signed relays              |
 
 If **no** `MAILER_HOST` is set, the mailer is unconfigured and **silently drops
 mail** — it still logs `Invitation email sent`, which is misleading. So "invites
@@ -64,12 +64,12 @@ Wait for `DKIM: "SUCCESS"`.
 
 ### 2. Leave the SES sandbox (production access)
 
-New SES accounts are **sandboxed**: they can only send to *verified* recipient
+New SES accounts are **sandboxed**: they can only send to _verified_ recipient
 addresses, capped at 200/day. To email arbitrary invited members you must
 request **production access**. This is a **console** step — the API
 (`put-account-details`) refuses to re-submit after a denial (`ConflictException`).
 
-1. AWS Console → **SES** → *Account dashboard* → **Request production access**
+1. AWS Console → **SES** → _Account dashboard_ → **Request production access**
    (or reply to the existing Support case).
 2. Mail type: **Transactional**. Website: `https://notesgraph.com`.
 3. Use-case description (this wording gets approved; generic ones get denied):
@@ -114,11 +114,11 @@ Sends through the server container's `MAILER_*` env exactly as the app does.
 
 ## Scripts
 
-| script | purpose |
-|--------|---------|
-| `scripts/setup-ses-dns.sh` | Create SES identity + publish DKIM/SPF/DMARC/MAIL FROM records to GoDaddy |
-| `scripts/deploy-mailer.sh` | Mint SES SMTP creds, write `MAILER_*` to the server `.env`, restart |
-| `scripts/send-test-email.sh` | Send a test email via the server's SMTP path |
+| script                       | purpose                                                                   |
+| ---------------------------- | ------------------------------------------------------------------------- |
+| `scripts/setup-ses-dns.sh`   | Create SES identity + publish DKIM/SPF/DMARC/MAIL FROM records to GoDaddy |
+| `scripts/deploy-mailer.sh`   | Mint SES SMTP creds, write `MAILER_*` to the server `.env`, restart       |
+| `scripts/send-test-email.sh` | Send a test email via the server's SMTP path                              |
 
 All are idempotent and read the box host/key from the same env vars as
 `deploy-prod.sh` (`NOTESGRAPH_DEPLOY_HOST`, `NOTESGRAPH_DEPLOY_KEY`).

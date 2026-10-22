@@ -146,9 +146,13 @@ export class AgentMemoryService {
     const job = await this.models.registryJob.get(workspaceId, jobId);
     const userId = job?.createdBy;
     if (!job || !userId || !profileFor(job.model)) return;
-    const questions = (await this.models.registryJob.listQuestions(job.id))
-      .filter(q => q.kind === 'question' && q.answer?.trim())
-      .map(q => ({ text: q.text, answer: q.answer! }));
+    const questions = (
+      await this.models.registryJob.listQuestions(job.id)
+    ).flatMap(q =>
+      q.kind === 'question' && q.answer?.trim()
+        ? [{ text: q.text, answer: q.answer }]
+        : []
+    );
     if (!job.log.trim() && !job.result?.trim() && !questions.length) return;
 
     const runtime = this.promptRuntime();
@@ -329,10 +333,10 @@ export class AgentMemoryService {
     if (!this.contract) {
       const { responseSchemaJson, schemaHash } =
         buildStructuredResponseFromSchemaJson(EXTRACTION_SCHEMA);
-      this.contract = {
-        responseSchemaJson: responseSchemaJson!,
-        schemaHash: schemaHash!,
-      };
+      if (!responseSchemaJson || !schemaHash) {
+        throw new Error('Agent memory extraction contract is required');
+      }
+      this.contract = { responseSchemaJson, schemaHash };
     }
     return this.contract;
   }

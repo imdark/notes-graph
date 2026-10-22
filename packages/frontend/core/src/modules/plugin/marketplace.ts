@@ -39,7 +39,9 @@ export function getPluginMarketplaceBaseUrl(): string {
  * Plugin code is loaded with `import()`, which needs a fully-qualified URL —
  * a relative one would resolve against the page, not the configured server.
  */
-export function absolutePluginMarketplaceBaseUrl(serverBaseUrl: string): string {
+export function absolutePluginMarketplaceBaseUrl(
+  serverBaseUrl: string
+): string {
   const base = getPluginMarketplaceBaseUrl();
   return new URL(base, serverBaseUrl).toString().replace(/\/+$/, '');
 }

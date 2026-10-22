@@ -3,6 +3,7 @@ import type { SurfaceBlockModel } from '@blocksuite/notesgraph/blocks/surface';
 import { NotesGraphSchemas } from '@blocksuite/notesgraph/schemas';
 import { ZipTransformer } from '@blocksuite/notesgraph/widgets/linked-doc';
 import { Schema } from '@blocksuite/store';
+import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
 import { beforeEach, expect, test } from 'vitest';
 
 import { wait } from '../utils/common.js';
@@ -26,17 +27,35 @@ const fieldChecker: Record<string, (value: any) => boolean> = {
 
 const skipFields = new Set(['_lastXYWH']);
 
+/**
+ * The snapshots were exported by AFFiNE, before the blocks and theme
+ * variables were renamed: rename them in the snapshots' JSON before import.
+ */
+const fetchRenamedSnapshot = async (snapshotUrl: string) => {
+  const zipped = new Uint8Array(await (await fetch(snapshotUrl)).arrayBuffer());
+  const files = unzipSync(zipped);
+  for (const [name, data] of Object.entries(files)) {
+    if (!name.endsWith('.json')) continue;
+    files[name] = strToU8(
+      strFromU8(data)
+        .replaceAll('"affine:', '"notesgraph:')
+        .replaceAll('--affine-', '--notesgraph-')
+    );
+  }
+  return new Blob([zipSync(files) as Uint8Array<ArrayBuffer>], {
+    type: 'application/zip',
+  });
+};
+
 const snapshotTest = async (snapshotUrl: string, elementsCount: number) => {
   const transformer = ZipTransformer;
   const schema = new Schema();
   schema.register(NotesGraphSchemas);
 
-  const snapshotFile = await fetch(snapshotUrl)
-    .then(res => res.blob())
-    .catch(e => {
-      console.error(e);
-      throw e;
-    });
+  const snapshotFile = await fetchRenamedSnapshot(snapshotUrl).catch(e => {
+    console.error(e);
+    throw e;
+  });
 
   const [newDoc] = await transformer.importDocs(
     window.editor.doc.workspace,
@@ -99,16 +118,24 @@ beforeEach(async () => {
 
 const xywhPattern = /\[(\s*-?\d+(\.\d+)?\s*,){3}(\s*-?\d+(\.\d+)?\s*)\]/;
 
-test('snapshot 1 importing', async () => {
-  await snapshotTest(
-    'https://test.notesgraphassets.com/test-snapshot-1.zip',
-    25
-  );
-});
+// Downloads: the second snapshot is 13 MB.
+const SNAPSHOT_TIMEOUT_MS = 60_000;
 
-test('snapshot 2 importing', async () => {
-  await snapshotTest(
-    'https://test.notesgraphassets.com/test-snapshot-2%20(onboarding).zip',
-    174
-  );
-});
+test(
+  'snapshot 1 importing',
+  async () => {
+    await snapshotTest('https://test.affineassets.com/test-snapshot-1.zip', 25);
+  },
+  SNAPSHOT_TIMEOUT_MS
+);
+
+test(
+  'snapshot 2 importing',
+  async () => {
+    await snapshotTest(
+      'https://test.affineassets.com/test-snapshot-2%20(onboarding).zip',
+      174
+    );
+  },
+  SNAPSHOT_TIMEOUT_MS
+);

@@ -39,10 +39,12 @@ test('synced formula: block A = value of block C + 15, live', async ({
   // Attach the formula: value + 15.
   await synced.locator('.synced-block-frame').hover();
   await synced.getByTestId('synced-block-formula').click();
-  const input = page.locator('notesgraph-menu input').last();
+  // The formula editor is a popover textarea; it saves when closed (Done).
+  const editor = page.locator('notesgraph-synced-formula-editor');
+  const input = editor.locator('textarea');
   await expect(input).toBeVisible();
   await input.fill('value + 15');
-  await input.press('Enter');
+  await editor.getByText('Done', { exact: true }).click();
 
   const computed = synced.getByTestId('synced-formula-value');
   await expect(computed).toHaveText(/^\s*57\s*$/);
@@ -56,9 +58,14 @@ test('synced formula: block A = value of block C + 15, live', async ({
   // Clearing the expression returns to a plain editable synced block.
   await synced.locator('.synced-block-frame').hover();
   await synced.getByTestId('synced-block-formula').click();
-  const input2 = page.locator('notesgraph-menu input').last();
-  await input2.fill('');
-  await input2.press('Enter');
+  await expect(input).toBeVisible();
+  // Clear with Backspace: select-all (and so `fill('')`) doesn't reach the
+  // popover textarea — the editor host underneath takes the shortcut.
+  for (let i = 0; i < 'value + 15'.length; i++) {
+    await input.press('Backspace');
+  }
+  await expect(input).toHaveValue('');
+  await editor.getByText('Done', { exact: true }).click();
   await expect(synced.locator('rich-text')).toBeVisible();
   await expect(synced).toContainText('420');
 });

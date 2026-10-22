@@ -1,6 +1,6 @@
 import { PlusIcon } from '@blocksuite/icons/rc';
-import { saveAnswerAsDoc } from '@notesgraph/core/blocksuite/ai/utils/save-answer-as-doc';
 import { Button, notify, Scrollable } from '@notesgraph/component';
+import { saveAnswerAsDoc } from '@notesgraph/core/blocksuite/ai/utils/save-answer-as-doc';
 import {
   type Agent,
   AgentContextService,
@@ -314,14 +314,13 @@ export const EditorAgentsPanel = () => {
   const runs = useLiveData(
     useMemo(() => runsStore.watchRunsForDoc(doc.id), [runsStore, doc.id])
   );
-  const toReview = useMemo(
-    () => runs.filter(run => run.reviewPending),
-    [runs]
-  );
+  const toReview = useMemo(() => runs.filter(run => run.reviewPending), [runs]);
 
   const runOnDoc = useCallback(
     (agent: Agent) => {
-      void sessionService.start(agent, { kind: 'doc', docId: doc.id });
+      sessionService
+        .start(agent, { kind: 'doc', docId: doc.id })
+        .catch(console.error);
     },
     [doc.id, sessionService]
   );

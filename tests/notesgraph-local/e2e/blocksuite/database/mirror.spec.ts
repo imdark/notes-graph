@@ -57,7 +57,11 @@ test.describe('Mirror list as database', () => {
     await expect(rows.nth(2)).toContainText('Cherry');
 
     // Live sync, list -> table: edit the first list item.
-    await page.locator('notesgraph-list').first().locator('.inline-editor').click();
+    await page
+      .locator('notesgraph-list')
+      .first()
+      .locator('.inline-editor')
+      .click();
     await page.keyboard.press('End');
     await page.keyboard.type(' Pie');
     await expect(rows.nth(0)).toContainText('Apple Pie');
@@ -82,7 +86,9 @@ test.describe('Mirror list as database', () => {
     await expect(rows.nth(3)).toContainText('Durian');
   });
 
-  test('create table (destructive) works on a nested list item', async ({
+  // The destructive "Create Table" toolbar action is gone (convertToDatabase
+  // has no caller); "Mirror as Table" replaced it — covered below.
+  test.skip('create table (destructive) works on a nested list item', async ({
     page,
   }) => {
     // "Create Table" (turnIntoDatabase/convertToDatabase) is the older,
@@ -299,7 +305,11 @@ test.describe('Mirror list as database', () => {
     // Org-status read path: typing a plain org annotation into a new list
     // item groups its card under the matching kanban column. (The keyword
     // form is used because typing "[x] " triggers the todo-list input rule.)
-    await page.locator('notesgraph-list').nth(1).locator('.inline-editor').click();
+    await page
+      .locator('notesgraph-list')
+      .nth(1)
+      .locator('.inline-editor')
+      .click();
     await page.keyboard.press('End');
     await page.keyboard.press('Enter');
     await page.keyboard.type('DONE Task three');
@@ -426,10 +436,7 @@ test.describe('Mirror list as database', () => {
 
     // Ticking the checkbox live re-groups the card without any org
     // annotation ever being written.
-    await items
-      .nth(0)
-      .locator('.notesgraph-list-block__todo-prefix')
-      .click();
+    await items.nth(0).locator('.notesgraph-list-block__todo-prefix').click();
     await expect(
       doneGroup.locator('notesgraph-data-view-kanban-card', {
         hasText: 'Unchecked task',

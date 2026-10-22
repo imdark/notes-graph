@@ -5,6 +5,7 @@ import { DocsSearchService } from '@notesgraph/core/modules/docs-search';
 import { LiveData, useLiveData, useService } from '@notesgraph/infra';
 import { useMemo, useState } from 'react';
 import { catchError, map, of } from 'rxjs';
+
 import * as styles from './styles.css';
 import type { ParentCandidate } from './use-suggest-parent';
 
@@ -43,7 +44,8 @@ export const ParentPickerContent = ({
             .slice(0, 20)
             .map(id => ({
               docId: id,
-              title: docsService.list.doc$(id).value?.title$.value || 'Untitled',
+              title:
+                docsService.list.doc$(id).value?.title$.value || 'Untitled',
             }))
         ),
         // errored source poisons the LiveData and useLiveData re-throws in
@@ -63,9 +65,7 @@ export const ParentPickerContent = ({
   // was typed — creating an (empty) parent note and linking this note under it.
   const hasExactMatch = useMemo(
     () =>
-      results.some(
-        r => r.title.trim().toLowerCase() === trimmed.toLowerCase()
-      ),
+      results.some(r => r.title.trim().toLowerCase() === trimmed.toLowerCase()),
     [results, trimmed]
   );
 
@@ -81,10 +81,7 @@ export const ParentPickerContent = ({
       />
       <div className={styles.pickerList}>
         {results.map(r => (
-          <MenuItem
-            key={r.docId}
-            onSelect={() => onSelect(r.docId, r.title)}
-          >
+          <MenuItem key={r.docId} onSelect={() => onSelect(r.docId, r.title)}>
             {r.title}
           </MenuItem>
         ))}

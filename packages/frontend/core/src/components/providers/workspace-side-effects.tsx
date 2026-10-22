@@ -117,14 +117,16 @@ export const WorkspaceSideEffects = () => {
 
     let cancelled = false;
     let disposable: { unsubscribe: () => void } | undefined;
-    void import('@notesgraph/core/blocksuite/ai').then(({ AIAppEvents }) => {
-      if (cancelled) return;
-      disposable = AIAppEvents.requestInsertTemplate.subscribe(
-        ({ template, mode }) => {
-          insertTemplate({ template, mode });
-        }
-      );
-    });
+    import('@notesgraph/core/blocksuite/ai')
+      .then(({ AIAppEvents }) => {
+        if (cancelled) return;
+        disposable = AIAppEvents.requestInsertTemplate.subscribe(
+          ({ template, mode }) => {
+            insertTemplate({ template, mode });
+          }
+        );
+      })
+      .catch(console.error);
 
     return () => {
       cancelled = true;
@@ -146,15 +148,17 @@ export const WorkspaceSideEffects = () => {
   useEffect(() => {
     let cancelled = false;
     let disposable: { unsubscribe: () => void } | undefined;
-    void import('@notesgraph/core/blocksuite/ai').then(({ AIAppEvents }) => {
-      if (cancelled) return;
-      disposable = AIAppEvents.requestUpgradePlan.subscribe(() => {
-        workspaceDialogService.open('setting', {
-          activeTab: 'billing',
+    import('@notesgraph/core/blocksuite/ai')
+      .then(({ AIAppEvents }) => {
+        if (cancelled) return;
+        disposable = AIAppEvents.requestUpgradePlan.subscribe(() => {
+          workspaceDialogService.open('setting', {
+            activeTab: 'billing',
+          });
+          track.$.paywall.aiAction.viewPlans();
         });
-        track.$.paywall.aiAction.viewPlans();
-      });
-    });
+      })
+      .catch(console.error);
     return () => {
       cancelled = true;
       disposable?.unsubscribe();
@@ -173,8 +177,8 @@ export const WorkspaceSideEffects = () => {
   useEffect(() => {
     let cancelled = false;
     let dispose: (() => void) | undefined;
-    void import('@notesgraph/core/blocksuite/ai').then(
-      ({ createAIRequestService, setupAIProvider }) => {
+    import('@notesgraph/core/blocksuite/ai')
+      .then(({ createAIRequestService, setupAIProvider }) => {
         if (cancelled) return;
         // Local backend runs on-device (no cloud calls); cloud uses the copilot.
         const requestService =
@@ -194,8 +198,8 @@ export const WorkspaceSideEffects = () => {
           globalDialogService,
           authService
         );
-      }
-    );
+      })
+      .catch(console.error);
     return () => {
       cancelled = true;
       dispose?.();

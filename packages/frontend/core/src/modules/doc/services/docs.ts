@@ -469,7 +469,9 @@ export class DocsService extends Service {
         'notesgraph:embed-synced-doc',
       ] as const) {
         for (const block of bsDoc.getBlocksByFlavour(flavour)) {
-          if ((block.model.props as { pageId?: string }).pageId === linkedDocId) {
+          if (
+            (block.model.props as { pageId?: string }).pageId === linkedDocId
+          ) {
             bsDoc.deleteBlock(block.model);
           }
         }

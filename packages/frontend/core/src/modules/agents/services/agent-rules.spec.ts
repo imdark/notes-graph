@@ -1,4 +1,4 @@
-import { Framework } from '@notesgraph/infra';
+import { Framework, LiveData } from '@notesgraph/infra';
 import { describe, expect, test } from 'vitest';
 
 import { DocsService } from '../../doc';
@@ -13,8 +13,8 @@ import {
 
 const record = (id: string, title: string, trash = false) => ({
   id,
-  title$: { value: title },
-  trash$: { value: trash },
+  title$: new LiveData(title),
+  trash$: new LiveData(trash),
 });
 
 /**
@@ -27,7 +27,7 @@ const fakeDocs = (records: ReturnType<typeof record>[]) => {
   const created: string[] = [];
   let released = 0;
   const docs: any = {
-    list: { docs$: { value: records } },
+    list: { docs$: new LiveData(records) },
     open: () => ({
       doc: {
         addPriorityLoad: () => () => {},
@@ -67,14 +67,18 @@ describe('agentRulesSection', () => {
     expect(section).toContain(`"${AGENT_RULES_TITLE}"`);
     expect(section).toContain('take precedence over any built-in conventions');
     expect(section).not.toContain('above');
-    expect(section.endsWith('<agent-rules>\nTag research #research\n</agent-rules>')).toBe(true);
+    expect(
+      section.endsWith('<agent-rules>\nTag research #research\n</agent-rules>')
+    ).toBe(true);
   });
 
   test('cuts a long note and says so', () => {
     const section = agentRulesSection('x'.repeat(MAX_AGENT_RULES_CHARS + 10))!;
     expect(section).toContain('x'.repeat(MAX_AGENT_RULES_CHARS));
     expect(section).not.toContain('x'.repeat(MAX_AGENT_RULES_CHARS + 1));
-    expect(section.endsWith('[the rest of the note was cut]\n</agent-rules>')).toBe(true);
+    expect(
+      section.endsWith('[the rest of the note was cut]\n</agent-rules>')
+    ).toBe(true);
   });
 });
 

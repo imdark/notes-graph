@@ -51,12 +51,10 @@ export class HomeDocService extends Service {
     return this.docsService.list.docs$.value
       .filter(
         record =>
-          !record.trash$.value &&
-          (record.title$.value ?? '').trim() === 'Home'
+          !record.trash$.value && (record.title$.value ?? '').trim() === 'Home'
       )
-      .sort(
-        (a, b) => (a.createdAt$.value ?? 0) - (b.createdAt$.value ?? 0)
-      )[0]?.id;
+      .sort((a, b) => (a.createdAt$.value ?? 0) - (b.createdAt$.value ?? 0))[0]
+      ?.id;
   }
 
   /**
@@ -142,7 +140,10 @@ export class HomeDocService extends Service {
   }
 
   private adoptOrCreateHome() {
-    if (this.creating || this.isValid(this.homeDocId$.value ?? this.lastCreatedId)) {
+    if (
+      this.creating ||
+      this.isValid(this.homeDocId$.value ?? this.lastCreatedId)
+    ) {
       return;
     }
     // Prefer adopting an already-present Home over minting another one.

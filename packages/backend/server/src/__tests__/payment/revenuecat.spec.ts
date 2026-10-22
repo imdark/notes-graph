@@ -976,6 +976,7 @@ test('should refresh user subscriptions (empty / revenuecat / stripe-only)', asy
   // prepare mocks:
   // first call returns Pro subscription
   // second call returns AI subscription.
+  // Expiring far off: a subscription past its period end isn't saved.
   const stub = mockSubSeq([
     [
       {
@@ -983,7 +984,7 @@ test('should refresh user subscriptions (empty / revenuecat / stripe-only)', asy
         isTrial: false,
         isActive: true,
         latestPurchaseDate: new Date('2025-09-01T00:00:00.000Z'),
-        expirationDate: new Date('2026-09-01T00:00:00.000Z'),
+        expirationDate: new Date('2099-09-01T00:00:00.000Z'),
         productId: 'app.notesgraph.pro.Annual',
         store: 'app_store',
         willRenew: true,
@@ -996,7 +997,7 @@ test('should refresh user subscriptions (empty / revenuecat / stripe-only)', asy
         isTrial: false,
         isActive: true,
         latestPurchaseDate: new Date('2025-09-02T00:00:00.000Z'),
-        expirationDate: new Date('2026-09-02T00:00:00.000Z'),
+        expirationDate: new Date('2099-09-02T00:00:00.000Z'),
         productId: 'app.notesgraph.pro.ai.Annual',
         store: 'play_store',
         willRenew: true,

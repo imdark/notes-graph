@@ -76,7 +76,9 @@ function getPath(data: unknown, path: string): unknown {
 }
 
 const clip = (value: string) =>
-  value.length > MAX_VALUE_CHARS ? `${value.slice(0, MAX_VALUE_CHARS - 1)}…` : value;
+  value.length > MAX_VALUE_CHARS
+    ? `${value.slice(0, MAX_VALUE_CHARS - 1)}…`
+    : value;
 
 /**
  * The value `spec` asks for in `body`. Throws with a message a person can
@@ -114,7 +116,9 @@ export function extract(body: string, spec: ExtractSpec): string {
       if (value === undefined || value === null) {
         throw new Error(`Nothing at ${spec.pattern}`);
       }
-      return clip(typeof value === 'object' ? JSON.stringify(value) : String(value));
+      return clip(
+        typeof value === 'object' ? JSON.stringify(value) : String(value)
+      );
     }
     case 'text': {
       const text = (looksLikeHtml(body) ? htmlToText(body) : body).trim();

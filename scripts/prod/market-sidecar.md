@@ -11,13 +11,13 @@ record of them; both were backed up in place before editing
 
 ## What is public and what is not
 
-| route | exposure |
-|---|---|
-| `GET /plugins`, `GET /plugins/:id` | public |
-| `GET /download/:id/:version/*` | public |
-| `GET /pubkey`, `GET /health` | public |
-| `POST /publish` | signed in |
-| `POST /admin/:id/:version/approve\|reject` | signed in |
+| route                                       | exposure  |
+| ------------------------------------------- | --------- |
+| `GET /plugins`, `GET /plugins/:id`          | public    |
+| `GET /download/:id/:version/*`              | public    |
+| `GET /pubkey`, `GET /health`                | public    |
+| `POST /publish`                             | signed in |
+| `POST /admin/:id/:version/approve\|reject`  | signed in |
 | `POST /p/:id/:fn` (runs plugin server code) | signed in |
 
 The sidecar has no authentication of its own — every route is open to anyone
@@ -36,18 +36,18 @@ proxy addresses services by their compose service name (`plugin_server:8099`,
 the same way `linkcard:8088` works).
 
 ```yaml
-  plugin_server:
-    image: notesgraph-plugin-server:prod
-    container_name: notesgraph_plugin_server
-    environment:
-      - PORT=8099
-      - PLUGIN_DATA_DIR=/data
-      - AUTO_APPROVE=false
-    volumes:
-      - /opt/notesgraph/data/plugins:/data
-    expose:
-      - '8099'
-    restart: unless-stopped
+plugin_server:
+  image: notesgraph-plugin-server:prod
+  container_name: notesgraph_plugin_server
+  environment:
+    - PORT=8099
+    - PLUGIN_DATA_DIR=/data
+    - AUTO_APPROVE=false
+  volumes:
+    - /opt/notesgraph/data/plugins:/data
+  expose:
+    - '8099'
+  restart: unless-stopped
 ```
 
 `/opt/notesgraph/data/plugins` holds `registry.json`, the published bundles and
@@ -60,7 +60,7 @@ Goes inside the existing `app.notesgraph.com { … }` block, **before** the bare
 `handle { reverse_proxy notesgraph:3010 }` catch-all.
 
 `handle`, not `route` — this cost a failed attempt. Caddy emits all `handle`
-blocks as one mutually-exclusive group *before* any `route` block, regardless
+blocks as one mutually-exclusive group _before_ any `route` block, regardless
 of where the `route` is written. A top-level `route /market/*` placed above the
 catch-all therefore never ran: the bare `handle` swallowed every request first,
 so `/market/plugins` returned the SPA and `/market/publish` 404'd. The nested
@@ -91,7 +91,7 @@ so `/market/plugins` returned the SPA and `/market/publish` 404'd. The nested
   }
 ```
 
-`forward_auth` only *authenticates* the write; it falls through to the proxy at
+`forward_auth` only _authenticates_ the write; it falls through to the proxy at
 the bottom of the route, which is what actually forwards it.
 
 Validate against a candidate file before swapping it in — a bad Caddyfile takes
@@ -142,7 +142,7 @@ silently left the seeds `pending` and the marketplace listed nothing.)
 container start and `publish()` replaces the existing entry for that id and
 version, so a manual status edit is overwritten on the next restart.
 
-Note the gate only proves *someone is signed in* — it does not distinguish an
+Note the gate only proves _someone is signed in_ — it does not distinguish an
 admin from any other user. Until the sidecar learns who the caller is, anyone
 with an account can publish and approve.
 

@@ -104,7 +104,9 @@ export class OmniSeekClient {
     });
     const body = await response.text();
     if (!response.ok) {
-      throw new Error(`OmniSeek answered ${response.status}: ${body.slice(0, 200)}`);
+      throw new Error(
+        `OmniSeek answered ${response.status}: ${body.slice(0, 200)}`
+      );
     }
     const reply = rpcReply(body, response.headers.get('content-type') ?? '');
     if (reply.error) {

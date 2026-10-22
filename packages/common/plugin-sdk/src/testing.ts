@@ -24,11 +24,6 @@
  * plugin that bundles its own React); it tests behaviour, not delivery.
  */
 import type {
-  Capability,
-  Platform,
-  PluginManifest,
-} from './manifest';
-import type {
   CommandSpec,
   Disposable,
   ImporterSpec,
@@ -42,6 +37,7 @@ import type {
   SlashMenuItemSpec,
   ToolbarItemSpec,
 } from './client';
+import type { Capability, Platform, PluginManifest } from './manifest';
 
 export interface HarnessOptions {
   manifest: PluginManifest;

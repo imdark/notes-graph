@@ -231,9 +231,7 @@ export class SyncedFormulaEditor extends WithDisposable(ShadowlessElement) {
         kind: 'ref' as const,
       })),
     ];
-    return items.filter(
-      i => !bare || i.label.toLowerCase().includes(bare)
-    );
+    return items.filter(i => !bare || i.label.toLowerCase().includes(bare));
   }
 
   private _fnSuggestions(token: string): Suggestion[] {
@@ -331,9 +329,7 @@ export class SyncedFormulaEditor extends WithDisposable(ShadowlessElement) {
     const caret = el?.selectionStart ?? this._expression.length;
     const insert = `[${name}]`;
     this._expression =
-      this._expression.slice(0, caret) +
-      insert +
-      this._expression.slice(caret);
+      this._expression.slice(0, caret) + insert + this._expression.slice(caret);
     this._suggestions = [];
     this.updateComplete
       .then(() => {
@@ -391,18 +387,19 @@ export class SyncedFormulaEditor extends WithDisposable(ShadowlessElement) {
             ${repeat(
               this._suggestions,
               (s, i) => `${s.kind}:${s.insert}:${i}`,
-              (s, i) => html`<div
-                class="sfe-suggest-item ${i === this._active ? 'active' : ''}"
-                @mousedown=${(e: Event) => {
-                  e.preventDefault();
-                  this._accept(s);
-                }}
-              >
-                <span class="sfe-suggest-label">${s.label}</span>
-                ${s.hint
-                  ? html`<span class="sfe-suggest-hint">${s.hint}</span>`
-                  : nothing}
-              </div>`
+              (s, i) =>
+                html`<div
+                  class="sfe-suggest-item ${i === this._active ? 'active' : ''}"
+                  @mousedown=${(e: Event) => {
+                    e.preventDefault();
+                    this._accept(s);
+                  }}
+                >
+                  <span class="sfe-suggest-label">${s.label}</span>
+                  ${s.hint
+                    ? html`<span class="sfe-suggest-hint">${s.hint}</span>`
+                    : nothing}
+                </div>`
             )}
           </div>`
         : nothing}
@@ -423,23 +420,24 @@ export class SyncedFormulaEditor extends WithDisposable(ShadowlessElement) {
             ${repeat(
               this._refs,
               r => r.name,
-              r => html`<div class="sfe-ref">
-                <code>[${r.name}]</code>
-                <span class="sfe-suggest-hint"
-                  >${this.block.refLabel(r.pageId, r.blockId)}</span
-                >
-                <span class="sfe-spacer"></span>
-                <span
-                  class="sfe-ref-remove"
-                  @click=${() => this._removeRef(r.name)}
-                  >✕</span
-                >
-              </div>`
+              r =>
+                html`<div class="sfe-ref">
+                  <code>[${r.name}]</code>
+                  <span class="sfe-suggest-hint"
+                    >${this.block.refLabel(r.pageId, r.blockId)}</span
+                  >
+                  <span class="sfe-spacer"></span>
+                  <span
+                    class="sfe-ref-remove"
+                    @click=${() => this._removeRef(r.name)}
+                    >✕</span
+                  >
+                </div>`
             )}
           </div>`
         : html`<div class="sfe-hint">
-            Refer to the source with <code>value</code>. Paste a copied block
-            to add more (<code>[ref1]</code>). e.g.
+            Refer to the source with <code>value</code>. Paste a copied block to
+            add more (<code>[ref1]</code>). e.g.
             <code>value + [ref1]</code>
           </div>`}
     `;

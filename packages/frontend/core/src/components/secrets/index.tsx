@@ -113,7 +113,7 @@ const SecretForm = ({
         />
       </label>
       <label className={styles.field}>
-        What it's for (optional)
+        What it&apos;s for (optional)
         <Input
           value={description}
           onChange={setDescription}
@@ -253,7 +253,7 @@ export const SecretsView = () => {
       <p className={styles.intro}>
         API keys, tokens and passwords for this workspace. Values are encrypted
         on the server and never shown again after you save them, so keep a copy
-        elsewhere if you'll need to read one.
+        elsewhere if you&apos;ll need to read one.
         {canEdit === false
           ? ' Only workspace owners and admins can add or change them.'
           : null}
@@ -287,7 +287,7 @@ export const SecretsView = () => {
 
       {loadError ? (
         <div className={styles.empty}>
-          Couldn't load the secrets: {loadError}{' '}
+          Couldn&apos;t load the secrets: {loadError}{' '}
           <Button variant="plain" onClick={load}>
             Try again
           </Button>

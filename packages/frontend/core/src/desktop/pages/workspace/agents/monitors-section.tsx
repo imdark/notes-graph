@@ -119,7 +119,10 @@ const MonitorCard = ({ monitor, now }: { monitor: Monitor; now: number }) => {
         await run();
         if (done) notify.success({ title: done });
       } catch (err) {
-        notify.error({ title: 'Monitor', message: err instanceof Error ? err.message : String(err) });
+        notify.error({
+          title: 'Monitor',
+          message: err instanceof Error ? err.message : String(err),
+        });
       }
     },
     []
@@ -139,16 +142,25 @@ const MonitorCard = ({ monitor, now }: { monitor: Monitor; now: number }) => {
   }, [monitor, workbench]);
 
   return (
-    <div className={styles.agentCard} data-disabled={!monitor.enabled || undefined} data-testid="agents-page-monitor">
+    <div
+      className={styles.agentCard}
+      data-disabled={!monitor.enabled || undefined}
+      data-testid="agents-page-monitor"
+    >
       <span className={styles.agentCardHead}>
         <span className={styles.agentCardIcon}>📡</span>
         <span className={styles.agentCardName}>{monitor.name}</span>
         {!monitor.enabled ? <span className={styles.pill}>Paused</span> : null}
-        {monitor.enabled && monitor.lastError ? <span className={styles.pill}>Failing</span> : null}
+        {monitor.enabled && monitor.lastError ? (
+          <span className={styles.pill}>Failing</span>
+        ) : null}
         {monitor.pending ? <span className={styles.pill}>Running</span> : null}
       </span>
       <span className={styles.agentCardMeta}>{watches(monitor)}</span>
-      <span className={styles.agentCardFoot} title={monitor.lastError ?? undefined}>
+      <span
+        className={styles.agentCardFoot}
+        title={monitor.lastError ?? undefined}
+      >
         {monitor.lastError
           ? `✗ ${monitor.lastError}`
           : monitor.lastValue
@@ -157,20 +169,23 @@ const MonitorCard = ({ monitor, now }: { monitor: Monitor; now: number }) => {
       </span>
       <MonitorTrend monitor={monitor} />
       <span style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
-        <Button onClick={() => void act(() => monitorsService.runNow(monitor.id), 'Checking now')}>
+        <Button
+          onClick={() =>
+            void act(() => monitorsService.runNow(monitor.id), 'Checking now')
+          }
+        >
           Run now
         </Button>
         <Button
-         
           onClick={() =>
-            void act(() => monitorsService.update(monitor.id, { enabled: !monitor.enabled }))
+            void act(() =>
+              monitorsService.update(monitor.id, { enabled: !monitor.enabled })
+            )
           }
         >
           {monitor.enabled ? 'Pause' : 'Resume'}
         </Button>
-        <Button onClick={edit}>
-          Edit
-        </Button>
+        <Button onClick={edit}>Edit</Button>
         <Button variant="plain" onClick={openBlock}>
           Open
         </Button>
@@ -270,8 +285,11 @@ const NotesHealthSetup = () => {
     setBusy(true);
     try {
       // Find somewhere to run it before making a note that would go unused.
-      const deviceKey = notesHealthDevice(await remoteRunner.agentTargets(workspaceId));
-      if (!deviceKey) throw new Error('No device or cloud runner takes agent work here.');
+      const deviceKey = notesHealthDevice(
+        await remoteRunner.agentTargets(workspaceId)
+      );
+      if (!deviceKey)
+        throw new Error('No device or cloud runner takes agent work here.');
 
       const record = docsService.createDoc({ title: NOTES_HEALTH_DOC_TITLE });
       const { doc, release } = docsService.open(record.id);
@@ -282,19 +300,29 @@ const NotesHealthSetup = () => {
         if (!note) throw new Error("Couldn't write the new note.");
         blockId = doc.blockSuiteDoc.addBlock(
           'notesgraph:paragraph' as never,
-          { text: new Text('Weekly notes health check: the first report is on its way.') },
+          {
+            text: new Text(
+              'Weekly notes health check: the first report is on its way.'
+            ),
+          },
           note.id
         );
       } finally {
         release();
       }
 
-      await monitorsService.create(notesHealthMonitorDraft(record.id, blockId, deviceKey));
+      await monitorsService.create(
+        notesHealthMonitorDraft(record.id, blockId, deviceKey)
+      );
       notify.success({
         title: 'Notes health check set up',
-        message: 'It runs now and then every week. Fixes come as to-dos in its report.',
+        message:
+          'It runs now and then every week. Fixes come as to-dos in its report.',
       });
-      workbench.openDoc({ docId: record.id, mode: 'page', blockIds: [blockId] }, { at: 'active' });
+      workbench.openDoc(
+        { docId: record.id, mode: 'page', blockIds: [blockId] },
+        { at: 'active' }
+      );
     } catch (err) {
       notify.error({
         title: "Couldn't set up the notes health check",

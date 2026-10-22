@@ -14,8 +14,6 @@ import { NotesGraphContext } from '@notesgraph/core/components/context';
 import { AppFallback } from '@notesgraph/core/mobile/components/app-fallback';
 import { DebugConsole } from '@notesgraph/core/mobile/components/debug-console';
 import { configureMobileModules } from '@notesgraph/core/mobile/modules';
-import { setupAgentPush } from './agent-push-glue';
-import { setupBackgroundSyncManifest } from './background-sync-glue';
 import { VirtualKeyboardProvider } from '@notesgraph/core/mobile/modules/virtual-keyboard';
 import { router } from '@notesgraph/core/mobile/router';
 import { configureCommonModules } from '@notesgraph/core/modules';
@@ -40,8 +38,8 @@ import {
   NbstoreProvider,
 } from '@notesgraph/core/modules/storage';
 import { PopupWindowProvider } from '@notesgraph/core/modules/url';
-import { SpeechToTextProvider } from '@notesgraph/core/modules/voice-tasks';
 import { ClientSchemeProvider } from '@notesgraph/core/modules/url/providers/client-schema';
+import { SpeechToTextProvider } from '@notesgraph/core/modules/voice-tasks';
 import {
   configureBrowserWorkbenchModule,
   WorkbenchService,
@@ -59,6 +57,8 @@ import { useTheme } from 'next-themes';
 import { Suspense, useEffect } from 'react';
 import { RouterProvider } from 'react-router-dom';
 
+import { setupAgentPush } from './agent-push-glue';
+import { setupBackgroundSyncManifest } from './background-sync-glue';
 import { AgentPush } from './plugins/agent-push';
 import { AIButton } from './plugins/ai-button';
 import { AppLock } from './plugins/app-lock';
@@ -67,12 +67,12 @@ import { HashCash } from './plugins/hashcash';
 import { NbStoreNativeDBApis } from './plugins/nbstore';
 import { NotesGraphTheme } from './plugins/notesgraph-theme';
 import { Preview } from './plugins/preview';
-import { nativeSpeechToText } from './speech-to-text-glue';
 import {
   deleteEndpointToken,
   readEndpointToken,
   writeEndpointToken,
 } from './proxy';
+import { nativeSpeechToText } from './speech-to-text-glue';
 
 const storeManagerClient = createStoreManagerClient();
 setTelemetryTransport(storeManagerClient.telemetry);
@@ -406,8 +406,9 @@ try {
       : `/workspace/${workspaceId}/agents`;
     return true;
   }
-  const workspaceRef =
-    frameworkProvider.get(WorkspacesService).openByWorkspaceId(workspaceId);
+  const workspaceRef = frameworkProvider
+    .get(WorkspacesService)
+    .openByWorkspaceId(workspaceId);
   if (!workspaceRef) return false;
   const { workspace, dispose } = workspaceRef;
   try {
@@ -654,9 +655,9 @@ function createStoreManagerClient() {
     };
     if (!id || !endpoint) return;
     if (write !== undefined) {
-      writeEndpointToken(endpoint, write)
-        .catch(() => {})
-        .then(() => authTokenChannelServer.postMessage({ id, written: true }));
+      const written = () =>
+        authTokenChannelServer.postMessage({ id, written: true });
+      writeEndpointToken(endpoint, write).then(written, written);
       return;
     }
     readEndpointToken(endpoint)

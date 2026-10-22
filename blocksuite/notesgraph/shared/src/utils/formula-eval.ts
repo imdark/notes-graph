@@ -135,6 +135,7 @@ class Parser {
     if (!this.takeOp('?')) return test;
     const then = this.ternary();
     this.expectOp(':');
+    // oxlint-disable-next-line unicorn/no-thenable -- AST node for `a ? b : c`, never awaited
     return { kind: 'cond', test, then, else: this.ternary() };
   }
 

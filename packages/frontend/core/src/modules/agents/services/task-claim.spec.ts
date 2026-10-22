@@ -265,10 +265,11 @@ describe('releaseQueuedTasks', () => {
       finished: chip('[X]'),
     });
 
-    releaseQueuedTasks(store, ['ours', 'theirs', 'finished'], [
-      'ours',
-      'finished',
-    ]);
+    releaseQueuedTasks(
+      store,
+      ['ours', 'theirs', 'finished'],
+      ['ours', 'finished']
+    );
 
     expect(status('ours')).toBe('[ ]');
     expect(status('theirs')).toBe('[-]');
@@ -315,9 +316,9 @@ describe('markTasksStarted', () => {
       box: { ops: [{ insert: 'c' }], props: { type: 'todo', checked: false } },
     });
 
-    expect(markTasksStarted(store, ['queued', 'done', 'box', 'gone'])).toEqual(
-      ['queued']
-    );
+    expect(markTasksStarted(store, ['queued', 'done', 'box', 'gone'])).toEqual([
+      'queued',
+    ]);
     expect(status('queued')).toBe('[-]');
     expect(status('done')).toBe('[X]');
     expect(status('box')).toBeUndefined();

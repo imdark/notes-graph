@@ -12,6 +12,7 @@ until no eligible todo remains or you hit a real blocker.
 
 The whole point of this loop is **low input**: don't ask "should I do the next
 one?" — just do it. You only surface to the user at three moments:
+
 1. a card needs a genuine **product decision** you can't defensibly make,
 2. you're about to **deploy to prod** (outward-facing, confirm first), or
 3. the loop is **done** (no eligible cards) — report the run.
@@ -71,7 +72,7 @@ stamps, `@mentions`, `#tags`, `#type:x`); raw edits corrupt the CRDT (caused the
 7. **Commit** `scripts/task-git.sh commit "<what+why>" <paths…>`. End the message
    with your session's attribution trailers; the script adds none.
 8. **Mark committed — not done** `update_task {status:"committed", note:"<what
-   changed + commit + how verified>"}`. Done comes later, once it's live (see
+changed + commit + how verified>"}`. Done comes later, once it's live (see
    "Shipping stages"). A card with nothing to ship (already fixed, a question
    answered) goes straight to `done`.
 9. **Next card — immediately.** Don't ask. Go to step 1.
@@ -82,12 +83,12 @@ A card that ships code climbs `committed` → `merged` → `deployed` → `done`
 **never** done just because the code is written. Each is a custom `update_task`
 status (rendered `COMMITTED`/`MERGED`/`DEPLOYED`; only `done` writes CLOSED):
 
-| status      | set when                                                         |
-|-------------|------------------------------------------------------------------|
-| `committed` | the work is committed on its branch (PR opened or pushed)        |
+| status      | set when                                                                     |
+| ----------- | ---------------------------------------------------------------------------- |
+| `committed` | the work is committed on its branch (PR opened or pushed)                    |
 | `merged`    | that branch landed on `main` (`gh pr view <branch> --json state` → `MERGED`) |
-| `deployed`  | a prod deploy containing `main` finished (`DEPLOY-DONE`)          |
-| `done`      | the deployed change was verified live                            |
+| `deployed`  | a prod deploy containing `main` finished (`DEPLOY-DONE`)                     |
+| `done`      | the deployed change was verified live                                        |
 
 Stages only move forward. Before finishing, sweep: `list_blocks
 {docId:"_NYa0NxmRK", status:"committed"}`, then `merged`, then `deployed`, and
@@ -99,8 +100,8 @@ promote each card whose next condition now holds, with a one-line note.
   skips `node_modules`/`dist`). See CLAUDE.md.
 - **Dev server "already up" can be a lie** — it may answer `curl` with `000`. If
   eval fails or a page shows `chrome-error://`, `scripts/debug-local-web-dev.sh
-  restart` then `… wait 180`, and confirm `curl -s -o /dev/null -w "%{http_code}"
-  http://localhost:8080/` is `200` before trusting it.
+restart` then `… wait 180`, and confirm `curl -s -o /dev/null -w "%{http_code}"
+http://localhost:8080/` is `200` before trusting it.
 - **Wrap eval JS in an IIFE** — the CDP eval context **persists variables between
   calls**, so a bare `const x = …` throws "already declared" on the next call. Use
   `(()=>{ … return JSON.stringify(...); })()`.
@@ -108,7 +109,7 @@ promote each card whose next condition now holds, with a one-line note.
   (relative paths resolved wrong once and wandered off-app).
 - **Type into a React input** via the native setter, not `.value=`:
   `const set=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,"value").set;
-  set.call(input,"text"); input.dispatchEvent(new Event("input",{bubbles:true}));`
+set.call(input,"text"); input.dispatchEvent(new Event("input",{bubbles:true}));`
 - **Open the command palette** by dispatching `$mod+K` to `window`:
   `window.dispatchEvent(new KeyboardEvent("keydown",{key:"k",code:"KeyK",metaKey:true,bubbles:true}))`.
   Palette DOM: root `[data-testid=cmdk-quick-search]`, input `[cmdk-input]`,

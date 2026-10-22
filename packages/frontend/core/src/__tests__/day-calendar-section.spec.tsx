@@ -33,6 +33,7 @@ vi.mock('@notesgraph/infra', () => ({
   useService: (token: unknown) => {
     if (token === tokens.CalendarEventNoteService) {
       return {
+        // eslint-disable-next-line rxjs/finnish -- stubs CalendarEventNoteService.note$
         note$: (id: string) =>
           state.notes.has(id) ? { id: state.notes.get(id) } : null,
         ensureNote: (event: { externalEventId: string }) => {
@@ -58,6 +59,7 @@ vi.mock('@notesgraph/infra', () => ({
     }
     return {
       calendar: {
+        // eslint-disable-next-line rxjs/finnish -- stubs calendar.eventsByDate$
         eventsByDate$: () => state.events,
         revalidateEvents: (date: { format: (f: string) => string }) => {
           state.revalidated.push(date.format('YYYY-MM-DD'));
@@ -86,9 +88,8 @@ vi.mock('@notesgraph/i18n', () => {
   };
 });
 
-const { DayCalendarSection } = await import(
-  '../desktop/pages/workspace/detail-page/day-calendar-section'
-);
+const { DayCalendarSection } =
+  await import('../desktop/pages/workspace/detail-page/day-calendar-section');
 
 const event = (over: Record<string, unknown> = {}) => ({
   id: 'e1',

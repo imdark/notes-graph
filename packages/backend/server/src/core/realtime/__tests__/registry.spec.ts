@@ -489,6 +489,10 @@ test('doc realtime providers register share state and grants handlers', async t 
         defaultRole: DocRole.Reader,
       }),
     },
+    // A public doc's share state says who the public is: read only here.
+    docAccessPolicy: {
+      get: async () => ({ publicRole: 'reader' }),
+    },
     docUser: {
       findDirectGrantDocIdsByUser: async () => [],
       paginate: async () => [
@@ -552,6 +556,7 @@ test('doc realtime providers register share state and grants handlers', async t 
         public: true,
         mode: 'Page',
         defaultRole: 'Reader',
+        publicRole: 'Reader',
       },
     }
   );

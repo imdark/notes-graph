@@ -44,7 +44,7 @@ describe('redirect proxy allowlist', () => {
       await import('../../src/main/security/redirect-proxy');
     expect(
       validateRedirectProxyUrl(
-        'assets://./redirect-proxy?redirect_uri=https%3A%2F%2Fgithub.com%2Ftoeverything%2FNotesGraph'
+        'assets://./redirect-proxy?redirect_uri=https%3A%2F%2Fgithub.com%2Fnotesgraph%2Fnotesgraph'
       )
     ).toEqual({
       allow: true,

@@ -11,7 +11,7 @@ test('tokenizer', () => {
     expect(tokens).toEqual([
       { term: 'hello', start: 0, end: 5 },
       { term: 'world', start: 7, end: 12 },
-      { term: 'notesgraph', start: 15, end: 21 },
+      { term: 'notesgraph', start: 15, end: 25 },
     ]);
   }
 

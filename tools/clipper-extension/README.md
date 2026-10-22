@@ -46,7 +46,7 @@ node tools/clipper-extension/smoke-test.mjs
 
 LinkedIn/Facebook stream video via **MSE** (a `<video>` playing a `blob:` URL fed
 JS-fetched HLS/DASH segments) — there's no file URL to download, and DASH streams
-audio in a *separate* buffer from video. `mse-hook.js` (MAIN world,
+audio in a _separate_ buffer from video. `mse-hook.js` (MAIN world,
 `document_start`, scoped to linkedin.com / facebook.com / fb.watch) captures it
 two ways:
 
@@ -63,6 +63,7 @@ clicking Clip. The result shows "+ video"; the note says "(with audio)" or
 "(video only)".
 
 **Honest limits:**
+
 - The audio path is **realtime** — only the portion you actually played is
   recorded.
 - Output is **WebM** (audio path) or MP4 (fallback); capped at ~80 MB.

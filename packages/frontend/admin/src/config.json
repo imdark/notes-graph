@@ -31,6 +31,14 @@
       "type": "Object",
       "desc": "The config for calendar job queue"
     },
+    "queues.directory": {
+      "type": "Object",
+      "desc": "The config for directory sync job queue"
+    },
+    "queues.monitor": {
+      "type": "Object",
+      "desc": "The config for the monitor job queue (scheduled checks)"
+    },
     "queues.doc": {
       "type": "Object",
       "desc": "The config for doc job queue"
@@ -81,7 +89,7 @@
     },
     "newAccountShareActionDelay": {
       "type": "Number",
-      "desc": "Minimum account age in seconds before new accounts can invite members or create share links."
+      "desc": "Minimum account age in seconds before new accounts can invite members or create share links. 0 disables this (default) — it is a public-cloud anti-abuse gate and is inappropriate for self-hosted instances, where the just-created admin must be able to share immediately."
     },
     "passwordRequirements": {
       "type": "Object",
@@ -325,6 +333,16 @@
     }
   },
   "copilot": {
+    "embedding.url": {
+      "type": "String",
+      "desc": "Base URL of an OpenAI-compatible embeddings API, e.g. http://ollama:11434/v1. When set, doc embeddings use it instead of the hosted default model.",
+      "env": "NOTESGRAPH_EMBEDDING_URL"
+    },
+    "embedding.model": {
+      "type": "String",
+      "desc": "The model to ask the embeddings API at embedding.url for.",
+      "env": "NOTESGRAPH_EMBEDDING_MODEL"
+    },
     "enabled": {
       "type": "Boolean",
       "desc": "Whether to enable the copilot plugin. <br> Document: <a href=\"https://docs.notesgraph.com/self-host-notesgraph/administer/ai\" target=\"_blank\">https://docs.notesgraph.com/self-host-notesgraph/administer/ai</a>"
@@ -429,6 +447,35 @@
       "desc": "Number of workspaces automatically indexed per batch"
     }
   },
+  "directory": {
+    "google": {
+      "type": "Object",
+      "desc": "Google Workspace directory sync integration config",
+      "link": "https://developers.google.com/admin-sdk/directory/v1/guides/delegation"
+    }
+  },
+  "registry": {
+    "enabled": {
+      "type": "Boolean",
+      "desc": "Enable the device registry API for deployment and agent targets.",
+      "env": "NOTESGRAPH_REGISTRY_ENABLED"
+    },
+    "maxDevicesPerWorkspace": {
+      "type": "Number",
+      "desc": "Maximum number of registry devices a single workspace may hold.",
+      "env": "NOTESGRAPH_REGISTRY_MAX_DEVICES"
+    },
+    "fcmServiceAccount": {
+      "type": "String",
+      "desc": "Firebase service-account JSON for pushing agent questions to phones. Empty disables push.",
+      "env": "NOTESGRAPH_FCM_SERVICE_ACCOUNT"
+    },
+    "agentMemory": {
+      "type": "Boolean",
+      "desc": "Save what agent runs learn about the user into the \"Agent memory\" notes, and recall it into later runs.",
+      "env": "NOTESGRAPH_AGENT_MEMORY"
+    }
+  },
   "oauth": {
     "providers.google": {
       "type": "Object",
@@ -469,6 +516,18 @@
       "type": "Object",
       "desc": "RevenueCat integration configs",
       "link": "https://www.revenuecat.com/docs/"
+    }
+  },
+  "research": {
+    "omniseekUrl": {
+      "type": "String",
+      "desc": "Base URL of the OmniSeek MCP service, e.g. http://omniseek:8765. Empty disables research.",
+      "env": "NOTESGRAPH_OMNISEEK_URL"
+    },
+    "omniseekToken": {
+      "type": "String",
+      "desc": "Bearer token for OmniSeek (its ~/.omniseek/credentials/omniseek_http.json 'token').",
+      "env": "NOTESGRAPH_OMNISEEK_TOKEN"
     }
   },
   "worker": {

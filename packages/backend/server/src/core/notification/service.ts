@@ -114,7 +114,8 @@ export class NotificationService {
     input: MonitorAlertNotificationCreate,
     { email }: { email: boolean }
   ) {
-    const notification = await this.models.notification.createMonitorAlert(input);
+    const notification =
+      await this.models.notification.createMonitorAlert(input);
     await this.publishCountChanged(input.userId, 'created');
     if (email) {
       const receiver = await this.models.user.getWorkspaceUser(input.userId);

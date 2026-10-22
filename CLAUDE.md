@@ -35,8 +35,8 @@ build output by default), and has cleaner multiline/glob support.
 - ❌ `grep -rn … .` — slow here, walks `node_modules`/`dist`, noisy
 
 `grep` is still allowlisted and fine for a quick read-only pipe on a file or a
-command's output (`… | grep foo | head`); just don't use it as the *recursive
-codebase search* tool — that's `rg`'s job.
+command's output (`… | grep foo | head`); just don't use it as the _recursive
+codebase search_ tool — that's `rg`'s job.
 
 ## Typechecking
 

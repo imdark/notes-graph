@@ -15,8 +15,8 @@ import {
 } from '@testing-library/react';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 
-import manifestJson from './manifest.json';
 import plugin from './index.js';
+import manifestJson from './manifest.json';
 
 const manifest = manifestJson as Parameters<
   typeof createPluginHarness
@@ -228,7 +228,8 @@ describe('registry plugin — summary command', () => {
 describe('registry plugin — writes', () => {
   test('registers a device as a JSON POST and reloads the list', async () => {
     const fetchImpl = vi.fn(async (url: string, init?: RequestInit) => {
-      if (init?.method === 'POST') return jsonResponse(200, { device: device() });
+      if (init?.method === 'POST')
+        return jsonResponse(200, { device: device() });
       return jsonResponse(200, { devices: [] });
     });
     const harness = await harnessWith(fetchImpl);
@@ -273,9 +274,9 @@ describe('registry plugin — writes', () => {
     await waitFor(() =>
       expect(screen.getByText(/Key is required/)).toBeTruthy()
     );
-    expect(harness.requests.filter(r => r.init?.method === 'POST')).toHaveLength(
-      0
-    );
+    expect(
+      harness.requests.filter(r => r.init?.method === 'POST')
+    ).toHaveLength(0);
   });
 
   test('removes a device only after the confirm step', async () => {
@@ -289,9 +290,9 @@ describe('registry plugin — writes', () => {
 
     screen.getByText('Remove').click();
     // Arming alone must not delete anything.
-    expect(harness.requests.filter(r => r.init?.method === 'DELETE')).toHaveLength(
-      0
-    );
+    expect(
+      harness.requests.filter(r => r.init?.method === 'DELETE')
+    ).toHaveLength(0);
 
     await waitFor(() => expect(screen.getByText('Confirm')).toBeTruthy());
     screen.getByText('Confirm').click();

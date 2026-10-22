@@ -7,6 +7,7 @@ import {
 import { openHomePage } from '@notesgraph-test/kit/utils/load-page';
 import {
   clickNewPageButton,
+  switchEdgelessTheme,
   type,
   waitForEditorLoad,
 } from '@notesgraph-test/kit/utils/page-logic';
@@ -31,6 +32,9 @@ test.beforeEach(async ({ page }) => {
 test('should update color of edgeless text when switching theme', async ({
   page,
 }) => {
+  // NotesGraph's app theme defaults to dark, so a new doc's edgeless theme
+  // starts dark; start from light so the light -> dark switch is tested.
+  await switchEdgelessTheme(page, 'light');
   const container = locateEditorContainer(page);
   await container.dblclick();
 

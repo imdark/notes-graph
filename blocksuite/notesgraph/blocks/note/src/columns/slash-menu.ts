@@ -16,10 +16,7 @@ import type { BlockModel } from '@blocksuite/store';
  * it goes after the outermost block instead. An empty line the menu was
  * typed into is replaced rather than left behind.
  */
-const insertColumnsAt = (
-  { std, model }: SlashMenuContext,
-  count: number
-) => {
+const insertColumnsAt = ({ std, model }: SlashMenuContext, count: number) => {
   const { store } = model;
   let target: BlockModel = model;
   let parent = store.getParent(target);

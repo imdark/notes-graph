@@ -1,8 +1,8 @@
-import type { EmbedSyncedBlockModel } from '@blocksuite/notesgraph-model';
 import { CaptionedBlockComponent } from '@blocksuite/notesgraph-components/caption';
 import { createLitPortal } from '@blocksuite/notesgraph-components/portal';
 import { DefaultInlineManagerExtension } from '@blocksuite/notesgraph-inline-preset';
 import { RefNodeSlotsProvider } from '@blocksuite/notesgraph-inline-reference';
+import type { EmbedSyncedBlockModel } from '@blocksuite/notesgraph-model';
 import {
   evaluateFormula,
   type FormulaValue,
@@ -53,7 +53,9 @@ export class EmbedSyncedBlockComponent extends CaptionedBlockComponent<EmbedSync
       user-select: none;
       z-index: 1;
     }
-    notesgraph-embed-synced-block .synced-block-frame:hover .synced-block-badge {
+    notesgraph-embed-synced-block
+      .synced-block-frame:hover
+      .synced-block-badge {
       display: inline-flex;
     }
     notesgraph-embed-synced-block .synced-block-missing {
@@ -220,7 +222,10 @@ export class EmbedSyncedBlockComponent extends CaptionedBlockComponent<EmbedSync
   };
 
   /** Persist the formula editor's expression + refs onto the model. */
-  saveFormula(expression: string, refs: EmbedSyncedBlockModel['props']['refs']) {
+  saveFormula(
+    expression: string,
+    refs: EmbedSyncedBlockModel['props']['refs']
+  ) {
     this.store.captureSync();
     this.model.props.expression = expression.trim() ? expression : null;
     this.model.props.refs = refs && refs.length ? refs : [];
@@ -264,7 +269,7 @@ export class EmbedSyncedBlockComponent extends CaptionedBlockComponent<EmbedSync
     // every edit to the source.
     const expression = this.model.props.expression$.value?.trim();
     if (expression) {
-      this.sourceTextVersion$.value;
+      void this.sourceTextVersion$.value;
       const refs = this.model.props.refs$.value ?? [];
       const result = evaluateFormula(expression, name => {
         const key = name.trim().toLowerCase();

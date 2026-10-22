@@ -60,10 +60,7 @@ export class DirectoryService {
     connectedByUserId: string;
   }) {
     const provider = this.mustGetProvider(params.provider);
-    const tokens = await provider.exchangeCode(
-      params.code,
-      params.redirectUri
-    );
+    const tokens = await provider.exchangeCode(params.code, params.redirectUri);
     const profile = await provider.getAccountProfile(tokens.accessToken);
 
     if (!profile.domain) {
@@ -88,9 +85,8 @@ export class DirectoryService {
   }
 
   async disconnectAccount(accountId: string) {
-    const scopes = await this.models.directorySyncScope.listByAccount(
-      accountId
-    );
+    const scopes =
+      await this.models.directorySyncScope.listByAccount(accountId);
     for (const scope of scopes) {
       await this.deleteSyncScope(scope.id);
     }
@@ -255,10 +251,7 @@ export class DirectoryService {
     }
   }
 
-  private async resolveWorkspaceUser(
-    account: DirectoryAccount,
-    email: string
-  ) {
+  private async resolveWorkspaceUser(account: DirectoryAccount, email: string) {
     let user = await this.models.user.getUserByEmail(email);
     if (!user) {
       user = await this.models.user.create({ email, registered: false });

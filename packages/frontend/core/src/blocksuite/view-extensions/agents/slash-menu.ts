@@ -22,8 +22,7 @@ const GROUP = '2_Agents@0';
 const currentBlockId = (ctx: SlashMenuContext): string | null => {
   const text = ctx.std.selection.find(TextSelection);
   if (text?.from.blockId) return text.from.blockId;
-  const blocks = ctx.std.selection.filter(BlockSelection);
-  return blocks[0]?.blockId ?? null;
+  return ctx.std.selection.find(BlockSelection)?.blockId ?? null;
 };
 
 const selectedBlockIds = (ctx: SlashMenuContext): string[] => {
@@ -54,7 +53,9 @@ export function AgentsSlashMenuConfigExtension(framework: FrameworkProvider) {
       const monitor: SlashMenuItem = {
         name: 'Monitor this block…',
         description: 'Keep it up to date from a website, a command or an agent',
-        icon: html`<div style="color: var(--notesgraph-primary-color)">📡</div>`,
+        icon: html`<div style="color: var(--notesgraph-primary-color)">
+          📡
+        </div>`,
         searchAlias: ['monitor', 'watch', 'track', 'price', 'alert'],
         group: GROUP,
         when: () => currentBlockId(ctx) !== null,
@@ -70,34 +71,40 @@ export function AgentsSlashMenuConfigExtension(framework: FrameworkProvider) {
         },
       };
 
-      return [monitor, ...agents.map<SlashMenuItem>(agent => ({
-        name: agent.name,
-        description: 'Run this agent on the current block',
-        icon: html`<div style="color: var(--notesgraph-primary-color)">
-          ${agent.emoji ? html`<span>${agent.emoji}</span>` : ToolIcon()}
-        </div>`,
-        searchAlias: ['agent'],
-        group: GROUP,
-        when: () => currentBlockId(ctx) !== null,
-        action: () => {
-          const blockIds = selectedBlockIds(ctx);
-          const blockId = currentBlockId(ctx);
-          if (!blockId) return;
-          const docId = ctx.std.host.store.id;
+      return [
+        monitor,
+        ...agents.map<SlashMenuItem>(agent => ({
+          name: agent.name,
+          description: 'Run this agent on the current block',
+          icon: html`<div style="color: var(--notesgraph-primary-color)">
+            ${agent.emoji ? html`<span>${agent.emoji}</span>` : ToolIcon()}
+          </div>`,
+          searchAlias: ['agent'],
+          group: GROUP,
+          when: () => currentBlockId(ctx) !== null,
+          action: () => {
+            const blockIds = selectedBlockIds(ctx);
+            const blockId = currentBlockId(ctx);
+            if (!blockId) return;
+            const docId = ctx.std.host.store.id;
 
-          // More than one block highlighted reads as "run on all of them",
-          // which is a different target than the caret's block.
-          const target: AgentTarget =
-            blockIds.length > 1
-              ? { kind: 'selection', docId, blockIds }
-              : { kind: 'block', docId, blockId };
+            // More than one block highlighted reads as "run on all of them",
+            // which is a different target than the caret's block.
+            const target: AgentTarget =
+              blockIds.length > 1
+                ? { kind: 'selection', docId, blockIds }
+                : { kind: 'block', docId, blockId };
 
-          const workbench = framework.get(WorkbenchService).workbench;
-          workbench.openSidebar();
-          workbench.activeView$.value.activeSidebarTab('agents');
-          void framework.get(AgentRunSessionService).start(agent, target);
-        },
-      }))];
+            const workbench = framework.get(WorkbenchService).workbench;
+            workbench.openSidebar();
+            workbench.activeView$.value.activeSidebarTab('agents');
+            framework
+              .get(AgentRunSessionService)
+              .start(agent, target)
+              .catch(console.error);
+          },
+        })),
+      ];
     },
   });
 }

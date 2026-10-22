@@ -271,7 +271,7 @@ export interface SpentRun {
   tokens: number | null;
 }
 
-export const openQuestions =(job: RemoteJob): RemoteQuestion[] =>
+export const openQuestions = (job: RemoteJob): RemoteQuestion[] =>
   (job.questions ?? []).filter(q => !q.answeredAt);
 
 /** Messages sent to the job that its runner hasn't taken yet. */
@@ -386,7 +386,7 @@ export class RemoteAgentRunnerService extends Service {
     }
     const response = await fetchService.fetch(url, {
       ...init,
-      headers: { 'content-type': 'application/json', ...(init?.headers ?? {}) },
+      headers: { 'content-type': 'application/json', ...init?.headers },
     });
     if (!response.ok) {
       // The server's message is the useful part -- "not an agent target",

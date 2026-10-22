@@ -78,7 +78,12 @@ export const TrackerAddModal = ({
         <label className={styles.label}>
           {t['com.notesgraph.virtualViews.tracker.url']()}
         </label>
-        <Input value={url} onChange={setUrl} placeholder="https://…" autoFocus />
+        <Input
+          value={url}
+          onChange={setUrl}
+          placeholder="https://…"
+          autoFocus
+        />
 
         <label className={styles.label}>
           {t['com.notesgraph.virtualViews.tracker.name']()}
