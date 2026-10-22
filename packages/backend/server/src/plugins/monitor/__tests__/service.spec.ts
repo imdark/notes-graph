@@ -177,6 +177,33 @@ test('an agent run’s summary is the reading; the agent wrote the block itself'
   t.is(readings[0].value, 'RTX 5090 at $1,899 (Micro Center)');
 });
 
+test('a research monitor queues a research job on its device', async t => {
+  const monitor = monitorRow({
+    kind: 'agent',
+    source: null,
+    deviceKey: 'cloud',
+    spec: { instructions: 'Track new papers on diffusion policies.', model: 'research', tools: [] },
+  });
+  const { service, queued } = setup({ monitor });
+  await service.run({ monitorId: 'm1' });
+  const [, , device, body] = queued[0];
+  t.is(device, 'cloud');
+  t.like(body, { model: 'research', tools: [], agentName: 'EUR' });
+  t.true(body.instructions.startsWith('Track new papers'));
+});
+
+test('an agent monitor with no model runs as Claude Code', async t => {
+  const monitor = monitorRow({
+    kind: 'agent',
+    source: null,
+    deviceKey: 'mac',
+    spec: { instructions: 'Find RTX 5090 deals.' },
+  });
+  const { service, queued } = setup({ monitor });
+  await service.run({ monitorId: 'm1' });
+  t.is(queued[0][3].model, 'claude-code');
+});
+
 test('an agent is told which block to keep current', t => {
   const text = agentInstructions(
     { name: 'GPU deals', docId: 'doc', blockId: 'blk' },
