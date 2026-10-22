@@ -6,6 +6,11 @@ import { AppSidebarStateImpl } from './impls/storage';
 import { AppSidebarState } from './providers/storage';
 import { AppSidebarService } from './services/app-sidebar';
 
+export {
+  OPERATIONS_BUTTONS,
+  SIDEBAR_BUTTONS,
+  type SidebarButton,
+} from './entities/app-sidebar';
 export * from './services/app-sidebar';
 
 export function configureAppSidebarModule(framework: Framework) {

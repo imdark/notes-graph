@@ -21,6 +21,19 @@ test('plain command output gives its first number', t => {
   t.is(extract('-3.5 degrees', { type: 'number' }), '-3.5');
 });
 
+test('a page’s copyright year is not its number', t => {
+  // A search engine's home page: nothing but the footer has a digit.
+  const home = '<html><body><a>Gmail</a><footer>© 2026 - Privacy - Terms</footer></body></html>';
+  t.throws(() => extract(home, { type: 'number' }), { message: /No number/ });
+  t.is(
+    extract('<p>Updated 2026</p><td>Rate</td><td>6.42%</td>', { type: 'number' }),
+    '6.42'
+  );
+  t.is(extract('<p>1,999 sold in 2025</p>', { type: 'number' }), '1999');
+  // Command output keeps its first number, which may be a year.
+  t.is(extract('2026\n', { type: 'number' }), '2026');
+});
+
 test('a regex takes its first capture group from the page text', t => {
   const html = '<td>30-year fixed</td><td>6.42%</td>';
   t.is(extract(html, { type: 'regex', pattern: 'fixed\\s+([\\d.]+)%' }), '6.42');
