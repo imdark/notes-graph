@@ -145,6 +145,34 @@ export class RegistryController {
     return { device };
   }
 
+  /**
+   * How many jobs the device runs at once. Its own call, not part of
+   * registration: `wf` re-registers with the whole record, which would
+   * otherwise reset what was set here.
+   */
+  @Post('/workspaces/:workspaceId/devices/:key/max-jobs')
+  async setMaxJobs(
+    @CurrentUser() user: CurrentUserType,
+    @Param('workspaceId') workspaceId: string,
+    @Param('key') key: string,
+    @Body() body: { maxJobs?: number | null }
+  ) {
+    this.assertEnabled();
+    await this.ac
+      .user(user.id)
+      .workspace(workspaceId)
+      .assert('Workspace.Settings.Update');
+    const device = await this.service.setMaxJobs(
+      workspaceId,
+      key,
+      body?.maxJobs ?? null
+    );
+    if (!device) {
+      throw new NotFoundException(`No device '${key}' in this workspace`);
+    }
+    return { device };
+  }
+
   @Delete('/workspaces/:workspaceId/devices/:key')
   async remove(
     @CurrentUser() user: CurrentUserType,
@@ -482,10 +510,11 @@ export class RegistryController {
   ) {
     this.assertEnabled();
     await this.ac.user(user.id).workspace(workspaceId).assert('Workspace.Read');
-    const job = await this.jobs.claim(
+    // `maxJobs`: what the device was set to run at once in the app (null:
+    // the runner's own setting), for the runner to follow.
+    return this.jobs.claimNext(
       workspaceId, key, body?.runnerId ?? 'runner', body?.leaseSeconds
     );
-    return { job };
   }
 
   /** A device reports progress or a result. Also renews the lease. */

@@ -26,6 +26,9 @@ export class FakeNotesGraph {
   /** Instructions sent to the run and not yet taken. */
   steers: Array<{ id: string; text: string; createdAt: number }> = [];
   devices: Record<string, any>[] = [];
+  /** The device's "jobs at once" as set in the app; null for the runner's own. */
+  maxJobs: number | null = null;
+  claims = 0;
   /** What a report hears back as the job's status (a stopped run says cancelled). */
   status = 'running';
   url = '';
@@ -49,8 +52,15 @@ export class FakeNotesGraph {
           return reply({ device: data });
         }
         if (path.endsWith('/jobs/claim')) {
+          this.claims += 1;
           const job = this.queue.shift() ?? null;
-          return reply({ job: job ? { ...job, status: 'running' } : null });
+          return reply({
+            job: job ? { ...job, status: 'running' } : null,
+            maxJobs: this.maxJobs,
+          });
+        }
+        if (req.method === 'GET' && (m = path.match(/\/devices\/([^/]+)$/))) {
+          return reply({ device: { key: m[1], maxJobs: this.maxJobs } });
         }
         if ((m = path.match(/\/jobs\/([^/]+)\/report$/))) {
           this.reports.push({ jobId: m[1], fields: data });

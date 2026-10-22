@@ -9,6 +9,7 @@ import {
 import {
   type Agent,
   AgentsService,
+  CLAUDE_CODE_MODEL,
   type ConditionType,
   type ExtractType,
   isDeviceClaudeModel,
@@ -17,6 +18,7 @@ import {
   type MonitorKind,
   MonitorsService,
   RemoteAgentRunnerService,
+  RESEARCH_MODEL,
   WEEK_MINUTES,
 } from '@notesgraph/core/modules/agents';
 import type { DialogComponentProps } from '@notesgraph/core/modules/dialogs';
@@ -36,6 +38,30 @@ const WHAT: { value: What; label: string; note: string }[] = [
   { value: 'agent', label: 'An agent', note: 'Searches and rewrites the block itself' },
 ];
 
+/** What an agent monitor runs as on its device. */
+const RUN_WITH: { value: string; label: string; hint: string }[] = [
+  {
+    value: CLAUDE_CODE_MODEL,
+    label: 'Claude Code',
+    hint: 'Searches the web and your notes.',
+  },
+  {
+    value: RESEARCH_MODEL,
+    label: 'Research (OmniSeek)',
+    hint: 'Claude Code with OmniSeek: sources in other languages, papers, PDFs and video. The device needs OmniSeek running.',
+  },
+];
+
+/**
+ * The model and tools a monitor started from this agent runs with. A
+ * research agent runs as Claude Code with OmniSeek on the device; its in-tab
+ * research tools are named for the browser loop, so none are carried over.
+ */
+const runAs = (agent: Agent) =>
+  agent.harness === 'research'
+    ? { model: RESEARCH_MODEL, tools: [] }
+    : { model: agent.model ?? CLAUDE_CODE_MODEL, tools: agent.tools };
+
 const EXTRACTORS: { value: ExtractType; label: string; hint: string }[] = [
   { value: 'number', label: 'A number', hint: 'The price on a shop page, or the first number' },
   { value: 'jsonpath', label: 'JSON path', hint: 'e.g. rates.EUR or data[0].price' },
@@ -51,6 +77,20 @@ const CONDITIONS: { value: ConditionType; label: string }[] = [
 ];
 
 const INTERVALS = [5, 15, 30, 60, 180, 360, 720, 1440, WEEK_MINUTES];
+
+const SEARCH_ENGINES = /(^|\.)(google|bing|duckduckgo|yahoo|baidu|yandex|ecosia|search\.brave)\.[a-z.]+$/i;
+
+/**
+ * A search engine's own page: fetching it reads its home page, it doesn't
+ * search, so a question monitored there gets the footer's year or nothing.
+ */
+const isSearchEngine = (url: string) => {
+  try {
+    return SEARCH_ENGINES.test(new URL(url.trim()).hostname);
+  } catch {
+    return false;
+  }
+};
 
 const intervalLabel = (minutes: number) =>
   minutes < 60
@@ -85,9 +125,14 @@ export const MonitorEditorDialog = ({
     [monitorId, monitors]
   );
   const allAgents = useLiveData(agentsService.agents$);
-  // Only device Claude agents can run unattended on a schedule.
+  // Only device Claude agents can run unattended on a schedule; a research
+  // agent can too, as Claude Code with OmniSeek (see runAs).
   const deviceAgents = useMemo(
-    () => allAgents.filter((a: Agent) => a.harness === 'remote' && isDeviceClaudeModel(a.model)),
+    () =>
+      allAgents.filter(
+        (a: Agent) =>
+          a.harness === 'research' || (a.harness === 'remote' && isDeviceClaudeModel(a.model))
+      ),
     [allAgents]
   );
 
@@ -103,6 +148,7 @@ export const MonitorEditorDialog = ({
   const [pattern, setPattern] = useState(existing?.spec.extract?.pattern ?? '');
   const [agentId, setAgentId] = useState<string>('');
   const [instructions, setInstructions] = useState(existing?.spec.instructions ?? '');
+  const [model, setModel] = useState(existing?.spec.model ?? CLAUDE_CODE_MODEL);
   const [deviceKey, setDeviceKey] = useState(existing?.deviceKey ?? '');
   const [interval, setInterval] = useState(existing?.intervalMinutes ?? 60);
   const [conditionType, setConditionType] = useState<ConditionType>(
@@ -119,6 +165,11 @@ export const MonitorEditorDialog = ({
   const [devices, setDevices] = useState<{ key: string; name: string }[]>([]);
   const [testResult, setTestResult] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  // A monitor saved from a Workflow agent keeps running as one.
+  const runWith = RUN_WITH.some(option => option.value === model)
+    ? RUN_WITH
+    : [...RUN_WITH, { value: model, label: model, hint: '' }];
 
   const kind: MonitorKind = what === 'agent' ? 'agent' : 'check';
   const minimum = MIN_INTERVAL_MINUTES[kind];
@@ -143,6 +194,7 @@ export const MonitorEditorDialog = ({
       const agent = deviceAgents.find(a => a.id === id);
       if (!agent) return;
       setInstructions(agent.instructions);
+      setModel(runAs(agent).model);
       if (agent.deviceKey) setDeviceKey(agent.deviceKey);
       if (name === 'Monitor' || !name.trim()) setName(agent.name);
     },
@@ -165,8 +217,8 @@ export const MonitorEditorDialog = ({
             ? { command: command.trim(), extract: { type: extractType, pattern: pattern || undefined } }
             : {
                 instructions: instructions.trim(),
-                model: agent?.model ?? existing?.spec.model ?? 'claude-code',
-                tools: agent?.tools ?? existing?.spec.tools ?? [],
+                model,
+                tools: (agent ? runAs(agent).tools : existing?.spec.tools) ?? [],
               },
       intervalMinutes: Math.max(interval, minimum),
       condition:
@@ -178,7 +230,7 @@ export const MonitorEditorDialog = ({
   }, [
     agentId, alerts, blockId, command, conditionType, conditionValue, deviceAgents,
     deviceKey, docId, existing, extractType, instructions, interval, kind, minimum,
-    name, needsDevice, pattern, url, what,
+    model, name, needsDevice, pattern, url, what,
   ]);
 
   const test = useCallback(async () => {
@@ -288,6 +340,23 @@ export const MonitorEditorDialog = ({
                 placeholder="https://api.frankfurter.app/latest?from=USD&to=EUR"
                 data-testid="monitor-url"
               />
+              {isSearchEngine(url) ? (
+                <span className={styles.hint} data-testid="monitor-url-search-engine">
+                  The server fetches this page; it doesn&apos;t search. To have something
+                  look this up, watch with an agent instead.{' '}
+                  <Button
+                    variant="plain"
+                    onClick={() => {
+                      setWhat('agent');
+                      if (interval < 60) setInterval(360);
+                      if (!instructions.trim()) setInstructions(name.trim());
+                    }}
+                    data-testid="monitor-url-use-agent"
+                  >
+                    Use an agent
+                  </Button>
+                </span>
+              ) : null}
             </div>
           ) : null}
 
@@ -329,6 +398,24 @@ export const MonitorEditorDialog = ({
                   </select>
                 </div>
               ) : null}
+              <div className={styles.field}>
+                <span className={styles.label}>Run with</span>
+                <select
+                  className={styles.select}
+                  value={model}
+                  onChange={e => setModel(e.target.value)}
+                  data-testid="monitor-model"
+                >
+                  {runWith.map(option => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+                <span className={styles.hint}>
+                  {runWith.find(option => option.value === model)?.hint}
+                </span>
+              </div>
               <div className={styles.field}>
                 <span className={styles.label}>Instructions</span>
                 <textarea

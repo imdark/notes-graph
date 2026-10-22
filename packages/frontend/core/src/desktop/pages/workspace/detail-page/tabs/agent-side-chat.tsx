@@ -8,6 +8,7 @@ import {
   LitTextRenderer,
   type TextRendererOptions,
 } from '@notesgraph/core/blocksuite/ai/components/text-renderer';
+import { registerAISharedEffects } from '@notesgraph/core/blocksuite/ai/effects/shared';
 import { useAISpecs } from '@notesgraph/core/components/hooks/notesgraph/use-ai-specs';
 import {
   type ChatMessage,
@@ -32,6 +33,10 @@ import {
 } from 'react';
 
 import * as styles from './agents.css';
+
+// LitTextRenderer constructs <text-renderer>, which is otherwise only
+// registered once an editor or the chat page has loaded.
+registerAISharedEffects();
 
 /** A file sent with a question. Its text rides inside the message. */
 interface AttachedFile {
@@ -127,6 +132,7 @@ export const AgentSideChat = ({
   opening,
   renderReply = renderFormattedReply,
   openModel,
+  waiting,
   onClose,
   testId,
 }: {
@@ -138,6 +144,8 @@ export const AgentSideChat = ({
   renderReply?: (reply: string, streaming: boolean) => ReactNode;
   /** Who answers; the server's model when not given. */
   openModel?: () => Promise<ChatModel>;
+  /** Why the reply hasn't started, shown under it while it is awaited. */
+  waiting?: string | null;
   onClose?: () => void;
   testId: string;
 }) => {
@@ -347,6 +355,11 @@ export const AgentSideChat = ({
                 </div>
               )
             )}
+            {busy && waiting ? (
+              <span className={styles.hint} data-testid={`${testId}-waiting`}>
+                {waiting}
+              </span>
+            ) : null}
             <div ref={listEnd} />
           </div>
         ) : null}

@@ -11,7 +11,29 @@ enum APP_SIDEBAR_STATE {
   SHOW_COLLECTIONS = 'showCollections',
   SHOW_NOTES = 'showNotes',
   SHOW_PROJECTS = 'showProjects',
+  SHOW_OPERATIONS = 'showOperations',
+  HIDDEN_BUTTONS = 'hiddenButtons',
 }
+
+/**
+ * Sidebar buttons a user can hide from Settings → Appearance. The operations
+ * buttons (agents, deployments, monitoring) go in the Operations section when
+ * it is on, and in the top list with the others when it is off.
+ */
+export const SIDEBAR_BUTTONS = [
+  'graph',
+  'discover',
+  'journals',
+  'agents',
+  'deployments',
+  'monitoring',
+] as const;
+export type SidebarButton = (typeof SIDEBAR_BUTTONS)[number];
+export const OPERATIONS_BUTTONS: readonly SidebarButton[] = [
+  'agents',
+  'deployments',
+  'monitoring',
+];
 
 export class AppSidebar extends Entity {
   constructor(private readonly appSidebarState: AppSidebarState) {
@@ -83,6 +105,24 @@ export class AppSidebar extends Entity {
     this.appSidebarState.get<boolean>(APP_SIDEBAR_STATE.SHOW_PROJECTS) ?? true
   );
 
+  /** Group agents, deployments and monitoring under an Operations section. */
+  showOperations$ = LiveData.from(
+    this.appSidebarState
+      .watch<boolean>(APP_SIDEBAR_STATE.SHOW_OPERATIONS)
+      .pipe(map(value => value ?? true)),
+    this.appSidebarState.get<boolean>(APP_SIDEBAR_STATE.SHOW_OPERATIONS) ?? true
+  );
+
+  /** Buttons the user turned off; every button shows until it is listed here. */
+  hiddenButtons$ = LiveData.from(
+    this.appSidebarState
+      .watch<SidebarButton[]>(APP_SIDEBAR_STATE.HIDDEN_BUTTONS)
+      .pipe(map(value => value ?? [])),
+    this.appSidebarState.get<SidebarButton[]>(
+      APP_SIDEBAR_STATE.HIDDEN_BUTTONS
+    ) ?? []
+  );
+
   /**
    * hovering can show the floating sidebar, without open it
    */
@@ -150,5 +190,17 @@ export class AppSidebar extends Entity {
 
   setShowProjects = (show: boolean) => {
     this.appSidebarState.set(APP_SIDEBAR_STATE.SHOW_PROJECTS, show);
+  };
+
+  setShowOperations = (show: boolean) => {
+    this.appSidebarState.set(APP_SIDEBAR_STATE.SHOW_OPERATIONS, show);
+  };
+
+  setButtonShown = (button: SidebarButton, show: boolean) => {
+    const hidden = this.hiddenButtons$.value.filter(b => b !== button);
+    this.appSidebarState.set(
+      APP_SIDEBAR_STATE.HIDDEN_BUTTONS,
+      show ? hidden : [...hidden, button]
+    );
   };
 }

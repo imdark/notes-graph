@@ -10492,6 +10492,26 @@ export function useNotesGraphI18N(): {
       */
     ["com.notesgraph.appearanceSettings.sidebarProjects.description"](): string;
     /**
+      * `Group operations in the sidebar`
+      */
+    ["com.notesgraph.appearanceSettings.sidebarOperations.title"](): string;
+    /**
+      * `Put Agents, Deployments and Monitoring in their own Operations section. When off, they sit with the buttons at the top. On by default.`
+      */
+    ["com.notesgraph.appearanceSettings.sidebarOperations.description"](): string;
+    /**
+      * `Sidebar buttons`
+      */
+    ["com.notesgraph.appearanceSettings.sidebarButtons.title"](): string;
+    /**
+      * `Show this button in the sidebar.`
+      */
+    ["com.notesgraph.appearanceSettings.sidebarButtons.description"](): string;
+    /**
+      * `Operations`
+      */
+    ["com.notesgraph.rootAppSidebar.operations"](): string;
+    /**
       * `Load more`
       */
     ["com.notesgraph.discover.loadMore"](): string;
@@ -10543,6 +10563,206 @@ export function useNotesGraphI18N(): {
       * `Inbox`
       */
     ["com.notesgraph.schedule.todo.inbox"](): string;
+    /**
+      * `Add note`
+      */
+    ["com.notesgraph.integration.calendar.add-note"](): string;
+    /**
+      * `Open note`
+      */
+    ["com.notesgraph.integration.calendar.open-note"](): string;
+    /**
+      * `Security`
+      */
+    ["com.notesgraph.mobile.setting.security.title"](): string;
+    /**
+      * `Lock app with device PIN or biometrics`
+      */
+    ["com.notesgraph.mobile.setting.security.app-lock"](): string;
+    /**
+      * `Set a screen lock on your phone to use this.`
+      */
+    ["com.notesgraph.mobile.setting.security.app-lock.unavailable"](): string;
+    /**
+      * `Dictate tasks`
+      */
+    ["com.notesgraph.mobile.voice-tasks.title"](): string;
+    /**
+      * `Say a task, then say “next task” before the next one. Pausing is fine; it won't start a new task.`
+      */
+    ["com.notesgraph.mobile.voice-tasks.hint"](): string;
+    /**
+      * `Your tasks appear here, one per line. You can fix them before adding.`
+      */
+    ["com.notesgraph.mobile.voice-tasks.placeholder"](): string;
+    /**
+      * `Start listening`
+      */
+    ["com.notesgraph.mobile.voice-tasks.listen"](): string;
+    /**
+      * `Stop listening`
+      */
+    ["com.notesgraph.mobile.voice-tasks.stop"](): string;
+    /**
+      * `Add {{count}} tasks`
+    
+      * - com.notesgraph.mobile.voice-tasks.add_one: `Add {{count}} task`
+    
+      * - com.notesgraph.mobile.voice-tasks.add_other: `Add {{count}} tasks`
+      */
+    ["com.notesgraph.mobile.voice-tasks.add"](options: {
+        readonly count: string | number | bigint;
+    }): string;
+    /**
+      * `Add {{count}} task`
+      */
+    ["com.notesgraph.mobile.voice-tasks.add_one"](options: {
+        readonly count: string | number | bigint;
+    }): string;
+    /**
+      * `Add {{count}} tasks`
+      */
+    ["com.notesgraph.mobile.voice-tasks.add_other"](options: {
+        readonly count: string | number | bigint;
+    }): string;
+    /**
+      * `Added {{count}} tasks`
+    
+      * - com.notesgraph.mobile.voice-tasks.added_one: `Added {{count}} task`
+    
+      * - com.notesgraph.mobile.voice-tasks.added_other: `Added {{count}} tasks`
+      */
+    ["com.notesgraph.mobile.voice-tasks.added"](options: {
+        readonly count: string | number | bigint;
+    }): string;
+    /**
+      * `Added {{count}} task`
+      */
+    ["com.notesgraph.mobile.voice-tasks.added_one"](options: {
+        readonly count: string | number | bigint;
+    }): string;
+    /**
+      * `Added {{count}} tasks`
+      */
+    ["com.notesgraph.mobile.voice-tasks.added_other"](options: {
+        readonly count: string | number | bigint;
+    }): string;
+    /**
+      * `Allow microphone access to dictate tasks.`
+      */
+    ["com.notesgraph.mobile.voice-tasks.error.permission"](): string;
+    /**
+      * `Speech recognition isn't available on this device.`
+      */
+    ["com.notesgraph.mobile.voice-tasks.error.unavailable"](): string;
+    /**
+      * `Listening stopped. Tap the mic to try again.`
+      */
+    ["com.notesgraph.mobile.voice-tasks.error.failed"](): string;
+    /**
+      * `Share`
+      */
+    ["com.notesgraph.agent-run.share.button"](): string;
+    /**
+      * `Copy link`
+      */
+    ["com.notesgraph.agent-run.share.copy"](): string;
+    /**
+      * `Update snapshot`
+      */
+    ["com.notesgraph.agent-run.share.refresh"](): string;
+    /**
+      * `Turn off link`
+      */
+    ["com.notesgraph.agent-run.share.revoke"](): string;
+    /**
+      * `Link copied`
+      */
+    ["com.notesgraph.agent-run.share.copied"](): string;
+    /**
+      * `Link turned off`
+      */
+    ["com.notesgraph.agent-run.share.revoked"](): string;
+    /**
+      * `Couldn't share this run`
+      */
+    ["com.notesgraph.agent-run.share.failed"](): string;
+    /**
+      * `Anyone with the link can read this run as it was when shared, with secrets redacted. Later output shows only after you update the snapshot.`
+      */
+    ["com.notesgraph.agent-run.share.hint"](): string;
+    /**
+      * `Make a read-only link to this run that works without signing in`
+      */
+    ["com.notesgraph.agent-run.share.tooltip"](): string;
+    /**
+      * `This link was turned off, or it never existed. Ask whoever sent it for a new one.`
+      */
+    ["com.notesgraph.shared-run.not-found"](): string;
+    /**
+      * `Couldn't load this run.`
+      */
+    ["com.notesgraph.shared-run.load-failed"](): string;
+    /**
+      * `Loading the run…`
+      */
+    ["com.notesgraph.shared-run.loading"](): string;
+    /**
+      * `Read-only snapshot`
+      */
+    ["com.notesgraph.shared-run.snapshot"](): string;
+    /**
+      * `Agent run`
+      */
+    ["com.notesgraph.shared-run.untitled"](): string;
+    /**
+      * `Result`
+      */
+    ["com.notesgraph.shared-run.result"](): string;
+    /**
+      * `Transcript`
+      */
+    ["com.notesgraph.shared-run.transcript"](): string;
+    /**
+      * `What it asked`
+      */
+    ["com.notesgraph.shared-run.questions"](): string;
+    /**
+      * `Not answered`
+      */
+    ["com.notesgraph.shared-run.unanswered"](): string;
+    /**
+      * `Allowed`
+      */
+    ["com.notesgraph.shared-run.allowed"](): string;
+    /**
+      * `Denied`
+      */
+    ["com.notesgraph.shared-run.denied"](): string;
+    /**
+      * `This run left no log.`
+      */
+    ["com.notesgraph.shared-run.empty-log"](): string;
+    /**
+      * `Queued`
+      */
+    ["com.notesgraph.shared-run.status.queued"](): string;
+    /**
+      * `Running`
+      */
+    ["com.notesgraph.shared-run.status.running"](): string;
+    /**
+      * `Done`
+      */
+    ["com.notesgraph.shared-run.status.done"](): string;
+    /**
+      * `Failed`
+      */
+    ["com.notesgraph.shared-run.status.error"](): string;
+    /**
+      * `Cancelled`
+      */
+    ["com.notesgraph.shared-run.status.cancelled"](): string;
 } { const { t } = useTranslation(); return useMemo(() => createProxy((key) => t.bind(null, key)), [t]); }
 function createComponent(i18nKey: string) {
     return (props) => createElement(Trans, { i18nKey, shouldUnescape: true, ...props });

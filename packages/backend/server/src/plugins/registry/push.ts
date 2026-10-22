@@ -78,7 +78,8 @@ export function runOutcome(
 /**
  * Whether a finished job is worth a phone notification. Not when the user
  * cancelled it, not a monitor's run (its alert is its own push), not the
- * Deployments screen asking GitHub (the screen shows the answer), and not a
+ * Deployments screen asking GitHub (the screen shows the answer), not a turn
+ * of a side chat asked on a device (the chat shows the answer), and not a
  * health check that passed: those run on a schedule, and only a failure is
  * news. A failed one still pushes.
  */
@@ -90,6 +91,7 @@ export function pushesWhenFinished(job: {
   if (!job.createdBy || job.status === 'cancelled') return false;
   if (job.agentId.startsWith('monitor:')) return false;
   if (job.agentId.startsWith('github:')) return false;
+  if (job.agentId.startsWith('chat:')) return false;
   if (job.agentId.startsWith('health:') && job.status === 'done') return false;
   return true;
 }

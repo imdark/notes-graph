@@ -842,6 +842,41 @@ test('claiming a job starts its tasks', async t => {
   t.is(calls.length, 1);
 });
 
+test('a device set to N jobs at once hands out none while N are held', async t => {
+  const job = { id: 'job-1', workspaceId, model: null, tools: [], createdAt: new Date(0) };
+  const claimed: string[] = [];
+  const service = (held: number, maxJobs: number | null) =>
+    new RegistryJobService({
+      registryDevice: {
+        touchRunner: async () => {},
+        get: async () => ({ key: 'cloud', maxJobs }),
+      },
+      registryJob: {
+        countHeld: async () => held,
+        claim: async () => {
+          claimed.push('claim');
+          return job;
+        },
+      },
+    } as any);
+
+  // Two runs waiting on their starter hold both slots.
+  t.deepEqual(await service(2, 2).claimNext(workspaceId, 'cloud', 'runner'), {
+    job: null,
+    maxJobs: 2,
+  });
+  t.deepEqual(claimed, []);
+
+  const free = await service(1, 2).claimNext(workspaceId, 'cloud', 'runner');
+  t.is(free.job?.id, 'job-1');
+  t.is(free.maxJobs, 2);
+
+  // Unset: the runner's own setting decides; the server doesn't count.
+  const unset = await service(99, null).claimNext(workspaceId, 'cloud', 'runner');
+  t.is(unset.job?.id, 'job-1');
+  t.is(unset.maxJobs, null);
+});
+
 test('a job that ends, however it ends, hands its tasks back', async t => {
   for (const status of ['done', 'error']) {
     const { service: base } = makeReportService();

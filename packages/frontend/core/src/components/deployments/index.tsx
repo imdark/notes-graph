@@ -20,6 +20,7 @@ import {
   type ShipTask,
   type ShipTaskDetails,
   shipTargets,
+  stuckReason,
 } from '@notesgraph/core/modules/agents';
 import { WorkbenchService } from '@notesgraph/core/modules/workbench';
 import { useLiveData, useService } from '@notesgraph/infra';
@@ -27,7 +28,11 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import * as styles from './styles.css';
 
-type Row = ShipTask & ShipTaskDetails;
+type Row = ShipTask &
+  ShipTaskDetails & {
+    /** Why a COMMITTED task has nothing to merge; see stuckReason. */
+    stuck: string | null;
+  };
 
 const READINESS: Record<
   MergeReadiness,
@@ -184,6 +189,10 @@ export const DeploymentsView = () => {
     string,
     ShipTaskDetails & { stage: ShipStage }
   > | null>(null);
+  // Bumped when this screen moved tasks on itself, so their notes are read
+  // again now rather than whenever the index catches up.
+  const [notesChanged, setNotesChanged] = useState(0);
+  const branchChecks = useLiveData(deployments.branchChecks$);
   useEffect(() => {
     if (!tasks) return;
     let cancelled = false;
@@ -198,7 +207,7 @@ export const DeploymentsView = () => {
     return () => {
       cancelled = true;
     };
-  }, [deployments, tasks]);
+  }, [deployments, tasks, notesChanged]);
 
   const pullsByUrl = useMemo(
     () => new Map(github.pulls.map(pr => [pr.url, pr])),
@@ -212,24 +221,29 @@ export const DeploymentsView = () => {
         // Read but gone from its note, or no longer in a ship stage there.
         if (details && !read) return [];
         const pullRequest = read?.pullRequest ?? null;
-        const stage = read?.stage ?? task.stage;
+        const noted = read?.stage ?? task.stage;
+        const check = pullRequest ? branchChecks.get(pullRequest) : undefined;
+        // Merged on GitHub by someone else: it is waiting for a deploy. The
+        // list has only recent merges; an older one is known from a check.
+        const stage =
+          noted === 'committed' &&
+          pullRequest &&
+          (pullsByUrl.get(pullRequest)?.state === 'merged' ||
+            check?.state === 'merged')
+            ? 'merged'
+            : noted;
         return [
           {
             ...task,
-            // Merged on GitHub by someone else: it is waiting for a deploy.
-            stage:
-              stage === 'committed' &&
-              pullRequest &&
-              pullsByUrl.get(pullRequest)?.state === 'merged'
-                ? 'merged'
-                : stage,
+            stage,
             title: read?.title ?? task.text,
             docTitle: read?.docTitle ?? '',
             pullRequest,
+            stuck: stuckReason({ stage, pullRequest }, check),
           },
         ];
       }),
-    [tasks, details, pullsByUrl]
+    [tasks, details, pullsByUrl, branchChecks]
   );
 
   // The repos the tasks' pull requests are in: what to ask GitHub about.
@@ -284,8 +298,42 @@ export const DeploymentsView = () => {
     () => rows.filter(row => !unchosen.has(rowKey(row))),
     [rows, unchosen]
   );
-  const toMerge = shipTargets(chosen, 'merge');
-  const toDeploy = shipTargets(chosen, 'deploy');
+  // A task with nothing open to merge isn't sent to merge or deploy.
+  const chosenToShip = chosen.filter(row => !row.stuck);
+  const toMerge = shipTargets(chosenToShip, 'merge');
+  const toDeploy = shipTargets(chosenToShip, 'deploy');
+  const stuck = rows.filter(row => row.stuck);
+
+  // Moved on by hand, for a task whose work is on main already or done.
+  const [moving, setMoving] = useState<Set<string>>(() => new Set());
+  const moveOn = useCallback(
+    async (row: Row, status: 'MERGED' | 'DONE') => {
+      const key = rowKey(row);
+      setMoving(prev => new Set(prev).add(key));
+      try {
+        const moved = await deployments.moveOn(row, status);
+        if (!moved) {
+          notify.error({
+            title: `Couldn't mark it ${status.toLowerCase()}`,
+            message: `"${row.title}" isn't COMMITTED in its note any more.`,
+          });
+        }
+        setNotesChanged(n => n + 1);
+      } catch (err) {
+        notify.error({
+          title: `Couldn't mark it ${status.toLowerCase()}`,
+          message: err instanceof Error ? err.message : String(err),
+        });
+      } finally {
+        setMoving(prev => {
+          const next = new Set(prev);
+          next.delete(key);
+          return next;
+        });
+      }
+    },
+    [deployments]
+  );
 
   // The run this screen last sent, followed here so a phone sees it through.
   const [sent, setSent] = useState<{
@@ -399,6 +447,8 @@ export const DeploymentsView = () => {
             ? `${lines.join(' ')}${ok > 0 ? ` ${ok} still open and ready.` : ''}`
             : 'All still open, with their branches.',
       });
+      // Merged ones were moved on in their notes; show that now.
+      setNotesChanged(n => n + 1);
       refresh();
     } catch (err) {
       notify.error({
@@ -506,7 +556,8 @@ export const DeploymentsView = () => {
   }
 
   const shippable =
-    rows.some(row => row.stage !== 'deployed') || untrackedOpen.length > 0;
+    rows.some(row => row.stage !== 'deployed' && !row.stuck) ||
+    untrackedOpen.length > 0;
 
   /** Merge buttons for an open pull request: wf's, or Claude's to fix it. */
   const mergeActions = (pr: PullRequest | undefined, row?: Row) => {
@@ -666,7 +717,7 @@ export const DeploymentsView = () => {
       ) : null}
 
       {SECTIONS.map(({ stage, title, hint }) => {
-        const list = rows.filter(row => row.stage === stage);
+        const list = rows.filter(row => row.stage === stage && !row.stuck);
         const extra = stage === 'committed' ? untrackedOpen : [];
         if (list.length === 0 && extra.length === 0) return null;
         return (
@@ -758,6 +809,72 @@ export const DeploymentsView = () => {
           </section>
         );
       })}
+
+      {stuck.length > 0 ? (
+        <section className={styles.section} data-testid="deployments-stuck">
+          <div className={styles.sectionTitle}>
+            Not ready to merge
+            <span className={styles.sectionCount}>{stuck.length}</span>
+          </div>
+          <div className={styles.sectionHint}>
+            Marked COMMITTED, but there is nothing open to merge: no pull
+            request in the note, or Check ready branches found it closed, gone
+            or without its branch. Mark it merged if the work is on main
+            another way, or done if nothing is left to ship.
+          </div>
+          <div className={styles.rows}>
+            {stuck.map(row => {
+              const key = rowKey(row);
+              const busyRow = moving.has(key);
+              return (
+                <div key={key} className={styles.row}>
+                  <div className={styles.rowBody}>
+                    <span className={styles.rowTitle}>{row.title}</span>
+                    <span className={styles.rowMeta}>
+                      <button
+                        className={styles.link}
+                        onClick={() => openTask(row)}
+                      >
+                        {row.docTitle || 'Open note'}
+                      </button>
+                      {row.pullRequest ? (
+                        <a
+                          className={styles.link}
+                          href={row.pullRequest}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          {prLabel(row.pullRequest)}
+                        </a>
+                      ) : null}
+                      <span className={styles.badgeBad}>{row.stuck}</span>
+                    </span>
+                  </div>
+                  <div className={styles.rowActions}>
+                    <Button
+                      onClick={() => void moveOn(row, 'MERGED')}
+                      disabled={busyRow}
+                      tooltip="Its work is on main already: it moves to Ready to deploy"
+                      data-testid="deployments-stuck-merged"
+                    >
+                      Mark merged
+                    </Button>
+                    <Button
+                      variant="plain"
+                      onClick={() => void moveOn(row, 'DONE')}
+                      disabled={busyRow}
+                      tooltip="Nothing left to ship: it leaves this screen"
+                      data-testid="deployments-stuck-done"
+                    >
+                      Mark done
+                    </Button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      ) : null}
 
       {untrackedMerged.length > 0 ? (
         <section

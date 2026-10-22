@@ -2,6 +2,7 @@ import {
   LitTextRenderer,
   type TextRendererOptions,
 } from '@notesgraph/core/blocksuite/ai/components/text-renderer';
+import { registerAISharedEffects } from '@notesgraph/core/blocksuite/ai/effects/shared';
 import { useAISpecs } from '@notesgraph/core/components/hooks/notesgraph/use-ai-specs';
 import {
   type AgentRun,
@@ -19,6 +20,10 @@ import { useCallback, useMemo, useState } from 'react';
 import * as styles from './agents.css';
 import * as diffStyles from './edit-diff.css';
 import { EditDiffView } from './edit-diff-view';
+
+// LitTextRenderer constructs <text-renderer>, which is otherwise only
+// registered once an editor or the chat page has loaded.
+registerAISharedEffects();
 
 /**
  * Lines of a file's diff shown before "Show all": the diff grows to its
