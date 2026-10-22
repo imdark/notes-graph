@@ -52,7 +52,7 @@ export class EmbedHtmlBlockComponent extends EmbedBlockComponent<EmbedHtmlModel>
   }
 
   override renderBlock(): unknown {
-    const titleText = 'Basic HTML Page Structure';
+    const titleText = this.model.props.caption || 'HTML';
 
     const htmlSrc = `
       <style>

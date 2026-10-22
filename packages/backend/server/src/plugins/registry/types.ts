@@ -26,6 +26,9 @@ export interface RegisterDeviceBody {
   labels?: Record<string, unknown>;
 }
 
+/** The most "jobs at once" a device may be set to. */
+export const MAX_DEVICE_JOBS = 16;
+
 export interface DeviceStatusBody {
   state?: string;
   statusDetail?: string | null;
@@ -52,6 +55,8 @@ export interface DeviceDto {
   channel: string;
   pin: string | null;
   agentTarget: boolean;
+  /** Jobs its runners may run at once; null leaves it to the runner. */
+  maxJobs: number | null;
   labels: Record<string, unknown>;
   state: string;
   statusDetail: string | null;
@@ -79,6 +84,7 @@ export function toDeviceDto(device: RegistryDevice): DeviceDto {
     channel: device.channel,
     pin: device.pin,
     agentTarget: device.agentTarget,
+    maxJobs: device.maxJobs,
     labels: (device.labels ?? {}) as Record<string, unknown>,
     state: device.state,
     statusDetail: device.statusDetail,

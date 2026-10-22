@@ -79,6 +79,9 @@ describe('Claude Code under Cloud', () => {
 const job = (overrides: Partial<RemoteJob>): RemoteJob => ({
   id: 'job-1',
   deviceKey: 'laptop',
+  agentId: 'agent-1',
+  agentName: 'Claude',
+  model: null,
   status: 'running',
   result: null,
   error: null,

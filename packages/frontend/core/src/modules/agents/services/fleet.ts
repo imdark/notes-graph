@@ -42,6 +42,11 @@ export interface RegistryDevice {
   recipe: string;
   channel: string;
   agentTarget: boolean;
+  /**
+   * Jobs its runners may run at once, set here; null leaves it to each
+   * runner's own setting. Absent from older servers.
+   */
+  maxJobs?: number | null;
   labels: Record<string, unknown>;
   state: string;
   statusDetail: string | null;
@@ -381,6 +386,22 @@ export class FleetService extends Service {
       method: 'POST',
     });
     this.markChecking([key]);
+  }
+
+  /**
+   * How many jobs the machine's runners may run at once; null for their own
+   * setting. A run waiting on its starter still holds its slot, so a machine
+   * whose slots are all waiting starts nothing else, side chats included.
+   */
+  async setMaxJobs(key: string, maxJobs: number | null): Promise<RegistryDevice> {
+    const { device } = await this.json<{ device: RegistryDevice }>(
+      `/devices/${encodeURIComponent(key)}/max-jobs`,
+      { method: 'POST', body: JSON.stringify({ maxJobs }) }
+    );
+    this.devices$.setValue(
+      this.devices$.value.map(d => (d.key === device.key ? device : d))
+    );
+    return device;
   }
 
   async revalidateAgent(): Promise<void> {

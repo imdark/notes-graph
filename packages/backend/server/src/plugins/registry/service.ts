@@ -12,6 +12,7 @@ import {
   DEVICE_STATES,
   type DeviceDto,
   type DeviceStatusBody,
+  MAX_DEVICE_JOBS,
   type RegisterDeviceBody,
   toDeviceDto,
 } from './types';
@@ -132,6 +133,31 @@ export class RegistryService {
 
   async get(workspaceId: string, key: string): Promise<DeviceDto | null> {
     const device = await this.models.registryDevice.get(workspaceId, this.normalizeKey(key));
+    return device ? toDeviceDto(device) : null;
+  }
+
+  /**
+   * How many jobs the device's runners may run at once; null leaves it to
+   * each runner's own setting (`--max-jobs`, RUNNER_MAX_JOBS).
+   */
+  async setMaxJobs(
+    workspaceId: string,
+    key: string,
+    maxJobs: unknown
+  ): Promise<DeviceDto | null> {
+    if (
+      maxJobs !== null &&
+      !(Number.isInteger(maxJobs) && (maxJobs as number) >= 1 && (maxJobs as number) <= MAX_DEVICE_JOBS)
+    ) {
+      throw new BadRequest(
+        `maxJobs must be a whole number from 1 to ${MAX_DEVICE_JOBS}, or null for the runner's own setting`
+      );
+    }
+    const device = await this.models.registryDevice.setMaxJobs(
+      workspaceId,
+      this.normalizeKey(key),
+      maxJobs as number | null
+    );
     return device ? toDeviceDto(device) : null;
   }
 

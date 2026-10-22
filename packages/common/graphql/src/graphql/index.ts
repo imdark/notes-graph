@@ -3334,6 +3334,58 @@ export const getWorkspaceRolePermissionsQuery = {
   deprecations: ["'workspaceRolePermissions' is deprecated: use WorkspaceType[permissions] instead"],
 };
 
+export const deleteWorkspaceSecretMutation = {
+  id: 'deleteWorkspaceSecretMutation' as const,
+  op: 'deleteWorkspaceSecret',
+  query: `mutation deleteWorkspaceSecret($workspaceId: String!, $name: String!) {
+  deleteWorkspaceSecret(workspaceId: $workspaceId, name: $name)
+}`,
+};
+
+export const workspaceSecretsQuery = {
+  id: 'workspaceSecretsQuery' as const,
+  op: 'workspaceSecrets',
+  query: `query workspaceSecrets($workspaceId: String!) {
+  workspace(id: $workspaceId) {
+    secrets {
+      id
+      name
+      description
+      createdAt
+      updatedAt
+    }
+  }
+}`,
+};
+
+export const renameWorkspaceSecretMutation = {
+  id: 'renameWorkspaceSecretMutation' as const,
+  op: 'renameWorkspaceSecret',
+  query: `mutation renameWorkspaceSecret($workspaceId: String!, $name: String!, $newName: String!) {
+  renameWorkspaceSecret(workspaceId: $workspaceId, name: $name, newName: $newName) {
+    id
+    name
+    description
+    createdAt
+    updatedAt
+  }
+}`,
+};
+
+export const setWorkspaceSecretMutation = {
+  id: 'setWorkspaceSecretMutation' as const,
+  op: 'setWorkspaceSecret',
+  query: `mutation setWorkspaceSecret($input: SetWorkspaceSecretInput!) {
+  setWorkspaceSecret(input: $input) {
+    id
+    name
+    description
+    createdAt
+    updatedAt
+  }
+}`,
+};
+
 export const approveWorkspaceTeamMemberMutation = {
   id: 'approveWorkspaceTeamMemberMutation' as const,
   op: 'approveWorkspaceTeamMember',

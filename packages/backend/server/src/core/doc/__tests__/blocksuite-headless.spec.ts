@@ -3,6 +3,8 @@ import * as Y from 'yjs';
 
 import { createDocWithMarkdown } from '../../../native';
 import {
+  appendEmbedHtmlBlock,
+  appendFlashcards,
   appendLinkedDocReference,
   NoteBlockNotFoundError,
 } from '../blocksuite-headless';
@@ -75,6 +77,69 @@ test('appendLinkedDocReference adds a reference paragraph without touching exist
     noteBlock.get('sys:children') as Y.Array<string>
   ).toArray();
   t.true(noteChildren.includes(refBlockId!));
+});
+
+test('appendEmbedHtmlBlock adds an html embed as the last block of the note', t => {
+  const docId = 'widget-doc';
+  const original = createDocWithMarkdown('Widgets', 'Intro.', docId);
+  const delta = appendEmbedHtmlBlock(
+    original,
+    docId,
+    '<button>+1</button>',
+    'Counter'
+  );
+
+  const merged = new Y.Doc();
+  Y.applyUpdate(merged, original);
+  Y.applyUpdate(merged, delta);
+  const blocks = merged.getMap('blocks');
+  t.deepEqual(paragraphTexts(blocks), ['Intro.']);
+
+  let note: Y.Map<unknown> | undefined;
+  blocks.forEach(block => {
+    const yBlock = block as Y.Map<unknown>;
+    if (yBlock.get('sys:flavour') === 'notesgraph:note') note = yBlock;
+  });
+  const lastId = (note!.get('sys:children') as Y.Array<string>).toArray().at(-1);
+  const embed = blocks.get(lastId!) as Y.Map<unknown>;
+  t.is(embed.get('sys:flavour'), 'notesgraph:embed-html');
+  t.is(embed.get('prop:html'), '<button>+1</button>');
+  t.is(embed.get('prop:caption'), 'Counter');
+  t.is(embed.get('prop:style'), 'html');
+});
+
+test('appendFlashcards adds collapsed list items with the answer as the child', t => {
+  const docId = 'deck-doc';
+  const original = createDocWithMarkdown('Deck', 'Intro.', docId);
+  const delta = appendFlashcards(original, docId, [
+    { question: 'Capital of France?', answer: 'Paris' },
+    { question: '2 + 2?', answer: '4' },
+  ]);
+
+  const merged = new Y.Doc();
+  Y.applyUpdate(merged, original);
+  Y.applyUpdate(merged, delta);
+  const blocks = merged.getMap('blocks');
+
+  let note: Y.Map<unknown> | undefined;
+  blocks.forEach(block => {
+    const yBlock = block as Y.Map<unknown>;
+    if (yBlock.get('sys:flavour') === 'notesgraph:note') note = yBlock;
+  });
+  const noteChildren = (note!.get('sys:children') as Y.Array<string>).toArray();
+  t.is(noteChildren.length, 3, 'intro paragraph plus two cards');
+
+  const cards = noteChildren.slice(1).map(id => {
+    const card = blocks.get(id) as Y.Map<unknown>;
+    t.is(card.get('sys:flavour'), 'notesgraph:list');
+    t.is(card.get('prop:type'), 'bulleted');
+    t.true(card.get('prop:collapsed') as boolean);
+    const [answerId] = (card.get('sys:children') as Y.Array<string>).toArray();
+    const answer = blocks.get(answerId) as Y.Map<unknown>;
+    t.is(answer.get('sys:flavour'), 'notesgraph:paragraph');
+    return `${(card.get('prop:text') as Y.Text).toString()}=${(answer.get('prop:text') as Y.Text).toString()}`;
+  });
+  t.deepEqual(cards, ['Capital of France?=Paris', '2 + 2?=4']);
 });
 
 test('appendLinkedDocReference throws NoteBlockNotFoundError for a page with no note', t => {

@@ -1921,6 +1921,7 @@ export interface Mutation {
   deleteUser: DeleteAccount;
   deleteWorkspace: Scalars['Boolean']['output'];
   deleteWorkspaceByokConfig: Scalars['Boolean']['output'];
+  deleteWorkspaceSecret: Scalars['Boolean']['output'];
   disconnectDirectoryAccount: Scalars['Boolean']['output'];
   /** Reenable an banned user */
   enableUser: UserType;
@@ -1967,6 +1968,7 @@ export interface Mutation {
   /** Remove workspace embedding files */
   removeWorkspaceEmbeddingFiles: Scalars['Boolean']['output'];
   renameProject: ProjectType;
+  renameWorkspaceSecret: WorkspaceSecretType;
   reorderWorkspaceByokConfigs: Array<WorkspaceByokKeyConfigType>;
   /** Request to apply the subscription in advance */
   requestApplySubscription: Array<SubscriptionType>;
@@ -1987,6 +1989,7 @@ export interface Mutation {
   sendVerifyChangeEmail: Scalars['Boolean']['output'];
   sendVerifyEmail: Scalars['Boolean']['output'];
   setBlob: Scalars['String']['output'];
+  setWorkspaceSecret: WorkspaceSecretType;
   settleTranscriptTask: Maybe<TranscriptionResultType>;
   submitTranscriptTask: Maybe<TranscriptionResultType>;
   syncDirectoryScopeNow: Scalars['Boolean']['output'];
@@ -2239,6 +2242,11 @@ export interface MutationDeleteWorkspaceByokConfigArgs {
   workspaceId: Scalars['String']['input'];
 }
 
+export interface MutationDeleteWorkspaceSecretArgs {
+  name: Scalars['String']['input'];
+  workspaceId: Scalars['String']['input'];
+}
+
 export interface MutationDisconnectDirectoryAccountArgs {
   accountId: Scalars['String']['input'];
 }
@@ -2375,6 +2383,12 @@ export interface MutationRenameProjectArgs {
   name: Scalars['String']['input'];
 }
 
+export interface MutationRenameWorkspaceSecretArgs {
+  name: Scalars['String']['input'];
+  newName: Scalars['String']['input'];
+  workspaceId: Scalars['String']['input'];
+}
+
 export interface MutationReorderWorkspaceByokConfigsArgs {
   input: ReorderWorkspaceByokConfigsInput;
 }
@@ -2456,6 +2470,10 @@ export interface MutationSendVerifyEmailArgs {
 export interface MutationSetBlobArgs {
   blob: Scalars['Upload']['input'];
   workspaceId: Scalars['String']['input'];
+}
+
+export interface MutationSetWorkspaceSecretArgs {
+  input: SetWorkspaceSecretInput;
 }
 
 export interface MutationSettleTranscriptTaskArgs {
@@ -3199,6 +3217,15 @@ export enum ServerFeature {
   Payment = 'Payment',
 }
 
+/** User role in workspace */
+export interface SetWorkspaceSecretInput {
+  description?: InputMaybe<Scalars['String']['input']>;
+  name: Scalars['String']['input'];
+  /** Leave out to keep the stored value. */
+  value?: InputMaybe<Scalars['String']['input']>;
+  workspaceId: Scalars['String']['input'];
+}
+
 export interface SpaceAccessDeniedDataType {
   __typename?: 'SpaceAccessDeniedDataType';
   spaceId: Scalars['String']['output'];
@@ -3791,7 +3818,6 @@ export interface WorkspaceQuotaType {
   usedStorageQuota: Scalars['SafeInt']['output'];
 }
 
-/** User role in workspace */
 export enum WorkspaceRole {
   Admin = 'Admin',
   Collaborator = 'Collaborator',
@@ -3803,6 +3829,15 @@ export interface WorkspaceRolePermissions {
   __typename?: 'WorkspaceRolePermissions';
   permissions: WorkspacePermissions;
   role: Permission;
+}
+
+export interface WorkspaceSecretType {
+  __typename?: 'WorkspaceSecretType';
+  createdAt: Scalars['DateTime']['output'];
+  description: Maybe<Scalars['String']['output']>;
+  id: Scalars['String']['output'];
+  name: Scalars['String']['output'];
+  updatedAt: Scalars['DateTime']['output'];
 }
 
 export interface WorkspaceType {
@@ -3876,6 +3911,8 @@ export interface WorkspaceType {
   search: SearchResultObjectType;
   /** Search docs by keyword */
   searchDocs: Array<SearchDocObjectType>;
+  /** Names and descriptions of the workspace secrets, no values. */
+  secrets: Array<WorkspaceSecretType>;
   /** The team subscription of the workspace, if exists. */
   subscription: Maybe<SubscriptionType>;
   /** if workspace is team workspace */
@@ -8203,6 +8240,69 @@ export type GetWorkspaceRolePermissionsQuery = {
   };
 };
 
+export type DeleteWorkspaceSecretMutationVariables = Exact<{
+  workspaceId: Scalars['String']['input'];
+  name: Scalars['String']['input'];
+}>;
+
+export type DeleteWorkspaceSecretMutation = {
+  __typename?: 'Mutation';
+  deleteWorkspaceSecret: boolean;
+};
+
+export type WorkspaceSecretsQueryVariables = Exact<{
+  workspaceId: Scalars['String']['input'];
+}>;
+
+export type WorkspaceSecretsQuery = {
+  __typename?: 'Query';
+  workspace: {
+    __typename?: 'WorkspaceType';
+    secrets: Array<{
+      __typename?: 'WorkspaceSecretType';
+      id: string;
+      name: string;
+      description: string | null;
+      createdAt: string;
+      updatedAt: string;
+    }>;
+  };
+};
+
+export type RenameWorkspaceSecretMutationVariables = Exact<{
+  workspaceId: Scalars['String']['input'];
+  name: Scalars['String']['input'];
+  newName: Scalars['String']['input'];
+}>;
+
+export type RenameWorkspaceSecretMutation = {
+  __typename?: 'Mutation';
+  renameWorkspaceSecret: {
+    __typename?: 'WorkspaceSecretType';
+    id: string;
+    name: string;
+    description: string | null;
+    createdAt: string;
+    updatedAt: string;
+  };
+};
+
+export type SetWorkspaceSecretMutationVariables = Exact<{
+  input: SetWorkspaceSecretInput;
+}>;
+
+export type SetWorkspaceSecretMutation = {
+  __typename?: 'Mutation';
+  setWorkspaceSecret: {
+    __typename?: 'WorkspaceSecretType';
+    id: string;
+    name: string;
+    description: string | null;
+    createdAt: string;
+    updatedAt: string;
+  };
+};
+
 export type ApproveWorkspaceTeamMemberMutationVariables = Exact<{
   workspaceId: Scalars['String']['input'];
   userId: Scalars['String']['input'];
@@ -8629,6 +8729,11 @@ export type Queries =
       name: 'getWorkspaceRolePermissionsQuery';
       variables: GetWorkspaceRolePermissionsQueryVariables;
       response: GetWorkspaceRolePermissionsQuery;
+    }
+  | {
+      name: 'workspaceSecretsQuery';
+      variables: WorkspaceSecretsQueryVariables;
+      response: WorkspaceSecretsQuery;
     };
 
 export type Mutations =
@@ -9251,6 +9356,21 @@ export type Mutations =
       name: 'revokeInviteLinkMutation';
       variables: RevokeInviteLinkMutationVariables;
       response: RevokeInviteLinkMutation;
+    }
+  | {
+      name: 'deleteWorkspaceSecretMutation';
+      variables: DeleteWorkspaceSecretMutationVariables;
+      response: DeleteWorkspaceSecretMutation;
+    }
+  | {
+      name: 'renameWorkspaceSecretMutation';
+      variables: RenameWorkspaceSecretMutationVariables;
+      response: RenameWorkspaceSecretMutation;
+    }
+  | {
+      name: 'setWorkspaceSecretMutation';
+      variables: SetWorkspaceSecretMutationVariables;
+      response: SetWorkspaceSecretMutation;
     }
   | {
       name: 'approveWorkspaceTeamMemberMutation';

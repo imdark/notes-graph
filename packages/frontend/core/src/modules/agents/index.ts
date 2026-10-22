@@ -62,6 +62,7 @@ export {
   type ShipTask,
   type ShipTaskDetails,
   shipTargets,
+  stuckReason,
 } from './services/deployments';
 export {
   type ConditionType,

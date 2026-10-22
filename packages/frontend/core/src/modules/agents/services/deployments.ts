@@ -280,6 +280,25 @@ export function parseBranchChecks(
   return checks;
 }
 
+/**
+ * Why a COMMITTED task has nothing to merge, or null when it may: no pull
+ * request named, or "Check ready branches" found it closed, gone from
+ * GitHub, or open on a branch that was deleted. Unchecked, a named pull
+ * request is taken as mergeable.
+ */
+export function stuckReason(
+  task: { stage: ShipStage; pullRequest: string | null },
+  check: Pick<BranchCheck, 'state' | 'branchExists'> | undefined
+): string | null {
+  if (task.stage !== 'committed') return null;
+  if (!task.pullRequest) return 'No pull request';
+  if (!check) return null;
+  if (check.state === 'closed') return 'Closed without merging';
+  if (check.state === 'missing') return 'Not on GitHub';
+  if (check.state === 'open' && !check.branchExists) return 'Branch deleted';
+  return null;
+}
+
 /** Whether a checked branch is merged, still there and safe to delete. */
 export const deletesBranch = (check: BranchCheck) =>
   check.state === 'merged' &&
@@ -580,6 +599,15 @@ export class DeploymentsService extends Service {
    */
   readonly deployInfo$ = new LiveData<DeployInfo | null | undefined>(undefined);
 
+  /**
+   * What "Check ready branches" last found, by pull request URL: kept, since
+   * the pull request list only holds open and recently merged ones, so an
+   * older merged, closed or deleted one is known only from here.
+   */
+  readonly branchChecks$ = new LiveData<ReadonlyMap<string, BranchCheck>>(
+    new Map()
+  );
+
   async refreshDeployInfo(): Promise<void> {
     try {
       this.deployInfo$.setValue(await this.remote.deployInfo());
@@ -749,6 +777,9 @@ export class DeploymentsService extends Service {
       ),
       prs
     );
+    const known = new Map(this.branchChecks$.value);
+    for (const check of checks) known.set(check.url, check);
+    this.branchChecks$.setValue(known);
     const toDelete = checks.filter(deletesBranch);
     const deleted: BranchCheck[] = [];
     const failed: string[] = [];
@@ -773,21 +804,35 @@ export class DeploymentsService extends Service {
     }
     for (const check of checks) {
       if (check.state !== 'merged') continue;
-      const task = items.find(item => item.pr.url === check.url)?.task;
-      if (task) await this.markMerged(task).catch(() => {});
+      for (const item of items) {
+        if (item.pr.url === check.url && item.task) {
+          await this.markMerged(item.task).catch(() => false);
+        }
+      }
     }
     return { checks, deleted, failed };
   }
 
   /** Move a task to MERGED, as an agent that merged it would. */
-  private async markMerged(task: Pick<ShipTask, 'docId' | 'blockId'>) {
+  private markMerged(task: Pick<ShipTask, 'docId' | 'blockId'>) {
+    return this.moveOn(task, 'MERGED');
+  }
+
+  /**
+   * Move a COMMITTED task on by hand, from the screen: to MERGED when its
+   * work is on main already (merged another way), or DONE when there is
+   * nothing left to ship. Resolves to whether its note said COMMITTED.
+   */
+  async moveOn(
+    task: Pick<ShipTask, 'docId' | 'blockId'>,
+    status: 'MERGED' | 'DONE'
+  ): Promise<boolean> {
     const { doc, release } = this.docsService.open(task.docId);
     try {
       await doc.waitForSyncReady();
       const model = doc.blockSuiteDoc.getBlock(task.blockId)?.model;
-      if (model && readStage(model) === 'committed') {
-        setTaskStatus(model, 'MERGED');
-      }
+      if (!model || readStage(model) !== 'committed') return false;
+      return setTaskStatus(model, status);
     } finally {
       release();
     }

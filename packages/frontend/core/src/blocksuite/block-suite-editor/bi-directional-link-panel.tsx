@@ -52,7 +52,12 @@ import {
   NotesGraphSharedPageReference,
 } from '../../components/notesgraph/reference-link';
 import { LitTextRenderer } from '../ai/components/text-renderer';
+import { registerAISharedEffects } from '../ai/effects/shared';
 import * as styles from './bi-directional-link-panel.css';
+
+// LitTextRenderer constructs <text-renderer>, which is otherwise only
+// registered once the editor's AI extension has loaded.
+registerAISharedEffects();
 
 const PREFIX = 'bi-directional-link-panel-collapse:';
 

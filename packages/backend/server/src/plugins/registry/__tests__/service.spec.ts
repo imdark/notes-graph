@@ -173,3 +173,58 @@ test('timestamps cross the wire as epoch seconds', t => {
 
   t.is(dto.checkedAt, 1_700_000_000);
 });
+
+test('jobs at once is a whole number in range, or null for the runner', async t => {
+  const set: any[] = [];
+  const { service } = makeService();
+  (service as any).models.registryDevice.setMaxJobs = async (
+    _ws: string,
+    key: string,
+    maxJobs: number | null
+  ) => {
+    set.push(maxJobs);
+    return key === 'cloud'
+      ? { ...toDeviceDtoInput(), key, maxJobs }
+      : null;
+  };
+
+  t.is((await service.setMaxJobs(workspaceId, 'cloud', 4))?.maxJobs, 4);
+  t.is((await service.setMaxJobs(workspaceId, 'cloud', null))?.maxJobs, null);
+  t.is(await service.setMaxJobs(workspaceId, 'gone', 2), null);
+  for (const bad of [0, 17, 2.5, '3', -1]) {
+    await t.throwsAsync(service.setMaxJobs(workspaceId, 'cloud', bad), {
+      message: /whole number from 1 to 16/,
+    });
+  }
+  t.deepEqual(set, [4, null, 2]);
+});
+
+function toDeviceDtoInput() {
+  return {
+    id: 'uuid-1',
+    workspaceId,
+    key: 'cloud',
+    name: 'Cloud (server)',
+    kind: 'machine',
+    host: '',
+    user: '',
+    port: 22,
+    parentKey: null,
+    path: null,
+    recipe: 'generic',
+    repo: null,
+    branch: 'main',
+    channel: 'stable',
+    pin: null,
+    agentTarget: true,
+    maxJobs: null,
+    labels: {},
+    state: 'unknown',
+    statusDetail: null,
+    version: null,
+    checkedAt: null,
+    checks: [],
+    createdAt: new Date(0),
+    updatedAt: new Date(0),
+  };
+}
