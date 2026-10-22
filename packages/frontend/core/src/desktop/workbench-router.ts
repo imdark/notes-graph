@@ -34,6 +34,10 @@ export const workbenchRoutes = [
     lazy: () => import('./pages/workspace/monitoring/index'),
   },
   {
+    path: '/secrets',
+    lazy: () => import('./pages/workspace/secrets/index'),
+  },
+  {
     path: '/collection',
     lazy: () => import('./pages/workspace/all-collection'),
   },

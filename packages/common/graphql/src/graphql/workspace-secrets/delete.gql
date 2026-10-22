@@ -1,0 +1,3 @@
+mutation deleteWorkspaceSecret($workspaceId: String!, $name: String!) {
+  deleteWorkspaceSecret(workspaceId: $workspaceId, name: $name)
+}

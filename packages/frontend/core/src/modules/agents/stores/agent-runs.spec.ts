@@ -129,3 +129,55 @@ describe('AgentRunsStore usage', () => {
     expect(rows.r1).toMatchObject({ costUsd: 0.2, tokens: 10 });
   });
 });
+
+describe('AgentRunsStore ask chats', () => {
+  const parent = {
+    id: 'p',
+    agentId: 'a',
+    agentName: 'Doer',
+    targetKind: 'block',
+    docId: 'd',
+    blockId: 'b',
+    title: 'Fix the bug',
+    status: 'error',
+    startedAt: 0,
+    harness: 'remote',
+    deviceKey: 'mac',
+  } as const;
+
+  test('a chat is its own row about the run, on no blocks', () => {
+    const { store, rows } = setup({ p: { ...parent } });
+    const id = store.startAsk(parent);
+    expect(rows[id]).toMatchObject({
+      kind: 'ask',
+      parentRunId: 'p',
+      targetKind: 'ask',
+      docId: 'd',
+      title: 'Ask: Fix the bug',
+      status: 'running',
+      harness: 'remote',
+    });
+    expect(rows[id].blockId).toBeUndefined();
+    expect(store.latestAsk('p')?.id).toBe(id);
+    expect(store.targetOf(rows[id] as any)).toBeNull();
+  });
+
+  test('a chat keeps its error and is never put up for review', () => {
+    const { store, rows } = setup({ p: { ...parent } });
+    const id = store.startAsk(parent);
+    store.finish(id, { status: 'error', steps: 0, error: 'Model offline' });
+    expect(rows[id]).toMatchObject({ status: 'error', error: 'Model offline' });
+
+    expect(store.resumeAsk(id)).toBe(true);
+    expect(rows[id]).toMatchObject({ status: 'running', error: undefined });
+    store.finish(id, { status: 'done', steps: 1, output: 'Because…' });
+    expect(rows[id]).toMatchObject({ status: 'done', summary: 'Because…' });
+    expect(rows[id].reviewPending).toBe(false);
+  });
+
+  test('a deleted chat cannot be resumed', () => {
+    const { store } = setup({ p: { ...parent } });
+    expect(store.resumeAsk('gone')).toBe(false);
+    expect(store.latestAsk('p')).toBeUndefined();
+  });
+});

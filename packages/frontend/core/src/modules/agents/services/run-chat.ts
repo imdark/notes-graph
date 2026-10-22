@@ -1,5 +1,7 @@
+import type { SavedAskChat } from '../stores/agent-run-logs';
 import type { AgentRun } from '../stores/agent-runs';
 import type { ChatMessage } from './cloud-runner';
+import { stampLines } from './log-lines';
 
 /**
  * A chat about a run that has ended — done, failed or stopped — so the reader
@@ -77,4 +79,27 @@ export function runChatMessages(
     { role: 'system', content: instructions },
     { role: 'user', content: record },
   ];
+}
+
+/**
+ * An ask chat as a run log, for its row's Log tab: each question and answer
+ * stamped with when it was sent, and the error a turn ended on, if any.
+ */
+export function askTranscript(
+  turns: SavedAskChat['turns'],
+  error?: string,
+  at = Date.now()
+): string {
+  const lines = turns.map(turn => {
+    const files = turn.files?.length
+      ? ` (attached: ${turn.files.join(', ')})`
+      : '';
+    const text =
+      turn.role === 'user'
+        ? `? ${turn.content}${files}`
+        : turn.content || '(no answer)';
+    return stampLines(text, turn.at ?? at);
+  });
+  if (error) lines.push(stampLines(`✗ ${error}`, at));
+  return lines.length ? `${lines.join('\n')}\n` : '';
 }

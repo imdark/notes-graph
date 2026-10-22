@@ -37,7 +37,12 @@ export interface AgentRun {
   tokens?: number;
   /** Finished, and waiting for the reader to approve it. */
   reviewPending?: boolean;
+  /** 'ask': a chat about the run `parentRunId`, not a run of its own. */
+  kind?: 'ask';
+  parentRunId?: string;
 }
+
+export const isAskRun = (run: AgentRun) => run.kind === 'ask';
 
 /** What a run used, as its runner reported it; absent parts are unknown. */
 export interface AgentRunUsage {
@@ -139,6 +144,43 @@ export class AgentRunsStore extends Store {
     return row.id;
   }
 
+  /**
+   * Record a chat about `parent` as it is first asked. It keeps the parent's
+   * agent and note, but no blocks: it is about the run, not on them.
+   */
+  startAsk(parent: AgentRun): string {
+    const row = this.table.create({
+      agentId: parent.agentId,
+      agentName: parent.agentName,
+      targetKind: 'ask',
+      docId: parent.docId,
+      title: `Ask: ${parent.title || parent.agentName}`.slice(0, TITLE_CHARS),
+      status: 'running',
+      startedAt: Date.now(),
+      harness: parent.harness,
+      deviceKey: parent.deviceKey,
+      kind: 'ask',
+      parentRunId: parent.id,
+    });
+    this.prune();
+    return row.id;
+  }
+
+  /** The newest chat about `runId`, to show again and go on with. */
+  latestAsk(runId: string): AgentRun | undefined {
+    return (this.table.find() as AgentRun[])
+      .filter(run => run.kind === 'ask' && run.parentRunId === runId)
+      .sort((a, b) => b.startedAt - a.startedAt)[0];
+  }
+
+  /** A chat asked again: it is answering until `finish` says otherwise. */
+  resumeAsk(askId: string): boolean {
+    const row = this.table.get(askId);
+    if (!row) return false;
+    this.table.update(askId, { status: 'running', error: undefined });
+    return true;
+  }
+
   watchRun(runId: string): LiveData<AgentRun | undefined> {
     return this.watchRuns().map(runs => runs.find(run => run.id === runId));
   }
@@ -214,8 +256,10 @@ export class AgentRunsStore extends Store {
           ? outcome.output.slice(0, SUMMARY_CHARS)
           : undefined,
       error: outcome.status === 'error' ? outcome.error : undefined,
-      // A run settled again after the fact keeps the review it had.
+      // A run settled again after the fact keeps the review it had. A chat
+      // changed nothing, so there is nothing to review.
       reviewPending:
+        row.kind !== 'ask' &&
         outcome.status === 'done' &&
         (row.status === 'running' || row.reviewPending),
     });

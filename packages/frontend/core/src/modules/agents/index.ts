@@ -149,6 +149,7 @@ export {
   type RunChanges,
 } from './services/run-changes';
 export { runChatMessages } from './services/run-chat';
+export { askTranscript } from './services/run-chat';
 export {
   type AgentRunSession,
   AgentRunSessionService,
@@ -173,12 +174,13 @@ export {
   QUEUED_STATUS,
   releaseQueuedTasks,
 } from './services/task-claim';
-export { AgentRunLogsStore } from './stores/agent-run-logs';
+export { AgentRunLogsStore, type SavedAskChat } from './stores/agent-run-logs';
 export {
   type AgentRun,
   AgentRunsStore,
   type AgentRunStatus,
   formatRunCost,
+  isAskRun,
 } from './stores/agent-runs';
 export {
   type Agent,

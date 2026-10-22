@@ -9761,6 +9761,26 @@ export function useNotesGraphI18N(): {
       */
     ["com.notesgraph.appearanceSettings.sidebarProjects.description"](): string;
     /**
+      * `Group operations in the sidebar`
+      */
+    ["com.notesgraph.appearanceSettings.sidebarOperations.title"](): string;
+    /**
+      * `Put Agents, Deployments and Monitoring in their own Operations section. When off, they sit with the buttons at the top. On by default.`
+      */
+    ["com.notesgraph.appearanceSettings.sidebarOperations.description"](): string;
+    /**
+      * `Sidebar buttons`
+      */
+    ["com.notesgraph.appearanceSettings.sidebarButtons.title"](): string;
+    /**
+      * `Show this button in the sidebar.`
+      */
+    ["com.notesgraph.appearanceSettings.sidebarButtons.description"](): string;
+    /**
+      * `Operations`
+      */
+    ["com.notesgraph.rootAppSidebar.operations"](): string;
+    /**
       * `Load more`
       */
     ["com.notesgraph.discover.loadMore"](): string;

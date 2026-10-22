@@ -7,6 +7,7 @@ import {
   ExportIcon,
   ImportIcon,
   JournalIcon,
+  LockIcon,
   PlanetPanelIcon,
   PublishIcon,
   SettingsIcon,
@@ -21,7 +22,11 @@ import {
   AgentExecutorService,
   AgentRunsStore,
 } from '@notesgraph/core/modules/agents';
-import { AppSidebarService } from '@notesgraph/core/modules/app-sidebar';
+import {
+  AppSidebarService,
+  OPERATIONS_BUTTONS,
+  type SidebarButton,
+} from '@notesgraph/core/modules/app-sidebar';
 import {
   AddPageButton,
   AppDownloadButton,
@@ -207,16 +212,9 @@ const DuplicatesButton = () => {
 /** How often to check runs that say running against how they really ended. */
 const RECONCILE_RUNS_MS = 30_000;
 
-const AgentsButton = () => {
-  const { workbenchService } = useServices({
-    WorkbenchService,
-  });
-  const workbench = workbenchService.workbench;
-  const agentsActive = useLiveData(
-    workbench.location$.selector(location => location.pathname === '/agents')
-  );
+const useRunningCount = () => {
   const runsStore = useService(AgentRunsStore);
-  const running = useLiveData(
+  return useLiveData(
     useMemo(
       () =>
         runsStore
@@ -225,9 +223,15 @@ const AgentsButton = () => {
       [runsStore]
     )
   );
+};
 
-  // A run whose tab closed mid-way would say running forever; while any do,
-  // check now and then whether they have in fact ended.
+/**
+ * A run whose tab closed mid-way would say running forever; while any do,
+ * check now and then whether they have in fact ended. Mounted on its own so
+ * it keeps going when the Agents button is hidden or its section collapsed.
+ */
+const RunReconciler = () => {
+  const running = useRunningCount();
   const executor = useService(AgentExecutorService);
   useEffect(() => {
     if (running === 0) return;
@@ -240,6 +244,19 @@ const AgentsButton = () => {
     const id = setInterval(reconcile, RECONCILE_RUNS_MS);
     return () => clearInterval(id);
   }, [executor, running]);
+
+  return null;
+};
+
+const AgentsButton = () => {
+  const { workbenchService } = useServices({
+    WorkbenchService,
+  });
+  const workbench = workbenchService.workbench;
+  const agentsActive = useLiveData(
+    workbench.location$.selector(location => location.pathname === '/agents')
+  );
+  const running = useRunningCount();
 
   return (
     <MenuLinkItem icon={<ToolIcon />} active={agentsActive} to={'/agents'}>
@@ -311,6 +328,19 @@ const MonitoringButton = () => {
   );
 };
 
+/** The workspace's API keys and tokens; see SecretsView. */
+const SecretsButton = () => {
+  const workbench = useService(WorkbenchService).workbench;
+  const active = useLiveData(
+    workbench.location$.selector(location => location.pathname === '/secrets')
+  );
+  return (
+    <MenuLinkItem icon={<LockIcon />} active={active} to={'/secrets'}>
+      <span data-testid="secrets">Secrets</span>
+    </MenuLinkItem>
+  );
+};
+
 const AIChatButton = () => {
   const t = useI18n();
   const featureFlagService = useService(FeatureFlagService);
@@ -356,6 +386,17 @@ export const RootAppSidebar = memo((): ReactElement => {
   const showCollections = useLiveData(appSidebar.showCollections$);
   const showNotes = useLiveData(appSidebar.showNotes$);
   const showProjects = useLiveData(appSidebar.showProjects$);
+  const showOperations = useLiveData(appSidebar.showOperations$);
+  const hiddenButtons = useLiveData(appSidebar.hiddenButtons$);
+  const shown = (button: SidebarButton) => !hiddenButtons.includes(button);
+  const operationsButtons = (
+    <>
+      {shown('agents') && <AgentsButton />}
+      {shown('deployments') && <DeploymentsButton />}
+      {shown('monitoring') && <MonitoringButton />}
+      {shown('secrets') && <SecretsButton />}
+    </>
+  );
   const workspaceDialogService = useService(WorkspaceDialogService);
   const workspace = useService(WorkspaceService).workspace;
   const workbench = workbenchService.workbench;
@@ -454,12 +495,11 @@ export const RootAppSidebar = memo((): ReactElement => {
               bar on top, so the sidebar search is redundant. */}
           <AddPageButton />
         </div>
-        <GraphButton />
-        <DiscoverButton />
-        <AppSidebarJournalButton />
-        <AgentsButton />
-        <DeploymentsButton />
-        <MonitoringButton />
+        <RunReconciler />
+        {shown('graph') && <GraphButton />}
+        {shown('discover') && <DiscoverButton />}
+        {shown('journals') && <AppSidebarJournalButton />}
+        {!showOperations && operationsButtons}
         <DuplicatesButton />
         <MenuItem
           data-testid="slider-bar-workspace-setting-button"
@@ -472,6 +512,16 @@ export const RootAppSidebar = memo((): ReactElement => {
         </MenuItem>
       </SidebarContainer>
       <SidebarScrollableContainer>
+        {showOperations && OPERATIONS_BUTTONS.some(shown) && (
+          <CollapsibleSection
+            path={['operations']}
+            title={t['com.notesgraph.rootAppSidebar.operations']()}
+            testId="sidebar-operations-section"
+            contentStyle={{ padding: '6px 8px 0 8px' }}
+          >
+            {operationsButtons}
+          </CollapsibleSection>
+        )}
         {showNotes && <NavigationPanelNotes />}
         {showFavorites && <NavigationPanelFavorites />}
         {showFavorites && <NavigationPanelMigrationFavorites />}

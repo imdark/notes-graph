@@ -322,7 +322,7 @@ export const NotesGraph_WORKSPACE_USERDATA_DB_SCHEMA = {
     agentId: f.string(),
     /** Denormalized so a run still reads sensibly after the agent is deleted. */
     agentName: f.string(),
-    /** 'block' | 'selection' | 'doc' */
+    /** 'block' | 'selection' | 'doc', or 'ask' for a chat about a run */
     targetKind: f.string(),
     docId: f.string(),
     blockId: f.string().optional(),
@@ -366,6 +366,13 @@ export const NotesGraph_WORKSPACE_USERDATA_DB_SCHEMA = {
      * row, which syncs, so the card is there after a reload and on every device.
      */
     reviewPending: f.boolean().optional(),
+    /**
+     * 'ask' for a chat about an ended run (its Ask tab), recorded beside the
+     * runs so its turns and errors can be found again; absent for a run.
+     */
+    kind: f.string().optional(),
+    /** The run an 'ask' row is a chat about. */
+    parentRunId: f.string().optional(),
   },
 } as const satisfies DBSchemaBuilder;
 export type NotesGraphWorkspaceUserdataDbSchema =

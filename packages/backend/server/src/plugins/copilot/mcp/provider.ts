@@ -1,9 +1,11 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
 import { pick } from 'lodash-es';
 import z from 'zod/v3';
 
+import { publishCommentChanged } from '../../../core/comment/realtime';
 import { DocReader, DocWriter } from '../../../core/doc';
 import { PermissionAccess } from '../../../core/permission';
+import { RealtimePublisher } from '../../../core/realtime';
 import { clearEmbeddingChunk, Models } from '../../../models';
 import { IndexerService } from '../../indexer';
 import { SearchTable } from '../../indexer/tables';
@@ -27,6 +29,17 @@ import {
   searchText,
 } from '../search-query';
 import {
+  CanvasError,
+  canvasSvg,
+  describeItem,
+  type DrawItem,
+  drawOnCanvas,
+  intersects,
+  readCanvas,
+  svgToPng,
+} from './canvas';
+import { commentText, replyContent } from './comments';
+import {
   DEFAULT_STALE_DAYS,
   DEFAULT_STUB_CHARS,
   notesHealth,
@@ -49,14 +62,23 @@ const SEMANTIC_SEARCH_TOP_K = 5;
 const KEYWORD_SEARCH_LIMIT = 20;
 const HYBRID_DEFAULT_ITEMS = 8;
 const HYBRID_DEFAULT_CHARS = 6000;
+/** A widget is stored in the doc and synced to every device. */
+const MAX_WIDGET_HTML = 100_000;
+const MAX_FLASHCARDS = 200;
 
 type McpTextContent = {
   type: 'text';
   text: string;
 };
 
+type McpImageContent = {
+  type: 'image';
+  data: string;
+  mimeType: string;
+};
+
 export type WorkspaceMcpToolResult = {
-  content: McpTextContent[];
+  content: (McpTextContent | McpImageContent)[];
   isError?: boolean;
 };
 
@@ -195,7 +217,9 @@ export class WorkspaceMcpProvider {
     private readonly writer: DocWriter,
     private readonly context: CopilotContextService,
     private readonly indexer: IndexerService,
-    private readonly models: Models
+    private readonly models: Models,
+    // Tells open editors a comment thread changed; absent in unit tests.
+    @Optional() private readonly realtime?: RealtimePublisher
   ) {}
 
   async for(userId: string, workspaceId: string): Promise<WorkspaceMcpServer> {
@@ -1223,11 +1247,207 @@ export class WorkspaceMcpProvider {
       },
     });
 
+    const readComments = defineTool({
+      name: 'read_comments',
+      title: 'Read Comments',
+      description:
+        'Read the comments people left on a document: feedback and instructions on its text, newest first, each with the text it is anchored to (quote), its replies and whether it is resolved. Read them before you revise a note you wrote, and treat an open comment as a request to you. Answer or close one with reply_to_comment; reading does not resolve it. Open comments only unless includeResolved is set.',
+      parser: z.object({
+        docId: z.string(),
+        includeResolved: z.boolean().optional(),
+      }),
+      inputSchema: {
+        type: 'object',
+        properties: {
+          docId: { type: 'string' },
+          includeResolved: {
+            type: 'boolean',
+            description: 'Also return resolved comments (default false).',
+          },
+        },
+        required: ['docId'],
+        additionalProperties: false,
+      },
+      execute: async ({ docId, includeResolved }, options) => {
+        const accessible = await this.ac
+          .user(userId)
+          .workspace(workspaceId)
+          .doc(docId)
+          .can('Doc.Comments.Read');
+        if (!accessible) return toolError(`Doc with id ${docId} not found.`);
+
+        const aborted = abortIfNeeded(options.signal);
+        if (aborted) return aborted;
+
+        const comments = (
+          await this.models.comment.list(workspaceId, docId)
+        ).filter(comment => includeResolved || !comment.resolved);
+        const users = await this.models.user.getPublicUsersMap([
+          ...comments,
+          ...comments.flatMap(comment => comment.replies),
+        ]);
+        const author = (id: string) => users.get(id)?.name ?? 'unknown';
+        return toolText(
+          JSON.stringify({
+            docId,
+            comments: comments.map(comment => ({
+              id: comment.id,
+              author: author(comment.userId),
+              createdAt: comment.createdAt,
+              resolved: comment.resolved,
+              quote: comment.content?.preview || undefined,
+              text: commentText(comment.content),
+              replies: comment.replies.map(reply => ({
+                author: author(reply.userId),
+                createdAt: reply.createdAt,
+                text: commentText(reply.content),
+              })),
+            })),
+          })
+        );
+      },
+    });
+
+    /** The doc's canvas, or an error result when it can't be read. */
+    const loadCanvas = async (docId: string, signal: AbortSignal) => {
+      const notFoundError = toolError(`Doc with id ${docId} not found.`);
+      const accessible = await this.ac
+        .user(userId)
+        .workspace(workspaceId)
+        .doc(docId)
+        .can('Doc.Read');
+      if (!accessible) return notFoundError;
+      const aborted = abortIfNeeded(signal);
+      if (aborted) return aborted;
+      const doc = await this.reader.getDoc(workspaceId, docId);
+      if (!doc?.bin) return notFoundError;
+      return readCanvas(doc.bin);
+    };
+
+    const regionParser = z
+      .object({
+        x: z.number(),
+        y: z.number(),
+        w: z.number().positive(),
+        h: z.number().positive(),
+      })
+      .optional();
+    const regionInputSchema = {
+      type: 'object',
+      description:
+        'A part of the canvas, in canvas coordinates (x, y of its top-left corner, w, h). Omit for the whole canvas.',
+      properties: {
+        x: { type: 'number' },
+        y: { type: 'number' },
+        w: { type: 'number' },
+        h: { type: 'number' },
+      },
+      required: ['x', 'y', 'w', 'h'],
+      additionalProperties: false,
+    } as const;
+
+    const readCanvasTool = defineTool({
+      name: 'read_canvas',
+      title: 'Read Canvas',
+      description:
+        "List what is on a document's canvas (its edgeless/whiteboard view): handwriting and pen strokes (brush), shapes, text, connectors, and the notes, images and frames placed on it, back to front. Each item has its id, type, position and size in canvas coordinates, and its text. Strokes give a pointCount, not their ink; to see handwriting, use capture_canvas. Pass region to list only what touches that part.",
+      parser: z.object({ docId: z.string(), region: regionParser }),
+      inputSchema: {
+        type: 'object',
+        properties: {
+          docId: { type: 'string' },
+          region: regionInputSchema,
+        },
+        required: ['docId'],
+        additionalProperties: false,
+      },
+      execute: async ({ docId, region }, options) => {
+        const canvas = await loadCanvas(docId, options.signal);
+        if ('content' in canvas) return canvas;
+        const items = region
+          ? canvas.items.filter(item => intersects(item, region))
+          : canvas.items;
+        return toolText(
+          JSON.stringify({
+            docId,
+            hasCanvas: canvas.hasSurface,
+            ...(region ? { region } : {}),
+            count: items.length,
+            items: items.map(describeItem),
+          })
+        );
+      },
+    });
+
+    const captureCanvasTool = defineTool({
+      name: 'capture_canvas',
+      title: 'Capture Canvas',
+      description:
+        "Take a picture of a document's canvas (its edgeless/whiteboard view), or of one region of it, so you can see handwriting, sketches and layout. Returns a PNG (SVG when the server can't rasterise) plus the region it shows, in canvas coordinates. It is drawn from the stored canvas: strokes, shapes, text and connectors as they are, notes and images as labelled boxes, so it is close to the app's view, not identical. Use read_canvas for ids and exact text.",
+      parser: z.object({
+        docId: z.string(),
+        region: regionParser,
+        maxSize: z.number().int().min(100).max(4000).optional(),
+      }),
+      inputSchema: {
+        type: 'object',
+        properties: {
+          docId: { type: 'string' },
+          region: regionInputSchema,
+          maxSize: {
+            type: 'number',
+            description:
+              'Longest side of the picture in pixels (default 1600). The canvas is never drawn larger than 1:1.',
+          },
+        },
+        required: ['docId'],
+        additionalProperties: false,
+      },
+      execute: async ({ docId, region, maxSize }, options) => {
+        const canvas = await loadCanvas(docId, options.signal);
+        if ('content' in canvas) return canvas;
+        const picture = canvasSvg(canvas.items, region, maxSize);
+        const shown = region
+          ? canvas.items.filter(item => intersects(item, region)).length
+          : canvas.items.length;
+        const png = await svgToPng(picture.svg);
+        const caption = JSON.stringify({
+          docId,
+          region: picture.region,
+          width: picture.width,
+          height: picture.height,
+          items: shown,
+          format: png ? 'png' : 'svg',
+        });
+        if (!png) {
+          return {
+            content: [
+              { type: 'text', text: caption },
+              { type: 'text', text: picture.svg },
+            ],
+          };
+        }
+        return {
+          content: [
+            { type: 'text', text: caption },
+            {
+              type: 'image',
+              data: png.toString('base64'),
+              mimeType: 'image/png',
+            },
+          ],
+        };
+      },
+    });
+
     const tools = [
       readDocument,
+      readComments,
       hybridSearch,
       docOutline,
       readDocSection,
+      readCanvasTool,
+      captureCanvasTool,
       semanticSearch,
       keywordSearch,
       searchBlocks,
@@ -1844,14 +2064,479 @@ export class WorkspaceMcpProvider {
         },
       });
 
+      const replyToComment = defineTool({
+        name: 'reply_to_comment',
+        title: 'Reply to Comment',
+        description:
+          "Answer a comment from read_comments, resolve it, or both. Reply with what you did about it (or why you did not), and resolve it once it is dealt with, which is how the user sees that you acted on it. The reply appears in the document's comment thread as written by the user's account, signed with the agent name." +
+          firstPersonGuidance,
+        parser: z.object({
+          commentId: z.string(),
+          text: z.string().optional(),
+          resolve: z.boolean().optional(),
+          agent: z.string().optional(),
+        }),
+        inputSchema: {
+          type: 'object',
+          properties: {
+            commentId: {
+              type: 'string',
+              description: 'The comment id from read_comments',
+            },
+            text: {
+              type: 'string',
+              description: 'The reply, plain text; one paragraph per line.',
+            },
+            resolve: {
+              type: 'boolean',
+              description: 'Mark the comment resolved (default false).',
+            },
+            agent: agentInputSchema,
+          },
+          required: ['commentId'],
+          additionalProperties: false,
+        },
+        execute: async ({ commentId, text, resolve, agent }, options) => {
+          const reply = text?.trim();
+          if (!reply && !resolve) {
+            return toolError('Give a reply text, resolve: true, or both.');
+          }
+          const secret = guardSecrets(reply ?? '', agent);
+          if (secret) return toolError(secret);
+
+          const comment = await this.models.comment.get(commentId);
+          const notFound = toolError(`Comment with id ${commentId} not found.`);
+          if (!comment || comment.workspaceId !== workspaceId) return notFound;
+          const docAccess = this.ac
+            .user(userId)
+            .workspace(workspaceId)
+            .doc(comment.docId);
+          if (!(await docAccess.can('Doc.Comments.Read'))) return notFound;
+
+          const aborted = abortIfNeeded(options.signal);
+          if (aborted) return aborted;
+
+          try {
+            if (reply) {
+              await docAccess.assert('Doc.Comments.Create');
+              const name =
+                (agent ?? '').replace(/[\r\n]+/g, ' ').trim() || 'AI agent';
+              await this.models.comment.createReply({
+                commentId,
+                userId,
+                content: replyContent(`${reply}\n— ${name}, via MCP`),
+              });
+            }
+            if (resolve) {
+              await docAccess.assert('Doc.Comments.Resolve');
+              await this.models.comment.resolve({
+                id: commentId,
+                resolved: true,
+              });
+            }
+            publishCommentChanged(this.realtime, workspaceId, comment.docId);
+            return toolText(
+              JSON.stringify({
+                success: true,
+                commentId,
+                replied: !!reply,
+                resolved: !!resolve || comment.resolved,
+              })
+            );
+          } catch (error) {
+            return toolError(
+              `Failed to reply to comment: ${error instanceof Error ? error.message : 'Unknown error'}`
+            );
+          }
+        },
+      });
+
+      /**
+       * The doc a block-appending tool writes to: `docId`, stamped with the
+       * agent first (the markdown can't carry the appended block, and the
+       * differ keeps it wherever it already is), or a new doc titled
+       * `title`. Returns the doc ID, or the error result to send back.
+       */
+      const appendTarget = async (
+        docId: string | undefined,
+        title: string | undefined,
+        agent: string | undefined,
+        what: string,
+        signal: AbortSignal
+      ): Promise<string | WorkspaceMcpToolResult> => {
+        if (!docId) {
+          const sanitizedTitle = (title ?? '').replace(/[\r\n]+/g, ' ').trim();
+          if (!sanitizedTitle) {
+            return toolError(
+              `Give a title for the new document, or a docId to add ${what} to.`
+            );
+          }
+          await this.ac
+            .user(userId)
+            .workspace(workspaceId)
+            .assert('Workspace.CreateDoc');
+          const aborted = abortIfNeeded(signal);
+          if (aborted) return aborted;
+          return (
+            await this.writer.createDoc(
+              workspaceId,
+              sanitizedTitle,
+              stampAttribution('', agent),
+              userId
+            )
+          ).docId;
+        }
+        const accessible = await this.ac
+          .user(userId)
+          .workspace(workspaceId)
+          .doc(docId)
+          .can('Doc.Update');
+        if (!accessible) return toolError(`Doc with id ${docId} not found.`);
+        const aborted = abortIfNeeded(signal);
+        if (aborted) return aborted;
+        const current = await this.reader.getDocMarkdown(
+          workspaceId,
+          docId,
+          false
+        );
+        if (!current) return toolError(`Doc with id ${docId} not found.`);
+        await this.writer.updateDoc(
+          workspaceId,
+          docId,
+          stampAttribution(current.markdown, agent),
+          userId
+        );
+        return docId;
+      };
+
+      const createWidget = defineTool({
+        name: 'create_widget',
+        title: 'Create Widget',
+        description:
+          'Add a live widget (a calculator, quiz, converter, timer, small chart) to the notes: an HTML page shown inside the document as a sandboxed iframe with scripts on. Write one self-contained page with inline <style> and <script>. It runs on an opaque origin, so it cannot reach the notes, cookies or localStorage, and it keeps no state between views. With docId it is appended to the end of that document; without, a new document is created (title required) and its ID returned. Use create_diagram for a static diagram.',
+        parser: z.object({
+          docId: z.string().optional(),
+          title: z.string().optional(),
+          html: z.string().min(1).max(MAX_WIDGET_HTML),
+          caption: z.string().optional(),
+          agent: z.string().optional(),
+        }),
+        inputSchema: {
+          type: 'object',
+          properties: {
+            docId: {
+              type: 'string',
+              description:
+                'The document to append the widget to. Omit to create a new document.',
+            },
+            title: {
+              type: 'string',
+              description: 'Title of the new document, when no docId is given.',
+            },
+            html: {
+              type: 'string',
+              description: `The widget's HTML, at most ${MAX_WIDGET_HTML} characters.`,
+            },
+            caption: {
+              type: 'string',
+              description: 'A short name shown under the widget.',
+            },
+            agent: agentInputSchema,
+          },
+          required: ['html'],
+          additionalProperties: false,
+        },
+        execute: async ({ docId, title, html, caption, agent }, options) => {
+          const secret = guardSecrets(html, caption, title, agent);
+          if (secret) return toolError(secret);
+          const label = caption?.replace(/[\r\n]+/g, ' ').trim() || null;
+
+          try {
+            const target = await appendTarget(
+              docId,
+              title,
+              agent,
+              'the widget',
+              options.signal
+            );
+            if (typeof target !== 'string') return target;
+            await this.writer.appendHtmlEmbed(
+              workspaceId,
+              target,
+              html,
+              label,
+              userId
+            );
+            return toolText(
+              JSON.stringify({
+                success: true,
+                docId: target,
+                message: docId
+                  ? 'Widget added to the end of the document'
+                  : 'Widget created in a new document',
+              })
+            );
+          } catch (error) {
+            return toolError(
+              `Failed to add widget: ${error instanceof Error ? error.message : 'Unknown error'}`
+            );
+          }
+        },
+      });
+
+      const createFlashcards = defineTool({
+        name: 'create_flashcards',
+        title: 'Create Flashcards',
+        description:
+          'Add flashcards to the notes for the user to study. Each card is a collapsed list item showing the question; the answer sits inside it and appears when the user expands the item. Write one fact or idea per card, with a short question and answer. With docId the cards are appended to the end of that document; without, a new document is created (title required) and its ID returned.',
+        parser: z.object({
+          docId: z.string().optional(),
+          title: z.string().optional(),
+          cards: z
+            .array(
+              z.object({
+                question: z.string().trim().min(1),
+                answer: z.string().trim().min(1),
+              })
+            )
+            .min(1)
+            .max(MAX_FLASHCARDS),
+          agent: z.string().optional(),
+        }),
+        inputSchema: {
+          type: 'object',
+          properties: {
+            docId: {
+              type: 'string',
+              description:
+                'The document to append the cards to. Omit to create a new document.',
+            },
+            title: {
+              type: 'string',
+              description: 'Title of the new document, when no docId is given.',
+            },
+            cards: {
+              type: 'array',
+              description: `The cards, at most ${MAX_FLASHCARDS}.`,
+              items: {
+                type: 'object',
+                properties: {
+                  question: { type: 'string' },
+                  answer: { type: 'string' },
+                },
+                required: ['question', 'answer'],
+                additionalProperties: false,
+              },
+            },
+            agent: agentInputSchema,
+          },
+          required: ['cards'],
+          additionalProperties: false,
+        },
+        execute: async ({ docId, title, cards, agent }, options) => {
+          const secret = guardSecrets(
+            title,
+            agent,
+            ...cards.flatMap(card => [card.question, card.answer])
+          );
+          if (secret) return toolError(secret);
+          // A card is one list item and one paragraph: no line breaks.
+          const flat = cards.map(card => ({
+            question: card.question.replace(/\s*[\r\n]+\s*/g, ' '),
+            answer: card.answer.replace(/\s*[\r\n]+\s*/g, ' '),
+          }));
+          try {
+            const target = await appendTarget(
+              docId,
+              title,
+              agent,
+              'the cards',
+              options.signal
+            );
+            if (typeof target !== 'string') return target;
+            await this.writer.appendFlashcards(
+              workspaceId,
+              target,
+              flat,
+              userId
+            );
+            return toolText(
+              JSON.stringify({
+                success: true,
+                docId: target,
+                cards: flat.length,
+                message: docId
+                  ? 'Flashcards added to the end of the document'
+                  : 'Flashcards created in a new document',
+              })
+            );
+          } catch (error) {
+            return toolError(
+              `Failed to add flashcards: ${error instanceof Error ? error.message : 'Unknown error'}`
+            );
+          }
+        },
+      });
+
+      const xy = z.tuple([z.number(), z.number()]);
+      const drawItemParser = z.discriminatedUnion('type', [
+        z.object({
+          type: z.literal('stroke'),
+          key: z.string().optional(),
+          points: z
+            .array(z.union([xy, z.tuple([z.number(), z.number(), z.number()])]))
+            .min(2)
+            .max(5000),
+          color: z.string().optional(),
+          width: z.number().positive().max(100).optional(),
+        }),
+        z.object({
+          type: z.literal('shape'),
+          key: z.string().optional(),
+          shape: z.enum(['rect', 'ellipse', 'diamond', 'triangle']).optional(),
+          x: z.number(),
+          y: z.number(),
+          w: z.number().positive(),
+          h: z.number().positive(),
+          text: z.string().optional(),
+          color: z.string().optional(),
+          fill: z.string().optional(),
+        }),
+        z.object({
+          type: z.literal('text'),
+          key: z.string().optional(),
+          x: z.number(),
+          y: z.number(),
+          text: z.string().min(1),
+          fontSize: z.number().positive().max(400).optional(),
+          color: z.string().optional(),
+        }),
+        z.object({
+          type: z.literal('connector'),
+          key: z.string().optional(),
+          from: z.union([z.string(), xy]),
+          to: z.union([z.string(), xy]),
+          color: z.string().optional(),
+        }),
+      ]);
+
+      const drawOnCanvasTool = defineTool({
+        name: 'draw_on_canvas',
+        title: 'Draw On Canvas',
+        description:
+          "Draw on a document's canvas (its edgeless/whiteboard view), on top of what is there; nothing existing is moved or removed. Items: `stroke` (freehand pen ink through points, e.g. to circle, underline or annotate something), `shape` (rect, ellipse, diamond or triangle, with optional text inside), `text`, and `connector` (an arrow; each end is an [x, y] point, an element id from read_canvas, or the `key` of an item drawn earlier in the same call). Coordinates are canvas coordinates, as read_canvas and capture_canvas report them. Colours are CSS colours such as '#d14' (default near-black). Returns the new element ids. Check the result with capture_canvas.",
+        parser: z.object({
+          docId: z.string(),
+          items: z.array(drawItemParser).min(1).max(200),
+          agent: z.string().optional(),
+        }),
+        inputSchema: {
+          type: 'object',
+          properties: {
+            docId: { type: 'string' },
+            items: {
+              type: 'array',
+              minItems: 1,
+              maxItems: 200,
+              items: {
+                type: 'object',
+                properties: {
+                  type: {
+                    type: 'string',
+                    enum: ['stroke', 'shape', 'text', 'connector'],
+                  },
+                  key: {
+                    type: 'string',
+                    description:
+                      'A name for this item, so a connector later in the call can point at it.',
+                  },
+                  points: {
+                    type: 'array',
+                    description:
+                      'stroke: [x, y] points (or [x, y, pressure]) along the pen path, at least 2.',
+                    items: { type: 'array', items: { type: 'number' } },
+                  },
+                  width: {
+                    type: 'number',
+                    description: 'stroke: line width (default 4).',
+                  },
+                  shape: {
+                    type: 'string',
+                    enum: ['rect', 'ellipse', 'diamond', 'triangle'],
+                  },
+                  x: { type: 'number' },
+                  y: { type: 'number' },
+                  w: { type: 'number' },
+                  h: { type: 'number' },
+                  text: { type: 'string' },
+                  fontSize: {
+                    type: 'number',
+                    description: 'text: font size (default 24).',
+                  },
+                  from: {
+                    description: 'connector start: [x, y], element id or key.',
+                  },
+                  to: {
+                    description: 'connector end: [x, y], element id or key.',
+                  },
+                  color: { type: 'string' },
+                  fill: {
+                    type: 'string',
+                    description: 'shape: fill colour (default unfilled).',
+                  },
+                },
+                required: ['type'],
+              },
+            },
+            agent: agentInputSchema,
+          },
+          required: ['docId', 'items'],
+          additionalProperties: false,
+        },
+        execute: async ({ docId, items }, options) => {
+          const secret = guardSecrets(
+            ...items.map(item => ('text' in item ? item.text : undefined))
+          );
+          if (secret) return toolError(secret);
+          const accessible = await this.ac
+            .user(userId)
+            .workspace(workspaceId)
+            .doc(docId)
+            .can('Doc.Update');
+          if (!accessible) return toolError(`Doc with id ${docId} not found.`);
+
+          const aborted = abortIfNeeded(options.signal);
+          if (aborted) return aborted;
+
+          try {
+            const { ids } = await this.writer.editDoc(
+              workspaceId,
+              docId,
+              binary => drawOnCanvas(binary, items as DrawItem[]),
+              userId
+            );
+            return toolText(JSON.stringify({ success: true, docId, ids }));
+          } catch (error) {
+            if (error instanceof CanvasError) return toolError(error.message);
+            return toolError(
+              `Failed to draw on canvas: ${error instanceof Error ? error.message : 'Unknown error'}`
+            );
+          }
+        },
+      });
+
       tools.push(
+        replyToComment,
+        createWidget,
+        createFlashcards,
         createDocument,
         updateDocument,
         updateDocumentMeta,
         linkDocument,
         updateTask,
         updateBlock,
-        createDiagram
+        createDiagram,
+        drawOnCanvasTool
       );
     }
 

@@ -39,19 +39,26 @@ const cleanNumber = (raw: string): string | null => {
   return `${negative ? '-' : ''}${digits.replace(/\.$/, '')}`;
 };
 
+/** "2026", as in a page's "© 2026" footer or a date; not "1,999" or "2026.5". */
+const isBareYear = (token: string) => /^(19|20)\d{2}$/.test(token);
+
 /**
  * A number from a page or output: a JSON-LD/microdata price first (a shop's
  * real price, not the first "$" in an ad), then a currency amount, then the
- * first number at all.
+ * first number at all. On a web page a bare year is skipped: it is the
+ * footer's copyright or a date, never what was asked for, and reporting it
+ * hid that the page had no value (a search engine's home page read "2026").
  */
 function firstNumber(body: string): string | null {
   const jsonLd = body.match(/"price"\s*:\s*"?([\d,]+(?:\.\d+)?)"?/i);
   if (jsonLd) return cleanNumber(jsonLd[1]);
-  const text = looksLikeHtml(body) ? htmlToText(body) : body;
+  const html = looksLikeHtml(body);
+  const text = html ? htmlToText(body) : body;
   const currency = text.match(/[$€£¥]\s?(-?[\d,]+(?:\.\d+)?)/);
   if (currency) return cleanNumber(currency[1]);
-  const plain = text.match(/-?\d[\d,]*(?:\.\d+)?/);
-  return plain ? cleanNumber(plain[0]) : null;
+  const numbers = text.match(/-?\d[\d,]*(?:\.\d+)?/g) ?? [];
+  const plain = html ? numbers.find(n => !isBareYear(n)) : numbers[0];
+  return plain ? cleanNumber(plain) : null;
 }
 
 /** `a.b[0].c` over parsed JSON. */

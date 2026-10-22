@@ -14,6 +14,7 @@ import {
   notesHealthDevice,
   notesHealthMonitorDraft,
   RemoteAgentRunnerService,
+  RESEARCH_MODEL,
   sparklinePath,
   type Trend,
   WEEK_MINUTES,
@@ -50,7 +51,7 @@ const every = (minutes: number) =>
 export const watches = (monitor: Monitor) =>
   [
     monitor.kind === 'agent'
-      ? `Agent on ${monitor.deviceKey ?? 'a device'}`
+      ? `${monitor.spec.model === RESEARCH_MODEL ? 'Research' : 'Agent'} on ${monitor.deviceKey ?? 'a device'}`
       : monitor.source === 'command'
         ? `Command on ${monitor.deviceKey ?? 'a device'}`
         : host(monitor.spec.url),

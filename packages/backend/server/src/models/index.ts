@@ -60,6 +60,7 @@ import { WorkspaceAnalyticsModel } from './workspace-analytics';
 import { WorkspaceCalendarModel } from './workspace-calendar';
 import { WorkspaceFeatureModel } from './workspace-feature';
 import { WorkspaceRuntimeStateModel } from './workspace-runtime-state';
+import { WorkspaceSecretModel } from './workspace-secret';
 import { WorkspaceUserModel } from './workspace-user';
 
 const MODELS = {
@@ -106,6 +107,7 @@ const MODELS = {
   userPushToken: UserPushTokenModel,
   monitor: MonitorModel,
   monitoringAgent: MonitoringAgentModel,
+  workspaceSecret: WorkspaceSecretModel,
   calendarSubscription: CalendarSubscriptionModel,
   calendarEvent: CalendarEventModel,
   calendarEventInstance: CalendarEventInstanceModel,
@@ -208,4 +210,5 @@ export * from './workspace-analytics';
 export * from './workspace-calendar';
 export * from './workspace-feature';
 export * from './workspace-runtime-state';
+export * from './workspace-secret';
 export * from './workspace-user';

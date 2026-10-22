@@ -1,7 +1,12 @@
 import { describe, expect, test } from 'vitest';
 
 import type { AgentRun } from '../stores/agent-runs';
-import { RUN_CHAT_OUTPUT_CHARS, runChatMessages } from './run-chat';
+import { parseLogLines } from './log-lines';
+import {
+  askTranscript,
+  RUN_CHAT_OUTPUT_CHARS,
+  runChatMessages,
+} from './run-chat';
 
 const run = (over: Partial<AgentRun> = {}): AgentRun => ({
   id: 'r1',
@@ -52,5 +57,39 @@ describe('runChatMessages', () => {
     });
     expect(user.content).toContain(`${'a'.repeat(RUN_CHAT_OUTPUT_CHARS - 1)}…`);
     expect(user.content).not.toContain('a'.repeat(RUN_CHAT_OUTPUT_CHARS));
+  });
+});
+
+describe('askTranscript', () => {
+  const at = Date.UTC(2026, 9, 21, 9);
+
+  test('logs a question and its answer, stamped', () => {
+    const log = askTranscript([
+      { role: 'user', content: 'Why did it fail?', files: ['err.log'], at },
+      {
+        role: 'assistant',
+        content: 'The token expired.\nIt retried once.',
+        at,
+      },
+    ]);
+    const lines = parseLogLines(log);
+    expect(lines.map(line => line.text)).toEqual([
+      '? Why did it fail? (attached: err.log)',
+      'The token expired.',
+      'It retried once.',
+    ]);
+    expect(lines.every(line => line.at === at)).toBe(true);
+  });
+
+  test('ends a turn that failed with its error', () => {
+    const log = askTranscript(
+      [{ role: 'user', content: 'And then?', at }],
+      'The device is offline.',
+      at
+    );
+    expect(parseLogLines(log).map(line => line.text)).toEqual([
+      '? And then?',
+      '✗ The device is offline.',
+    ]);
   });
 });
