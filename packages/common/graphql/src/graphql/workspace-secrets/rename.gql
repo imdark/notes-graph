@@ -1,0 +1,13 @@
+mutation renameWorkspaceSecret(
+  $workspaceId: String!
+  $name: String!
+  $newName: String!
+) {
+  renameWorkspaceSecret(workspaceId: $workspaceId, name: $name, newName: $newName) {
+    id
+    name
+    description
+    createdAt
+    updatedAt
+  }
+}

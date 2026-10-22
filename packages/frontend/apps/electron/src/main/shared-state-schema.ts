@@ -15,6 +15,7 @@ export const workbenchViewIconNameSchema = z.enum([
   'ai',
   'deploy',
   'monitoring',
+  'secrets',
 ]);
 
 export const workbenchViewMetaSchema = z.object({

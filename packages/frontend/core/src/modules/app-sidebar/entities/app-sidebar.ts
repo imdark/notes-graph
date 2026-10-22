@@ -17,8 +17,8 @@ enum APP_SIDEBAR_STATE {
 
 /**
  * Sidebar buttons a user can hide from Settings → Appearance. The operations
- * buttons (agents, deployments, monitoring) go in the Operations section when
- * it is on, and in the top list with the others when it is off.
+ * buttons (agents, deployments, monitoring, secrets) go in the Operations
+ * section when it is on, and in the top list with the others when it is off.
  */
 export const SIDEBAR_BUTTONS = [
   'graph',
@@ -27,12 +27,14 @@ export const SIDEBAR_BUTTONS = [
   'agents',
   'deployments',
   'monitoring',
+  'secrets',
 ] as const;
 export type SidebarButton = (typeof SIDEBAR_BUTTONS)[number];
 export const OPERATIONS_BUTTONS: readonly SidebarButton[] = [
   'agents',
   'deployments',
   'monitoring',
+  'secrets',
 ];
 
 export class AppSidebar extends Entity {

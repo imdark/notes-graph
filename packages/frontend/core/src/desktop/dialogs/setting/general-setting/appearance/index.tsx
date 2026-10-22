@@ -246,8 +246,8 @@ const SidebarButtonsSetting = () => {
   const appSidebar = useService(AppSidebarService).sidebar;
   const hiddenButtons = useLiveData(appSidebar.hiddenButtons$);
 
-  // Agents, Deployments and Monitoring have no translations in the sidebar
-  // either, so they use the same English labels here.
+  // Agents, Deployments, Monitoring and Secrets have no translations in the
+  // sidebar either, so they use the same English labels here.
   const labels: Record<SidebarButton, string> = {
     graph: t['com.notesgraph.workspaceSubPath.graph'](),
     discover: t['com.notesgraph.discover.title'](),
@@ -255,6 +255,7 @@ const SidebarButtonsSetting = () => {
     agents: 'Agents',
     deployments: 'Deployments',
     monitoring: 'Monitoring',
+    secrets: 'Secrets',
   };
 
   return (

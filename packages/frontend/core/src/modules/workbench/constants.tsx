@@ -6,6 +6,7 @@ import {
   DeleteIcon,
   EdgelessIcon,
   ExportToPdfIcon,
+  LockIcon,
   MindmapIcon,
   PageIcon,
   PublishIcon,
@@ -30,6 +31,7 @@ export const iconNameToIcon = {
   ai: <AiIcon />,
   deploy: <PublishIcon />,
   monitoring: <ComputerPanelIcon />,
+  secrets: <LockIcon />,
 } satisfies Record<string, ReactNode>;
 
 export type ViewIconName = keyof typeof iconNameToIcon;
