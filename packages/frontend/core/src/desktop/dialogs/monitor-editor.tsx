@@ -52,6 +52,20 @@ const CONDITIONS: { value: ConditionType; label: string }[] = [
 
 const INTERVALS = [5, 15, 30, 60, 180, 360, 720, 1440, WEEK_MINUTES];
 
+const SEARCH_ENGINES = /(^|\.)(google|bing|duckduckgo|yahoo|baidu|yandex|ecosia|search\.brave)\.[a-z.]+$/i;
+
+/**
+ * A search engine's own page: fetching it reads its home page, it doesn't
+ * search, so a question monitored there gets the footer's year or nothing.
+ */
+const isSearchEngine = (url: string) => {
+  try {
+    return SEARCH_ENGINES.test(new URL(url.trim()).hostname);
+  } catch {
+    return false;
+  }
+};
+
 const intervalLabel = (minutes: number) =>
   minutes < 60
     ? `Every ${minutes} minutes`
@@ -288,6 +302,23 @@ export const MonitorEditorDialog = ({
                 placeholder="https://api.frankfurter.app/latest?from=USD&to=EUR"
                 data-testid="monitor-url"
               />
+              {isSearchEngine(url) ? (
+                <span className={styles.hint} data-testid="monitor-url-search-engine">
+                  The server fetches this page; it doesn&apos;t search. To have something
+                  look this up, watch with an agent instead.{' '}
+                  <Button
+                    variant="plain"
+                    onClick={() => {
+                      setWhat('agent');
+                      if (interval < 60) setInterval(360);
+                      if (!instructions.trim()) setInstructions(name.trim());
+                    }}
+                    data-testid="monitor-url-use-agent"
+                  >
+                    Use an agent
+                  </Button>
+                </span>
+              ) : null}
             </div>
           ) : null}
 
