@@ -38,6 +38,7 @@ export const displayStatus = (
       return 'error';
     case 'cancelled':
       return 'cancelled';
+    case 'held':
     case 'queued':
       return 'queued';
     default:

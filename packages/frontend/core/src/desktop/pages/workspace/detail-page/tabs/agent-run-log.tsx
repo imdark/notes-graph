@@ -120,9 +120,11 @@ const useRunLog = (run: AgentRun | undefined): RunLogState => {
             steers: job.steers ?? [],
             allowAllTools: !!job.allowAllTools,
             note:
-              job.status === 'queued'
-                ? 'Waiting for the device to pick this up…'
-                : null,
+              job.status === 'held'
+                ? 'Waiting for the workspace’s prestart automations…'
+                : job.status === 'queued'
+                  ? 'Waiting for the device to pick this up…'
+                  : null,
             loading: false,
             result: job.result,
             // Recorded only as the run ends, so it comes with the last poll.

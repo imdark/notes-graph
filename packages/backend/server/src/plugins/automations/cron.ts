@@ -36,5 +36,8 @@ export class AutomationCronJobs {
         );
       }
     });
+    await this.automations.giveUpStalePrestart(now).catch(err => {
+      this.logger.warn(`giving up stale prestart hooks: ${err}`);
+    });
   }
 }

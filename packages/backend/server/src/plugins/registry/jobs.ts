@@ -20,6 +20,7 @@ import {
   profileFor,
 } from './agent-profiles';
 import { AgentRules, withAgentRules } from './agent-rules';
+import { JobGates } from './job-gates';
 import { AgentPushService } from './push';
 import { isSessionLimit, sessionLimitRunAfter } from './session-limit';
 import { SkillNoteService } from './skill-notes';
@@ -45,6 +46,8 @@ declare global {
       status: string;
       result: string | null;
       error: string | null;
+      /** Its tasks' statuses as the run left them, before they were handed back. */
+      taskStatuses?: Record<string, string>;
     };
   }
 }
@@ -449,7 +452,8 @@ export class RegistryJobService {
     @Optional() private readonly tasks?: JobTaskClaims,
     @Optional() private readonly rules?: AgentRules,
     @Optional() private readonly skillNotes?: SkillNoteService,
-    @Optional() private readonly memory?: AgentMemoryService
+    @Optional() private readonly memory?: AgentMemoryService,
+    @Optional() private readonly gates?: JobGates
   ) {}
 
   /** Push without holding up the request it rides on, or failing it. */
@@ -504,10 +508,16 @@ export class RegistryJobService {
     );
 
     const docId = body.docId ? String(body.docId) : null;
+    const agentId = String(body.agentId ?? '');
+    // A gate (an automation's prestart hook) may need to see the job before
+    // any runner can take it.
+    const held =
+      (await this.gates?.holds({ workspaceId, agentId, deviceKey })) ?? false;
     const job = await this.models.registryJob.create({
       workspaceId,
       deviceKey,
-      agentId: String(body.agentId ?? ''),
+      status: held ? 'held' : 'queued',
+      agentId,
       agentName: String(body.agentName ?? 'agent').slice(0, 200),
       instructions,
       context,
@@ -535,10 +545,90 @@ export class RegistryJobService {
 
     this.logger.log(
       `queued job ${job.id} for ${workspaceId}/${deviceKey}` +
-        (runAfter ? ` (held until ${runAfter.toISOString()})` : '')
+        (runAfter ? ` (held until ${runAfter.toISOString()})` : '') +
+        (held ? ' (held for its prestart hooks)' : '')
     );
     await this.tasks?.queued(job);
+    if (held && this.gates) {
+      try {
+        await this.gates.start(job);
+      } catch (err) {
+        const failed = await this.failHeld(
+          workspaceId,
+          job.id,
+          `Couldn't start its prestart hooks: ${(err as Error).message}`
+        );
+        return toJobDto(failed ?? job);
+      }
+    }
     return toJobDto(job);
+  }
+
+  /**
+   * A held job's hooks passed: queue it for a runner, with the instructions
+   * or context they rewrote, if any.
+   */
+  async releaseHeld(
+    workspaceId: string,
+    id: string,
+    changes: { instructions?: string; context?: string } = {},
+    note?: string
+  ): Promise<RegistryJob | null> {
+    const job = await this.models.registryJob.leaveHeld(
+      workspaceId,
+      id,
+      { status: 'queued', ...changes },
+      note
+    );
+    if (job) this.logger.log(`job ${id} released by its prestart hooks`);
+    return job;
+  }
+
+  /**
+   * A held job may not run: it fails without a runner seeing it, handing its
+   * tasks back like any job that ends.
+   */
+  async failHeld(
+    workspaceId: string,
+    id: string,
+    error: string
+  ): Promise<RegistryJob | null> {
+    const job = await this.models.registryJob.leaveHeld(
+      workspaceId,
+      id,
+      { status: 'error', error },
+      `⛔ ${error}\n`
+    );
+    if (!job) return null;
+    this.logger.log(`job ${id} blocked: ${error}`);
+    await this.ended(job);
+    return job;
+  }
+
+  /**
+   * An end hook found that a run which ended done didn't do its job: it is
+   * failed after the fact. Nothing is re-announced, so the hooks that end
+   * runs don't run on it twice.
+   */
+  async failAfterEnd(
+    workspaceId: string,
+    id: string,
+    error: string
+  ): Promise<RegistryJob | null> {
+    return this.models.registryJob.failAfterEnd(
+      workspaceId,
+      id,
+      error,
+      `⛔ ${error}\n`
+    );
+  }
+
+  /** Set a job's tasks to these statuses, by block id; see JobTaskClaims.set. */
+  async setTaskStatuses(
+    job: RegistryJob,
+    statuses: Record<string, string>
+  ): Promise<string[]> {
+    return (await this.tasks?.set(job, statuses)) ?? [];
   }
 
   /**
@@ -883,24 +973,31 @@ export class RegistryJobService {
     });
     // Whoever queued the job may be waiting on its end (a monitor, say).
     if (job && (JOB_TERMINAL as readonly string[]).includes(job.status)) {
-      const taskStatuses = (await this.tasks?.finished(job)) ?? {};
       // Only on the report that ended it: a cancelled job answers later
       // reports with itself, and the user cancelled it anyway.
-      if (status === job.status) {
-        this.notify(push => push.runFinished(job, taskStatuses));
-      }
-      this.event?.emit('registry.job.finished', {
-        workspaceId,
-        jobId: job.id,
-        agentId: job.agentId,
-        deviceKey: job.deviceKey,
-        kind: job.kind,
-        status: job.status,
-        result: job.result,
-        error: job.error,
-      });
+      await this.ended(job, { push: status === job.status });
     }
     return job ? toJobDto(job) : null;
+  }
+
+  /**
+   * A job has ended: hand its tasks back, push its starter, and announce it
+   * with where its tasks were left.
+   */
+  private async ended(job: RegistryJob, { push = true } = {}) {
+    const taskStatuses = (await this.tasks?.finished(job)) ?? {};
+    if (push) this.notify(p => p.runFinished(job, taskStatuses));
+    this.event?.emit('registry.job.finished', {
+      workspaceId: job.workspaceId,
+      jobId: job.id,
+      agentId: job.agentId,
+      deviceKey: job.deviceKey,
+      kind: job.kind,
+      status: job.status,
+      result: job.result,
+      error: job.error,
+      taskStatuses,
+    });
   }
 
   /** The agent names its run once it knows what it is doing. */

@@ -1,12 +1,25 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { type Automation, type AutomationRun, Prisma } from '@prisma/client';
+import {
+  Injectable,
+  Logger,
+  type OnModuleInit,
+  Optional,
+} from '@nestjs/common';
+import {
+  type Automation,
+  type AutomationRun,
+  Prisma,
+  type RegistryJob,
+} from '@prisma/client';
 
 import { BadRequest, NotFound, OnEvent } from '../../base';
 import { Models, RUN_LOG_CAP } from '../../models';
-import { RegistryJobService } from '../registry';
+import { type GateQuery, JobGates, RegistryJobService } from '../registry';
+import { endActions, hookJob, prestartVerdict } from './hooks';
 import {
+  type AgentHook,
   type AutomationEvent,
   type EventFilter,
+  hooksRun,
   matchingTrigger,
   nextRunAt,
   type Trigger,
@@ -16,6 +29,7 @@ import {
 export interface RunTrigger {
   type: Trigger['type'];
   event?: AutomationEvent;
+  hook?: AgentHook;
   /** Who clicked Run, for a manual run. */
   by?: string;
 }
@@ -41,13 +55,22 @@ const JOB_TO_RUN_STATUS: Record<string, string> = {
  * back as `registry.job.finished`.
  */
 @Injectable()
-export class AutomationService {
+export class AutomationService implements OnModuleInit {
   private readonly logger = new Logger(AutomationService.name);
 
   constructor(
     private readonly models: Models,
-    private readonly jobs: RegistryJobService
+    private readonly jobs: RegistryJobService,
+    @Optional() private readonly gates?: JobGates
   ) {}
+
+  /** Prestart hooks hold agent jobs until they pass; see hooks.ts. */
+  onModuleInit() {
+    this.gates?.register({
+      holds: query => this.prestartHolds(query),
+      start: job => this.startPrestart(job),
+    });
+  }
 
   async getOwned(workspaceId: string, id: string) {
     const automation = await this.models.automation.get(workspaceId, id);
@@ -63,7 +86,18 @@ export class AutomationService {
     automation: Automation,
     trigger: RunTrigger,
     input: unknown = null,
-    { target, attempt = 1 }: { target?: string; attempt?: number } = {}
+    {
+      target,
+      attempt = 1,
+      hook,
+      hookJobId,
+    }: {
+      target?: string;
+      attempt?: number;
+      /** For a hook run: which hook, and the agent job it wraps. */
+      hook?: AgentHook;
+      hookJobId?: string;
+    } = {}
   ): Promise<AutomationRun> {
     const deployments = await this.models.automation.listDeployments(
       automation.id
@@ -91,6 +125,8 @@ export class AutomationService {
       trigger: trigger as unknown as Prisma.InputJsonValue,
       input: capInput(input),
       attempt,
+      hook,
+      hookJobId,
     });
     try {
       const job = await this.jobs.enqueueAutomation(
@@ -164,6 +200,9 @@ export class AutomationService {
       deviceKey: event.deviceKey,
       status: event.status,
     };
+    await this.startEndHooks(event).catch(err => {
+      this.logger.warn(`end hooks for job ${event.jobId}: ${err}`);
+    });
     await this.dispatch(event.workspaceId, 'job.finished', event, fields);
     if (event.status === 'error') {
       await this.dispatch(event.workspaceId, 'run.failed', event, fields);
@@ -220,7 +259,10 @@ export class AutomationService {
     }
   }
 
-  /** Copy a finished job onto its run, and retry a failure if allowed. */
+  /**
+   * Copy a finished job onto its run, and retry a failure if allowed. A
+   * hook run's last attempt then acts on the agent run it wraps.
+   */
   private async finishRun(event: Events['registry.job.finished']) {
     const run = await this.models.automation.findRunByJob(event.jobId);
     if (!run) return;
@@ -229,7 +271,7 @@ export class AutomationService {
       event.jobId
     );
     const status = runStatus(event.status, event.error);
-    await this.models.automation.updateRun(run.id, {
+    const finished = await this.models.automation.updateRun(run.id, {
       status,
       output: parseOutput(event.result),
       error: event.error,
@@ -238,22 +280,210 @@ export class AutomationService {
       finishedAt: new Date(),
     });
 
-    if (status !== 'failed' && status !== 'timed_out') return;
-    const automation = await this.models.automation.get(
+    let retried = false;
+    if (status === 'failed' || status === 'timed_out') {
+      const automation = await this.models.automation.get(
+        event.workspaceId,
+        run.automationId
+      );
+      if (automation?.enabled && run.attempt <= automation.maxRetries) {
+        retried = true;
+        await this.start(
+          automation,
+          run.trigger as unknown as RunTrigger,
+          run.input,
+          {
+            target: run.target,
+            attempt: run.attempt + 1,
+            hook: (run.hook as AgentHook | null) ?? undefined,
+            hookJobId: run.hookJobId ?? undefined,
+          }
+        ).catch(err => {
+          this.logger.warn(
+            `retrying automation ${automation.id}: ${(err as Error).message}`
+          );
+        });
+      }
+    }
+
+    if (run.hookJobId && run.hook === 'prestart') {
+      await this.resolvePrestart(event.workspaceId, run.hookJobId);
+    } else if (run.hookJobId && run.hook === 'end' && !retried) {
+      await this.applyEnd(event.workspaceId, finished);
+    }
+  }
+
+  /** Whether a new agent job must wait on a prestart hook. */
+  private async prestartHolds(query: GateQuery): Promise<boolean> {
+    return (
+      (await this.hooksFor(query.workspaceId, 'prestart', query)).length > 0
+    );
+  }
+
+  private async hooksFor(
+    workspaceId: string,
+    hook: AgentHook,
+    fields: { agentId: string; deviceKey: string }
+  ) {
+    // A device's health check is the runner's own, not an agent's run: no
+    // workspace hook may hold it up or fail it.
+    if (fields.agentId.startsWith('health:')) return [];
+    const automations = await this.models.automation.listWithHooks(workspaceId);
+    return automations.filter(a =>
+      hooksRun(a.triggers as unknown as Trigger[], hook, fields)
+    );
+  }
+
+  /** Start every prestart hook a held job waits on. */
+  private async startPrestart(job: RegistryJob) {
+    const hooks = await this.hooksFor(job.workspaceId, 'prestart', job);
+    // While they are being started, one that ends early mustn't let the job
+    // go before the rest exist.
+    this.startingPrestart.add(job.id);
+    try {
+      // One at a time: a hook that can't start fails the job, and the ones
+      // after it needn't run.
+      for (const automation of hooks) {
+        await this.start(
+          automation,
+          { type: 'hook', hook: 'prestart' },
+          { hook: 'prestart', job: hookJob(job) },
+          { hook: 'prestart', hookJobId: job.id }
+        );
+      }
+    } finally {
+      this.startingPrestart.delete(job.id);
+    }
+    await this.resolvePrestart(job.workspaceId, job.id);
+  }
+
+  /** Held jobs whose prestart hooks are still being started. */
+  private readonly startingPrestart = new Set<string>();
+
+  /**
+   * Once every prestart hook of a held job is through (its last attempt
+   * ended), let the job go to the queue with what they rewrote, or fail it
+   * with why. Called as each one ends; until the last, it waits.
+   */
+  async resolvePrestart(workspaceId: string, jobId: string) {
+    if (this.startingPrestart.has(jobId)) return;
+    const runs = await this.models.automation.listHookRuns(jobId, 'prestart');
+    const latest = new Map<string, (typeof runs)[number]>();
+    for (const run of runs) {
+      const seen = latest.get(run.automationId);
+      if (!seen || run.attempt >= seen.attempt)
+        latest.set(run.automationId, run);
+    }
+    const last = [...latest.values()];
+    if (!last.length) return;
+    if (last.some(r => r.status === 'queued' || r.status === 'running')) return;
+
+    const changes: { instructions?: string; context?: string } = {};
+    for (const run of last) {
+      const name = run.automation.name;
+      if (run.status !== 'succeeded') {
+        await this.jobs.failHeld(
+          workspaceId,
+          jobId,
+          `Prestart automation "${name}" ${run.status.replace('_', ' ')}` +
+            (run.error ? `: ${run.error}` : '')
+        );
+        return;
+      }
+      const verdict = prestartVerdict(run.output);
+      if (!verdict.allow) {
+        await this.jobs.failHeld(
+          workspaceId,
+          jobId,
+          `Stopped by automation "${name}": ${verdict.reason}`
+        );
+        return;
+      }
+      if (verdict.instructions !== undefined) {
+        changes.instructions = verdict.instructions;
+      }
+      if (verdict.context !== undefined) changes.context = verdict.context;
+    }
+    const rewrote = Object.keys(changes);
+    await this.jobs.releaseHeld(
+      workspaceId,
+      jobId,
+      changes,
+      `✓ Prestart automations passed: ${last.map(r => `"${r.automation.name}"`).join(', ')}` +
+        (rewrote.length ? ` (rewrote ${rewrote.join(' and ')})` : '') +
+        '\n'
+    );
+  }
+
+  /** Give up on prestart runs nobody finished, failing the jobs they hold. */
+  async giveUpStalePrestart(now = new Date()) {
+    const stale = await this.models.automation.listStalePrestartRuns(
+      new Date(now.getTime() - PRESTART_GIVE_UP_MS)
+    );
+    for (const run of stale) {
+      await this.models.automation.updateRun(run.id, {
+        status: 'timed_out',
+        error: 'No runner finished it in time',
+        finishedAt: now,
+      });
+      const automation = await this.models.automation.findById(
+        run.automationId
+      );
+      if (automation && run.hookJobId) {
+        await this.resolvePrestart(automation.workspaceId, run.hookJobId);
+      }
+    }
+  }
+
+  /** Start the end hooks of an agent run that just ended. */
+  private async startEndHooks(event: Events['registry.job.finished']) {
+    const hooks = await this.hooksFor(event.workspaceId, 'end', event);
+    if (!hooks.length) return;
+    const job = await this.models.registryJob.get(
       event.workspaceId,
+      event.jobId
+    );
+    if (!job) return;
+    for (const automation of hooks) {
+      await this.start(
+        automation,
+        { type: 'hook', hook: 'end' },
+        { hook: 'end', job: hookJob(job), tasks: event.taskStatuses ?? {} },
+        { hook: 'end', hookJobId: job.id }
+      ).catch(err => {
+        this.logger.warn(
+          `end hook ${automation.id} on job ${job.id}: ${(err as Error).message}`
+        );
+      });
+    }
+  }
+
+  /** Do what an end hook's output says to the run it wrapped. */
+  private async applyEnd(workspaceId: string, run: AutomationRun) {
+    if (run.status !== 'succeeded' || !run.hookJobId) return;
+    const job = await this.models.registryJob.get(workspaceId, run.hookJobId);
+    if (!job) return;
+    const automation = await this.models.automation.get(
+      workspaceId,
       run.automationId
     );
-    if (!automation?.enabled || run.attempt > automation.maxRetries) return;
-    await this.start(
-      automation,
-      run.trigger as unknown as RunTrigger,
-      run.input,
-      { target: run.target, attempt: run.attempt + 1 }
-    ).catch(err => {
-      this.logger.warn(
-        `retrying automation ${automation.id}: ${(err as Error).message}`
+    const name = automation?.name ?? 'automation';
+    const actions = endActions(run.output, job.taskIds ?? []);
+    if (actions.tasks && Object.keys(actions.tasks).length) {
+      const changed = await this.jobs.setTaskStatuses(job, actions.tasks);
+      if (changed.length) {
+        this.logger.log(
+          `end hook "${name}" set ${changed.length} task(s) on job ${job.id}`
+        );
+      }
+    }
+    if (actions.fail) {
+      await this.jobs.failAfterEnd(
+        workspaceId,
+        job.id,
+        `Failed by automation "${name}": ${actions.fail}`
       );
-    });
+    }
   }
 }
 
@@ -286,3 +516,9 @@ export function capInput(input: unknown): Prisma.InputJsonValue | null {
   }
   return JSON.parse(json) as Prisma.InputJsonValue;
 }
+
+/**
+ * A prestart run unfinished after this long is given up on, so a job held
+ * for a hook no runner picks up doesn't wait for ever.
+ */
+export const PRESTART_GIVE_UP_MS = MAX_TIMEOUT_SECONDS * 1000 + 15 * 60_000;

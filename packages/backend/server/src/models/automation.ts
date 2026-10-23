@@ -47,6 +47,9 @@ export interface CreateRunInput {
   trigger: Prisma.InputJsonValue;
   input?: Prisma.InputJsonValue | null;
   attempt?: number;
+  /** For a hook run: which hook, and the agent job it wraps. */
+  hook?: 'prestart' | 'end';
+  hookJobId?: string;
 }
 
 @Injectable()
@@ -58,6 +61,11 @@ export class AutomationModel extends BaseModel {
   async get(workspaceId: string, id: string) {
     const automation = await this.db.automation.findUnique({ where: { id } });
     return automation?.workspaceId === workspaceId ? automation : null;
+  }
+
+  /** By id alone: for the server's own bookkeeping, not a person's request. */
+  async findById(id: string) {
+    return await this.db.automation.findUnique({ where: { id } });
   }
 
   async list(workspaceId: string) {
@@ -91,6 +99,38 @@ export class AutomationModel extends BaseModel {
         workspaceId,
         enabled: true,
         triggers: { array_contains: [{ type: 'event' }] },
+      },
+    });
+  }
+
+  /** Enabled automations in a workspace with any hook trigger. */
+  async listWithHooks(workspaceId: string) {
+    return await this.db.automation.findMany({
+      where: {
+        workspaceId,
+        enabled: true,
+        triggers: { array_contains: [{ type: 'hook' }] },
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+  }
+
+  /** Every run of one hook for one agent job, retries included. */
+  async listHookRuns(hookJobId: string, hook: 'prestart' | 'end') {
+    return await this.db.automationRun.findMany({
+      where: { hookJobId, hook },
+      orderBy: { createdAt: 'asc' },
+      include: { automation: { select: { name: true } } },
+    });
+  }
+
+  /** Prestart runs still unfinished since before `before`. */
+  async listStalePrestartRuns(before: Date) {
+    return await this.db.automationRun.findMany({
+      where: {
+        hook: 'prestart',
+        status: { in: ['queued', 'running'] },
+        createdAt: { lt: before },
       },
     });
   }

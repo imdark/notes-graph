@@ -42,6 +42,11 @@ export interface CreateRegistryJobInput {
   access?: string | null;
   /** 'agent' unless given; see `JOB_KINDS`. */
   kind?: JobKind;
+  /**
+   * 'held' for a job that waits on something before any runner may take it
+   * (an automation's prestart hook); 'queued' otherwise.
+   */
+  status?: 'queued' | 'held';
   payload?: Prisma.InputJsonValue | null;
 }
 
@@ -135,6 +140,7 @@ export class RegistryJobModel extends BaseModel {
         access: input.access ?? null,
         kind: input.kind ?? 'agent',
         payload: input.payload ?? Prisma.DbNull,
+        status: input.status ?? 'queued',
       },
     });
   }
@@ -297,6 +303,52 @@ export class RegistryJobModel extends BaseModel {
         tmuxSession: null,
         finishedAt: null,
       },
+    });
+  }
+
+  /**
+   * A held job's wait is over: it is queued for a runner (with what its
+   * hooks rewrote) or fails without running. Null when it is no longer held
+   * (cancelled meanwhile, or already let go).
+   */
+  async leaveHeld(
+    workspaceId: string,
+    id: string,
+    to:
+      | { status: 'queued'; instructions?: string; context?: string }
+      | { status: 'error'; error: string },
+    logAppend?: string
+  ): Promise<RegistryJob | null> {
+    const job = await this.get(workspaceId, id);
+    if (!job || job.status !== 'held') return null;
+    const { count } = await this.db.registryJob.updateMany({
+      where: { id, status: 'held' },
+      data: {
+        ...to,
+        finishedAt: to.status === 'error' ? new Date() : null,
+      },
+    });
+    if (!count) return null;
+    if (logAppend) await this.appendLog(id, logAppend);
+    return this.db.registryJob.findUnique({ where: { id } });
+  }
+
+  /**
+   * Fail a job that ended as done: what it produced didn't pass a check run
+   * after it (an automation's end hook). Null unless it ended done.
+   */
+  async failAfterEnd(
+    workspaceId: string,
+    id: string,
+    error: string,
+    logAppend?: string
+  ): Promise<RegistryJob | null> {
+    const job = await this.get(workspaceId, id);
+    if (!job || job.status !== 'done') return null;
+    if (logAppend) await this.appendLog(id, logAppend);
+    return this.db.registryJob.update({
+      where: { id },
+      data: { status: 'error', error },
     });
   }
 

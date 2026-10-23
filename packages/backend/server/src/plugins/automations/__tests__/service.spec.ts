@@ -54,6 +54,7 @@ function setup(
         automationUpdates.push({ id, ...data }),
       findRunByJob: async () => options.run ?? null,
       listWithEventTriggers: async () => [automation],
+      listWithHooks: async () => [],
     },
     registryJob: {
       get: async () => ({ log: 'hello\n', startedAt: new Date(0) }),
