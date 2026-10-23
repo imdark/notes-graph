@@ -186,6 +186,7 @@ model Workspace {
   monitoringLogCatalogs      MonitoringLogCatalog[]
   projectDocs                ProjectDoc[]
   directoryAccounts          DirectoryAccount[]
+  automations                Automation[]
 
   @@index([lastCheckEmbeddings])
   @@index([createdAt])
@@ -1823,6 +1824,12 @@ model RegistryJob {
   /// A queued job is not handed out before this: set when a run hit the
   /// device's Claude session limit, to when that limit resets.
   runAfter       DateTime? @map("run_after") @db.Timestamptz(3)
+  /// 'agent' (an agent run) or 'automation' (an automation's code). A runner
+  /// only claims the kinds it asks for, so older runners never see code jobs.
+  kind           String    @default("agent") @db.VarChar
+  /// For an automation: {automationId, runId, versionId, code, input,
+  /// timeoutSeconds, secrets}. Secret values are revealed only on claim.
+  payload        Json?
   startedAt      DateTime? @map("started_at") @db.Timestamptz(3)
   finishedAt     DateTime? @map("finished_at") @db.Timestamptz(3)
   createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
@@ -1979,6 +1986,112 @@ model MonitorReading {
 
   @@index([monitorId, at])
   @@map("monitor_readings")
+}
+
+/// Code that runs on a trigger: a schedule, an event in the workspace, a
+/// webhook or a click. Its code lives in versions; a deployment says which
+/// version runs where.
+model Automation {
+  id               String    @id @default(uuid()) @db.VarChar
+  workspaceId      String    @map("workspace_id") @db.VarChar
+  createdBy        String    @map("created_by") @db.VarChar
+  name             String    @db.VarChar
+  /// The note block the automation was made from, if any.
+  docId            String?   @map("doc_id") @db.VarChar
+  blockId          String?   @map("block_id") @db.VarChar
+  /// 'node' today.
+  runtime          String    @default("node") @db.VarChar
+  /// [{type: 'cron', expr, tz?} | {type: 'interval', minutes}
+  ///  | {type: 'event', event, filter?} | {type: 'webhook'} | {type: 'manual'}]
+  triggers         Json      @default("[]") @db.JsonB
+  /// Names of workspace secrets the code may read.
+  secrets          String[]  @default([]) @db.VarChar
+  timeoutSeconds   Int       @default(60) @map("timeout_seconds")
+  maxRetries       Int       @default(0) @map("max_retries")
+  enabled          Boolean   @default(true)
+  /// sha256 of the webhook token; the token itself is shown once.
+  webhookTokenHash String?   @unique @map("webhook_token_hash") @db.VarChar
+  /// When the next cron or interval trigger fires; null without one.
+  nextRunAt        DateTime? @map("next_run_at") @db.Timestamptz(3)
+  lastRunAt        DateTime? @map("last_run_at") @db.Timestamptz(3)
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  workspace   Workspace              @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  versions    AutomationVersion[]
+  deployments AutomationDeployment[]
+  runs        AutomationRun[]
+
+  @@index([enabled, nextRunAt])
+  @@index([workspaceId])
+  @@map("automations")
+}
+
+/// One saved copy of an automation's code; never changed once written.
+model AutomationVersion {
+  id           String   @id @default(uuid()) @db.VarChar
+  automationId String   @map("automation_id") @db.VarChar
+  number       Int
+  code         String   @db.Text
+  /// sha256 of `code`, so saving the same code twice keeps one version.
+  hash         String   @db.VarChar
+  createdBy    String   @map("created_by") @db.VarChar
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  automation  Automation             @relation(fields: [automationId], references: [id], onDelete: Cascade)
+  deployments AutomationDeployment[]
+  runs        AutomationRun[]
+
+  @@unique([automationId, number])
+  @@map("automation_versions")
+}
+
+/// Which version of an automation runs on which device. One per device.
+model AutomationDeployment {
+  id           String   @id @default(uuid()) @db.VarChar
+  automationId String   @map("automation_id") @db.VarChar
+  /// A registry device key ('cloud' for the cloud runner).
+  target       String   @db.VarChar
+  versionId    String   @map("version_id") @db.VarChar
+  deployedBy   String   @map("deployed_by") @db.VarChar
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  automation Automation        @relation(fields: [automationId], references: [id], onDelete: Cascade)
+  version    AutomationVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+
+  @@unique([automationId, target])
+  @@map("automation_deployments")
+}
+
+/// One time an automation ran (or is waiting to).
+model AutomationRun {
+  id            String    @id @default(uuid()) @db.VarChar
+  automationId  String    @map("automation_id") @db.VarChar
+  versionId     String    @map("version_id") @db.VarChar
+  target        String    @db.VarChar
+  /// {type: 'cron'|'interval'|'event'|'webhook'|'manual', event?, by?}
+  trigger       Json      @db.JsonB
+  input         Json?     @db.JsonB
+  /// 'queued', 'running', 'succeeded', 'failed', 'timed_out' or 'cancelled'.
+  status        String    @default("queued") @db.VarChar
+  attempt       Int       @default(1)
+  output        Json?     @db.JsonB
+  error         String?   @db.Text
+  logs          String    @default("") @db.Text
+  /// The registry job carrying this run to its runner.
+  jobId         String?   @unique @map("job_id") @db.VarChar
+  /// Agent jobs the code started.
+  spawnedJobIds String[]  @default([]) @map("spawned_job_ids") @db.VarChar
+  startedAt     DateTime? @map("started_at") @db.Timestamptz(3)
+  finishedAt    DateTime? @map("finished_at") @db.Timestamptz(3)
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  automation Automation        @relation(fields: [automationId], references: [id], onDelete: Cascade)
+  version    AutomationVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+
+  @@index([automationId, createdAt])
+  @@map("automation_runs")
 }
 
 /// A workspace's monitoring agent: it learns what normal looks like on each

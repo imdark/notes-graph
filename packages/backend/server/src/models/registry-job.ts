@@ -40,6 +40,25 @@ export interface CreateRegistryJobInput {
   runAfter?: Date | null;
   maxCostUsd?: number | null;
   access?: string | null;
+  /** 'agent' unless given; see `JOB_KINDS`. */
+  kind?: JobKind;
+  payload?: Prisma.InputJsonValue | null;
+}
+
+/**
+ * What a job carries: an agent run, or an automation's code. A runner claims
+ * only the kinds it names, and one that names none gets agent jobs, so a
+ * runner from before automations never receives code it can't run.
+ */
+export const JOB_KINDS = ['agent', 'automation'] as const;
+export type JobKind = (typeof JOB_KINDS)[number];
+
+/** The kinds a runner's claim asks for: known names only, agent by default. */
+export function parseJobKinds(raw: unknown): JobKind[] {
+  const kinds = Array.isArray(raw)
+    ? JOB_KINDS.filter(kind => raw.includes(kind))
+    : [];
+  return kinds.length ? kinds : ['agent'];
 }
 
 /**
@@ -114,6 +133,8 @@ export class RegistryJobModel extends BaseModel {
         runAfter: input.runAfter ?? null,
         maxCostUsd: input.maxCostUsd ?? null,
         access: input.access ?? null,
+        kind: input.kind ?? 'agent',
+        payload: input.payload ?? Prisma.DbNull,
       },
     });
   }
@@ -153,13 +174,15 @@ export class RegistryJobModel extends BaseModel {
     workspaceId: string,
     deviceKey: string,
     runnerId: string,
-    leaseSeconds = 300
+    leaseSeconds = 300,
+    kinds: readonly JobKind[] = ['agent']
   ): Promise<RegistryJob | null> {
     const now = new Date();
     const candidate = await this.db.registryJob.findFirst({
       where: {
         workspaceId,
         deviceKey,
+        kind: { in: [...kinds] },
         OR: claimable(now),
       },
       orderBy: { createdAt: 'asc' },

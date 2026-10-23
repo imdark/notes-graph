@@ -187,6 +187,9 @@ test('the device job’s output becomes the reading', async t => {
   await service.onJobFinished({
     workspaceId: 'ws',
     jobId: 'job-1',
+    agentId: 'monitor',
+    deviceKey: 'mac',
+    kind: 'agent',
     status: 'done',
     result: 'count 42\n',
     error: null,
@@ -206,6 +209,9 @@ test('an agent run’s summary is the reading; the agent wrote the block itself'
   await service.onJobFinished({
     workspaceId: 'ws',
     jobId: 'job-1',
+    agentId: 'monitor',
+    deviceKey: 'mac',
+    kind: 'agent',
     status: 'done',
     result: 'RTX 5090 at $1,899 (Micro Center)',
     error: null,
