@@ -120,7 +120,7 @@ class AgentQuestionActivity : FragmentActivity() {
                             // On the note the run is working on.
                             startActivity(
                                 NotificationTarget.intent(
-                                    this, pushed.workspaceId, pushed.docId
+                                    this, pushed.workspaceId, pushed.docId, pushed.blockId
                                 )
                             )
                             finish()

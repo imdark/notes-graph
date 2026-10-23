@@ -25,7 +25,10 @@ const bytes = (data: Record<string, string>) =>
  */
 export function questionPushData(
   serverBaseUrl: string,
-  job: Pick<RegistryJob, 'id' | 'workspaceId' | 'agentName' | 'docId'>,
+  job: Pick<
+    RegistryJob,
+    'id' | 'workspaceId' | 'agentName' | 'docId' | 'blockId'
+  >,
   question: Pick<
     RegistryJobQuestion,
     'id' | 'kind' | 'text' | 'detail' | 'options'
@@ -37,6 +40,7 @@ export function questionPushData(
     workspaceId: job.workspaceId,
     jobId: job.id,
     docId: job.docId ?? '',
+    blockId: job.blockId ?? '',
     questionId: question.id,
     kind: question.kind,
     agentName: job.agentName,
@@ -101,7 +105,14 @@ export function finishedPushData(
   serverBaseUrl: string,
   job: Pick<
     RegistryJob,
-    'id' | 'workspaceId' | 'agentName' | 'docId' | 'title' | 'result' | 'error'
+    | 'id'
+    | 'workspaceId'
+    | 'agentName'
+    | 'docId'
+    | 'blockId'
+    | 'title'
+    | 'result'
+    | 'error'
   >,
   outcome: RunOutcome
 ): Record<string, string> {
@@ -112,6 +123,7 @@ export function finishedPushData(
     workspaceId: job.workspaceId,
     jobId: job.id,
     docId: job.docId ?? '',
+    blockId: job.blockId ?? '',
     agentName: job.agentName,
     title: clip(job.title ?? '', 200),
     outcome,

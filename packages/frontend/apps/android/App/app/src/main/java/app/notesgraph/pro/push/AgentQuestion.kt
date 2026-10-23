@@ -14,6 +14,8 @@ data class AgentQuestion(
     val workspaceId: String,
     val jobId: String,
     val docId: String,
+    /** The block the run started from, so opening the note scrolls to it. */
+    val blockId: String,
     val questionId: String,
     /** "question" wants text back; "permission" wants allow or deny. */
     val kind: String,
@@ -29,6 +31,7 @@ data class AgentQuestion(
         putString("workspaceId", workspaceId)
         putString("jobId", jobId)
         putString("docId", docId)
+        putString("blockId", blockId)
         putString("questionId", questionId)
         putString("kind", kind)
         putString("agentName", agentName)
@@ -45,7 +48,7 @@ data class AgentQuestion(
             }.getOrDefault(emptyList())
             return build(
                 data["server"], data["workspaceId"], data["jobId"], data["docId"],
-                data["questionId"], data["kind"], data["agentName"], data["text"],
+                data["blockId"], data["questionId"], data["kind"], data["agentName"], data["text"],
                 data["detail"], options,
             )
         }
@@ -53,7 +56,7 @@ data class AgentQuestion(
         fun fromBundle(bundle: Bundle?): AgentQuestion? = bundle?.let {
             build(
                 it.getString("server"), it.getString("workspaceId"), it.getString("jobId"),
-                it.getString("docId"), it.getString("questionId"), it.getString("kind"),
+                it.getString("docId"), it.getString("blockId"), it.getString("questionId"), it.getString("kind"),
                 it.getString("agentName"), it.getString("text"), it.getString("detail"),
                 it.getStringArrayList("options") ?: emptyList(),
             )
@@ -61,7 +64,7 @@ data class AgentQuestion(
 
         private fun build(
             server: String?, workspaceId: String?, jobId: String?, docId: String?,
-            questionId: String?, kind: String?, agentName: String?, text: String?,
+            blockId: String?, questionId: String?, kind: String?, agentName: String?, text: String?,
             detail: String?, options: List<String>,
         ): AgentQuestion? {
             if (server.isNullOrEmpty() || workspaceId.isNullOrEmpty() ||
@@ -72,6 +75,7 @@ data class AgentQuestion(
                 workspaceId = workspaceId,
                 jobId = jobId,
                 docId = docId.orEmpty(),
+                blockId = blockId.orEmpty(),
                 questionId = questionId,
                 kind = if (kind == "permission") "permission" else "question",
                 agentName = agentName?.takeIf { it.isNotEmpty() } ?: "Agent",

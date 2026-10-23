@@ -64,7 +64,9 @@ object RunNotifications {
         val open = PendingIntent.getActivity(
             context,
             jobId.hashCode(),
-            NotificationTarget.intent(context, data["workspaceId"], data["docId"]),
+            NotificationTarget.intent(
+                context, data["workspaceId"], data["docId"], data["blockId"]
+            ),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
         fun builder() = NotificationCompat.Builder(context, CHANNEL_ID)

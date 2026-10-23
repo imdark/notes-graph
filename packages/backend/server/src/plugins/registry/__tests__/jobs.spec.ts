@@ -691,7 +691,13 @@ test('a push that fails does not fail the ask', async t => {
 test('push data fits FCM by giving up the tool input first', t => {
   const data = questionPushData(
     'https://app.notesgraph.com',
-    { id: 'job-1', workspaceId, agentName: 'coder', docId: null },
+    {
+      id: 'job-1',
+      workspaceId,
+      agentName: 'coder',
+      docId: null,
+      blockId: null,
+    },
     {
       id: 'q1',
       kind: 'permission',

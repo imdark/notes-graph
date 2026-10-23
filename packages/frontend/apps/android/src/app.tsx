@@ -417,6 +417,9 @@ try {
       workbench.openDoc({
         docId,
         ...(payload?.blockId ? { blockIds: [payload.blockId] } : {}),
+        // A fresh key so tapping a second notification for the block already
+        // open still scrolls to it: the editor only refocuses on a change.
+        refreshKey: String(Date.now()),
       });
     } else {
       workbench.open('/agents');
