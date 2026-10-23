@@ -14,17 +14,22 @@ object NotificationTarget {
     private const val EXTRA_OPEN = "ng_open_target"
     private const val EXTRA_HANDLED = "ng_open_handled"
 
-    /** The app, on `docId` (at `blockId`) in `workspaceId`; the Agents page without a doc. */
+    /**
+     * The app, on `docId` (at `blockId`) in `workspaceId`; the Agents page
+     * without a doc; the journal page for `journal` (YYYY-MM-DD) when given.
+     */
     fun intent(
         context: Context,
         workspaceId: String?,
         docId: String?,
         blockId: String? = null,
+        journal: String? = null,
     ): Intent {
         val target = JSONObject()
         if (!workspaceId.isNullOrEmpty()) target.put("workspaceId", workspaceId)
         if (!docId.isNullOrEmpty()) target.put("docId", docId)
         if (!blockId.isNullOrEmpty()) target.put("blockId", blockId)
+        if (!journal.isNullOrEmpty()) target.put("journal", journal)
         return Intent(context, MainActivity::class.java)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
             .putExtra(EXTRA_OPEN, target.toString())

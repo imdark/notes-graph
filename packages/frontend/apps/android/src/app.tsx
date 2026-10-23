@@ -31,8 +31,7 @@ import {
 import { registerNativePreviewHandlers } from '@notesgraph/core/modules/code-block-preview-renderer';
 import { DocsService } from '@notesgraph/core/modules/doc';
 import { GlobalContextService } from '@notesgraph/core/modules/global-context';
-import { I18nProvider } from '@notesgraph/core/modules/i18n';
-import { LifecycleService } from '@notesgraph/core/modules/lifecycle';
+import { I18nProvider } from '@notesgraph/core/modules/i18n';import { LifecycleService } from '@notesgraph/core/modules/lifecycle';
 import {
   configureLocalStorageStateStorageImpls,
   NbstoreProvider,
@@ -72,6 +71,7 @@ import {
   readEndpointToken,
   writeEndpointToken,
 } from './proxy';
+import { setupNoteWidget } from './note-widget-glue';
 import { nativeSpeechToText } from './speech-to-text-glue';
 
 const storeManagerClient = createStoreManagerClient();
@@ -164,6 +164,8 @@ const frameworkProvider = framework.provider();
 setupBackgroundSyncManifest(frameworkProvider);
 // Phone notifications when an agent run is waiting on the user.
 setupAgentPush(frameworkProvider);
+// Tell home-screen note widgets which workspace to read from.
+setupNoteWidget(frameworkProvider);
 
 registerNativePreviewHandlers({
   renderMermaidSvg: request => Preview.renderMermaidSvg(request),
@@ -381,15 +383,18 @@ try {
   // localStorage unavailable — nothing to resume
 }
 /**
- * Open what a tapped notification is about: a finished run's note (or the
- * Agents page when it ran on none), a monitor's block. Native calls this
- * until it returns true; false means the app has no workspace open yet.
- * Another workspace is opened by its URL, which reloads into it.
+ * Open what a tapped notification or home-screen widget is about: a finished
+ * run's note (or the Agents page when it ran on none), a monitor's block, the
+ * journal page for a date. Native calls this until it returns true; false
+ * means the app has no workspace open yet. Another workspace is opened by its
+ * URL, which reloads into it.
  */
 (window as any).notesgraphOpenFromNotification = (payload: {
   workspaceId?: string;
   docId?: string;
   blockId?: string;
+  /** YYYY-MM-DD: that day's journal, or the page to start it from. */
+  journal?: string;
 }): boolean => {
   const globalContextService = frameworkProvider.get(GlobalContextService);
   const currentWorkspaceId =
@@ -397,13 +402,18 @@ try {
   if (!currentWorkspaceId) return false;
   const workspaceId = payload?.workspaceId || currentWorkspaceId;
   const docId = payload?.docId;
+  const journalPath = payload?.journal
+    ? `/journals?date=${encodeURIComponent(payload.journal)}`
+    : null;
   if (workspaceId !== currentWorkspaceId) {
     const blocks = payload?.blockId
       ? `?blockIds=${encodeURIComponent(payload.blockId)}`
       : '';
-    window.location.href = docId
-      ? `/workspace/${workspaceId}/${docId}${blocks}`
-      : `/workspace/${workspaceId}/agents`;
+    window.location.href = journalPath
+      ? `/workspace/${workspaceId}${journalPath}`
+      : docId
+        ? `/workspace/${workspaceId}/${docId}${blocks}`
+        : `/workspace/${workspaceId}/agents`;
     return true;
   }
   const workspaceRef = frameworkProvider
@@ -413,7 +423,9 @@ try {
   const { workspace, dispose } = workspaceRef;
   try {
     const workbench = workspace.scope.get(WorkbenchService).workbench;
-    if (docId) {
+    if (journalPath) {
+      workbench.open(journalPath);
+    } else if (docId) {
       workbench.openDoc({
         docId,
         ...(payload?.blockId ? { blockIds: [payload.blockId] } : {}),

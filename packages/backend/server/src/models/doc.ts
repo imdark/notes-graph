@@ -530,6 +530,19 @@ export class DocModel extends BaseModel {
     return rows.map(row => row.docId);
   }
 
+  /** Docs whose title contains `text` (case-insensitive), with their titles. */
+  async findByTitleMatch(workspaceId: string, text: string, limit = 50) {
+    return await this.db.workspaceDoc.findMany({
+      where: {
+        workspaceId,
+        title: { contains: text, mode: 'insensitive' },
+      },
+      select: { docId: true, title: true },
+      orderBy: { title: 'asc' },
+      take: limit,
+    });
+  }
+
   /**
    * The ids of the workspace's docs titled `title`, ignoring case and the
    * spaces around it, as last synced into the doc metas. A title the user
