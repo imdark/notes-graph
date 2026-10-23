@@ -12,6 +12,7 @@ import { useActiveBlocksuiteEditor } from '@notesgraph/core/components/hooks/use
 import { useNavigateHelper } from '@notesgraph/core/components/hooks/use-navigate-helper';
 import { NotesGraphErrorBoundary } from '@notesgraph/core/components/notesgraph/notesgraph-error-boundary';
 import { PageDetailEditor } from '@notesgraph/core/components/page-detail-editor';
+import { DayCalendarSection } from '@notesgraph/core/desktop/pages/workspace/detail-page/day-calendar-section';
 import { DayScheduleSection } from '@notesgraph/core/desktop/pages/workspace/detail-page/day-schedule-section';
 import { DetailPageWrapper } from '@notesgraph/core/desktop/pages/workspace/detail-page/detail-page-wrapper';
 import {
@@ -272,6 +273,7 @@ const DetailPageImpl = ({
             key={doc.id}
             className={styles.errorBoundary}
           >
+            {journalDate ? <DayCalendarSection date={journalDate} /> : null}
             {journalDate ? <DayScheduleSection date={journalDate} /> : null}
             <PageDetailEditor onLoad={onLoad} readonly={readonly} />
           </NotesGraphErrorBoundary>
