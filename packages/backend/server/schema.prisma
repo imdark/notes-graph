@@ -2083,6 +2083,9 @@ model AutomationRun {
   jobId         String?   @unique @map("job_id") @db.VarChar
   /// Agent jobs the code started.
   spawnedJobIds String[]  @default([]) @map("spawned_job_ids") @db.VarChar
+  /// For a hook run: 'prestart' or 'end', and the agent job it wraps.
+  hook          String?   @db.VarChar
+  hookJobId     String?   @map("hook_job_id") @db.VarChar
   startedAt     DateTime? @map("started_at") @db.Timestamptz(3)
   finishedAt    DateTime? @map("finished_at") @db.Timestamptz(3)
   createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
@@ -2091,6 +2094,7 @@ model AutomationRun {
   version    AutomationVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
 
   @@index([automationId, createdAt])
+  @@index([hookJobId])
   @@map("automation_runs")
 }
 

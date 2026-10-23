@@ -492,9 +492,11 @@ export class AgentExecutorService extends Service implements AgentExecutor {
           // Runs waiting on their starter keep their slots, so with every
           // slot waiting this waits too, until one is answered.
           onWaiting?.(
-            update.status === 'queued'
-              ? `Waiting for a free job slot on ${deviceKey}. Runs waiting on you hold their slots: answer one, or raise "Jobs at once" for ${deviceKey} on the Monitoring page.`
-              : null
+            update.status === 'held'
+              ? 'Waiting for the workspace’s prestart automations to check this run…'
+              : update.status === 'queued'
+                ? `Waiting for a free job slot on ${deviceKey}. Runs waiting on you hold their slots: answer one, or raise "Jobs at once" for ${deviceKey} on the Monitoring page.`
+                : null
           );
           if (update.status === 'done') {
             answered = true;

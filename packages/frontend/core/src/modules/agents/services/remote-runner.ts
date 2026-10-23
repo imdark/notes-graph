@@ -191,7 +191,8 @@ export interface RemoteJob {
   agentId: string;
   agentName: string;
   model: string | null;
-  status: 'queued' | 'running' | 'done' | 'error' | 'cancelled';
+  /** 'held' while the workspace's prestart automations check it. */
+  status: 'held' | 'queued' | 'running' | 'done' | 'error' | 'cancelled';
   /** What the run is called; the agent may rename it. Absent from older servers. */
   title?: string | null;
   result: string | null;

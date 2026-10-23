@@ -22,6 +22,7 @@ import type { CurrentUser as CurrentUserType } from '../../core/auth';
 import { CurrentUser, Public } from '../../core/auth';
 import { PermissionAccess } from '../../core/permission';
 import { Models, sha256 } from '../../models';
+import { AUTOMATION_TEMPLATES } from './hooks';
 import { AutomationService, MAX_TIMEOUT_SECONDS } from './service';
 import {
   hasTrigger,
@@ -218,6 +219,16 @@ export class AutomationController {
       version: version ? { id: version.id, number: version.number } : null,
       ...(token ? { webhookToken: token } : {}),
     };
+  }
+
+  /** Ready-made automations to start from. Before `/:id`, which would take it. */
+  @Get('/templates')
+  async templates(
+    @CurrentUser() user: CurrentUserType,
+    @Param('workspaceId') workspaceId: string
+  ) {
+    await this.assertRead(user, workspaceId);
+    return { templates: AUTOMATION_TEMPLATES };
   }
 
   @Get('/:id')

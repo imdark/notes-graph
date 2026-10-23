@@ -10,7 +10,22 @@ export type Trigger =
   | { type: 'interval'; minutes: number }
   | { type: 'event'; event: AutomationEvent; filter?: EventFilter }
   | { type: 'webhook' }
-  | { type: 'manual' };
+  | { type: 'manual' }
+  /**
+   * Wraps agent runs: 'prestart' runs before a matching run may start and
+   * can stop it or rewrite its instructions; 'end' runs once it has ended
+   * and can fail it or set its tasks' statuses. See hooks.ts.
+   */
+  | { type: 'hook'; hook: AgentHook; filter?: HookFilter };
+
+export const AGENT_HOOKS = ['prestart', 'end'] as const;
+export type AgentHook = (typeof AGENT_HOOKS)[number];
+
+/** Which agent runs a hook wraps: every field given must match. */
+export interface HookFilter {
+  agentId?: string;
+  deviceKey?: string;
+}
 
 /** Workspace events an automation can start on. */
 export const AUTOMATION_EVENTS = [
@@ -105,13 +120,29 @@ function parseTrigger(raw: unknown): Trigger {
         ? { type: 'event', event, filter }
         : { type: 'event', event };
     }
+    case 'hook': {
+      const hook = String(t.hook ?? '') as AgentHook;
+      if (!AGENT_HOOKS.includes(hook)) {
+        throw new TriggerError(`hook must be one of ${AGENT_HOOKS.join(', ')}`);
+      }
+      const rawFilter = (t.filter ?? {}) as Record<string, unknown>;
+      const filter: HookFilter = {};
+      for (const key of ['agentId', 'deviceKey'] as const) {
+        if (rawFilter[key] != null && rawFilter[key] !== '') {
+          filter[key] = String(rawFilter[key]);
+        }
+      }
+      return Object.keys(filter).length
+        ? { type: 'hook', hook, filter }
+        : { type: 'hook', hook };
+    }
     case 'webhook':
       return { type: 'webhook' };
     case 'manual':
       return { type: 'manual' };
     default:
       throw new TriggerError(
-        'trigger type must be cron, interval, event, webhook or manual'
+        'trigger type must be cron, interval, event, hook, webhook or manual'
       );
   }
 }
@@ -158,3 +189,19 @@ export function matchingTrigger(
 
 export const hasTrigger = (triggers: Trigger[], type: Trigger['type']) =>
   triggers.some(trigger => trigger.type === type);
+
+/** Whether these triggers wrap an agent run on `hook` with these fields. */
+export function hooksRun(
+  triggers: Trigger[],
+  hook: AgentHook,
+  fields: { agentId: string; deviceKey: string }
+): boolean {
+  return triggers.some(
+    trigger =>
+      trigger.type === 'hook' &&
+      trigger.hook === hook &&
+      (!trigger.filter?.agentId || trigger.filter.agentId === fields.agentId) &&
+      (!trigger.filter?.deviceKey ||
+        trigger.filter.deviceKey === fields.deviceKey)
+  );
+}

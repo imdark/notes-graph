@@ -120,6 +120,19 @@ export function readStatuses(
   return statuses;
 }
 
+/** A status a task may be given: `[ ]`, `[X]`, `[-]` or an org keyword. */
+export const isTaskStatus = (status: string) =>
+  /^(\[(?: |x|X|-)\]|[A-Z][A-Z_-]{1,24})$/.test(status);
+
+/** Give each task in `next` (by block id) the status it names. */
+export const setTaskStatuses = (
+  binary: Uint8Array,
+  next: Record<string, string>
+) =>
+  editStatuses(binary, Object.keys(next), id =>
+    isTaskStatus(next[id]) ? next[id] : null
+  );
+
 /** To-do tasks become queued; anything else is left as it is. */
 export const queueTasks = (binary: Uint8Array, blockIds: string[]) =>
   editStatuses(binary, blockIds, (_, status) =>

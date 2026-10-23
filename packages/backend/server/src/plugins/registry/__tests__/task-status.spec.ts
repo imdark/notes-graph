@@ -5,6 +5,7 @@ import {
   queueTasks,
   readStatuses,
   releaseTasks,
+  setTaskStatuses,
   startTasks,
 } from '../task-status';
 
@@ -134,4 +135,23 @@ test('reads where tasks ended, skipping blocks that are not tasks', t => {
     ]),
     { review: 'COMMITTED', typed: 'DEPLOYED', box: '[ ]' }
   );
+});
+
+test('a hook sets the statuses it names, and only real statuses', t => {
+  const doc = makeDoc({
+    a: { text: ' one', chip: '[ ]' },
+    b: { text: ' two', chip: '[X]' },
+    c: { text: ' three', chip: '[-]' },
+  });
+  const edit = setTaskStatuses(Y.encodeStateAsUpdate(doc), {
+    a: 'FAILED',
+    b: '[X]',
+    c: 'not a status',
+  });
+  apply(doc, edit);
+
+  t.deepEqual(edit.changed, ['a']);
+  t.is(status(doc, 'a'), 'FAILED');
+  t.is(status(doc, 'b'), '[X]');
+  t.is(status(doc, 'c'), '[-]');
 });
