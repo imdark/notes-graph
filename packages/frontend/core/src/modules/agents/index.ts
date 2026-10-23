@@ -2,6 +2,21 @@ export { Agents } from './entities/agents';
 export { AGENT_RULES_TITLE, AgentRulesService } from './services/agent-rules';
 export { AgentsService, DEFAULT_AGENT_TOOLS } from './services/agents';
 export {
+  type Automation,
+  AUTOMATION_EVENTS,
+  type AutomationDetails,
+  type AutomationDraft,
+  type AutomationEvent,
+  type AutomationRun,
+  type AutomationRunStatus,
+  AutomationsService,
+  type AutomationTemplate,
+  type AutomationTrigger,
+  type AutomationTriggerType,
+  BLANK_AUTOMATION_CODE,
+  webhookUrl,
+} from './services/automations';
+export {
   hasAgentClaim,
   runsForBlock,
   runTargetsBlock,
@@ -211,6 +226,7 @@ import { WorkspaceScope, WorkspaceService } from '../workspace';
 import { Agents } from './entities/agents';
 import { AgentRulesService } from './services/agent-rules';
 import { AgentsService } from './services/agents';
+import { AutomationsService } from './services/automations';
 import { CloudAgentRunnerService } from './services/cloud-runner';
 import { AgentContextService } from './services/context';
 import { DeploymentsService } from './services/deployments';
@@ -238,6 +254,7 @@ export function configureAgentsModule(framework: Framework) {
     .service(CloudAgentRunnerService, [WorkspaceServerService])
     .service(ResearchToolsService, [WorkspaceServerService])
     .service(MonitorsService, [WorkspaceServerService, WorkspaceService])
+    .service(AutomationsService, [WorkspaceServerService, WorkspaceService])
     .service(FleetService, [WorkspaceServerService, WorkspaceService])
     .service(AgentExecutorService, [
       AgentContextService,
