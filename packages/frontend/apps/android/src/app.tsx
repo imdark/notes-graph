@@ -59,6 +59,7 @@ import { RouterProvider } from 'react-router-dom';
 
 import { setupAgentPush } from './agent-push-glue';
 import { setupBackgroundSyncManifest } from './background-sync-glue';
+import { setupNoteWidget } from './note-widget-glue';
 import { AgentPush } from './plugins/agent-push';
 import { AIButton } from './plugins/ai-button';
 import { AppLock } from './plugins/app-lock';
@@ -72,7 +73,6 @@ import {
   readEndpointToken,
   writeEndpointToken,
 } from './proxy';
-import { setupNoteWidget } from './note-widget-glue';
 import { nativeSpeechToText } from './speech-to-text-glue';
 
 const storeManagerClient = createStoreManagerClient();
