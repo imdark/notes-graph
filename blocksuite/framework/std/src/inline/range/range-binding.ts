@@ -4,6 +4,7 @@ import throttle from 'lodash-es/throttle';
 import { TextSelection } from '../../selection/index.js';
 import { EditorHost } from '../../view/index.js';
 import { INLINE_ROOT_ATTR } from '../consts.js';
+import type { InlineRootElement } from '../inline-editor.js';
 import { isActiveInEditor } from './active.js';
 import { RANGE_SYNC_EXCLUDE_ATTR } from './consts.js';
 import type { RangeManager } from './range-manager.js';
@@ -206,6 +207,8 @@ export class RangeBinding {
       range.endContainer instanceof HTMLElement &&
       range.endContainer.contentEditable === 'false';
     if (isRangeOutNotEditable) {
+      if (this._snapCaretIntoBlockText(range)) return;
+
       this._prevTextSelection = null;
       this.selectionManager.clear(['text']);
 
@@ -234,6 +237,7 @@ export class RangeBinding {
       // itself; removing the range there blurs the editor and closes the
       // mobile keyboard, so keep it and wait for the next selection change.
       if (range.collapsed && el.closest(`[${INLINE_ROOT_ATTR}]`)) return;
+      if (this._snapCaretIntoBlockText(range)) return;
 
       this._prevTextSelection = null;
       this.selectionManager.clear(['text']);
@@ -341,6 +345,47 @@ export class RangeBinding {
       })
       .catch(console.error);
   };
+
+  /**
+   * Dragging the caret to a line start on mobile can drop it beside the
+   * block's text: on a list item's checkbox or bullet (contenteditable=false)
+   * or in the wrapper around them. Removing that range blurs the editor and
+   * closes the keyboard, so move the caret to the nearest end of the block's
+   * own text instead. Returns false when there is no such text to move to.
+   */
+  private _snapCaretIntoBlockText(range: Range) {
+    if (!range.collapsed) return false;
+
+    const block = this.rangeManager?.getClosestBlock(range.startContainer);
+    if (!block) return false;
+    const inlineRoot = block.querySelector<InlineRootElement>(
+      `[${INLINE_ROOT_ATTR}]`
+    );
+    // Only the block's own text, and only from the row it sits in
+    // (prefix, rich-text, placeholder), never from its children.
+    if (!inlineRoot || this.rangeManager.getClosestBlock(inlineRoot) !== block)
+      return false;
+    const row = inlineRoot.closest('rich-text')?.parentElement;
+    const startElement = getElement(range.startContainer);
+    if (!row || !startElement || !row.contains(startElement)) return false;
+
+    const inlineEditor = inlineRoot.inlineEditor;
+    if (!inlineEditor) return false;
+    const rootRange = document.createRange();
+    rootRange.selectNodeContents(inlineRoot);
+    const index =
+      range.compareBoundaryPoints(Range.START_TO_START, rootRange) <= 0
+        ? 0
+        : inlineEditor.yTextLength;
+
+    const textSelection = this.selectionManager.create(TextSelection, {
+      from: { blockId: block.blockId, index, length: 0 },
+      to: null,
+    });
+    this.selectionManager.setGroup('note', [textSelection]);
+    this.rangeManager.syncTextSelectionToRange(textSelection);
+    return true;
+  }
 
   private _prevTextSelection: {
     selection: TextSelection;
