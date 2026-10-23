@@ -1,6 +1,9 @@
 import { cssVar } from '@toeverything/theme';
 import { style } from '@vanilla-extract/css';
 
+/** A phone-width journal page, where one row cannot fit every column. */
+const narrow = 'screen and (max-width: 640px)';
+
 /**
  * Deliberately the same shell as the day-schedule section: on a journal page
  * the two sit one above the other, and two boxes that differ slightly read as
@@ -83,6 +86,11 @@ export const time = style({
   // Times are the column you scan down, so give them a stable width rather
   // than letting each row's title start at a different offset.
   minWidth: '96px',
+  '@media': {
+    [narrow]: {
+      minWidth: 0,
+    },
+  },
 });
 
 export const title = style({
@@ -91,6 +99,17 @@ export const title = style({
   overflow: 'hidden',
   textOverflow: 'ellipsis',
   whiteSpace: 'nowrap',
+  // On a phone there is not room for one line next to the time, so the title
+  // wraps instead of being cut down to a lone ellipsis.
+  '@media': {
+    [narrow]: {
+      whiteSpace: 'normal',
+      overflowWrap: 'anywhere',
+      display: '-webkit-box',
+      WebkitBoxOrient: 'vertical',
+      WebkitLineClamp: 2,
+    },
+  },
 });
 
 /** Which calendar an event came from; only worth showing when there are several. */
@@ -124,6 +143,27 @@ export const noteAction = style({
     },
     [`${row}:hover &, ${row}:focus-visible &`]: {
       opacity: 1,
+    },
+  },
+  '@media': {
+    // A touch screen has no hover to reveal "Add note", and an invisible label
+    // still takes the width the title needs. The row's aria-label keeps saying
+    // what a tap does.
+    '(hover: none)': {
+      selectors: {
+        [`${row}:not([data-has-note="true"]) &`]: {
+          display: 'none',
+        },
+      },
+    },
+  },
+});
+
+/** On a phone the icon alone says "Open note"; the words go to the title. */
+export const noteActionLabel = style({
+  '@media': {
+    [narrow]: {
+      display: 'none',
     },
   },
 });

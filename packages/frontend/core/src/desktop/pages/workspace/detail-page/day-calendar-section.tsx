@@ -129,7 +129,7 @@ const EventRow = ({
       ) : null}
       <span className={styles.noteAction}>
         {note ? <PageIcon /> : <PlusIcon />}
-        {noteLabel}
+        <span className={styles.noteActionLabel}>{noteLabel}</span>
       </span>
     </button>
   );
