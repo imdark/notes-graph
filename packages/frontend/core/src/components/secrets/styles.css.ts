@@ -1,6 +1,6 @@
 import { cssVar } from '@toeverything/theme';
 import { cssVarV2 } from '@toeverything/theme/v2';
-import { style } from '@vanilla-extract/css';
+import { globalStyle, style } from '@vanilla-extract/css';
 
 export const content = style({
   display: 'flex',
@@ -116,10 +116,16 @@ export const form = style({
       border: 'none',
       background: cssVarV2('layer/background/secondary'),
     },
-    [`${list} > & + *, ${list} > * + &`]: {
+    [`${list} > * + &`]: {
       borderTop: `1px solid ${cssVarV2('layer/insideBorder/border')}`,
     },
   },
+});
+
+// The row after a form in the list; a style's selectors can only target
+// that style's own element, so this one is global.
+globalStyle(`${list} > ${form} + *`, {
+  borderTop: `1px solid ${cssVarV2('layer/insideBorder/border')}`,
 });
 
 export const field = style({
