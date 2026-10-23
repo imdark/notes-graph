@@ -33,6 +33,7 @@ export {
   shipTargets,
   type ShipTask,
   type ShipTaskDetails,
+  shownStage,
   stuckReason,
 } from './services/deployments';
 export {

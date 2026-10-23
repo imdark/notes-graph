@@ -124,6 +124,31 @@ export function pullRequestStage(
 }
 
 /**
+ * Where a task shows on the Deployments page: the stage noted on it, moved
+ * on when its pull request is further along. Merged on GitHub (`merged`,
+ * from the pull request list or a branch check) puts a COMMITTED task with
+ * the ones to deploy; in the build prod runs puts any task with the live
+ * ones, since nobody may have re-marked it after the deploy.
+ */
+export function shownStage(
+  noted: ShipStage,
+  pullRequest: string | null,
+  merged: boolean,
+  deploy: DeployInfo | null
+): ShipStage {
+  if (!pullRequest) return noted;
+  const number = pullRequestNumber(pullRequest);
+  if (
+    number !== null &&
+    pullRequestStage({ state: 'merged', number, url: pullRequest }, deploy) ===
+      'deployed'
+  ) {
+    return 'deployed';
+  }
+  return noted === 'committed' && merged ? 'merged' : noted;
+}
+
+/**
  * Where an open pull request stands on its way to main. Only conflicts stop
  * a plain `gh pr merge` (one that turns out not to merge fails safely); a
  * draft isn't meant to go yet. Failing checks are shown, not enforced: this
