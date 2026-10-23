@@ -97,3 +97,29 @@ export function countTaskStatuses(statusTexts: string[]): StatusCount[] {
         a.label.localeCompare(b.label)
     );
 }
+
+export type PieSlice<T> = T & {
+  /** Its share of the whole, 0–100. */
+  percent: number;
+  /** Where it starts round the circle, 0–100, clockwise from the top. */
+  offset: number;
+};
+
+/**
+ * Slices for a pie, in the order given. A part of zero or less (or not a
+ * number) has no share of a whole, so it's left out.
+ */
+export function pieSlices<T extends { value: number }>(
+  parts: T[]
+): PieSlice<T>[] {
+  const kept = parts.filter(p => Number.isFinite(p.value) && p.value > 0);
+  const total = kept.reduce((sum, p) => sum + p.value, 0);
+  if (total === 0) return [];
+  let offset = 0;
+  return kept.map(p => {
+    const percent = (p.value / total) * 100;
+    const slice = { ...p, percent, offset };
+    offset += percent;
+    return slice;
+  });
+}

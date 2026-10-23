@@ -57,8 +57,13 @@ export class DashboardBlockModel extends BlockModel<DashboardBlockProps> {}
  * - stat: a monitor's latest value, its change and a sparkline
  * - line / bar: a monitor's readings over time
  * - tasks: this note's tasks counted by status
+ * - pie: a share of the whole, of this note's tasks by status or of several
+ *   monitors' latest values
  */
-export type WidgetKind = 'stat' | 'line' | 'bar' | 'tasks';
+export type WidgetKind = 'stat' | 'line' | 'bar' | 'tasks' | 'pie';
+
+/** What a pie widget slices. */
+export type PieSource = 'tasks' | 'monitors';
 
 export type WidgetBlockProps = {
   kind: WidgetKind;
@@ -66,6 +71,10 @@ export type WidgetBlockProps = {
   title: string;
   /** The monitor a stat, line or bar widget charts. */
   monitorId: string | null;
+  /** What a pie widget slices. */
+  pieSource: PieSource;
+  /** The monitors a pie of monitors slices, one slice per latest value. */
+  monitorIds: string[];
   /** How many of the latest readings to chart. */
   points: number;
   /** Tiles it spans in a dashboard row. */
@@ -78,6 +87,8 @@ export const WidgetBlockSchema = defineBlockSchema({
     kind: 'stat',
     title: '',
     monitorId: null,
+    pieSource: 'tasks',
+    monitorIds: [],
     points: 30,
     span: 1,
   }),
