@@ -8,6 +8,7 @@ import { ModuleRef } from '@nestjs/core';
 
 import { ApplyType } from '../base';
 import { AccessTokenModel } from './access-token';
+import { AutomationModel } from './automation';
 import { BlobModel } from './blob';
 import { CalendarAccountModel } from './calendar-account';
 import { CalendarEventModel } from './calendar-event';
@@ -108,6 +109,7 @@ const MODELS = {
   monitor: MonitorModel,
   monitoringAgent: MonitoringAgentModel,
   workspaceSecret: WorkspaceSecretModel,
+  automation: AutomationModel,
   calendarSubscription: CalendarSubscriptionModel,
   calendarEvent: CalendarEventModel,
   calendarEventInstance: CalendarEventInstanceModel,
@@ -167,6 +169,7 @@ const ModelsSymbolProvider: ExistingProvider = {
 })
 export class ModelsModule {}
 
+export * from './automation';
 export * from './blob';
 export * from './calendar-account';
 export * from './calendar-event';

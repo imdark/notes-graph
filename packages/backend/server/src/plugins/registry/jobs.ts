@@ -7,6 +7,7 @@ import { ActionForbidden, BadRequest, EventBus, NotFound } from '../../base';
 import { Models } from '../../models';
 import {
   JOB_TERMINAL,
+  type JobKind,
   QUESTION_KINDS,
   type QuestionKind,
   STEER_KIND,
@@ -26,10 +27,21 @@ import { JobTaskClaims } from './task-claims';
 
 declare global {
   interface Events {
+    /** A runner claimed a device job and is starting it. */
+    'registry.job.started': {
+      workspaceId: string;
+      jobId: string;
+      agentId: string;
+      deviceKey: string;
+      kind: string;
+    };
     /** A device job reached done, error or cancelled. */
     'registry.job.finished': {
       workspaceId: string;
       jobId: string;
+      agentId: string;
+      deviceKey: string;
+      kind: string;
       status: string;
       result: string | null;
       error: string | null;
@@ -40,6 +52,10 @@ declare global {
 /** Wire shape for a job. Epoch seconds, matching the device DTO. */
 export interface JobDto {
   id: string;
+  /** 'agent' or 'automation'; see JOB_KINDS. */
+  kind: string;
+  /** What an automation job runs; null for an agent run. */
+  payload: unknown;
   deviceKey: string;
   agentId: string;
   agentName: string;
@@ -101,6 +117,11 @@ export interface JobDto {
    * null for a model that isn't a Claude agent. Claims only.
    */
   profile?: AgentProfile | null;
+  /**
+   * For an automation: the workspace secrets its code may read, by name.
+   * Claims only, so a secret's value never sits in the job row.
+   */
+  secrets?: Record<string, string>;
   createdAt: number;
   startedAt: number | null;
   finishedAt: number | null;
@@ -164,6 +185,8 @@ export function toJobDto(
 ): JobDto {
   return {
     id: job.id,
+    kind: job.kind,
+    payload: job.payload ?? null,
     deviceKey: job.deviceKey,
     agentId: job.agentId,
     agentName: job.agentName,
@@ -518,6 +541,44 @@ export class RegistryJobService {
     return toJobDto(job);
   }
 
+  /**
+   * Queue an automation's code for a device. Same consent as an agent run:
+   * code only goes to a device registered as an agent target.
+   */
+  async enqueueAutomation(
+    workspaceId: string,
+    userId: string,
+    deviceKey: string,
+    automation: { id: string; name: string },
+    payload: Prisma.InputJsonValue
+  ): Promise<RegistryJob> {
+    const device = await this.models.registryDevice.get(workspaceId, deviceKey);
+    if (!device) {
+      throw new BadRequest(`No device '${deviceKey}' in this workspace`);
+    }
+    if (!device.agentTarget) {
+      throw new BadRequest(
+        `Device '${deviceKey}' is not an agent target. Re-register it with agent execution allowed.`
+      );
+    }
+    const job = await this.models.registryJob.create({
+      workspaceId,
+      deviceKey,
+      agentId: automation.id,
+      agentName: automation.name.slice(0, 200),
+      instructions: `Run automation "${automation.name}"`,
+      context: '',
+      title: automation.name,
+      createdBy: userId,
+      kind: 'automation',
+      payload,
+    });
+    this.logger.log(
+      `queued automation job ${job.id} for ${workspaceId}/${deviceKey}`
+    );
+    return job;
+  }
+
   async get(
     workspaceId: string,
     id: string,
@@ -613,10 +674,17 @@ export class RegistryJobService {
     workspaceId: string,
     deviceKey: string,
     runnerId: string,
-    leaseSeconds?: number
+    leaseSeconds?: number,
+    kinds?: readonly JobKind[]
   ): Promise<JobDto | null> {
     return (
-      await this.claimNext(workspaceId, deviceKey, runnerId, leaseSeconds)
+      await this.claimNext(
+        workspaceId,
+        deviceKey,
+        runnerId,
+        leaseSeconds,
+        kinds
+      )
     ).job;
   }
 
@@ -632,7 +700,8 @@ export class RegistryJobService {
     workspaceId: string,
     deviceKey: string,
     runnerId: string,
-    leaseSeconds?: number
+    leaseSeconds?: number,
+    kinds?: readonly JobKind[]
   ): Promise<{ job: JobDto | null; maxJobs: number | null }> {
     // Asking is what "a runner is listening" means, whether or not there is
     // work to hand out. Best effort: never fail a claim over it.
@@ -663,13 +732,24 @@ export class RegistryJobService {
       workspaceId,
       deviceKey,
       runnerId || 'runner',
-      leaseSeconds
+      leaseSeconds,
+      kinds
     );
     if (!job) return { job: null, maxJobs };
     return { job: await this.claimed(job), maxJobs };
   }
 
   private async claimed(job: RegistryJob): Promise<JobDto> {
+    this.event?.emit('registry.job.started', {
+      workspaceId: job.workspaceId,
+      jobId: job.id,
+      agentId: job.agentId,
+      deviceKey: job.deviceKey,
+      kind: job.kind,
+    });
+    if (job.kind === 'automation') {
+      return { ...toJobDto(job), secrets: await this.revealSecrets(job) };
+    }
     await this.tasks?.claimed(job);
     const profile = await this.profile(job);
     // What earlier runs learned about whoever started this one.
@@ -679,6 +759,29 @@ export class RegistryJobService {
         ? await this.memory.withRecall(job, profile)
         : profile,
     };
+  }
+
+  /**
+   * The secrets an automation job's payload names, read now so a secret
+   * changed since the run was queued is the one it gets. A name with no
+   * secret behind it is left out; the code sees it as unset.
+   */
+  private async revealSecrets(
+    job: RegistryJob
+  ): Promise<Record<string, string>> {
+    const payload = job.payload as { secrets?: unknown } | null;
+    const names = Array.isArray(payload?.secrets)
+      ? payload.secrets.filter((n): n is string => typeof n === 'string')
+      : [];
+    const secrets: Record<string, string> = {};
+    for (const name of names) {
+      const value = await this.models.workspaceSecret.reveal(
+        job.workspaceId,
+        name
+      );
+      if (value !== null) secrets[name] = value;
+    }
+    return secrets;
   }
 
   /**
@@ -789,6 +892,9 @@ export class RegistryJobService {
       this.event?.emit('registry.job.finished', {
         workspaceId,
         jobId: job.id,
+        agentId: job.agentId,
+        deviceKey: job.deviceKey,
+        kind: job.kind,
         status: job.status,
         result: job.result,
         error: job.error,

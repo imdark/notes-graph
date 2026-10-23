@@ -16,6 +16,7 @@ import type { CurrentUser as CurrentUserType } from '../../core/auth';
 import { CurrentUser } from '../../core/auth';
 import { PermissionAccess } from '../../core/permission';
 import { Models } from '../../models';
+import { parseJobKinds } from '../../models/registry-job';
 import { RegistryHealthService } from './health';
 import { RegistryJobService } from './jobs';
 import { type AgentSettings, MonitoringAgentService } from './monitoring-agent';
@@ -559,17 +560,29 @@ export class RegistryController {
     @CurrentUser() user: CurrentUserType,
     @Param('workspaceId') workspaceId: string,
     @Param('key') key: string,
-    @Body() body: { runnerId?: string; leaseSeconds?: number }
+    @Body()
+    body: { runnerId?: string; leaseSeconds?: number; kinds?: unknown }
   ) {
     this.assertEnabled();
-    await this.ac.user(user.id).workspace(workspaceId).assert('Workspace.Read');
+    const kinds = parseJobKinds(body?.kinds);
+    // An automation claim hands over the workspace secrets its code reads,
+    // which Workspace.Read alone must not reach.
+    await this.ac
+      .user(user.id)
+      .workspace(workspaceId)
+      .assert(
+        kinds.includes('automation')
+          ? 'Workspace.Settings.Update'
+          : 'Workspace.Read'
+      );
     // `maxJobs`: what the device was set to run at once in the app (null:
     // the runner's own setting), for the runner to follow.
     return this.jobs.claimNext(
       workspaceId,
       key,
       body?.runnerId ?? 'runner',
-      body?.leaseSeconds
+      body?.leaseSeconds,
+      kinds
     );
   }
 
