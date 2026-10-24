@@ -1,21 +1,12 @@
-import { IS_MOBILE } from '@blocksuite/global/env';
 import type { BaseSelection, BlockModel } from '@blocksuite/store';
 import throttle from 'lodash-es/throttle';
 
 import { TextSelection } from '../../selection/index.js';
 import { EditorHost } from '../../view/index.js';
 import { INLINE_ROOT_ATTR } from '../consts.js';
-import type { InlineRootElement } from '../inline-editor.js';
 import { isActiveInEditor } from './active.js';
 import { RANGE_SYNC_EXCLUDE_ATTR } from './consts.js';
 import type { RangeManager } from './range-manager.js';
-
-/**
- * A selection change this soon after a pointerdown is that tap's, not a
- * caret drag's. A tap's selectionchange lands within a frame or two.
- */
-const TAP_WINDOW_MS = 500;
-
 /**
  * Two-way binding between native range and text selection
  */
@@ -215,8 +206,6 @@ export class RangeBinding {
       range.endContainer instanceof HTMLElement &&
       range.endContainer.contentEditable === 'false';
     if (isRangeOutNotEditable) {
-      if (this._snapCaretIntoBlockText(range)) return;
-
       this._prevTextSelection = null;
       this.selectionManager.clear(['text']);
 
@@ -245,7 +234,6 @@ export class RangeBinding {
       // itself; removing the range there blurs the editor and closes the
       // mobile keyboard, so keep it and wait for the next selection change.
       if (range.collapsed && el.closest(`[${INLINE_ROOT_ATTR}]`)) return;
-      if (this._snapCaretIntoBlockText(range)) return;
 
       this._prevTextSelection = null;
       this.selectionManager.clear(['text']);
@@ -354,60 +342,6 @@ export class RangeBinding {
       .catch(console.error);
   };
 
-  /**
-   * Dragging the caret to a line start on mobile can drop it beside the
-   * block's text: on a list item's checkbox or bullet (contenteditable=false)
-   * or in the wrapper around them. Removing that range blurs the editor and
-   * closes the keyboard, so move the caret to the nearest end of the block's
-   * own text instead. Returns false when there is no such text to move to.
-   *
-   * Only for a caret moved by dragging, which on a phone is the system's
-   * selection handle and sends no pointer events. A tap on a prefix (tick a
-   * checkbox, fold a toggle, select by its bullet) comes with a pointerdown,
-   * and is left to the prefix's own click handler as before. Desktop keeps
-   * its behaviour: there a caret on a prefix is a click on it.
-   */
-  private _snapCaretIntoBlockText(range: Range) {
-    if (!IS_MOBILE || !range.collapsed) return false;
-    if (performance.now() - this._lastPointerDown < TAP_WINDOW_MS) return false;
-
-    const block = this.rangeManager?.getClosestBlock(range.startContainer);
-    if (!block) return false;
-    const inlineRoot = block.querySelector<InlineRootElement>(
-      `[${INLINE_ROOT_ATTR}]`
-    );
-    // Only the block's own text, and only from the row it sits in
-    // (prefix, rich-text, placeholder), never from its children.
-    if (!inlineRoot || this.rangeManager.getClosestBlock(inlineRoot) !== block)
-      return false;
-    const row = inlineRoot.closest('rich-text')?.parentElement;
-    const startElement = getElement(range.startContainer);
-    if (!row || !startElement || !row.contains(startElement)) return false;
-    // Inside the text itself is an inline embed (a mention, a date, LaTeX):
-    // its place in the line isn't either end, so leave it as it was.
-    if (inlineRoot.contains(startElement)) return false;
-
-    const inlineEditor = inlineRoot.inlineEditor;
-    if (!inlineEditor) return false;
-    const rootRange = document.createRange();
-    rootRange.selectNodeContents(inlineRoot);
-    const index =
-      range.compareBoundaryPoints(Range.START_TO_START, rootRange) <= 0
-        ? 0
-        : inlineEditor.yTextLength;
-
-    const textSelection = this.selectionManager.create(TextSelection, {
-      from: { blockId: block.blockId, index, length: 0 },
-      to: null,
-    });
-    this.selectionManager.setGroup('note', [textSelection]);
-    this.rangeManager.syncTextSelectionToRange(textSelection);
-    return true;
-  }
-
-  /** When a pointer last went down, to tell a tap from a handle drag. */
-  private _lastPointerDown = -Infinity;
-
   private _prevTextSelection: {
     selection: TextSelection;
     path: string[];
@@ -438,15 +372,6 @@ export class RangeBinding {
       throttle(() => {
         this._onNativeSelectionChanged().catch(console.error);
       }, 10)
-    );
-
-    this.host.disposables.addFromEvent(
-      document,
-      'pointerdown',
-      () => {
-        this._lastPointerDown = performance.now();
-      },
-      { capture: true, passive: true }
     );
 
     this.host.disposables.add(

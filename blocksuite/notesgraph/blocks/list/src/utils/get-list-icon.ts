@@ -1,3 +1,4 @@
+import { IS_MOBILE } from '@blocksuite/global/env';
 import {
   BulletedList01Icon,
   BulletedList02Icon,
@@ -11,6 +12,21 @@ import {
 import type { ListBlockModel } from '@blocksuite/notesgraph-model';
 import { getNumberPrefix } from '@blocksuite/notesgraph-shared/utils';
 import { html } from 'lit';
+import { ifDefined } from 'lit/directives/if-defined.js';
+
+/**
+ * A list prefix (bullet, number, checkbox, toggle, zoom handle) is
+ * contenteditable=false on desktop. On a phone it is left to the page's
+ * editability, unselectable by its CSS (user-select: none) instead.
+ *
+ * Android moves the caret under its drag handle by hit-testing that point.
+ * Dragged past the start of a list line, the point lands on the prefix; a
+ * non-editable prefix gives no caret position there, so the WebView drops
+ * the selection, the editor loses it and the keyboard closes. An
+ * unselectable but editable prefix lets the caret settle at the start of
+ * the line's text, as it does on a paragraph.
+ */
+const prefixEditable = IS_MOBILE ? undefined : 'false';
 
 const getListDeep = (model: ListBlockModel): number => {
   let deep = 0;
@@ -38,7 +54,7 @@ export function getListIcon(
   switch (model.props.type) {
     case 'bulleted':
       return html`<div
-        contenteditable="false"
+        contenteditable=${ifDefined(prefixEditable)}
         class="notesgraph-list-block__prefix"
         @click=${onClick}
       >
@@ -46,7 +62,7 @@ export function getListIcon(
       </div>`;
     case 'numbered':
       return html`<div
-        contenteditable="false"
+        contenteditable=${ifDefined(prefixEditable)}
         class="notesgraph-list-block__prefix notesgraph-list-block__numbered"
         @click=${onClick}
       >
@@ -59,13 +75,13 @@ export function getListIcon(
       // hover-revealed affordance instead. Click handling lives with the
       // outline-zoom feature (frontend), keyed off the class.
       return html`<div
-          contenteditable="false"
+          contenteditable=${ifDefined(prefixEditable)}
           class="notesgraph-list-block__zoom-handle"
         >
           ${BulletIcons[deep % BulletIcons.length]}
         </div>
         <div
-          contenteditable="false"
+          contenteditable=${ifDefined(prefixEditable)}
           class=${`notesgraph-list-block__prefix notesgraph-list-block__todo-prefix ${model.store.readonly ? 'readonly' : ''}`}
           @click=${onClick}
         >
@@ -75,7 +91,7 @@ export function getListIcon(
         </div>`;
     case 'toggle':
       return html`<div
-        contenteditable="false"
+        contenteditable=${ifDefined(prefixEditable)}
         class="notesgraph-list-block__prefix"
         @click=${onClick}
       >
