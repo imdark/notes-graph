@@ -12,6 +12,7 @@ import {
   deletesBranch,
   findPullRequest,
   isShipStage,
+  liveCheckNote,
   mergeCommand,
   mergeReadiness,
   mergesDirectly,
@@ -453,5 +454,28 @@ describe('checking ready branches', () => {
     expect(command).toContain(`--jq '"\\(.state)\\t\\(.headRefName)"'`);
     expect(command).toContain('repos/imdark/notes-graph/branches/$b');
     expect(pullRequestNumber(prs[1].url)).toBe(123);
+  });
+});
+
+describe('liveCheckNote', () => {
+  const at = new Date(2026, 9, 24);
+  const day = at.toLocaleDateString();
+
+  test('a working feature is noted as checked', () => {
+    expect(liveCheckNote({ works: true }, at)).toBe(
+      `Checked live ${day}: works.`
+    );
+  });
+
+  test("a broken one carries what's wrong", () => {
+    expect(
+      liveCheckNote({ works: false, problem: '  keyboard still closes ' }, at)
+    ).toBe(`Checked live ${day}: doesn't work. keyboard still closes`);
+  });
+
+  test('with nothing typed it still says it does not work', () => {
+    expect(liveCheckNote({ works: false, problem: '   ' }, at)).toBe(
+      `Checked live ${day}: doesn't work.`
+    );
   });
 });

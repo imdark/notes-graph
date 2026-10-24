@@ -514,23 +514,22 @@ export async function assertBlockType(
   id: string | number | null,
   type: string
 ) {
-  const actual = await page.evaluate(
-    ({ id }) => {
-      const element = document.querySelector<BlockComponent>(
-        `[data-block-id="${id}"]`
+  // Polled like assertBlockChildrenIds: a block created by the last action
+  // may not be rendered yet on a slow runner.
+  await expect
+    .poll(async () => {
+      return page.evaluate(
+        ({ id }) => {
+          const element = document.querySelector<BlockComponent>(
+            `[data-block-id="${id}"]`
+          );
+          // @ts-ignore
+          return element ? element.model.props.type : `no block ${id}`;
+        },
+        { id }
       );
-
-      if (!element) {
-        throw new Error(`Element with id ${id} not found`);
-      }
-
-      const model = element.model;
-      // @ts-ignore
-      return model.props.type;
-    },
-    { id }
-  );
-  expect(actual).toBe(type);
+    })
+    .toBe(type);
 }
 
 export async function assertBlockFlavour(

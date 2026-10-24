@@ -900,6 +900,75 @@
         }
       }
     },
+    "registry": {
+      "type": "object",
+      "description": "Configuration for registry module",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Enable the device registry API for deployment and agent targets.\n@default false\n@environment `NOTESGRAPH_REGISTRY_ENABLED`",
+          "_def": {
+            "typeName": "ZodBoolean",
+            "coerce": false
+          },
+          "default": false,
+          "~standard": {
+            "version": 1,
+            "vendor": "zod"
+          }
+        },
+        "maxDevicesPerWorkspace": {
+          "type": "number",
+          "description": "Maximum number of registry devices a single workspace may hold.\n@default 500\n@environment `NOTESGRAPH_REGISTRY_MAX_DEVICES`",
+          "_def": {
+            "checks": [
+              {
+                "kind": "int"
+              },
+              {
+                "kind": "min",
+                "value": 0,
+                "inclusive": false
+              }
+            ],
+            "typeName": "ZodNumber",
+            "coerce": false
+          },
+          "default": 500,
+          "~standard": {
+            "version": 1,
+            "vendor": "zod"
+          }
+        },
+        "fcmServiceAccount": {
+          "type": "string",
+          "description": "Firebase service-account JSON for pushing agent questions to phones. Empty disables push.\n@default \"\"\n@environment `NOTESGRAPH_FCM_SERVICE_ACCOUNT`",
+          "_def": {
+            "checks": [],
+            "typeName": "ZodString",
+            "coerce": false
+          },
+          "default": "",
+          "~standard": {
+            "version": 1,
+            "vendor": "zod"
+          }
+        },
+        "agentMemory": {
+          "type": "boolean",
+          "description": "Save what agent runs learn about the user into the \"Agent memory\" notes, and recall it into later runs.\n@default true\n@environment `NOTESGRAPH_AGENT_MEMORY`",
+          "_def": {
+            "typeName": "ZodBoolean",
+            "coerce": false
+          },
+          "default": true,
+          "~standard": {
+            "version": 1,
+            "vendor": "zod"
+          }
+        }
+      }
+    },
     "calendar": {
       "type": "object",
       "description": "Configuration for calendar module",
@@ -1470,75 +1539,6 @@
             "clientId": "",
             "clientSecret": "",
             "requestTimeoutMs": 10000
-          }
-        }
-      }
-    },
-    "registry": {
-      "type": "object",
-      "description": "Configuration for registry module",
-      "properties": {
-        "enabled": {
-          "type": "boolean",
-          "description": "Enable the device registry API for deployment and agent targets.\n@default false\n@environment `NOTESGRAPH_REGISTRY_ENABLED`",
-          "_def": {
-            "typeName": "ZodBoolean",
-            "coerce": false
-          },
-          "default": false,
-          "~standard": {
-            "version": 1,
-            "vendor": "zod"
-          }
-        },
-        "maxDevicesPerWorkspace": {
-          "type": "number",
-          "description": "Maximum number of registry devices a single workspace may hold.\n@default 500\n@environment `NOTESGRAPH_REGISTRY_MAX_DEVICES`",
-          "_def": {
-            "checks": [
-              {
-                "kind": "int"
-              },
-              {
-                "kind": "min",
-                "value": 0,
-                "inclusive": false
-              }
-            ],
-            "typeName": "ZodNumber",
-            "coerce": false
-          },
-          "default": 500,
-          "~standard": {
-            "version": 1,
-            "vendor": "zod"
-          }
-        },
-        "fcmServiceAccount": {
-          "type": "string",
-          "description": "Firebase service-account JSON for pushing agent questions to phones. Empty disables push.\n@default \"\"\n@environment `NOTESGRAPH_FCM_SERVICE_ACCOUNT`",
-          "_def": {
-            "checks": [],
-            "typeName": "ZodString",
-            "coerce": false
-          },
-          "default": "",
-          "~standard": {
-            "version": 1,
-            "vendor": "zod"
-          }
-        },
-        "agentMemory": {
-          "type": "boolean",
-          "description": "Save what agent runs learn about the user into the \"Agent memory\" notes, and recall it into later runs.\n@default true\n@environment `NOTESGRAPH_AGENT_MEMORY`",
-          "_def": {
-            "typeName": "ZodBoolean",
-            "coerce": false
-          },
-          "default": true,
-          "~standard": {
-            "version": 1,
-            "vendor": "zod"
           }
         }
       }

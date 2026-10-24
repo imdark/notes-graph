@@ -63,6 +63,21 @@ test.beforeEach(async ({ page }) => {
       });
     }
   );
+  // GitHub embeds fetch the pull request or issue live. The URLs below point
+  // at a repo that doesn't exist, so the real API answered 404 and the
+  // console check failed the test. Answer with a plain open pull request.
+  await page.route('https://api.github.com/repos/**', async route => {
+    await route.fulfill({
+      json: {
+        state: 'open',
+        state_reason: null,
+        draft: false,
+        merged: false,
+        created_at: '2024-01-01T00:00:00Z',
+        assignees: [],
+      },
+    });
+  });
 });
 
 const createBookmarkBlockBySlashMenu = async (

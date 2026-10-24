@@ -670,6 +670,22 @@ export class EntitlementService {
         ],
       },
     });
+    // Read the subscriptions again. The legacy projection (an
+    // entitlement.changed listener running alongside this sync) writes an
+    // entitlement's subscription row and only then marks it legacyProjected,
+    // so one marked by the time of the read above may have no row in the
+    // first read of subscriptions. Without this, a just-bought plan's
+    // entitlement was revoked as stale.
+    const latestSubscriptions = await this.db.subscription.findMany({
+      where: {
+        targetId,
+        plan: { in: legacyPlans },
+      },
+    });
+    for (const subscription of latestSubscriptions) {
+      legacySubjects.add(this.cloudSubjectId(subscription));
+      legacySubscriptionPlans.add(subscription.plan);
+    }
     const staleIds = staleEntitlements
       .filter(
         entitlement =>
