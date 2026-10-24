@@ -1,4 +1,5 @@
-import type { BlockModel } from '@blocksuite/notesgraph/store';
+import { applyOrgStatusTimestamps } from '@blocksuite/notesgraph/shared/utils';
+import { type BlockModel, Text } from '@blocksuite/notesgraph/store';
 import { LiveData, Service } from '@notesgraph/infra';
 import type { Query, SearchOptions } from '@notesgraph/nbstore';
 import {
@@ -569,6 +570,20 @@ export function shipBrief(
   };
 }
 
+/**
+ * What checking a live task found: it works, or it doesn't and `problem`
+ * says how (may be empty).
+ */
+export type LiveCheck = { works: true } | { works: false; problem: string };
+
+/** The note a live check leaves under its task. */
+export const liveCheckNote = (check: LiveCheck, at: Date): string => {
+  const when = `Checked live ${at.toLocaleDateString()}`;
+  if (check.works) return `${when}: works.`;
+  const problem = check.problem.trim();
+  return `${when}: doesn't work.${problem ? ` ${problem}` : ''}`;
+};
+
 /** The status, task and note fields read off each indexed block. */
 const SEARCH_OPTIONS = {
   fields: ['docId', 'blockId', 'content', 'orgStatus'],
@@ -858,6 +873,44 @@ export class DeploymentsService extends Service {
       const model = doc.blockSuiteDoc.getBlock(task.blockId)?.model;
       if (!model || readStage(model) !== 'committed') return false;
       return setTaskStatus(model, status);
+    } finally {
+      release();
+    }
+  }
+
+  /**
+   * Record what checking a live task found, from the screen. Works: it is
+   * done, stamped CLOSED, as update_task's `done` does. Doesn't work: it goes
+   * back to to-do, so the board and agents pick it up again. Either way the
+   * finding is noted under it. Resolves to whether its note still had it in a
+   * ship stage.
+   */
+  async recordCheck(
+    task: Pick<ShipTask, 'docId' | 'blockId'>,
+    check: LiveCheck
+  ): Promise<boolean> {
+    const { doc, release } = this.docsService.open(task.docId);
+    try {
+      await doc.waitForSyncReady();
+      const store = doc.blockSuiteDoc;
+      const model = store.getBlock(task.blockId)?.model;
+      if (!model?.text || !readStage(model)) return false;
+      if (!setTaskStatus(model, check.works ? '[X]' : '[ ]')) return false;
+      applyOrgStatusTimestamps(
+        model.text.yText,
+        check.works ? 'Done' : 'Todo',
+        Date.now()
+      );
+      // A checkbox item shows its own tick too.
+      if ((model.props as { type?: string }).type === 'todo') {
+        store.updateBlock(model, { checked: check.works } as never);
+      }
+      store.addBlock(
+        'notesgraph:paragraph' as never,
+        { text: new Text(liveCheckNote(check, new Date())) },
+        model.id
+      );
+      return true;
     } finally {
       release();
     }
