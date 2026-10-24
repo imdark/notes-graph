@@ -1,4 +1,4 @@
-import { Button, Checkbox, notify } from '@notesgraph/component';
+import { Button, Checkbox, Input, notify } from '@notesgraph/component';
 import {
   AgentRunSessionService,
   AgentsService,
@@ -7,6 +7,7 @@ import {
   canFixToMerge,
   type DeployInfo,
   DeploymentsService,
+  type LiveCheck,
   type MergeReadiness,
   mergeReadiness,
   mergesDirectly,
@@ -73,7 +74,7 @@ const SECTIONS: { stage: ShipStage; title: string; hint: string }[] = [
   {
     stage: 'deployed',
     title: 'Live, waiting to be checked',
-    hint: 'Mark done once you have seen it working',
+    hint: "Try each one live. Works marks it done; Doesn't work sends it back to to-do with what's wrong noted under it.",
   },
 ];
 
@@ -325,6 +326,49 @@ export const DeploymentsView = () => {
       } catch (err) {
         notify.error({
           title: `Couldn't mark it ${status.toLowerCase()}`,
+          message: err instanceof Error ? err.message : String(err),
+        });
+      } finally {
+        setMoving(prev => {
+          const next = new Set(prev);
+          next.delete(key);
+          return next;
+        });
+      }
+    },
+    [deployments]
+  );
+
+  // The live row whose "What's wrong?" field is open, and what's typed in it.
+  const [reporting, setReporting] = useState<string | null>(null);
+  const [problem, setProblem] = useState('');
+
+  /** Record what checking a live task found; see DeploymentsService.recordCheck. */
+  const recordCheck = useCallback(
+    async (row: Row, check: LiveCheck) => {
+      const key = rowKey(row);
+      setMoving(prev => new Set(prev).add(key));
+      try {
+        const recorded = await deployments.recordCheck(row, check);
+        if (recorded) {
+          notify.success({
+            title: check.works ? 'Marked done' : 'Sent back to to-do',
+            message: check.works
+              ? `"${row.title}" works live.`
+              : `"${row.title}" is a to-do again, with what's wrong noted under it.`,
+          });
+          setReporting(null);
+          setProblem('');
+        } else {
+          notify.error({
+            title: "Couldn't record the check",
+            message: `"${row.title}" isn't marked as shipping in its note any more.`,
+          });
+        }
+        setNotesChanged(n => n + 1);
+      } catch (err) {
+        notify.error({
+          title: "Couldn't record the check",
           message: err instanceof Error ? err.message : String(err),
         });
       } finally {
@@ -781,8 +825,65 @@ export const DeploymentsView = () => {
                           <PullBadge pr={pr} deploy={deploy} />
                         )}
                       </span>
+                      {stage === 'deployed' && reporting === key ? (
+                        <div className={styles.problemForm}>
+                          <Input
+                            className={styles.problemInput}
+                            autoFocus
+                            value={problem}
+                            onChange={setProblem}
+                            onEnter={() =>
+                              void recordCheck(row, { works: false, problem })
+                            }
+                            placeholder="What's wrong? (optional)"
+                            disabled={moving.has(key)}
+                            data-testid="deployments-problem"
+                          />
+                          <Button
+                            variant="primary"
+                            onClick={() =>
+                              void recordCheck(row, { works: false, problem })
+                            }
+                            loading={moving.has(key)}
+                            data-testid="deployments-send-back"
+                          >
+                            Send back
+                          </Button>
+                          <Button
+                            variant="plain"
+                            onClick={() => setReporting(null)}
+                            disabled={moving.has(key)}
+                          >
+                            Cancel
+                          </Button>
+                        </div>
+                      ) : null}
                     </div>
                     {stage === 'committed' ? mergeActions(pr, row) : null}
+                    {stage === 'deployed' && reporting !== key ? (
+                      <div className={styles.rowActions}>
+                        <Button
+                          variant="primary"
+                          onClick={() => void recordCheck(row, { works: true })}
+                          loading={moving.has(key)}
+                          tooltip="Seen it working live: marks it done"
+                          data-testid="deployments-works"
+                        >
+                          Works
+                        </Button>
+                        <Button
+                          onClick={() => {
+                            setProblem('');
+                            setReporting(key);
+                          }}
+                          disabled={moving.has(key)}
+                          tooltip="Sends it back to to-do, with what's wrong noted under it"
+                          data-testid="deployments-broken"
+                        >
+                          Doesn&apos;t work
+                        </Button>
+                      </div>
+                    ) : null}
                   </div>
                 );
               })}

@@ -1,3 +1,4 @@
+import { IS_MOBILE } from '@blocksuite/global/env';
 import { WithDisposable } from '@blocksuite/global/lit';
 import {
   menu,
@@ -21,6 +22,21 @@ import {
 import type { DeltaInsert } from '@blocksuite/store';
 import { css, html } from 'lit';
 import { property } from 'lit/decorators.js';
+import { ifDefined } from 'lit/directives/if-defined.js';
+
+/**
+ * The chip is contenteditable=false on desktop. On a phone it is editable and
+ * selectable, and a caret that lands inside it is moved straight out (see
+ * `_moveCaretOutOfChip`).
+ *
+ * Android moves the caret under its drag handle by hit-testing that point.
+ * A status opens its line, so a caret dragged to the start of the line lands
+ * on the chip. A chip that is non-editable or unselectable (user-select: none)
+ * gives no caret position there, so the WebView drops the selection and the
+ * keyboard closes. Unlike the list prefix (get-list-icon.ts), the chip sits
+ * inside the inline editor, so it needs a valid caret position of its own.
+ */
+const chipEditable = IS_MOBILE ? undefined : 'false';
 
 const CHIP_COLORS: Record<string, { color: string; background: string }> = {
   Todo: {
@@ -67,6 +83,10 @@ export class OrgStatusNode extends WithDisposable(ShadowlessElement) {
       white-space: nowrap;
       vertical-align: baseline;
     }
+    notesgraph-org-status .org-status-chip.mobile {
+      user-select: text;
+      -webkit-user-select: text;
+    }
     notesgraph-org-status .org-status-chevron {
       font-size: 0.8em;
       opacity: 0.6;
@@ -76,6 +96,36 @@ export class OrgStatusNode extends WithDisposable(ShadowlessElement) {
   get statusText() {
     return this.delta.attributes?.orgStatus ?? this.delta.insert;
   }
+
+  override connectedCallback() {
+    super.connectedCallback();
+    if (IS_MOBILE) {
+      this.disposables.addFromEvent(
+        document,
+        'selectionchange',
+        this._moveCaretOutOfChip
+      );
+    }
+  }
+
+  /**
+   * Moves a caret that landed inside the chip to the start of the text after
+   * it. This must happen synchronously on the DOM selection: going through
+   * the inline editor applies on the next frame, by which time a caret drag
+   * has put the caret back inside the chip and the WebView has dropped it.
+   */
+  private readonly _moveCaretOutOfChip = () => {
+    const selection = document.getSelection();
+    if (!selection || selection.rangeCount === 0) return;
+    const chip = this.querySelector('.org-status-chip');
+    if (!chip?.contains(selection.focusNode)) return;
+
+    const next = this.closest('v-element')?.nextElementSibling;
+    const text = next
+      ? document.createTreeWalker(next, NodeFilter.SHOW_TEXT).nextNode()
+      : null;
+    if (text) selection.collapse(text, 0);
+  };
 
   private readonly onClick = (e: MouseEvent) => {
     e.preventDefault();
@@ -143,12 +193,11 @@ export class OrgStatusNode extends WithDisposable(ShadowlessElement) {
     // The trailing `<v-text .str=${ZERO_WIDTH_FOR_EMBED_NODE}>` is required in
     // an embed node so the inline editor computes ranges correctly — without
     // it, typing in a block that has a status chip lands one character before
-    // the caret. It sits outside the contenteditable="false" chip so the
-    // cursor can anchor to it.
+    // the caret. It sits outside the chip so the cursor can anchor to it.
     return html`<span
-        class="org-status-chip"
+        class=${IS_MOBILE ? 'org-status-chip mobile' : 'org-status-chip'}
         style="color: ${palette.color}; background: ${palette.background};"
-        contenteditable="false"
+        contenteditable=${ifDefined(chipEditable)}
         @click=${this.onClick}
         >${label}<span class="org-status-chevron">▾</span></span
       ><v-text .str=${ZERO_WIDTH_FOR_EMBED_NODE}></v-text>`;

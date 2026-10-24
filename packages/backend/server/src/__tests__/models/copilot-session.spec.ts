@@ -972,19 +972,20 @@ test('should cleanup empty sessions correctly', async t => {
 
   const result = await copilotSession.cleanupEmptySessions(oneDayAgo);
 
-  const remainingSessions = await db.aiSession.findMany({
-    where: {
-      id: {
-        in: [
-          ...neverUsedSessionIds,
-          ...emptySessionIds,
-          recentSessionId,
-          sessionWithMsgId,
-        ],
-      },
-    },
-    select: { id: true, deletedAt: true, pinned: true },
-  });
+  const sessionIds = [
+    ...neverUsedSessionIds,
+    ...emptySessionIds,
+    recentSessionId,
+    sessionWithMsgId,
+  ];
+  // In creation order, as the snapshot has them: without an order Postgres
+  // returns the (parallel-created, then updated) rows in any order.
+  const remainingSessions = (
+    await db.aiSession.findMany({
+      where: { id: { in: sessionIds } },
+      select: { id: true, deletedAt: true, pinned: true },
+    })
+  ).sort((a, b) => sessionIds.indexOf(a.id) - sessionIds.indexOf(b.id));
 
   t.snapshot(
     {
