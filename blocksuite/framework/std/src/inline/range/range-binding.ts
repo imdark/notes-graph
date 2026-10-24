@@ -193,6 +193,7 @@ export class RangeBinding {
     const range = selection.rangeCount > 0 ? selection.getRangeAt(0) : null;
 
     if (!range) {
+      if (this._keepDraggedCaret()) return;
       this._prevTextSelection = null;
       this.selectionManager.clear(['text']);
       return;
@@ -402,6 +403,26 @@ export class RangeBinding {
     });
     this.selectionManager.setGroup('note', [textSelection]);
     this.rangeManager.syncTextSelectionToRange(textSelection);
+    return true;
+  }
+
+  /**
+   * Android's WebView drops the selection altogether when its caret handle
+   * is dragged past the start of a line onto the list prefix: the range
+   * goes from offset 0 to none, with no script involved. Clearing the text
+   * selection then blurs the editor and closes the keyboard. On mobile,
+   * with no tap behind it, put the caret back where the editor last had it
+   * (the line start the drag reached) instead.
+   *
+   * Code that means to drop the caret clears the editor's text selection
+   * first, so there is nothing to put back and this stays out of its way.
+   */
+  private _keepDraggedCaret() {
+    if (!IS_MOBILE) return false;
+    if (performance.now() - this._lastPointerDown < TAP_WINDOW_MS) return false;
+    const text = this.selectionManager.find(TextSelection);
+    if (!text || text.to || text.from.length !== 0) return false;
+    this.rangeManager?.syncTextSelectionToRange(text);
     return true;
   }
 
