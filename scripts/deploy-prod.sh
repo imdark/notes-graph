@@ -18,6 +18,17 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
+# A git worktree's .git is a one-line pointer file into this machine's main
+# checkout. sync_source would ship it to the box, where the web bundle then
+# fails with "Failed to open git repo". A worktree's node_modules is also a
+# symlink into the main checkout, so local bundles would build that checkout's
+# source instead. --landing and --download don't sync the tree, so they're fine.
+if [[ -f "$REPO_ROOT/.git" && " $* " != *" --landing "* && " $* " != *" --download "* ]]; then
+  main="$(git -C "$REPO_ROOT" rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true)"
+  echo "!! $REPO_ROOT is a git worktree; run the full deploy from the main checkout${main:+ (${main%/.git})}" >&2
+  exit 1
+fi
+
 # HOST / SSH_KEY / SSH plus ssh_probe, ensure_aws_auth, open_ssh_ingress and
 # ensure_ssh_access. Shared with scripts/prod-exec.sh so there is one
 # implementation of "get me onto the box" rather than two that drift.
