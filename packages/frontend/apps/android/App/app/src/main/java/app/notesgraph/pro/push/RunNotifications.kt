@@ -60,11 +60,13 @@ object RunNotifications {
         ) return
         ensureChannel(context)
 
-        // Opens the note the run was on, or the Agents page for one on none.
+        // Opens the note the run was on, at its block, or the Agents page for one on none.
         val open = PendingIntent.getActivity(
             context,
             jobId.hashCode(),
-            NotificationTarget.intent(context, data["workspaceId"], data["docId"]),
+            NotificationTarget.intent(
+                context, data["workspaceId"], data["docId"], data["blockId"]
+            ),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
         fun builder() = NotificationCompat.Builder(context, CHANNEL_ID)

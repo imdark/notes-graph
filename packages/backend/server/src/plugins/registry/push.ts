@@ -25,7 +25,10 @@ const bytes = (data: Record<string, string>) =>
  */
 export function questionPushData(
   serverBaseUrl: string,
-  job: Pick<RegistryJob, 'id' | 'workspaceId' | 'agentName' | 'docId'>,
+  job: Pick<
+    RegistryJob,
+    'id' | 'workspaceId' | 'agentName' | 'docId' | 'blockId'
+  >,
   question: Pick<
     RegistryJobQuestion,
     'id' | 'kind' | 'text' | 'detail' | 'options'
@@ -37,6 +40,8 @@ export function questionPushData(
     workspaceId: job.workspaceId,
     jobId: job.id,
     docId: job.docId ?? '',
+    // The block the run started from, so opening the note scrolls to it.
+    blockId: job.blockId ?? '',
     questionId: question.id,
     kind: question.kind,
     agentName: job.agentName,
@@ -96,12 +101,19 @@ export function pushesWhenFinished(job: {
   return true;
 }
 
-/** A run ended: enough for the phone to say how, and open its note. */
+/** A run ended: enough for the phone to say how, and open its note at its block. */
 export function finishedPushData(
   serverBaseUrl: string,
   job: Pick<
     RegistryJob,
-    'id' | 'workspaceId' | 'agentName' | 'docId' | 'title' | 'result' | 'error'
+    | 'id'
+    | 'workspaceId'
+    | 'agentName'
+    | 'docId'
+    | 'blockId'
+    | 'title'
+    | 'result'
+    | 'error'
   >,
   outcome: RunOutcome
 ): Record<string, string> {
@@ -112,6 +124,7 @@ export function finishedPushData(
     workspaceId: job.workspaceId,
     jobId: job.id,
     docId: job.docId ?? '',
+    blockId: job.blockId ?? '',
     agentName: job.agentName,
     title: clip(job.title ?? '', 200),
     outcome,
