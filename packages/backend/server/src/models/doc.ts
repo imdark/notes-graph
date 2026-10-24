@@ -530,17 +530,25 @@ export class DocModel extends BaseModel {
     return rows.map(row => row.docId);
   }
 
-  /** Docs whose title contains `text` (case-insensitive), with their titles. */
+  /**
+   * Docs whose title contains `text` (case-insensitive), with their titles.
+   * Only docs that still have content: a deleted doc's meta row can outlive
+   * its snapshot, and a picker offering one would lead nowhere.
+   */
   async findByTitleMatch(workspaceId: string, text: string, limit = 50) {
-    return await this.db.workspaceDoc.findMany({
-      where: {
-        workspaceId,
-        title: { contains: text, mode: 'insensitive' },
-      },
-      select: { docId: true, title: true },
-      orderBy: { title: 'asc' },
-      take: limit,
-    });
+    const pattern = `%${text.replace(/[\\%_]/g, c => `\\${c}`)}%`;
+    return await this.db.$queryRaw<{ docId: string; title: string | null }[]>`
+      SELECT "workspace_pages"."page_id" as "docId", "workspace_pages"."title"
+      FROM "workspace_pages"
+      INNER JOIN "snapshots"
+      ON "workspace_pages"."workspace_id" = "snapshots"."workspace_id"
+      AND "workspace_pages"."page_id" = "snapshots"."guid"
+      WHERE
+        "workspace_pages"."workspace_id" = ${workspaceId}
+        AND "workspace_pages"."title" ILIKE ${pattern}
+      ORDER BY "workspace_pages"."title" ASC
+      LIMIT ${limit}
+    `;
   }
 
   /**

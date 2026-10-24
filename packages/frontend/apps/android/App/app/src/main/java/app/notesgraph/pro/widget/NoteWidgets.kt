@@ -21,6 +21,8 @@ import java.util.Locale
  */
 internal object NoteWidgets {
     private const val WORKSPACE_KEY = "note-widget-workspace"
+    /** Most of a note's markdown kept per widget: far more than it can show. */
+    private const val MAX_STORED_CHARS = 32_000
 
     private fun configKey(widgetId: Int) = "note-widget-$widgetId"
     private fun contentKey(widgetId: Int) = "note-widget-$widgetId-content"
@@ -119,7 +121,9 @@ internal object NoteWidgets {
             contentKey(widgetId),
             JSONObject()
                 .put("title", content.title)
-                .put("markdown", content.markdown)
+                // The widget shows the start of a note; the DataStore also
+                // holds the sign-in, so a long note mustn't bloat every read.
+                .put("markdown", content.markdown.take(MAX_STORED_CHARS))
                 .put("docId", content.docId ?: "")
                 .put("date", content.date ?: "")
                 .put("error", content.error ?: "")
@@ -129,6 +133,11 @@ internal object NoteWidgets {
 
     suspend fun forget(context: Context, widgetId: Int) {
         context.dataStore.del(configKey(widgetId))
+        context.dataStore.del(contentKey(widgetId))
+    }
+
+    /** Drop a widget's copy of its note, keeping what it shows. */
+    suspend fun forgetContent(context: Context, widgetId: Int) {
         context.dataStore.del(contentKey(widgetId))
     }
 

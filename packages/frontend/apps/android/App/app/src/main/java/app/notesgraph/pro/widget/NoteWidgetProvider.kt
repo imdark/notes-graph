@@ -91,8 +91,10 @@ class NoteWidgetWorker(
 
         suspend fun refreshOne(context: Context, widgetId: Int) {
             val config = NoteWidgets.config(context, widgetId)
-            // A locked app keeps its notes off the home screen too.
+            // A locked app keeps its notes off the home screen too, and off
+            // the phone's storage outside it.
             if (config == null || AppLock.isEnabled(context)) {
+                if (config != null) NoteWidgets.forgetContent(context, widgetId)
                 NoteWidgetViews.render(context, widgetId, config, null)
                 return
             }
@@ -288,6 +290,11 @@ private val link = Regex("\\[([^]]*)]\\([^)]*\\)")
 private val emphasis = Regex("(\\*\\*|__|~~|`)(.+?)\\1")
 
 private const val MAX_LINES = 200
+/**
+ * Longest line kept. A widget update travels to the launcher in one parcel
+ * (about 1 MB at most); 200 lines this long stay well inside it.
+ */
+private const val MAX_LINE_CHARS = 500
 
 /**
  * A note's markdown as the lines a widget shows: headings in bold, tasks as
@@ -300,7 +307,9 @@ internal fun markdownLines(markdown: String): List<CharSequence> {
     var lastBlank = true
     for (raw in markdown.lines()) {
         if (lines.size >= MAX_LINES) break
-        val line = raw.trimEnd()
+        val line = raw.trimEnd().let {
+            if (it.length > MAX_LINE_CHARS) it.take(MAX_LINE_CHARS - 1) + "…" else it
+        }
         if (line.trimStart().startsWith("```")) {
             inCode = !inCode
             continue
