@@ -143,6 +143,19 @@ export const rowActions = style({
   flexShrink: 0,
 });
 
+export const problemForm = style({
+  display: 'flex',
+  flexWrap: 'wrap',
+  alignItems: 'center',
+  gap: 6,
+  marginTop: 6,
+});
+
+export const problemInput = style({
+  flex: '1 1 200px',
+  minWidth: 0,
+});
+
 export const badge = style({
   padding: '1px 6px',
   borderRadius: 4,

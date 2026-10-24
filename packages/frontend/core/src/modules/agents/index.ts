@@ -31,6 +31,7 @@ export {
   type BranchCheck,
   canFixToMerge,
   DeploymentsService,
+  type LiveCheck,
   type MergeReadiness,
   mergeReadiness,
   mergesDirectly,
