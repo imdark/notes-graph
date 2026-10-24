@@ -28,10 +28,12 @@ function makeService(
     heldUntil?: Date;
     budget?: number;
     spent?: number;
+    gates?: any;
   } = {}
 ) {
   const created: any[] = [];
   const allowedAll: string[] = [];
+  const left: any[] = [];
   const models: any = {
     registryDevice: {
       get: async () => options.device ?? null,
@@ -43,11 +45,16 @@ function makeService(
       allowAllTools: async (jobId: string) => {
         allowedAll.push(jobId);
       },
+      leaveHeld: async (_ws: string, id: string, to: any) => {
+        left.push(to);
+        const job = created.find(j => j.id === id);
+        return job?.status === 'held' ? Object.assign(job, to) : null;
+      },
       create: async (input: any) => {
         const job = {
           id: 'job-1',
-          ...input,
           status: 'queued',
+          ...input,
           result: null,
           error: null,
           steps: 0,
@@ -60,10 +67,58 @@ function makeService(
       },
     },
   };
-  return { service: new RegistryJobService(models), created, allowedAll };
+  const service = new RegistryJobService(
+    models,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    options.gates
+  );
+  return { service, created, allowedAll, left };
 }
 
 const agentTarget = { key: 'laptop', agentTarget: true };
+
+test('a job a gate holds waits as held, and the gate is started on it', async t => {
+  const started: any[] = [];
+  const { service } = makeService({
+    device: agentTarget,
+    gates: {
+      holds: async (q: any) => q.agentId === 'a1',
+      start: async (job: any) => started.push(job.id),
+    },
+  });
+  const job = await service.enqueue(workspaceId, userId, 'laptop', {
+    agentId: 'a1',
+    instructions: 'go',
+  });
+  t.is(job.status, 'held');
+  t.deepEqual(started, ['job-1']);
+});
+
+test('a gate that cannot start fails the held job, saying why', async t => {
+  const { service, left } = makeService({
+    device: agentTarget,
+    gates: {
+      holds: async () => true,
+      start: async () => {
+        throw new Error('"Check" isn\'t deployed anywhere yet');
+      },
+    },
+  });
+  const job = await service.enqueue(workspaceId, userId, 'laptop', {
+    agentId: 'a1',
+    instructions: 'go',
+  });
+  t.is(job.status, 'error');
+  t.regex(
+    left[0].error,
+    /Couldn't start its prestart hooks: "Check" isn't deployed/
+  );
+});
 
 test('queues a job for an agent target', async t => {
   const { service } = makeService({ device: agentTarget });
@@ -691,7 +746,13 @@ test('a push that fails does not fail the ask', async t => {
 test('push data fits FCM by giving up the tool input first', t => {
   const data = questionPushData(
     'https://app.notesgraph.com',
-    { id: 'job-1', workspaceId, agentName: 'coder', docId: null },
+    {
+      id: 'job-1',
+      workspaceId,
+      agentName: 'coder',
+      docId: 'doc-1',
+      blockId: 'block-1',
+    },
     {
       id: 'q1',
       kind: 'permission',
@@ -703,6 +764,7 @@ test('push data fits FCM by giving up the tool input first', t => {
   t.is(data.type, 'agent-question');
   t.is(data.server, 'https://app.notesgraph.com');
   t.is(data.kind, 'permission');
+  t.is(data.blockId, 'block-1');
   t.true(Buffer.byteLength(JSON.stringify(data)) <= 3_500);
   t.true(data.detail.length <= 1_200);
 });

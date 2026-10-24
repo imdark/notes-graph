@@ -4,6 +4,7 @@ import {
   chartSeries,
   countTaskStatuses,
   parseReadingValue,
+  pieSlices,
   valueDomain,
 } from './chart-data';
 
@@ -75,5 +76,41 @@ describe('countTaskStatuses', () => {
       { label: 'QUEUED', count: 1 },
       { label: 'Done', count: 2 },
     ]);
+  });
+});
+
+describe('pieSlices', () => {
+  test('shares the whole between the parts, in order', () => {
+    const slices = pieSlices([
+      { label: 'Todo', value: 1 },
+      { label: 'In Progress', value: 1 },
+      { label: 'Done', value: 2 },
+    ]);
+    expect(slices.map(s => [s.label, s.percent, s.offset])).toEqual([
+      ['Todo', 25, 0],
+      ['In Progress', 25, 25],
+      ['Done', 50, 50],
+    ]);
+  });
+
+  test('one part is the whole circle', () => {
+    expect(pieSlices([{ label: 'Done', value: 3 }])).toEqual([
+      { label: 'Done', value: 3, percent: 100, offset: 0 },
+    ]);
+  });
+
+  test('leaves out parts with no share', () => {
+    const slices = pieSlices([
+      { label: 'a', value: 0 },
+      { label: 'b', value: -2 },
+      { label: 'c', value: Number.NaN },
+      { label: 'd', value: 4 },
+    ]);
+    expect(slices.map(s => s.label)).toEqual(['d']);
+  });
+
+  test('is empty when nothing has a share', () => {
+    expect(pieSlices([])).toEqual([]);
+    expect(pieSlices([{ label: 'a', value: 0 }])).toEqual([]);
   });
 });

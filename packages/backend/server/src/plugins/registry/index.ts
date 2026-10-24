@@ -10,6 +10,7 @@ import { AgentMemoryService } from './agent-memory';
 import { AgentRules } from './agent-rules';
 import { RegistryController } from './controller';
 import { RegistryHealthService } from './health';
+import { JobGates } from './job-gates';
 import { RegistryJobService } from './jobs';
 import { MonitoringAgentService } from './monitoring-agent';
 import { AgentPushService } from './push';
@@ -37,13 +38,16 @@ import { JobTaskClaims } from './task-claims';
     RegistryJobShareService,
     AgentRules,
     SkillNoteService,
+    JobGates,
   ],
   controllers: [RegistryController, RegistryJobShareController],
-  // Monitors queue device jobs and push alerts through these.
-  exports: [RegistryJobService, AgentPushService],
+  // Monitors queue device jobs and push alerts through these; automations
+  // hold agent jobs through JobGates.
+  exports: [RegistryJobService, AgentPushService, JobGates],
 })
 export class RegistryModule {}
 
+export * from './job-gates';
 export { RegistryJobService } from './jobs';
 export * from './jobs';
 export { AgentPushService } from './push';

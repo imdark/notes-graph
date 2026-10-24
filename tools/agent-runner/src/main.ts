@@ -74,6 +74,8 @@ await serve({
   runnerId: `cloud-${hostname()}-${Math.floor(Date.now() / 1000)}`,
   query,
   maxJobs: Number(process.env.RUNNER_MAX_JOBS ?? 2),
+  // Automations run workspace code here; RUNNER_AUTOMATIONS=0 turns them off.
+  automations: process.env.RUNNER_AUTOMATIONS?.trim() !== '0',
   settings: {
     workRoot: process.env.RUNNER_WORK_ROOT?.trim() || '/work',
     repo: process.env.RUNNER_REPO?.trim() || undefined,

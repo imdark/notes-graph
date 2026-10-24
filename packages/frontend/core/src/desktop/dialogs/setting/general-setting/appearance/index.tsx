@@ -253,6 +253,7 @@ const SidebarButtonsSetting = () => {
     discover: t['com.notesgraph.discover.title'](),
     journals: t['com.notesgraph.journal.app-sidebar-title'](),
     agents: 'Agents',
+    automations: 'Automations',
     deployments: 'Deployments',
     monitoring: 'Monitoring',
     secrets: 'Secrets',

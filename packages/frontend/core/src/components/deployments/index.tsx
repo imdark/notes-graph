@@ -20,6 +20,7 @@ import {
   shipTargets,
   type ShipTask,
   type ShipTaskDetails,
+  shownStage,
   stuckReason,
 } from '@notesgraph/core/modules/agents';
 import { WorkbenchService } from '@notesgraph/core/modules/workbench';
@@ -225,13 +226,15 @@ export const DeploymentsView = () => {
         const check = pullRequest ? branchChecks.get(pullRequest) : undefined;
         // Merged on GitHub by someone else: it is waiting for a deploy. The
         // list has only recent merges; an older one is known from a check.
-        const stage =
-          noted === 'committed' &&
-          pullRequest &&
-          (pullsByUrl.get(pullRequest)?.state === 'merged' ||
-            check?.state === 'merged')
-            ? 'merged'
-            : noted;
+        // In prod's build already: it is live, whatever the note still says.
+        const stage = shownStage(
+          noted,
+          pullRequest,
+          !!pullRequest &&
+            (pullsByUrl.get(pullRequest)?.state === 'merged' ||
+              check?.state === 'merged'),
+          deploy
+        );
         return [
           {
             ...task,
@@ -243,7 +246,7 @@ export const DeploymentsView = () => {
           },
         ];
       }),
-    [tasks, details, pullsByUrl, branchChecks]
+    [tasks, details, pullsByUrl, branchChecks, deploy]
   );
 
   // The repos the tasks' pull requests are in: what to ask GitHub about.

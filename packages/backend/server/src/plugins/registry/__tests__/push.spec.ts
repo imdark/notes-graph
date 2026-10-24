@@ -28,6 +28,7 @@ test('the push carries the summary, or the error for a failed run', t => {
     workspaceId: 'ws',
     agentName: 'Coder',
     docId: 'doc-1',
+    blockId: 'block-1',
     title: 'Fix the calendar',
     result: '  Opened PR #147.  ',
     error: 'tool crashed',
@@ -38,6 +39,7 @@ test('the push carries the summary, or the error for a failed run', t => {
     server: 'https://ng.example',
     jobId: 'job-1',
     docId: 'doc-1',
+    blockId: 'block-1',
     title: 'Fix the calendar',
     outcome: 'review',
     text: 'Opened PR #147.',
@@ -52,6 +54,11 @@ test('the push carries the summary, or the error for a failed run', t => {
       { ...job, docId: null, title: null },
       'done'
     ).docId,
+    ''
+  );
+  t.is(
+    finishedPushData('https://ng.example', { ...job, blockId: null }, 'done')
+      .blockId,
     ''
   );
 });

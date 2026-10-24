@@ -100,7 +100,8 @@ export class AgentMemoryService {
 
   @OnEvent('registry.job.finished')
   async onJobFinished(event: Events['registry.job.finished']) {
-    if (!this.enabled) return;
+    // An automation runs code, not an agent: there is nobody to learn about.
+    if (!this.enabled || event.kind === 'automation') return;
     const { workspaceId, jobId } = event;
     const next = (this.queues.get(workspaceId) ?? Promise.resolve())
       .then(() => this.remember(workspaceId, jobId))

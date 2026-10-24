@@ -26,6 +26,7 @@ import {
   shipBrief,
   type ShipStage,
   shipTargets,
+  shownStage,
   stuckReason,
 } from './deployments';
 
@@ -318,6 +319,45 @@ describe('pullRequestStage', () => {
     expect(
       pullRequestStage(pr(19, 'merged', 'imdark/workflow'), deploy)
     ).toBeNull();
+  });
+});
+
+describe('shownStage', () => {
+  const deploy = {
+    repo: 'imdark/notes-graph',
+    commit: 'abc1234',
+    branch: 'main',
+    subject: 'Merge pull request #112',
+    dirty: false,
+    deployedAt: '2026-10-12T23:55:00Z',
+    pullRequests: [112, 111, 110],
+  };
+  const url = (number: number, repo = 'imdark/notes-graph') =>
+    `https://github.com/${repo}/pull/${number}`;
+
+  test("a task noted MERGED whose pull request is in prod's build is live", () => {
+    expect(shownStage('merged', url(111), true, deploy)).toBe('deployed');
+  });
+
+  test('so is one still noted COMMITTED', () => {
+    expect(shownStage('committed', url(112), false, deploy)).toBe('deployed');
+  });
+
+  test('merged since the deploy, it waits to be deployed', () => {
+    expect(shownStage('merged', url(113), true, deploy)).toBe('merged');
+    expect(shownStage('committed', url(113), true, deploy)).toBe('merged');
+  });
+
+  test('an unmerged pull request keeps the noted stage', () => {
+    expect(shownStage('committed', url(114), false, deploy)).toBe('committed');
+  });
+
+  test('without a deploy record, another repo or a PR link, the note decides', () => {
+    expect(shownStage('merged', url(111), true, null)).toBe('merged');
+    expect(
+      shownStage('merged', url(111, 'imdark/workflow'), true, deploy)
+    ).toBe('merged');
+    expect(shownStage('merged', null, false, deploy)).toBe('merged');
   });
 });
 

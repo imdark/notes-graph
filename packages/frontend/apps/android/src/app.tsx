@@ -427,9 +427,16 @@ try {
     if (journalPath) {
       workbench.open(journalPath);
     } else if (docId) {
+      // A fresh refreshKey makes the editor jump again even when this note
+      // is already open at this block, scrolled away since.
       workbench.openDoc({
         docId,
-        ...(payload?.blockId ? { blockIds: [payload.blockId] } : {}),
+        ...(payload?.blockId
+          ? {
+              blockIds: [payload.blockId],
+              refreshKey: 'notification-' + Date.now(),
+            }
+          : {}),
       });
     } else {
       workbench.open('/agents');
