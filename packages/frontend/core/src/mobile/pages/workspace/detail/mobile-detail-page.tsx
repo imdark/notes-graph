@@ -273,8 +273,12 @@ const DetailPageImpl = ({
             key={doc.id}
             className={styles.errorBoundary}
           >
-            {journalDate ? <DayCalendarSection date={journalDate} /> : null}
-            {journalDate ? <DayScheduleSection date={journalDate} /> : null}
+            {journalDate ? (
+              <div className={styles.journalSections}>
+                <DayCalendarSection date={journalDate} />
+                <DayScheduleSection date={journalDate} />
+              </div>
+            ) : null}
             <PageDetailEditor onLoad={onLoad} readonly={readonly} />
           </NotesGraphErrorBoundary>
         </div>
