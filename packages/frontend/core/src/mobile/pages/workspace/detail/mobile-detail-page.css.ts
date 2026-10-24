@@ -93,9 +93,14 @@ export const notesgraphDocViewport = style({
 
 export const errorBoundary = style({
   flex: 1,
-  // The journal's calendar and schedule sections sit outside the editor and
-  // pad themselves with this var, whose desktop default (96px a side) left
-  // them too narrow for a row on a phone. Match the editor's 16px below.
+});
+
+// The journal's calendar and schedule sections sit outside the editor and
+// pad themselves with this var, whose desktop default (96px a side) left
+// them too narrow for a row on a phone. Match the editor's 16px below.
+// It needs its own element: NotesGraphErrorBoundary only puts its className
+// on the error fallback, so a var set there never reached the sections.
+export const journalSections = style({
   '@container': {
     [`viewport (width <= 640px)`]: {
       vars: {
