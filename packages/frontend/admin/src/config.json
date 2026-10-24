@@ -311,6 +311,28 @@
       "desc": "Allowed version range of the app that allowed to access the server. Requires 'client/versionControl.enabled' to be true to take effect."
     }
   },
+  "registry": {
+    "enabled": {
+      "type": "Boolean",
+      "desc": "Enable the device registry API for deployment and agent targets.",
+      "env": "NOTESGRAPH_REGISTRY_ENABLED"
+    },
+    "maxDevicesPerWorkspace": {
+      "type": "Number",
+      "desc": "Maximum number of registry devices a single workspace may hold.",
+      "env": "NOTESGRAPH_REGISTRY_MAX_DEVICES"
+    },
+    "fcmServiceAccount": {
+      "type": "String",
+      "desc": "Firebase service-account JSON for pushing agent questions to phones. Empty disables push.",
+      "env": "NOTESGRAPH_FCM_SERVICE_ACCOUNT"
+    },
+    "agentMemory": {
+      "type": "Boolean",
+      "desc": "Save what agent runs learn about the user into the \"Agent memory\" notes, and recall it into later runs.",
+      "env": "NOTESGRAPH_AGENT_MEMORY"
+    }
+  },
   "calendar": {
     "google": {
       "type": "Object",
@@ -452,28 +474,6 @@
       "type": "Object",
       "desc": "Google Workspace directory sync integration config",
       "link": "https://developers.google.com/admin-sdk/directory/v1/guides/delegation"
-    }
-  },
-  "registry": {
-    "enabled": {
-      "type": "Boolean",
-      "desc": "Enable the device registry API for deployment and agent targets.",
-      "env": "NOTESGRAPH_REGISTRY_ENABLED"
-    },
-    "maxDevicesPerWorkspace": {
-      "type": "Number",
-      "desc": "Maximum number of registry devices a single workspace may hold.",
-      "env": "NOTESGRAPH_REGISTRY_MAX_DEVICES"
-    },
-    "fcmServiceAccount": {
-      "type": "String",
-      "desc": "Firebase service-account JSON for pushing agent questions to phones. Empty disables push.",
-      "env": "NOTESGRAPH_FCM_SERVICE_ACCOUNT"
-    },
-    "agentMemory": {
-      "type": "Boolean",
-      "desc": "Save what agent runs learn about the user into the \"Agent memory\" notes, and recall it into later runs.",
-      "env": "NOTESGRAPH_AGENT_MEMORY"
     }
   },
   "oauth": {
