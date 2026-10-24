@@ -15,8 +15,11 @@ const workspace = await module.create(Mockers.Workspace, {
   owner,
 });
 
+// Not literally the next millisecond: createdAt comes from Postgres now()
+// and updatedAt from Node's clock, and a 1ms timer can fire early on Node's
+// cached loop time, so the two sometimes came out equal. 10ms is safely past.
 const waitNextMillisecond = () =>
-  new Promise(resolve => setTimeout(resolve, 1));
+  new Promise(resolve => setTimeout(resolve, 10));
 
 test.after.always(async () => {
   await module.close();
