@@ -1,7 +1,7 @@
 import { IS_ANDROID } from '@blocksuite/global/env';
 import type { BaseTextAttributes } from '@blocksuite/store';
 
-import { INLINE_ROOT_ATTR } from '../consts.js';
+import { INLINE_ROOT_ATTR, ZERO_WIDTH_FOR_EMBED_NODE } from '../consts.js';
 import type { InlineEditor } from '../inline-editor.js';
 import type { InlineRange } from '../types.js';
 import {
@@ -13,10 +13,31 @@ import { isMaybeInlineRangeEqual } from '../utils/inline-range.js';
 import { transformInput } from '../utils/transform-input.js';
 import type { BeforeinputHookCtx, CompositionEndHookCtx } from './hook.js';
 
+type CompositionEmbedTrim = {
+  /** 'covered': the range started on an embed; 'adjacent': right after one. */
+  start: 'covered' | 'adjacent' | false;
+  end: boolean;
+};
+
 export class EventService<TextAttributes extends BaseTextAttributes> {
   private _compositionInlineRange: InlineRange | null = null;
 
   private _compositionRangeFrozen = false;
+
+  /**
+   * Whether the current composition changed any text. Gboard moves its
+   * composing region along with a caret move (a tap or handle drag inside
+   * the same block) without a new compositionstart, then re-commits the
+   * word it now covers. With no insertCompositionText that commit is the
+   * word already in the model, and must not be inserted again.
+   */
+  private _compositionTextInserted = false;
+
+  /** Where the frozen composition range reached into an embed. */
+  private _compositionEmbedTrim: CompositionEmbedTrim = {
+    start: false,
+    end: false,
+  };
 
   private _isComposing = false;
 
@@ -84,9 +105,73 @@ export class EventService<TextAttributes extends BaseTextAttributes> {
     );
   };
 
+  private readonly _isEmbedAt = (index: number): boolean => {
+    if (index < 0) return false;
+    let start = 0;
+    for (const delta of this.editor.embedDeltas) {
+      const end = start + delta.insert.length;
+      if (index < end) return this.editor.isEmbed(delta);
+      start = end;
+    }
+    return false;
+  };
+
+  /**
+   * A composing region can reach into an embed next to the word: an embed
+   * renders a zero-width character beside it, which the IME takes for part
+   * of the word (and an editable embed's own text with it). Shrink the
+   * range off those embeds so the commit never replaces one.
+   */
+  private readonly _trimEmbedsFromCompositionRange = (
+    range: InlineRange
+  ): InlineRange => {
+    let { index, length } = range;
+    while (length > 0 && this._isEmbedAt(index)) {
+      index += 1;
+      length -= 1;
+    }
+    const startCovered = index > range.index;
+    while (length > 0 && this._isEmbedAt(index + length - 1)) {
+      length -= 1;
+    }
+    const endCovered = index + length < range.index + range.length;
+    this._compositionEmbedTrim = {
+      start: startCovered ? 'covered' : this._isEmbedAt(index - 1) && 'adjacent',
+      end: endCovered,
+    };
+    return { index, length };
+  };
+
+  /**
+   * Drops the embed text the IME composed along with the word. Only where
+   * the region reached into an embed: a zero-width non-joiner is also a real
+   * character (Persian, Indic scripts) and must survive anywhere else. The
+   * embed's own zero-width character is the first one at the start of the
+   * word and the last one at its end.
+   */
+  private readonly _trimEmbedsFromCompositionData = (data: string): string => {
+    const { start, end } = this._compositionEmbedTrim;
+    let trimmed = data;
+    if (
+      start === 'covered' ||
+      (start === 'adjacent' && trimmed.startsWith(ZERO_WIDTH_FOR_EMBED_NODE))
+    ) {
+      trimmed = trimmed.slice(trimmed.indexOf(ZERO_WIDTH_FOR_EMBED_NODE) + 1);
+    }
+    if (end) {
+      const at = trimmed.lastIndexOf(ZERO_WIDTH_FOR_EMBED_NODE);
+      if (at >= 0) trimmed = trimmed.slice(0, at);
+    }
+    return trimmed;
+  };
+
   private readonly _onBeforeInput = (event: InputEvent) => {
     const rootElement = this.editor.rootElement;
     if (this.editor.isReadonly || !rootElement) return;
+
+    if (event.inputType === 'insertCompositionText') {
+      this._compositionTextInserted = true;
+    }
 
     const range = this.editor.rangeService.getNativeRange();
 
@@ -146,7 +231,8 @@ export class EventService<TextAttributes extends BaseTextAttributes> {
             );
             const mapped = this.editor.toInlineRange(composedRange);
             if (mapped) {
-              this._compositionInlineRange = mapped;
+              this._compositionInlineRange =
+                this._trimEmbedsFromCompositionRange(mapped);
             }
           }
         } catch {
@@ -360,7 +446,14 @@ export class EventService<TextAttributes extends BaseTextAttributes> {
     }
   };
 
-  private readonly _onCompositionEnd = async (event: CompositionEvent) => {
+  private readonly _onCompositionEnd = async (
+    event: CompositionEvent,
+    composition: {
+      inlineRange: InlineRange | null;
+      textInserted: boolean;
+      embedTrim: CompositionEmbedTrim;
+    }
+  ) => {
     this._isComposing = false;
     if (!this.editor.rootElement || !this.editor.rootElement.isConnected) {
       return;
@@ -373,20 +466,37 @@ export class EventService<TextAttributes extends BaseTextAttributes> {
     // otherwise).
     if (this._isNativeSelectionInAnotherLiveRoot()) return;
 
+    if (IS_ANDROID && !composition.textInserted) {
+      // Nothing was typed: this is Gboard re-committing the word its moved
+      // composing region covers, which is already in the model. Inserting it
+      // at the range captured at compositionstart duplicated it there (e.g.
+      // "buy m‌buyilk now"). Just follow the caret to where it now is.
+      const range = this.editor.rangeService.getNativeRange();
+      const inlineRange =
+        range && this._isRangeCompletelyInRoot(range)
+          ? this.editor.toInlineRange(range)
+          : null;
+      if (inlineRange) this.editor.setInlineRange(inlineRange);
+      return;
+    }
+
     this.editor.rerenderWholeEditor();
     await this.editor.waitForUpdate();
 
-    const inlineRange =
-      this._compositionInlineRange ?? this.editor.getInlineRange();
+    const inlineRange = composition.inlineRange ?? this.editor.getInlineRange();
     if (!inlineRange) return;
 
     event.preventDefault();
 
+    this._compositionEmbedTrim = composition.embedTrim;
     const ctx: CompositionEndHookCtx<TextAttributes> = {
       inlineEditor: this.editor,
       raw: event,
       inlineRange,
-      data: event.data,
+      data:
+        event.data === null
+          ? null
+          : this._trimEmbedsFromCompositionData(event.data),
       attributes: {} as TextAttributes,
     };
     this.editor.hooks.compositionEnd?.(ctx);
@@ -438,6 +548,8 @@ export class EventService<TextAttributes extends BaseTextAttributes> {
   private readonly _onCompositionStart = (event: CompositionEvent) => {
     this._isComposing = true;
     this._compositionRangeFrozen = false;
+    this._compositionTextInserted = false;
+    this._compositionEmbedTrim = { start: false, end: false };
     if (!this.editor.rootElement) return;
     // embeds is not editable and it will break IME
     const embeds = this.editor.rootElement.querySelectorAll(
@@ -622,7 +734,14 @@ export class EventService<TextAttributes extends BaseTextAttributes> {
       // The very next beforeinput must already see the composition as over,
       // even while the queued handler waits behind earlier input.
       this._isComposing = false;
-      this._enqueueInput(() => this._onCompositionEnd(e));
+      // Snapshot now: a compositionstart can reset these before the queued
+      // handler runs.
+      const composition = {
+        inlineRange: this._compositionInlineRange,
+        textInserted: this._compositionTextInserted,
+        embedTrim: this._compositionEmbedTrim,
+      };
+      this._enqueueInput(() => this._onCompositionEnd(e, composition));
     });
     this.editor.disposables.addFromEvent(
       eventSource,
