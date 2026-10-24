@@ -214,6 +214,17 @@ export function domRangeToInlineRange(
     );
 
     if (anchorDomPoint) {
+      // A collapsed caret inside an embed (in its zero-width text, where
+      // Android puts a caret tapped or dragged in right after a chip) is a
+      // caret after the embed, not a selection of it. Mapping it to a
+      // length-1 range from the caret's offset selected the character after
+      // the embed instead, and typing then landed one character late.
+      if (range.collapsed) {
+        return {
+          index: anchorDomPoint.index - context.startTextOffset + 1,
+          length: 0,
+        };
+      }
       return {
         index: anchorDomPoint.index,
         length: 1,
