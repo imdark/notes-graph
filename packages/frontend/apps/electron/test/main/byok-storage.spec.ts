@@ -32,6 +32,27 @@ vi.mock('../../src/main/logger', () => ({
   },
 }));
 
+// The real storage imports the whole @notesgraph/infra barrel (yjs, blocksuite
+// store, rxjs). The handlers are imported inside each test after
+// resetModules, so that cold import counted against the test timeout and
+// took up to 60s on a busy CI shard. Nothing here reads the file back, so an
+// in-memory store stands in; each re-import gets a fresh, empty one.
+vi.mock('../../src/main/shared-storage/json-file', () => ({
+  PersistentJSONFileStorage: class {
+    private readonly data: Record<string, unknown> = {};
+    get<T>(key: string) {
+      return this.data[key] as T | undefined;
+    }
+    set(key: string, value: unknown) {
+      this.data[key] = value;
+    }
+    del(key: string) {
+      delete this.data[key];
+    }
+    dispose() {}
+  },
+}));
+
 beforeEach(async () => {
   vi.useRealTimers();
   vi.resetModules();
