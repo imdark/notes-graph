@@ -147,8 +147,14 @@ test.describe('embed iframe block', () => {
       // wait until iframe is loaded
       await expect(embedIframeBlock).toBeVisible();
 
-      // click to select embed iframe block
-      await embedIframeBlock.click();
+      // click to select embed iframe block. Dispatched on the container: a
+      // real click at the block's centre lands inside the cross-origin iframe
+      // once Spotify has loaded (the overlay that catches clicks only shows
+      // while dragging or resizing), so the block was never selected and the
+      // toolbar never appeared, depending on how fast Spotify loaded.
+      await embedIframeBlock
+        .locator('.notesgraph-embed-iframe-block-container')
+        .dispatchEvent('click');
 
       return { embedIframeBlock };
     }
