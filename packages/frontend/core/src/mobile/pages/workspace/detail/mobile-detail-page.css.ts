@@ -93,6 +93,16 @@ export const notesgraphDocViewport = style({
 
 export const errorBoundary = style({
   flex: 1,
+  // The journal's calendar and schedule sections sit outside the editor and
+  // pad themselves with this var, whose desktop default (96px a side) left
+  // them too narrow for a row on a phone. Match the editor's 16px below.
+  '@container': {
+    [`viewport (width <= 640px)`]: {
+      vars: {
+        '--notesgraph-editor-side-padding': '16px',
+      },
+    },
+  },
 });
 
 export const scrollbar = style({
