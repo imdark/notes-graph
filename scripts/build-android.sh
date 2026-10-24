@@ -13,6 +13,15 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$REPO_ROOT"
 
+# A git worktree's node_modules is a symlink into the main checkout, and the
+# repo CLI resolves its project root through it - so the web bundle would build
+# the main checkout's source (and write its dist there), not this tree's.
+if [[ -f "$REPO_ROOT/.git" ]]; then
+  main="$(git -C "$REPO_ROOT" rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true)"
+  echo "!! $REPO_ROOT is a git worktree; build the APK from the main checkout${main:+ (${main%/.git})}" >&2
+  exit 1
+fi
+
 export JAVA_HOME="${JAVA_HOME:-/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home}"
 export ANDROID_HOME="${ANDROID_HOME:-/opt/homebrew/share/android-commandlinetools}"
 export ANDROID_SDK_ROOT="$ANDROID_HOME"
