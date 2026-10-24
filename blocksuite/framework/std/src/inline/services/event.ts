@@ -136,7 +136,9 @@ export class EventService<TextAttributes extends BaseTextAttributes> {
     }
     const endCovered = index + length < range.index + range.length;
     this._compositionEmbedTrim = {
-      start: startCovered ? 'covered' : this._isEmbedAt(index - 1) && 'adjacent',
+      start: startCovered
+        ? 'covered'
+        : this._isEmbedAt(index - 1) && 'adjacent',
       end: endCovered,
     };
     return { index, length };
