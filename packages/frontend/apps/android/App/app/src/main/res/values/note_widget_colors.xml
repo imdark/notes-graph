@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The app's own page colours, so the widget reads like a note in the app. -->
+    <color name="note_widget_background">@color/layer.background.primary</color>
+    <color name="note_widget_text">#141414</color>
+    <color name="note_widget_secondary">#616161</color>
+</resources>

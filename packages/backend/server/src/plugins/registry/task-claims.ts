@@ -8,6 +8,7 @@ import {
   queueTasks,
   readStatuses,
   releaseTasks,
+  setTaskStatuses,
   startTasks,
 } from './task-status';
 
@@ -82,6 +83,32 @@ export class JobTaskClaims {
       );
     });
     return statuses;
+  }
+
+  /**
+   * Set the job's tasks to the statuses given, by block id (an automation's
+   * end hook does this). Only the job's own tasks; others are ignored.
+   * Returns the ids rewritten.
+   */
+  async set(
+    job: RegistryJob,
+    statuses: Record<string, string>
+  ): Promise<string[]> {
+    let changed: string[] = [];
+    await this.edit(job, 'set', async (docId, ids) => {
+      const mine = Object.fromEntries(
+        Object.entries(statuses).filter(([id]) => ids.includes(id))
+      );
+      if (!Object.keys(mine).length) return;
+      const edit = await this.writer.editDoc(
+        job.workspaceId,
+        docId,
+        binary => setTaskStatuses(binary, mine),
+        job.createdBy ?? undefined
+      );
+      changed = edit.changed;
+    });
+    return changed;
   }
 
   private async edit(

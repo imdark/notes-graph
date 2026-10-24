@@ -52,7 +52,26 @@ export interface Job {
   /** Stop the run once it has spent this much (USD). */
   maxCostUsd?: number | null;
   profile?: AgentProfile | null;
+  /** 'agent' or 'automation'; absent from a server that predates automations. */
+  kind?: string;
+  /** For an automation: the code to run and what triggered it. */
+  payload?: AutomationPayload | null;
+  /** For an automation: the workspace secrets its code names. Claims only. */
+  secrets?: Record<string, string>;
 }
+
+/** What an automation job carries; see plugins/automations on the server. */
+export interface AutomationPayload {
+  automationId: string;
+  runId: string;
+  versionId: string;
+  code: string;
+  input: unknown;
+  timeoutSeconds: number;
+}
+
+/** The job kinds a runner can claim. */
+export type JobKind = 'agent' | 'automation';
 
 export interface Question {
   id: string;
@@ -150,7 +169,8 @@ export class NotesGraphApi {
     workspaceId: string,
     deviceKey: string,
     runnerId: string,
-    leaseSeconds: number
+    leaseSeconds: number,
+    kinds: JobKind[] = ['agent']
   ): Promise<{ job: Job | null; maxJobs: number | null }> {
     const { job, maxJobs } = await this.request<{
       job: Job | null;
@@ -158,6 +178,7 @@ export class NotesGraphApi {
     }>('POST', `${this.base(workspaceId)}/devices/${deviceKey}/jobs/claim`, {
       runnerId,
       leaseSeconds,
+      kinds,
     });
     return { job: job ?? null, maxJobs: asMaxJobs(maxJobs) };
   }

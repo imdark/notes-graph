@@ -5,6 +5,7 @@ import {
   ComputerPanelIcon,
   DuplicateIcon,
   ExportIcon,
+  FlashPanelIcon,
   ImportIcon,
   JournalIcon,
   LockIcon,
@@ -328,6 +329,21 @@ const MonitoringButton = () => {
   );
 };
 
+/** Code that runs on triggers and around agent runs; see AutomationsView. */
+const AutomationsButton = () => {
+  const workbench = useService(WorkbenchService).workbench;
+  const active = useLiveData(
+    workbench.location$.selector(
+      location => location.pathname === '/automations'
+    )
+  );
+  return (
+    <MenuLinkItem icon={<FlashPanelIcon />} active={active} to={'/automations'}>
+      <span data-testid="automations">Automations</span>
+    </MenuLinkItem>
+  );
+};
+
 /** The workspace's API keys and tokens; see SecretsView. */
 const SecretsButton = () => {
   const workbench = useService(WorkbenchService).workbench;
@@ -392,6 +408,7 @@ export const RootAppSidebar = memo((): ReactElement => {
   const operationsButtons = (
     <>
       {shown('agents') && <AgentsButton />}
+      {shown('automations') && <AutomationsButton />}
       {shown('deployments') && <DeploymentsButton />}
       {shown('monitoring') && <MonitoringButton />}
       {shown('secrets') && <SecretsButton />}

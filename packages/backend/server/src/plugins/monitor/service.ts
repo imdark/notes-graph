@@ -3,6 +3,7 @@ import type { Monitor } from '@prisma/client';
 
 import {
   BadRequest,
+  EventBus,
   JobQueue,
   NotFound,
   OnEvent,
@@ -26,6 +27,17 @@ import {
 declare global {
   interface Jobs {
     'monitor.run': { monitorId: string };
+  }
+  interface Events {
+    /** A monitor found a value (automations can trigger on it). */
+    'monitor.reading': {
+      workspaceId: string;
+      monitorId: string;
+      value: string;
+      previous: string | null;
+      changed: boolean;
+      alerted: boolean;
+    };
   }
 }
 
@@ -81,7 +93,8 @@ export class MonitorService {
     private readonly ac: PermissionAccess,
     private readonly jobs: RegistryJobService,
     private readonly queue: JobQueue,
-    @Optional() private readonly push?: AgentPushService
+    @Optional() private readonly push?: AgentPushService,
+    @Optional() private readonly event?: EventBus
   ) {}
 
   /** Queue a run now (the cron and "Run now" both come through here). */
@@ -260,9 +273,10 @@ export class MonitorService {
     const alerted = verdict.alert
       ? await this.alert(monitor, value, previous, verdict.reason)
       : false;
+    const changed = previous !== null && previous !== value;
     await this.models.monitor.addReading(monitor.id, {
       value,
-      changed: previous !== null && previous !== value,
+      changed,
       alerted,
     });
     await this.models.monitor.update(monitor.id, {
@@ -270,6 +284,14 @@ export class MonitorService {
       lastRunAt: now,
       lastError: null,
       failureCount: 0,
+    });
+    this.event?.emit('monitor.reading', {
+      workspaceId: monitor.workspaceId,
+      monitorId: monitor.id,
+      value,
+      previous,
+      changed,
+      alerted,
     });
   }
 

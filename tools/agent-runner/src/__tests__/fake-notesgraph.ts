@@ -29,6 +29,10 @@ export class FakeNotesGraph {
   /** The device's "jobs at once" as set in the app; null for the runner's own. */
   maxJobs: number | null = null;
   claims = 0;
+  /** The job kinds each claim asked for. */
+  claimKinds: string[][] = [];
+  /** Refuse claims for automation jobs, as for a token without settings access. */
+  refuseAutomations = false;
   /** What a report hears back as the job's status (a stopped run says cancelled). */
   status = 'running';
   url = '';
@@ -54,7 +58,15 @@ export class FakeNotesGraph {
         }
         if (path.endsWith('/jobs/claim')) {
           this.claims += 1;
-          const job = this.queue.shift() ?? null;
+          const kinds: string[] = data.kinds ?? ['agent'];
+          this.claimKinds.push(kinds);
+          if (this.refuseAutomations && kinds.includes('automation')) {
+            return reply({ message: 'forbidden' }, 403);
+          }
+          const at = this.queue.findIndex(j =>
+            kinds.includes(j.kind ?? 'agent')
+          );
+          const job = at < 0 ? null : this.queue.splice(at, 1)[0];
           return reply({
             job: job ? { ...job, status: 'running' } : null,
             maxJobs: this.maxJobs,

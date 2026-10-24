@@ -4,7 +4,13 @@
  */
 import type { query as sdkQuery } from '@anthropic-ai/claude-agent-sdk';
 
-import { type Job, type NotesGraphApi, NotesGraphError } from './api';
+import {
+  type Job,
+  type JobKind,
+  type NotesGraphApi,
+  NotesGraphError,
+} from './api';
+import { CodeCancelled, CodeFailed, runCode } from './code-runner';
 import { RunFailed, runJob, type RunnerSettings } from './run-job';
 import { JobCancelled } from './run-tools';
 
@@ -19,6 +25,8 @@ export interface ServeOptions {
   settings: RunnerSettings;
   query: typeof sdkQuery;
   maxJobs?: number;
+  /** Also take automation jobs (run code); on unless set false. */
+  automations?: boolean;
   pollMs?: number;
   /** How often a running job's new transcript is sent. */
   tickMs?: number;
@@ -81,12 +89,67 @@ class Reporter {
   }
 }
 
+/**
+ * Run an automation's code and report how it ended: its return value (JSON)
+ * as the result, its console as the log. "Timed out" leads the error of a
+ * run that hit its limit; the server reads it as timed_out.
+ */
+async function runAutomation(
+  opts: ServeOptions,
+  workspaceId: string,
+  job: Job
+): Promise<'done' | 'error' | 'cancelled'> {
+  const { api } = opts;
+  const stop = new AbortController();
+  opts.signal?.addEventListener('abort', () => stop.abort());
+  const reporter = new Reporter(api, workspaceId, job.id, () => stop.abort());
+  const ticker = setInterval(() => void reporter.tick(), opts.tickMs ?? 2000);
+  try {
+    if (!job.payload?.code) throw new CodeFailed('The job carries no code');
+    const output = await runCode(
+      {
+        code: job.payload.code,
+        input: job.payload.input,
+        secrets: job.secrets ?? {},
+        timeoutSeconds: job.payload.timeoutSeconds,
+      },
+      { say: line => reporter.append(`${line}\n`), signal: stop.signal }
+    );
+    clearInterval(ticker);
+    const logAppend = await reporter.drain();
+    await api.report(workspaceId, job.id, {
+      status: 'done',
+      result: output ?? '',
+      ...(logAppend ? { logAppend } : {}),
+    });
+    return 'done';
+  } catch (err) {
+    clearInterval(ticker);
+    const logAppend = await reporter.drain();
+    if (err instanceof CodeCancelled) {
+      if (logAppend) {
+        await api.report(workspaceId, job.id, { logAppend }).catch(() => {});
+      }
+      return 'cancelled';
+    }
+    await api
+      .report(workspaceId, job.id, {
+        status: 'error',
+        error: String(err instanceof Error ? err.message : err).slice(0, 2000),
+        ...(logAppend ? { logAppend } : {}),
+      })
+      .catch(() => {});
+    return 'error';
+  }
+}
+
 /** Run a claimed job and report how it ended. */
 export async function runClaimed(
   opts: ServeOptions,
   workspaceId: string,
   job: Job
 ): Promise<'done' | 'error' | 'cancelled'> {
+  if (job.kind === 'automation') return runAutomation(opts, workspaceId, job);
   const { api } = opts;
   const stop = new AbortController();
   opts.signal?.addEventListener('abort', () => stop.abort());
@@ -176,6 +239,44 @@ export async function serve(opts: ServeOptions): Promise<void> {
     );
   };
   const running = new Set<Promise<unknown>>();
+  // Workspaces where this runner's token may not take automation jobs (the
+  // claim reveals secrets, so it needs workspace settings access): they get
+  // agent jobs only, rather than no jobs at all.
+  const agentOnly = new Set<string>();
+  const claim = async (workspaceId: string) => {
+    const kinds: JobKind[] =
+      opts.automations === false || agentOnly.has(workspaceId)
+        ? ['agent']
+        : ['agent', 'automation'];
+    try {
+      return await opts.api.claim(
+        workspaceId,
+        opts.deviceKey,
+        opts.runnerId,
+        LEASE_SECONDS,
+        kinds
+      );
+    } catch (err) {
+      if (
+        kinds.includes('automation') &&
+        err instanceof NotesGraphError &&
+        err.status === 403
+      ) {
+        agentOnly.add(workspaceId);
+        log(
+          `${workspaceId}: this token may not run automations; taking agent jobs only`
+        );
+        return await opts.api.claim(
+          workspaceId,
+          opts.deviceKey,
+          opts.runnerId,
+          LEASE_SECONDS,
+          ['agent']
+        );
+      }
+      throw err;
+    }
+  };
 
   while (!opts.signal?.aborted) {
     let claimed = false;
@@ -183,14 +284,9 @@ export async function serve(opts: ServeOptions): Promise<void> {
       if (running.size >= maxJobs() || opts.signal?.aborted) break;
       let job: Job | null;
       try {
-        const claim = await opts.api.claim(
-          workspaceId,
-          opts.deviceKey,
-          opts.runnerId,
-          LEASE_SECONDS
-        );
-        setLimit(workspaceId, claim.maxJobs);
-        job = claim.job;
+        const claimed = await claim(workspaceId);
+        setLimit(workspaceId, claimed.maxJobs);
+        job = claimed.job;
       } catch (err) {
         log(`claim failed: ${err}`);
         await sleep(Math.min((opts.pollMs ?? 5000) * 4, 60_000), opts.signal);
@@ -198,7 +294,9 @@ export async function serve(opts: ServeOptions): Promise<void> {
       }
       if (!job) continue;
       claimed = true;
-      log(`claimed ${job.id} (${job.model ?? 'plain'}) in ${workspaceId}`);
+      log(
+        `claimed ${job.id} (${job.kind === 'automation' ? 'automation' : (job.model ?? 'plain')}) in ${workspaceId}`
+      );
       const work = runClaimed(opts, workspaceId, job).then(
         end => log(`${end} ${job.id}`),
         err => log(`failed ${job.id}: ${err}`)
