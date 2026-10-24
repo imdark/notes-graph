@@ -126,6 +126,16 @@ export const DashboardSlashMenuConfigExtension = SlashMenuConfigExtension(
           when: () => insertionPoint(ctx, WidgetBlockFlavour) !== null,
           action: () => addWidget({ kind: 'tasks' }),
         },
+        {
+          name: 'Pie chart',
+          description:
+            "Shares of a whole: this note's tasks or monitors' values",
+          icon: icon('◔'),
+          searchAlias: ['pie', 'donut', 'share', 'tasks', 'chart', 'widget'],
+          group: `${GROUP}@4`,
+          when: () => insertionPoint(ctx, WidgetBlockFlavour) !== null,
+          action: () => addWidget({ kind: 'pie' }),
+        },
       ];
     },
   }

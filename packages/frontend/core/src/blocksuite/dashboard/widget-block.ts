@@ -13,6 +13,7 @@ import {
   countTaskStatuses,
   formatValue,
   parseReadingValue,
+  pieSlices,
   type StatusCount,
   valueDomain,
 } from './chart-data';
@@ -21,6 +22,7 @@ import { DashboardFrameworkIdentifier } from './framework';
 import {
   DashboardBlockFlavour,
   MAX_DASHBOARD_COLUMNS,
+  type PieSource,
   type WidgetBlockModel,
   type WidgetBlockProps,
   type WidgetKind,
@@ -33,7 +35,40 @@ const KIND_LABELS: Record<WidgetKind, string> = {
   line: 'Line chart',
   bar: 'Bar chart',
   tasks: 'Tasks by status',
+  pie: 'Pie chart',
 };
+
+const PIE_SOURCE_LABELS: Record<PieSource, string> = {
+  tasks: 'Tasks by status',
+  monitors: "Monitors' latest values",
+};
+
+const line = (name: string) => `var(--notesgraph-palette-line-${name})`;
+
+/** Slice colours, in order; a task status of its own keeps its colour. */
+const PIE_COLORS = [
+  'blue',
+  'green',
+  'orange',
+  'purple',
+  'teal',
+  'magenta',
+  'yellow',
+  'red',
+].map(line);
+const STATUS_COLORS: Record<string, string> = {
+  Todo: line('grey'),
+  'In Progress': line('blue'),
+  Done: line('green'),
+};
+const OTHER_STATUS_COLORS = [
+  'orange',
+  'purple',
+  'teal',
+  'magenta',
+  'yellow',
+  'red',
+].map(line);
 
 const POINT_OPTIONS = [10, 30, 100];
 
@@ -138,7 +173,7 @@ export class WidgetBlockComponent extends BlockComponent<WidgetBlockModel> {
       color: var(--notesgraph-text-secondary-color);
     }
     .ng-widget-settings select,
-    .ng-widget-settings input {
+    .ng-widget-settings input:not([type='checkbox']) {
       min-width: 0;
       font-size: 12px;
       padding: 2px 4px;
@@ -150,6 +185,21 @@ export class WidgetBlockComponent extends BlockComponent<WidgetBlockModel> {
     .ng-widget-settings .ng-widget-hint {
       grid-column: 1 / -1;
       color: var(--notesgraph-text-secondary-color);
+    }
+    .ng-widget-settings .ng-widget-picks {
+      grid-column: 1 / -1;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      max-height: 120px;
+      overflow-y: auto;
+    }
+    .ng-widget-settings .ng-widget-picks label {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--notesgraph-text-primary-color);
+      min-height: 24px;
     }
     .ng-widget-settings button {
       justify-self: start;
@@ -296,6 +346,54 @@ export class WidgetBlockComponent extends BlockComponent<WidgetBlockModel> {
       font-variant-numeric: tabular-nums;
       text-align: right;
     }
+    /* pie */
+    .ng-widget-pie {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px 16px;
+    }
+    .ng-widget-pie svg {
+      flex: none;
+      width: 96px;
+      height: 96px;
+    }
+    .ng-widget-pie circle[data-slice]:hover {
+      opacity: 0.75;
+    }
+    .ng-widget-pie-total {
+      font-size: 9px;
+      font-weight: 600;
+      fill: var(--notesgraph-text-primary-color);
+    }
+    .ng-widget-legend {
+      flex: 1;
+      min-width: 120px;
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr) auto auto;
+      gap: 4px 8px;
+      align-items: center;
+      font-size: 12px;
+    }
+    .ng-widget-legend .ng-swatch {
+      width: 10px;
+      height: 10px;
+      border-radius: 2px;
+    }
+    .ng-widget-legend .ng-label {
+      color: var(--notesgraph-text-secondary-color);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .ng-widget-legend .ng-count,
+    .ng-widget-legend .ng-percent {
+      font-variant-numeric: tabular-nums;
+      text-align: right;
+    }
+    .ng-widget-legend .ng-percent {
+      color: var(--notesgraph-text-secondary-color);
+    }
   `;
 
   private _framework: FrameworkProvider | null = null;
@@ -328,13 +426,7 @@ export class WidgetBlockComponent extends BlockComponent<WidgetBlockModel> {
   override connectedCallback() {
     super.connectedCallback();
     // A new, unconfigured chart opens its settings.
-    if (
-      !this.store.readonly &&
-      this.model.props.kind !== 'tasks' &&
-      !this.model.props.monitorId
-    ) {
-      this.settingsOpen = true;
-    }
+    if (!this.store.readonly && this.needsSetup) this.settingsOpen = true;
   }
 
   override firstUpdated() {
@@ -363,7 +455,7 @@ export class WidgetBlockComponent extends BlockComponent<WidgetBlockModel> {
     // Tasks change as the note is typed in; recount a moment after edits.
     let timer: ReturnType<typeof setTimeout> | null = null;
     const onUpdate = () => {
-      if (this.model.props.kind !== 'tasks' || timer) return;
+      if (!this.countsTasks || timer) return;
       timer = setTimeout(() => {
         timer = null;
         this._countTasks();
@@ -377,7 +469,7 @@ export class WidgetBlockComponent extends BlockComponent<WidgetBlockModel> {
     });
     const propsSub = this.model.propsUpdated.subscribe(() => {
       this._syncReadings();
-      if (this.model.props.kind === 'tasks') this._countTasks();
+      if (this.countsTasks) this._countTasks();
     });
     this._disposables.add(() => propsSub.unsubscribe());
     this._countTasks();
@@ -388,8 +480,30 @@ export class WidgetBlockComponent extends BlockComponent<WidgetBlockModel> {
     return (id && this.monitors.find(m => m.id === id)) || null;
   }
 
+  /** Whether it charts this note's tasks rather than monitors. */
+  private get countsTasks(): boolean {
+    const { kind, pieSource } = this.model.props;
+    return kind === 'tasks' || (kind === 'pie' && pieSource === 'tasks');
+  }
+
+  /** Whether it charts one monitor's readings. */
+  private get chartsReadings(): boolean {
+    const kind = this.model.props.kind;
+    return kind === 'stat' || kind === 'line' || kind === 'bar';
+  }
+
+  private get needsSetup(): boolean {
+    const props = this.model.props;
+    if (this.chartsReadings) return !props.monitorId;
+    return (
+      props.kind === 'pie' &&
+      props.pieSource === 'monitors' &&
+      props.monitorIds.length === 0
+    );
+  }
+
   private _countTasks() {
-    if (this.model.props.kind !== 'tasks') return;
+    if (!this.countsTasks) return;
     const statuses: string[] = [];
     for (const model of this.store.getModelsByFlavour('notesgraph:list')) {
       const status = readTaskStatus(model);
@@ -401,7 +515,7 @@ export class WidgetBlockComponent extends BlockComponent<WidgetBlockModel> {
   /** Fetch the monitor's readings when it changes or takes a new one. */
   private _syncReadings() {
     const monitor = this.monitor;
-    if (!this._monitors || !monitor || this.model.props.kind === 'tasks') {
+    if (!this._monitors || !monitor || !this.chartsReadings) {
       this._readingsKey = '';
       return;
     }
@@ -471,7 +585,24 @@ export class WidgetBlockComponent extends BlockComponent<WidgetBlockModel> {
             </option>`
         )}
       </select>
-      ${kind === 'tasks'
+      ${kind === 'pie'
+        ? html`<label>Slices</label>
+            <select @change=${onSelect('pieSource', v => v as PieSource)}>
+              ${(Object.keys(PIE_SOURCE_LABELS) as PieSource[]).map(
+                s =>
+                  html`<option
+                    value=${s}
+                    ?selected=${s === props.pieSource$.value}
+                  >
+                    ${PIE_SOURCE_LABELS[s]}
+                  </option>`
+              )}
+            </select>
+            ${props.pieSource$.value === 'monitors'
+              ? this.renderMonitorPicks(monitors)
+              : nothing}`
+        : nothing}
+      ${!this.chartsReadings
         ? nothing
         : html`<label>Monitor</label>
             <select
@@ -514,9 +645,7 @@ export class WidgetBlockComponent extends BlockComponent<WidgetBlockModel> {
       <label>Title</label>
       <input
         .value=${props.title$.value ?? ''}
-        placeholder=${kind === 'tasks'
-          ? 'Tasks'
-          : (this.monitor?.name ?? 'Untitled')}
+        placeholder=${this.defaultTitle || 'Untitled'}
         @change=${(e: Event) =>
           this._update({ title: (e.target as HTMLInputElement).value })}
       />
@@ -537,6 +666,42 @@ export class WidgetBlockComponent extends BlockComponent<WidgetBlockModel> {
       <span></span>
       <button @click=${() => (this.settingsOpen = false)}>Done</button>
     </div>`;
+  }
+
+  /** Checkboxes for the monitors a pie slices. */
+  private renderMonitorPicks(monitors: Monitor[]) {
+    if (monitors.length === 0) {
+      return html`<div class="ng-widget-hint">
+        ${this.monitorsError ??
+        'A pie of monitors slices their latest values. Type /Monitor on any line to create one, then tick it here.'}
+      </div>`;
+    }
+    const picked = this.model.props.monitorIds$.value;
+    const toggle = (id: string) => (e: Event) => {
+      const on = (e.target as HTMLInputElement).checked;
+      const ids = picked.filter(p => p !== id);
+      this._update({ monitorIds: on ? [...ids, id] : ids });
+    };
+    return html`<div class="ng-widget-picks">
+      ${monitors.map(
+        m =>
+          html`<label>
+            <input
+              type="checkbox"
+              .checked=${picked.includes(m.id)}
+              @change=${toggle(m.id)}
+            />
+            ${m.name}${m.lastValue ? ` · ${m.lastValue}` : ''}
+          </label>`
+      )}
+    </div>`;
+  }
+
+  /** The title when none is set. */
+  private get defaultTitle(): string {
+    if (this.countsTasks) return 'Tasks';
+    if (this.model.props.kind === 'pie') return 'Monitors';
+    return this.monitor?.name ?? '';
   }
 
   private renderMessage(text: string) {
@@ -697,9 +862,94 @@ export class WidgetBlockComponent extends BlockComponent<WidgetBlockModel> {
     </div>`;
   }
 
+  private renderPie() {
+    const props = this.model.props;
+    let parts: { label: string; value: number; color: string }[];
+    if (props.pieSource$.value === 'tasks') {
+      if (this.taskCounts.length === 0) {
+        return this.renderMessage('No tasks in this note yet.');
+      }
+      let other = 0;
+      parts = this.taskCounts.map(c => ({
+        label: c.label,
+        value: c.count,
+        color:
+          STATUS_COLORS[c.label] ??
+          OTHER_STATUS_COLORS[other++ % OTHER_STATUS_COLORS.length],
+      }));
+    } else {
+      if (!this._monitors) {
+        return this.renderMessage('Charts show in the NotesGraph app.');
+      }
+      const ids = props.monitorIds$.value;
+      if (ids.length === 0) {
+        return this.renderMessage('Tick monitors in ⚙ to slice their values.');
+      }
+      parts = ids.flatMap((id, i) => {
+        const monitor = this.monitors.find(m => m.id === id);
+        const value = parseReadingValue(monitor?.lastValue);
+        return monitor && value !== null
+          ? [
+              {
+                label: monitor.name,
+                value,
+                color: PIE_COLORS[i % PIE_COLORS.length],
+              },
+            ]
+          : [];
+      });
+    }
+    const slices = pieSlices(parts);
+    if (slices.length === 0) {
+      return this.renderMessage(
+        this.monitorsError ?? 'Nothing above zero to slice yet.'
+      );
+    }
+    const total = slices.reduce((sum, s) => sum + s.value, 0);
+    const percent = (p: number) => `${Math.round(p)}%`;
+    // Each slice is a dash of one ring: a circle's stroke drawn over
+    // `percent` of its length, starting `offset` round from the top.
+    const ring = svg`<svg viewBox="0 0 42 42" aria-hidden="true">
+      <g transform="rotate(-90 21 21)">
+        ${slices.map(
+          s => svg`<circle data-slice cx="21" cy="21" r="16" fill="none"
+            pathLength="100" stroke-width="7" stroke=${s.color}
+            stroke-dasharray=${`${s.percent} ${100 - s.percent}`}
+            stroke-dashoffset=${-s.offset}>
+            <title>${`${s.label}: ${formatValue(s.value)} (${percent(s.percent)})`}</title>
+          </circle>`
+        )}
+      </g>
+      <text class="ng-widget-pie-total" x="21" y="21" text-anchor="middle"
+        dominant-baseline="central">${formatValue(total)}</text>
+    </svg>`;
+    return html`<div
+      class="ng-widget-pie"
+      role="img"
+      aria-label=${slices
+        .map(s => `${s.label} ${percent(s.percent)}`)
+        .join(', ')}
+    >
+      ${ring}
+      <div class="ng-widget-legend">
+        ${slices.map(
+          s =>
+            html`<span
+                class="ng-swatch"
+                style=${styleMap({ background: s.color })}
+              ></span>
+              <span class="ng-label" title=${s.label}>${s.label}</span>
+              <span class="ng-count">${formatValue(s.value)}</span>
+              <span class="ng-percent">${percent(s.percent)}</span>`
+        )}
+      </div>
+    </div>`;
+  }
+
   private renderBody() {
     const kind = this.model.props.kind$.value;
     if (kind === 'tasks') return this.renderTasks();
+    if (kind === 'pie') return this.renderPie();
     if (!this._monitors) {
       return this.renderMessage('Charts show in the NotesGraph app.');
     }
@@ -730,11 +980,8 @@ export class WidgetBlockComponent extends BlockComponent<WidgetBlockModel> {
   override renderBlock() {
     const props = this.model.props;
     const kind = props.kind$.value;
-    const monitor = kind === 'tasks' ? null : this.monitor;
-    const title =
-      props.title$.value ||
-      (kind === 'tasks' ? 'Tasks' : monitor?.name) ||
-      KIND_LABELS[kind];
+    const monitor = this.chartsReadings ? this.monitor : null;
+    const title = props.title$.value || this.defaultTitle || KIND_LABELS[kind];
     // Line and bar charts name their latest value; the stat tile is that value.
     const latest =
       (kind === 'line' || kind === 'bar') && monitor?.lastValue
@@ -743,7 +990,7 @@ export class WidgetBlockComponent extends BlockComponent<WidgetBlockModel> {
     const sub =
       monitor?.lastRunAt != null
         ? `${latest}checked ${formatTime(monitor.lastRunAt)}`
-        : kind === 'tasks'
+        : this.countsTasks
           ? 'in this note'
           : '';
     return html`<div
