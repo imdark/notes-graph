@@ -7,6 +7,7 @@ import {
   Param,
   Post,
   Put,
+  Query,
   RawBody,
   Res,
 } from '@nestjs/common';
@@ -104,6 +105,73 @@ export class NotesApiController {
     res.setHeader('content-type', 'application/octet-stream');
     res.setHeader('x-doc-timestamp', doc.timestamp.toString());
     res.send(doc.bin);
+  }
+
+  /** Readable docs whose title contains `q`, for a note picker. */
+  @Get('/workspaces/:workspaceId/docs')
+  async findDocs(
+    @CurrentUser() user: CurrentUserType,
+    @Param('workspaceId') workspaceId: string,
+    @Query('q') q?: string
+  ) {
+    await this.ac.user(user.id).workspace(workspaceId).assert('Workspace.Read');
+    const found = await this.models.doc.findByTitleMatch(
+      workspaceId,
+      (q ?? '').trim()
+    );
+    const docs = await this.ac
+      .user(user.id)
+      .workspace(workspaceId)
+      .docs(found, 'Doc.Read');
+    return {
+      docs: docs.map(doc => ({ docId: doc.docId, title: doc.title ?? '' })),
+    };
+  }
+
+  /** A doc as markdown, the way a phone widget shows it. */
+  @Get('/workspaces/:workspaceId/docs/:docId/markdown')
+  async getDocMarkdown(
+    @CurrentUser() user: CurrentUserType,
+    @Param('workspaceId') workspaceId: string,
+    @Param('docId') docId: string
+  ) {
+    await this.assertReadable(user.id, workspaceId, docId);
+    const doc = await this.docReader.getDocMarkdown(workspaceId, docId, false);
+    if (!doc) {
+      throw new NotFound('Doc not found');
+    }
+    return { docId, title: doc.title, markdown: doc.markdown };
+  }
+
+  /**
+   * The journal page for `date` (YYYY-MM-DD), found by its title, which the
+   * app sets to the date. `docId` is null when that day has none yet.
+   */
+  @Get('/workspaces/:workspaceId/journal')
+  async getJournal(
+    @CurrentUser() user: CurrentUserType,
+    @Param('workspaceId') workspaceId: string,
+    @Query('date') date?: string
+  ) {
+    if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      throw new BadRequestException('date must be YYYY-MM-DD');
+    }
+    await this.ac.user(user.id).workspace(workspaceId).assert('Workspace.Read');
+    const ids = await this.models.doc.findIdsByExactTitle(workspaceId, date);
+    for (const docId of ids) {
+      const readable = await this.ac
+        .user(user.id)
+        .doc(workspaceId, docId)
+        .can('Doc.Read');
+      if (!readable) continue;
+      const doc = await this.docReader.getDocMarkdown(
+        workspaceId,
+        docId,
+        false
+      );
+      if (doc) return { date, docId, title: doc.title, markdown: doc.markdown };
+    }
+    return { date, docId: null, title: date, markdown: '' };
   }
 
   @Post('/workspaces/:workspaceId/docs')

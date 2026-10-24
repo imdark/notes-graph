@@ -83,6 +83,32 @@
             android:name=".push.AgentAnswerReceiver"
             android:exported="false" />
 
+        <!-- Home-screen widget: one note, or today's journal -->
+        <receiver
+            android:name=".widget.NoteWidgetProvider"
+            android:exported="false"
+            android:label="@string/note_widget_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/note_widget_info" />
+        </receiver>
+
+        <!-- Started by the launcher when the widget is added or changed -->
+        <activity
+            android:name=".widget.NoteWidgetConfigActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:theme="@style/AppTheme.NoActionBar"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />
+            </intent-filter>
+        </activity>
+
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_channel_id"
             android:value="agent-questions" />

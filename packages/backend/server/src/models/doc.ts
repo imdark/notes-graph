@@ -531,6 +531,27 @@ export class DocModel extends BaseModel {
   }
 
   /**
+   * Docs whose title contains `text` (case-insensitive), with their titles.
+   * Only docs that still have content: a deleted doc's meta row can outlive
+   * its snapshot, and a picker offering one would lead nowhere.
+   */
+  async findByTitleMatch(workspaceId: string, text: string, limit = 50) {
+    const pattern = `%${text.replace(/[\\%_]/g, c => `\\${c}`)}%`;
+    return await this.db.$queryRaw<{ docId: string; title: string | null }[]>`
+      SELECT "workspace_pages"."page_id" as "docId", "workspace_pages"."title"
+      FROM "workspace_pages"
+      INNER JOIN "snapshots"
+      ON "workspace_pages"."workspace_id" = "snapshots"."workspace_id"
+      AND "workspace_pages"."page_id" = "snapshots"."guid"
+      WHERE
+        "workspace_pages"."workspace_id" = ${workspaceId}
+        AND "workspace_pages"."title" ILIKE ${pattern}
+      ORDER BY "workspace_pages"."title" ASC
+      LIMIT ${limit}
+    `;
+  }
+
+  /**
    * The ids of the workspace's docs titled `title`, ignoring case and the
    * spaces around it, as last synced into the doc metas. A title the user
    * has just typed may take a moment to show up here.

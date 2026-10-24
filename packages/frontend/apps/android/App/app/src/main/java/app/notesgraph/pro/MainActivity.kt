@@ -35,9 +35,12 @@ import app.notesgraph.pro.plugin.NotesGraphThemePlugin
 import app.notesgraph.pro.plugin.AuthPlugin
 import app.notesgraph.pro.plugin.HashCashPlugin
 import app.notesgraph.pro.plugin.NbStorePlugin
+import app.notesgraph.pro.plugin.NoteWidgetPlugin
 import app.notesgraph.pro.plugin.PreviewPlugin
 import app.notesgraph.pro.plugin.SpeechToTextPlugin
 import app.notesgraph.pro.push.NotificationTarget
+import app.notesgraph.pro.widget.NoteWidgetWorker
+import app.notesgraph.pro.widget.NoteWidgets
 import app.notesgraph.pro.service.GraphQLService
 import app.notesgraph.pro.service.SSEService
 import app.notesgraph.pro.service.WebService
@@ -77,6 +80,7 @@ class MainActivity : BridgeActivity(), AIButtonPlugin.Callback, NotesGraphThemeP
                 AuthPlugin::class.java,
                 HashCashPlugin::class.java,
                 NbStorePlugin::class.java,
+                NoteWidgetPlugin::class.java,
                 PreviewPlugin::class.java,
                 SpeechToTextPlugin::class.java,
             )
@@ -222,6 +226,11 @@ class MainActivity : BridgeActivity(), AIButtonPlugin.Callback, NotesGraphThemeP
 
     override fun onStop() {
         super.onStop()
+        // Show what was just written on the home screen, once the edits have
+        // had a moment to reach the server the widgets read from.
+        if (NoteWidgets.widgetIds(this).isNotEmpty()) {
+            NoteWidgetWorker.refresh(this, delaySeconds = 20)
+        }
         // Cover on the way out, so the notes are not the first frame shown on
         // return before onResume decides whether to lock; a return within the
         // grace period lifts it again at once.

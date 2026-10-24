@@ -52,12 +52,13 @@ internal object AgentApi {
         body: JSONObject,
     ) = post(server, "${jobPath(workspaceId, jobId)}/questions/${enc(questionId)}/answer", body)
 
-    private fun enc(value: String) = Uri.encode(value)
+    fun enc(value: String) = Uri.encode(value)
 
     private fun jobPath(workspaceId: String, jobId: String) =
         "/api/registry/workspaces/${enc(workspaceId)}/jobs/${enc(jobId)}"
 
-    private suspend fun get(server: String, path: String) =
+    /** A signed-in GET of `path`; the home-screen note widget reads with it too. */
+    suspend fun get(server: String, path: String) =
         send(server) { Request.Builder().url(server.trimEnd('/') + path).get() }
 
     private suspend fun post(server: String, path: String, body: JSONObject) =

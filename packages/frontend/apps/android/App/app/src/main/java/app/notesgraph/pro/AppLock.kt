@@ -12,6 +12,7 @@ import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
+import app.notesgraph.pro.widget.NoteWidgetWorker
 import timber.log.Timber
 
 /**
@@ -68,6 +69,9 @@ object AppLock {
 
     fun setEnabled(context: Context, enabled: Boolean) {
         prefs(context).edit { putBoolean(KEY_ENABLED, enabled) }
+        // Home-screen note widgets hide their note while the app is locked:
+        // redraw them now, not at their next half-hourly refresh.
+        NoteWidgetWorker.refresh(context.applicationContext)
     }
 
     /**
