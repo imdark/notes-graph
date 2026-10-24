@@ -266,19 +266,38 @@ test('nested list blocks', async ({ page }, testInfo) => {
       });
   };
 
+  // Wait for the caret to be in the block, rather than a fixed delay: an
+  // indented block re-renders, and a Tab pressed before the caret is back in
+  // it is lost (block 4 then stayed a sibling of 3 on a slow runner).
+  const caretIn = async (blockId: string) => {
+    await expect
+      .poll(() =>
+        page.evaluate(() => {
+          const node = document.getSelection()?.anchorNode;
+          const el = node instanceof Element ? node : node?.parentElement;
+          return el?.closest('[data-block-id]')?.getAttribute('data-block-id');
+        })
+      )
+      .toBe(blockId);
+  };
+
   await focusListItem('2');
   await type(page, '123');
 
   await focusListItem('3');
+  await caretIn('3');
   await pressTab(page);
+  await assertBlockChildrenIds(page, '2', ['3']);
   await type(page, '456');
 
   await focusListItem('4');
+  await caretIn('4');
   await pressTab(page);
-  await waitNextFrame(page, 200);
+  await assertBlockChildrenIds(page, '2', ['3', '4']);
   await focusListItem('4');
+  await caretIn('4');
   await pressTab(page);
-  await waitNextFrame(page, 200);
+  await assertBlockChildrenIds(page, '3', ['4']);
   await type(page, '789');
   await assertRichTexts(page, ['123', '456', '789']);
   await waitNextFrame(page, 200);

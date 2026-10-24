@@ -647,73 +647,39 @@ test('delete at start of paragraph block', async ({ page }) => {
   await assertBlockChildrenIds(page, '1', ['2', '3']);
 });
 
-test('delete at start of paragraph immediately following list', async ({
-  page,
-}) => {
-  await enterPlaygroundRoom(page);
-  await initEmptyParagraphState(page);
-  await focusRichText(page);
-  await type(page, 'hello');
+// One test per list type, each in a fresh room. These used to run in one
+// test with two undos between cases, but how many undo steps the conversion
+// and backspaces make depends on timing, so on a slow runner the reset
+// didn't get back to the start and the next case failed.
+for (const listType of ['bulleted', 'numbered', 'todo'] as const) {
+  test(`delete at start of paragraph immediately following ${listType} list`, async ({
+    page,
+  }) => {
+    await enterPlaygroundRoom(page);
+    await initEmptyParagraphState(page);
+    await focusRichText(page);
+    await type(page, 'hello');
 
-  await pressEnter(page);
-  await type(page, 'a');
+    await pressEnter(page);
+    await type(page, 'a');
 
-  await captureHistory(page);
+    await assertRichTexts(page, ['hello', 'a']);
+    await assertBlockChildrenIds(page, '1', ['2', '3']);
+    await assertBlockType(page, '3', 'text');
 
-  await assertRichTexts(page, ['hello', 'a']);
-  await assertBlockChildrenIds(page, '1', ['2', '3']);
-  await assertBlockType(page, '3', 'text');
-
-  // text -> bulleted
-  await focusRichText(page, 1);
-  await updateBlockType(page, 'notesgraph:list', 'bulleted');
-  await assertBlockType(page, '2', 'text');
-  await assertBlockType(page, '4', 'bulleted');
-  await pressBackspace(page, 2);
-  await waitNextFrame(page);
-  await assertBlockType(page, '5', 'text');
-  await assertBlockChildrenIds(page, '1', ['2', '5']);
-  await pressBackspace(page);
-  await assertBlockChildrenIds(page, '1', ['2']);
-
-  // reset
-  await undoByClick(page);
-  await undoByClick(page);
-  await assertRichTexts(page, ['hello', 'a']);
-  await assertBlockChildrenIds(page, '1', ['2', '3']);
-  await assertBlockType(page, '3', 'text');
-
-  // text -> numbered
-  await focusRichText(page, 1);
-  await updateBlockType(page, 'notesgraph:list', 'numbered');
-  await assertBlockType(page, '2', 'text');
-  await assertBlockType(page, '6', 'numbered');
-  await pressBackspace(page, 2);
-  await waitNextFrame(page);
-  await assertBlockType(page, '7', 'text');
-  await assertBlockChildrenIds(page, '1', ['2', '7']);
-  await pressBackspace(page);
-  await assertBlockChildrenIds(page, '1', ['2']);
-
-  // reset
-  await undoByClick(page);
-  await undoByClick(page);
-  await assertRichTexts(page, ['hello', 'a']);
-  await assertBlockChildrenIds(page, '1', ['2', '3']);
-  await assertBlockType(page, '3', 'text');
-
-  // text -> todo
-  await focusRichText(page, 1);
-  await updateBlockType(page, 'notesgraph:list', 'todo');
-  await assertBlockType(page, '2', 'text');
-  await assertBlockType(page, '8', 'todo');
-  await pressBackspace(page, 2);
-  await waitNextFrame(page);
-  await assertBlockType(page, '9', 'text');
-  await assertBlockChildrenIds(page, '1', ['2', '9']);
-  await pressBackspace(page);
-  await assertBlockChildrenIds(page, '1', ['2']);
-});
+    // text -> list
+    await focusRichText(page, 1);
+    await updateBlockType(page, 'notesgraph:list', listType);
+    await assertBlockType(page, '2', 'text');
+    await assertBlockType(page, '4', listType);
+    await pressBackspace(page, 2);
+    await waitNextFrame(page);
+    await assertBlockType(page, '5', 'text');
+    await assertBlockChildrenIds(page, '1', ['2', '5']);
+    await pressBackspace(page);
+    await assertBlockChildrenIds(page, '1', ['2']);
+  });
+}
 
 test('delete at start of paragraph with content', async ({ page }) => {
   await enterPlaygroundRoom(page);
