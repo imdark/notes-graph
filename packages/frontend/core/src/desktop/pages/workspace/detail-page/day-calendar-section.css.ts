@@ -67,6 +67,13 @@ export const row = style({
       outlineOffset: '-2px',
     },
   },
+  '@media': {
+    // Lets the calendar name drop to a line of its own (see calendarName).
+    [narrow]: {
+      flexWrap: 'wrap',
+      rowGap: '2px',
+    },
+  },
 });
 
 /** The calendar's own colour, so two calendars are distinguishable at a glance. */
@@ -122,6 +129,15 @@ export const calendarName = style({
   whiteSpace: 'nowrap',
   flexShrink: 2,
   minWidth: 0,
+  // On a phone the name (often an email address) would squeeze the title, so
+  // it takes the next line of the row, after the note icon, pushed right.
+  '@media': {
+    [narrow]: {
+      flexBasis: '100%',
+      order: 1,
+      textAlign: 'right',
+    },
+  },
 });
 
 /**
