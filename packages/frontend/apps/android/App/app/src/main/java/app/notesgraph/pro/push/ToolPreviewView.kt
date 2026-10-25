@@ -64,14 +64,15 @@ private fun ToolInputView(preview: ToolPreview.Input) {
             Text(it, style = MaterialTheme.typography.bodyMedium)
         }
         preview.command?.let { command ->
+            // Not inverseSurface: that turns near-white in dark mode.
             Surface(
-                color = MaterialTheme.colorScheme.inverseSurface,
+                color = MaterialTheme.colorScheme.surfaceVariant,
                 shape = MaterialTheme.shapes.small,
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Text(
                     "$ $command",
-                    color = MaterialTheme.colorScheme.inverseOnSurface,
+                    color = MaterialTheme.colorScheme.onSurface,
                     fontFamily = FontFamily.Monospace,
                     style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier.padding(12.dp),
