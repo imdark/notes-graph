@@ -12,7 +12,7 @@ use super::{
   super::{
     blocksuite::{build_block_index, collect_child_ids, get_flavour, get_string},
     doc_loader::load_doc,
-    schema::{NOTE_FLAVOUR, PROP_CHECKED, PROP_TEXT, PROP_TITLE, SYS_CHILDREN},
+    schema::{NOTE_FLAVOUR, PROP_CHECKED, PROP_COLLAPSED, PROP_TEXT, PROP_TITLE, SYS_CHILDREN},
   },
   ParseError,
   builder::{insert_block_map, insert_children, insert_sys_fields, insert_text, text_ops_from_plain},
@@ -851,13 +851,23 @@ fn append_note(
   insert_text(doc, &mut child, PROP_TEXT, &text_ops_from_plain(&note_text))?;
   insert_children(doc, &mut child, &[])?;
 
-  match task_block.get(SYS_CHILDREN).and_then(|value| value.to_array()) {
+  let had_children = match task_block.get(SYS_CHILDREN).and_then(|value| value.to_array()) {
     Some(mut children) => {
+      let had_children = children.len() > 0;
       children.push(child_id)?;
+      had_children
     }
     None => {
       insert_children(doc, task_block, &[child_id])?;
+      false
     }
+  };
+
+  // Agent notes start hidden under a collapsed list item, so a worked task
+  // stays one line. Only the first note collapses it: once the user has
+  // expanded the task, later notes leave it open.
+  if !had_children && get_flavour(task_block).as_deref() == Some(LIST_FLAVOUR) {
+    task_block.insert(PROP_COLLAPSED.to_string(), Any::True)?;
   }
   Ok(())
 }
@@ -1290,6 +1300,53 @@ mod tests {
       .unwrap_or_default();
     assert!(text.contains("found the root cause"), "text: {text}");
     assert!(text.contains("claude via MCP"), "text: {text}");
+  }
+
+  #[test]
+  fn test_first_note_collapses_task_later_notes_keep_it_open() {
+    let binary = doc_with("- [ ] Task with notes");
+    let block_id = task_block_id(&binary);
+    let note = |binary: &[u8], text: &'static str| {
+      update_task_block(
+        binary,
+        "doc-1",
+        &TaskUpdate {
+          block_id: &block_id,
+          status: None,
+          note: Some(text),
+          agent: Some("claude"),
+          now_naive_iso: "2026-10-25T13:00",
+        },
+      )
+      .expect("update")
+    };
+    let collapsed = |doc: &Doc| {
+      doc
+        .get_map("blocks")
+        .expect("blocks")
+        .get(&block_id)
+        .and_then(|v| v.to_map())
+        .and_then(|b| b.get(PROP_COLLAPSED))
+        .map(|v| matches!(v.to_any(), Some(Any::True)))
+        .unwrap_or(false)
+    };
+
+    let mut doc = load_doc(&binary, Some("doc-1")).expect("load");
+    doc.apply_update_from_binary_v1(note(&binary, "first")).expect("apply");
+    assert!(collapsed(&doc), "first note should collapse the task");
+
+    // The user expands the task; the next note must not fold it again.
+    doc
+      .get_map("blocks")
+      .expect("blocks")
+      .get(&block_id)
+      .and_then(|v| v.to_map())
+      .expect("task")
+      .insert(PROP_COLLAPSED.to_string(), Any::False)
+      .expect("expand");
+    let expanded = doc.encode_update_v1().expect("encode");
+    doc.apply_update_from_binary_v1(note(&expanded, "second")).expect("apply");
+    assert!(!collapsed(&doc), "later notes should leave the task open");
   }
 
   #[test]
