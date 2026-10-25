@@ -28,6 +28,7 @@ import { state } from 'lit/decorators.js';
 import { literal, unsafeStatic } from 'lit/static-html.js';
 
 import { AgentsFrameworkIdentifier } from './framework';
+import { lineTextRects } from './line-text-rects';
 
 const WIDGET_TAG = 'notesgraph-agent-assign-widget';
 
@@ -53,8 +54,11 @@ const agentMenuIcon = (agent: Agent) => {
 /** Gap between the bottom of the line's text and the button. */
 const GAP_PX = 2;
 
+/** Least room kept between the end of the line's text and the button. */
+const END_GAP_PX = 8;
+
 /**
- * A small button floating under a to-do line that no agent is on yet,
+ * A small button at the end of a to-do line that no agent is on yet,
  * offering to hand the task to one: pick an existing agent, or make a new one
  * and hand it to that.
  *
@@ -194,41 +198,86 @@ export class AgentAssignWidget extends WidgetComponent {
     requestAnimationFrame(() => this._place());
   }
 
+  override disconnectedCallback() {
+    super.disconnectedCallback();
+    this._reserveLine(null, 0);
+  }
+
+  /** The block's own line comes before its children, so the first rich text in it is this line's. */
+  private _lineEditor(): HTMLElement | null {
+    return (
+      this.parentElement
+        ?.closest(`[${BLOCK_ID_ATTR}]`)
+        ?.querySelector<HTMLElement>('rich-text .inline-editor') ?? null
+    );
+  }
+
+  /** The rich text the room under the line was last made on, to undo it. */
+  private _reservedOn: HTMLElement | null = null;
+
   /**
-   * Float just under the line's own text, at its start — the spot the runs
-   * chip drops to — so it never covers the text or the chips after it.
+   * Room under the line's text for the button, so the next line moves down
+   * instead of going under it. A margin, not the padding the runs chip uses,
+   * so the two don't undo each other's room.
+   */
+  private _reserveLine(editor: HTMLElement | null, height: number) {
+    const richText = height ? editor?.closest('rich-text') : null;
+    if (this._reservedOn && this._reservedOn !== richText) {
+      this._reservedOn.style.marginBottom = '';
+      this._reservedOn = null;
+    }
+    if (richText instanceof HTMLElement) {
+      richText.style.marginBottom = `${height}px`;
+      this._reservedOn = richText;
+    }
+  }
+
+  /**
+   * Sit at the right end of the text's last line when there is room after it
+   * (an empty line always has room); otherwise drop under the text and push
+   * the next line down, so the button never covers text on either line.
    */
   private _place() {
     const button =
       this.renderRoot.querySelector<HTMLElement>('.ng-agent-assign');
     // Every block's widget re-renders on each streamed run event; a hidden
     // one must not force a layout to find that out.
-    if (!button) return;
+    if (!button) {
+      this._reserveLine(null, 0);
+      return;
+    }
     const parent = this.offsetParent;
-    // The block's own line comes before its children, so the first rich text
-    // in it is this line's.
-    const editor = this.parentElement
-      ?.closest(`[${BLOCK_ID_ATTR}]`)
-      ?.querySelector('rich-text .inline-editor');
+    const editor = this._lineEditor();
     if (!parent || !editor) return;
 
-    const range = document.createRange();
-    range.selectNodeContents(editor);
-    const rects = range.getClientRects();
+    const rects = lineTextRects(editor);
     const line = editor.getBoundingClientRect();
-    const end = rects[rects.length - 1] ?? line;
+    const end = rects[rects.length - 1];
     const box = parent.getBoundingClientRect();
+    const width = button.offsetWidth;
+    const height = button.offsetHeight;
+    const lastBottom = Math.max(end?.bottom ?? 0, line.bottom);
 
-    let left = line.left - box.left;
-    let top = Math.max(end.bottom, line.bottom) - box.top + GAP_PX;
-
-    // A long block's last line can sit below the screen (or behind the
-    // phone's keyboard), taking the button with it. Pin it to the right end
-    // of the first line instead, where the block starts.
+    let left: number;
+    let top: number;
     const visibleBottom = window.visualViewport?.height ?? window.innerHeight;
-    if (Math.max(end.bottom, line.bottom) > visibleBottom && rects[0]) {
-      left = line.right - box.left - button.offsetWidth;
+    if (!end || end.right + END_GAP_PX + width <= line.right) {
+      this._reserveLine(null, 0);
+      // An empty line has no text box; centre on the editor's one line.
+      const row = end ?? line;
+      left = line.right - box.left - width;
+      top = row.top - box.top + (row.height - height) / 2;
+    } else if (lastBottom > visibleBottom) {
+      // A long block's last line can sit below the screen (or behind the
+      // phone's keyboard), taking the button with it. Pin it to the right end
+      // of the first line instead, where the block starts.
+      this._reserveLine(null, 0);
+      left = line.right - box.left - width;
       top = rects[0].top - box.top;
+    } else {
+      this._reserveLine(editor, height + GAP_PX);
+      left = line.left - box.left;
+      top = lastBottom - box.top + GAP_PX;
     }
     this.style.transform = `translate(${Math.max(0, left)}px, ${top}px)`;
   }
