@@ -11,44 +11,18 @@ import { useCallback, useLayoutEffect, useRef, useState } from 'react';
 import * as styles from './agents.css';
 
 /**
- * A run that finished and waits for the reader, shown where questions are:
- * approve its work, read what it did, or ask it about it. It stays until
- * approved, here and on the reader's other devices, since the flag is on the
- * run's synced row.
+ * Settling a run that waits for review: approve keeps its work; undo puts
+ * the note back, which only the tab that ran it can do while it keeps the
+ * snapshot.
  */
-export const AgentReviewCard = ({
-  run,
-  onReview,
-  onAsk,
-}: {
-  run: AgentRun;
-  /** Show what the run changed: the run's Changes tab. */
-  onReview: (runId: string) => void;
-  /** Open a chat about the run (see AgentRunChat). */
-  onAsk: (runId: string) => void;
-}) => {
+export const useRunReview = (run: AgentRun) => {
   const runsStore = useService(AgentRunsStore);
   const sessionService = useService(AgentRunSessionService);
 
   const sessions = useLiveData(sessionService.sessions$);
-  // Ran in this tab: it can be undone while the tab keeps its snapshot.
   const session = sessions.find(s => s.runId === run.id);
   const undoable = !!session && sessionService.canUndo(session.id);
   const [undoing, setUndoing] = useState(false);
-
-  const summary = run.summary?.trim() || `${run.agentName} finished.`;
-  // Past four lines the answer is cut, and More opens the whole summary.
-  const summaryRef = useRef<HTMLParagraphElement>(null);
-  const [clamped, setClamped] = useState(false);
-  useLayoutEffect(() => {
-    const el = summaryRef.current;
-    if (!el) return;
-    const measure = () => setClamped(el.scrollHeight > el.clientHeight + 1);
-    measure();
-    const observer = new ResizeObserver(measure);
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, [summary]);
 
   const approve = useCallback(() => {
     runsStore.settleReview(run.id);
@@ -68,6 +42,42 @@ export const AgentReviewCard = ({
       .catch(() => notify.error({ title: 'Could not undo this run' }))
       .finally(() => setUndoing(false));
   }, [run.id, runsStore, session, sessionService]);
+
+  return { approve, undo, undoable, undoing };
+};
+
+/**
+ * A run that finished and waits for the reader, shown where questions are:
+ * approve its work, read what it did, or ask it about it. It stays until
+ * approved, here and on the reader's other devices, since the flag is on the
+ * run's synced row.
+ */
+export const AgentReviewCard = ({
+  run,
+  onReview,
+  onAsk,
+}: {
+  run: AgentRun;
+  /** Show what the run changed: the run's Changes tab. */
+  onReview: (runId: string) => void;
+  /** Open a chat about the run (see AgentRunChat). */
+  onAsk: (runId: string) => void;
+}) => {
+  const { approve, undo, undoable, undoing } = useRunReview(run);
+
+  const summary = run.summary?.trim() || `${run.agentName} finished.`;
+  // Past four lines the answer is cut, and More opens the whole summary.
+  const summaryRef = useRef<HTMLParagraphElement>(null);
+  const [clamped, setClamped] = useState(false);
+  useLayoutEffect(() => {
+    const el = summaryRef.current;
+    if (!el) return;
+    const measure = () => setClamped(el.scrollHeight > el.clientHeight + 1);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [summary]);
 
   return (
     <div className={styles.questionCard} data-testid="agent-review">
@@ -117,6 +127,40 @@ export const AgentReviewCard = ({
             disabled={undoing}
             tooltip="Put the note back as it was before this run"
             data-testid="agent-review-undo"
+          >
+            Undo
+          </Button>
+        ) : null}
+      </div>
+    </div>
+  );
+};
+
+/**
+ * The same approve and undo, as a bar over a run's log dialog so they stay
+ * in reach whichever tab is open.
+ */
+export const AgentReviewBar = ({ run }: { run: AgentRun }) => {
+  const { approve, undo, undoable, undoing } = useRunReview(run);
+  return (
+    <div className={styles.reviewBar} data-testid="agent-review-bar">
+      <span className={styles.questionLabel}>Waiting for your review</span>
+      <div className={styles.sessionActions}>
+        <Button
+          variant="primary"
+          onClick={approve}
+          data-testid="agent-review-bar-approve"
+        >
+          Approve
+        </Button>
+        {undoable ? (
+          <Button
+            variant="plain"
+            onClick={undo}
+            loading={undoing}
+            disabled={undoing}
+            tooltip="Put the note back as it was before this run"
+            data-testid="agent-review-bar-undo"
           >
             Undo
           </Button>
