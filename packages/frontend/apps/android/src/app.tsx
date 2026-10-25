@@ -385,10 +385,10 @@ try {
 }
 /**
  * Open what a tapped notification or home-screen widget is about: a finished
- * run's note (or the Agents page when it ran on none), a monitor's block, the
- * journal page for a date. Native calls this until it returns true; false
- * means the app has no workspace open yet. Another workspace is opened by its
- * URL, which reloads into it.
+ * run's log on the Agents page, a monitor's block, the journal page for a
+ * date. Native calls this until it returns true; false means the app has no
+ * workspace open yet. Another workspace is opened by its URL, which reloads
+ * into it.
  */
 (window as any).notesgraphOpenFromNotification = (payload: {
   workspaceId?: string;
@@ -396,6 +396,8 @@ try {
   blockId?: string;
   /** YYYY-MM-DD: that day's journal, or the page to start it from. */
   journal?: string;
+  /** A finished run's job: its log on the Agents page, over the note. */
+  jobId?: string;
 }): boolean => {
   const globalContextService = frameworkProvider.get(GlobalContextService);
   const currentWorkspaceId =
@@ -406,15 +408,20 @@ try {
   const journalPath = payload?.journal
     ? `/journals?date=${encodeURIComponent(payload.journal)}`
     : null;
+  const runPath = payload?.jobId
+    ? `/agents?job=${encodeURIComponent(payload.jobId)}`
+    : null;
   if (workspaceId !== currentWorkspaceId) {
     const blocks = payload?.blockId
       ? `?blockIds=${encodeURIComponent(payload.blockId)}`
       : '';
     window.location.href = journalPath
       ? `/workspace/${workspaceId}${journalPath}`
-      : docId
-        ? `/workspace/${workspaceId}/${docId}${blocks}`
-        : `/workspace/${workspaceId}/agents`;
+      : runPath
+        ? `/workspace/${workspaceId}${runPath}`
+        : docId
+          ? `/workspace/${workspaceId}/${docId}${blocks}`
+          : `/workspace/${workspaceId}/agents`;
     return true;
   }
   const workspaceRef = frameworkProvider
@@ -426,6 +433,8 @@ try {
     const workbench = workspace.scope.get(WorkbenchService).workbench;
     if (journalPath) {
       workbench.open(journalPath);
+    } else if (runPath) {
+      workbench.open(runPath);
     } else if (docId) {
       // A fresh refreshKey makes the editor jump again even when this note
       // is already open at this block, scrolled away since.
