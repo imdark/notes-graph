@@ -27,6 +27,7 @@ import { AgentLogView } from './agent-log-view';
 import { AgentQuestionCard } from './agent-question';
 import { AgentRunChanges } from './agent-run-changes';
 import { AgentRunChat } from './agent-run-chat';
+import { AgentRunDeploy } from './agent-run-deploy';
 import { formatDuration } from './agent-run-row';
 import { AgentRunShare } from './agent-run-share';
 import { AgentRunSteer } from './agent-run-steer';
@@ -237,17 +238,19 @@ const LOG_TAB = 'log';
 const DETAILS_TAB = 'details';
 const ASK_TAB = 'ask';
 const CHANGES_TAB = 'changes';
-export type RunLogTab = 'log' | 'details' | 'ask' | 'changes';
+const DEPLOY_TAB = 'deploy';
+export type RunLogTab = 'log' | 'details' | 'ask' | 'changes' | 'deploy';
 const TABS = [
   { value: LOG_TAB, label: 'Log' },
   { value: DETAILS_TAB, label: 'Details' },
 ];
 /**
- * A run that has ended can be reviewed (what it changed) and asked about;
- * one going is still changing things and still answering.
+ * A run that has ended can be reviewed (what it changed), deployed and asked
+ * about; one going is still changing things and still answering.
  */
 const ENDED_TABS = [
   { value: CHANGES_TAB, label: 'Changes' },
+  { value: DEPLOY_TAB, label: 'Deploy' },
   ...TABS,
   { value: ASK_TAB, label: 'Ask' },
 ];
@@ -304,7 +307,7 @@ const RunDetails = ({ run }: { run: AgentRun }) => {
 };
 
 export const AgentRunLogDialog = ({
-  runId,
+  runId: openedRunId,
   onClose,
   ask = false,
   initialTab,
@@ -313,9 +316,17 @@ export const AgentRunLogDialog = ({
   onClose: () => void;
   /** Open on the Ask tab, to ask an ended run about itself. */
   ask?: boolean;
-  /** The tab to open on; wins over `ask`. Changes and Ask need an ended run. */
+  /**
+   * The tab to open on; wins over `ask`. Changes, Deploy and Ask need an
+   * ended run.
+   */
   initialTab?: RunLogTab;
 }) => {
+  // A deploy opened from the Deploy tab shows here in the run's place, with
+  // a way back to it.
+  const [deployRunId, setDeployRunId] = useState<string | null>(null);
+  useEffect(() => setDeployRunId(null), [openedRunId]);
+  const runId = deployRunId ?? openedRunId;
   const runsStore = useService(AgentRunsStore);
   const sessionService = useService(AgentRunSessionService);
   const remoteRunner = useService(RemoteAgentRunnerService);
@@ -401,12 +412,31 @@ export const AgentRunLogDialog = ({
   }, [remoteRunner, run, workspaceService]);
 
   // Each run opens on its log, unless it was opened to review or ask about.
+  // A deploy opened from the Deploy tab opens on its log, and going back
+  // returns to the Deploy tab.
   const [tab, setTab] = useState<string>(LOG_TAB);
-  useEffect(
-    () => setTab(initialTab ?? (ask ? ASK_TAB : LOG_TAB)),
-    [runId, ask, initialTab]
-  );
+  const returnTab = useRef<string | null>(null);
+  useEffect(() => {
+    setTab(
+      deployRunId
+        ? LOG_TAB
+        : (returnTab.current ?? initialTab ?? (ask ? ASK_TAB : LOG_TAB))
+    );
+    returnTab.current = null;
+  }, [runId, deployRunId, ask, initialTab]);
+  const backToRun = useCallback(() => {
+    returnTab.current = DEPLOY_TAB;
+    setDeployRunId(null);
+  }, []);
   const ended = !!run && run.status !== 'running';
+
+  // The run's whole answer, wherever it is kept.
+  const summary = run
+    ? (result ??
+      (session?.runId === run.id ? session.output : undefined) ??
+      run.summary ??
+      null)
+    : null;
 
   const attachCommand = tmuxSession ? `tmux attach -t ${tmuxSession}` : null;
   const copyAttach = useCallback(() => {
@@ -441,6 +471,15 @@ export const AgentRunLogDialog = ({
       description={meta}
     >
       <div className={styles.logDialogBody}>
+        {deployRunId ? (
+          <button
+            className={styles.linkButton}
+            onClick={backToRun}
+            data-testid="agent-run-log-back"
+          >
+            Back to the run it deploys
+          </button>
+        ) : null}
         {run ? (
           <RadioGroup
             width="100%"
@@ -468,15 +507,16 @@ export const AgentRunLogDialog = ({
         ) : run && !askRow && ended && tab === CHANGES_TAB ? (
           <AgentRunChanges
             run={run}
-            summary={
-              result ??
-              (session?.runId === run.id ? session.output : undefined) ??
-              run.summary ??
-              null
-            }
+            summary={summary}
             changes={changes}
             loading={!!run.remoteJobId && loading}
             onClose={onClose}
+          />
+        ) : run && !askRow && ended && tab === DEPLOY_TAB ? (
+          <AgentRunDeploy
+            run={run}
+            summary={summary}
+            onOpenRun={setDeployRunId}
           />
         ) : run && ended && tab === ASK_TAB ? (
           <AgentRunChat

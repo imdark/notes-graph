@@ -30,7 +30,9 @@ export { AgentContextService } from './services/context';
 export {
   type BranchCheck,
   canFixToMerge,
+  deployableTasks,
   DeploymentsService,
+  deployRunsFor,
   type LiveCheck,
   type MergeReadiness,
   mergeReadiness,
@@ -42,6 +44,7 @@ export {
   type PullRequestStage,
   pullRequestStage,
   repoOf,
+  type RunTask,
   SHIP_STAGES,
   type ShipAction,
   shipAgents,
