@@ -5,7 +5,8 @@ import {
   AgentRunsStore,
 } from '@notesgraph/core/modules/agents';
 import { useLiveData, useService } from '@notesgraph/infra';
-import { useCallback, useState } from 'react';
+import clsx from 'clsx';
+import { useCallback, useLayoutEffect, useRef, useState } from 'react';
 
 import * as styles from './agents.css';
 
@@ -35,6 +36,20 @@ export const AgentReviewCard = ({
   const undoable = !!session && sessionService.canUndo(session.id);
   const [undoing, setUndoing] = useState(false);
 
+  const summary = run.summary?.trim() || `${run.agentName} finished.`;
+  // Past four lines the answer is cut, and More opens the whole summary.
+  const summaryRef = useRef<HTMLParagraphElement>(null);
+  const [clamped, setClamped] = useState(false);
+  useLayoutEffect(() => {
+    const el = summaryRef.current;
+    if (!el) return;
+    const measure = () => setClamped(el.scrollHeight > el.clientHeight + 1);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [summary]);
+
   const approve = useCallback(() => {
     runsStore.settleReview(run.id);
     // Its work is kept, so the undo snapshot can go.
@@ -57,9 +72,21 @@ export const AgentReviewCard = ({
   return (
     <div className={styles.questionCard} data-testid="agent-review">
       <span className={styles.questionLabel}>Done · review</span>
-      <p className={styles.questionText}>
-        {run.summary?.trim() || `${run.agentName} finished.`}
+      <p
+        ref={summaryRef}
+        className={clsx(styles.questionText, styles.reviewSummary)}
+      >
+        {summary}
       </p>
+      {clamped ? (
+        <button
+          className={styles.reviewMore}
+          onClick={() => onReview(run.id)}
+          data-testid="agent-review-more"
+        >
+          More
+        </button>
+      ) : null}
       <div className={styles.sessionActions}>
         <Button
           variant="primary"
