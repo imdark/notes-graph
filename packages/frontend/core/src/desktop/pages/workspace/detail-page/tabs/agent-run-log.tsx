@@ -25,6 +25,7 @@ import {
 
 import { AgentLogView } from './agent-log-view';
 import { AgentQuestionCard } from './agent-question';
+import { AgentReviewBar } from './agent-review-card';
 import { AgentRunChanges } from './agent-run-changes';
 import { AgentRunChat } from './agent-run-chat';
 import { AgentRunDeploy } from './agent-run-deploy';
@@ -480,6 +481,7 @@ export const AgentRunLogDialog = ({
             Back to the run it deploys
           </button>
         ) : null}
+        {run?.reviewPending ? <AgentReviewBar run={run} /> : null}
         {run ? (
           <RadioGroup
             width="100%"

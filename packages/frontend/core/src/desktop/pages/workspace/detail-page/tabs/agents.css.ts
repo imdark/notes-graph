@@ -495,6 +495,19 @@ export const questionText = style({
   whiteSpace: 'pre-wrap',
 });
 
+/** Approve and undo over a run's log dialog, above its tabs. */
+export const reviewBar = style({
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  flexWrap: 'wrap',
+  gap: 8,
+  padding: '8px 12px',
+  borderRadius: 8,
+  border: `1px solid ${cssVarV2('button/primary')}`,
+  background: cssVarV2('layer/background/primary'),
+});
+
 /** A finished run's answer, cut to four lines; the rest is in its summary. */
 export const reviewSummary = style({
   display: '-webkit-box',
