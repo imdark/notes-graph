@@ -9,6 +9,7 @@ import {
   NotificationType,
   readAllNotificationsMutation,
   readNotificationMutation,
+  viewNotificationsMutation,
 } from '@notesgraph/graphql';
 
 import { Mockers } from '../../mocks';
@@ -285,6 +286,48 @@ e2e('should mark notification as read', async t => {
       },
     });
   }
+});
+
+e2e('should mark notifications as viewed and lower the count', async t => {
+  const { member, owner, workspace } = await init();
+
+  await app.login(owner);
+  for (const id of ['doc-id-1', 'doc-id-2']) {
+    await app.gql({
+      query: mentionUserMutation,
+      variables: {
+        input: {
+          userId: member.id,
+          workspaceId: workspace.id,
+          doc: { id, title: 'doc-title', mode: DocMode.page },
+        },
+      },
+    });
+  }
+
+  await app.login(member);
+  const socket = await createRealtimeClient(app, member);
+  t.teardown(() => socket.disconnect());
+  t.is((await realtimeRequest(socket, 'notification.count.get', {})).count, 2);
+
+  const result = await app.gql({
+    query: listNotificationsQuery,
+    variables: { pagination: { first: 1, offset: 0 } },
+  });
+  const [shown] = result.currentUser!.notifications.edges;
+  const { viewNotifications } = await app.gql({
+    query: viewNotificationsMutation,
+    variables: { ids: [shown.node.id] },
+  });
+  t.is(viewNotifications, 1);
+  t.is((await realtimeRequest(socket, 'notification.count.get', {})).count, 1);
+
+  // still in the inbox until it is read
+  const after = await app.gql({
+    query: listNotificationsQuery,
+    variables: { pagination: { first: 10, offset: 0 } },
+  });
+  t.is(after.currentUser!.notifications.totalCount, 2);
 });
 
 e2e('should throw error when read the other user notification', async t => {

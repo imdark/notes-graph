@@ -3027,6 +3027,14 @@ export const verifyEmailMutation = {
 }`,
 };
 
+export const viewNotificationsMutation = {
+  id: 'viewNotificationsMutation' as const,
+  op: 'viewNotifications',
+  query: `mutation viewNotifications($ids: [String!]!) {
+  viewNotifications(ids: $ids)
+}`,
+};
+
 export const workspaceBlobQuotaQuery = {
   id: 'workspaceBlobQuotaQuery' as const,
   op: 'workspaceBlobQuota',
