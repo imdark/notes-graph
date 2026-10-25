@@ -16,7 +16,9 @@ object NotificationTarget {
 
     /**
      * The app, on `docId` (at `blockId`) in `workspaceId`; the Agents page
-     * without a doc; the journal page for `journal` (YYYY-MM-DD) when given.
+     * without a doc; the journal page for `journal` (YYYY-MM-DD) when given;
+     * the run `jobId`'s log on the Agents page when given, which wins over
+     * the doc.
      */
     fun intent(
         context: Context,
@@ -24,12 +26,14 @@ object NotificationTarget {
         docId: String?,
         blockId: String? = null,
         journal: String? = null,
+        jobId: String? = null,
     ): Intent {
         val target = JSONObject()
         if (!workspaceId.isNullOrEmpty()) target.put("workspaceId", workspaceId)
         if (!docId.isNullOrEmpty()) target.put("docId", docId)
         if (!blockId.isNullOrEmpty()) target.put("blockId", blockId)
         if (!journal.isNullOrEmpty()) target.put("journal", journal)
+        if (!jobId.isNullOrEmpty()) target.put("jobId", jobId)
         return Intent(context, MainActivity::class.java)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
             .putExtra(EXTRA_OPEN, target.toString())
