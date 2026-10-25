@@ -1,4 +1,5 @@
 import { PageIcon, PlusIcon } from '@blocksuite/icons/rc';
+import { DocsSearchService } from '@notesgraph/core/modules/docs-search';
 import {
   type CalendarEvent,
   CalendarEventNoteService,
@@ -6,7 +7,7 @@ import {
 } from '@notesgraph/core/modules/integration';
 import { PeekViewService } from '@notesgraph/core/modules/peek-view';
 import { useI18n } from '@notesgraph/i18n';
-import { useLiveData, useService } from '@notesgraph/infra';
+import { LiveData, useLiveData, useService } from '@notesgraph/infra';
 import dayjs from 'dayjs';
 import { useCallback, useEffect, useMemo } from 'react';
 
@@ -21,6 +22,10 @@ import * as styles from './day-calendar-section.css';
  *
  * Takes a date rather than assuming today, so it works on whichever journal
  * day is open - past days included.
+ *
+ * Below the events, in their own colour, are the active long-term goals:
+ * open to-dos tagged #goal anywhere in the workspace, so the day is planned
+ * with them in view.
  */
 export const DayCalendarSection = ({ date }: { date: string }) => {
   const t = useI18n();
@@ -30,6 +35,7 @@ export const DayCalendarSection = ({ date }: { date: string }) => {
   const events = useLiveData(
     useMemo(() => calendar.eventsByDate$(day), [calendar, day])
   );
+  const goals = useActiveGoals();
 
   useEffect(() => {
     // Nothing else pulls events for a given day, so the widget asks. An
@@ -52,22 +58,37 @@ export const DayCalendarSection = ({ date }: { date: string }) => {
 
   // No events is the common case for most people on most days; an empty box
   // every morning would be worse than no box.
-  if (events.length === 0) return null;
+  if (events.length === 0 && goals.length === 0) return null;
 
   return (
     <div className={styles.wrapper} data-testid="day-calendar-section">
       <div className={styles.section}>
-        <div className={styles.header}>
-          {t['com.notesgraph.integration.calendar.name']()}
-          <span className={styles.count}>{events.length}</span>
-        </div>
-        {events.map(event => (
-          <EventRow
-            key={event.id}
-            event={event}
-            showCalendarName={showCalendarName}
-          />
-        ))}
+        {events.length > 0 ? (
+          <>
+            <div className={styles.header}>
+              {t['com.notesgraph.integration.calendar.name']()}
+              <span className={styles.count}>{events.length}</span>
+            </div>
+            {events.map(event => (
+              <EventRow
+                key={event.id}
+                event={event}
+                showCalendarName={showCalendarName}
+              />
+            ))}
+          </>
+        ) : null}
+        {goals.length > 0 ? (
+          <div className={styles.goals} data-testid="day-calendar-goals">
+            <div className={styles.header}>
+              {t['com.notesgraph.integration.calendar.goals']()}
+              <span className={styles.count}>{goals.length}</span>
+            </div>
+            {goals.map(goal => (
+              <GoalRow key={`${goal.docId}:${goal.blockId}`} goal={goal} />
+            ))}
+          </div>
+        ) : null}
       </div>
     </div>
   );
@@ -131,6 +152,36 @@ const EventRow = ({
         {note ? <PageIcon /> : <PlusIcon />}
         <span className={styles.noteActionLabel}>{noteLabel}</span>
       </span>
+    </button>
+  );
+};
+
+type Goal = { docId: string; blockId: string; text: string };
+
+const useActiveGoals = (): Goal[] => {
+  const docsSearch = useService(DocsSearchService);
+  return useLiveData(
+    useMemo(
+      () => LiveData.from<Goal[]>(docsSearch.watchGoals(), []),
+      [docsSearch]
+    )
+  );
+};
+
+/** One goal. Clicking it opens the goal's note at the goal's line. */
+const GoalRow = ({ goal }: { goal: Goal }) => {
+  const t = useI18n();
+  const peekView = useService(PeekViewService).peekView;
+  const open = useCallback(() => {
+    peekView
+      .open({ docRef: { docId: goal.docId, blockIds: [goal.blockId] } })
+      .catch(console.error);
+  }, [goal.docId, goal.blockId, peekView]);
+
+  return (
+    <button type="button" className={styles.goalRow} onClick={open}>
+      <span className={styles.goalDot} />
+      <span className={styles.title}>{goal.text || t['Untitled']()}</span>
     </button>
   );
 };

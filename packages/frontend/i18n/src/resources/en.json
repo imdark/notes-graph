@@ -2323,6 +2323,7 @@
   "com.notesgraph.integration.calendar.new-url-label": "Calendar URL",
   "com.notesgraph.integration.calendar.save-error": "An error occurred while saving the calendar settings",
   "com.notesgraph.integration.calendar.all-day": "All day",
+  "com.notesgraph.integration.calendar.goals": "Goals",
   "com.notesgraph.integration.calendar.account.load-error": "Failed to load calendar accounts",
   "com.notesgraph.integration.calendar.provider.load-error": "Failed to load calendar providers",
   "com.notesgraph.integration.calendar.auth.start-error": "Failed to start calendar authorization",

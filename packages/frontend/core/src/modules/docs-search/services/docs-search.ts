@@ -1,4 +1,5 @@
 import type { ReferenceParams } from '@blocksuite/notesgraph/model';
+import { GOAL_TAG } from '@blocksuite/notesgraph/shared/utils';
 import { toDocSearchParams } from '@notesgraph/core/modules/navigation';
 import { fromPromise, LiveData, Service } from '@notesgraph/infra';
 import type {
@@ -156,6 +157,50 @@ export class DocsSearchService extends Service {
             trail: first(node.fields.todoTrail) || undefined,
           })),
         }))
+      );
+  }
+
+  /**
+   * Active long-term goals: incomplete to-dos tagged `#goal`, with the tag
+   * itself left out of the text.
+   */
+  watchGoals(limit = 50) {
+    return this.indexer
+      .search$(
+        'block',
+        {
+          type: 'boolean',
+          occur: 'must',
+          queries: [
+            { type: 'match', field: 'todoStatus', match: 'todo' },
+            { type: 'match', field: 'tags', match: GOAL_TAG },
+          ],
+        },
+        {
+          pagination: { limit, skip: 0 },
+          fields: ['docId', 'blockId', 'content', 'tags'],
+          prefer: 'local',
+        }
+      )
+      .pipe(
+        map(({ nodes }) =>
+          nodes
+            // Index matching can be tokenized; keep exact `#goal` tags only.
+            .filter(node =>
+              indexTokens(node.fields.tags).some(
+                tag => tag.toLowerCase() === GOAL_TAG
+              )
+            )
+            .map(node => ({
+              docId: indexTokens(node.fields.docId)[0] ?? '',
+              blockId: indexTokens(node.fields.blockId)[0] ?? '',
+              text: normalizeSearchText(
+                (indexTokens(node.fields.content)[0] ?? '')
+                  .replace(/(^|\s)#goal(?=\s|$)/gi, ' ')
+                  .trim()
+              ),
+            }))
+        )
       );
   }
 

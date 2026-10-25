@@ -1,6 +1,7 @@
 import type { StyleInfo } from 'lit/directives/style-map.js';
 
 import type { NotesGraphTextAttributes } from '../types';
+import { GOAL_TAG } from '../utils/goal-tag';
 
 export function notesgraphTextStyles(
   props: NotesGraphTextAttributes,
@@ -31,7 +32,22 @@ export function notesgraphTextStyles(
   // Inline task tokens (`#tag`, `@agent`) render as soft chips — the text
   // itself stays intact, only decorated.
   let tokenChipStyle: Readonly<StyleInfo> = {};
-  if (props.orgTag != null) {
+  if (props.orgTag?.toLowerCase() === GOAL_TAG) {
+    // A long-term goal, not a task: a badge in its own colour so a goal
+    // stands out in a list of to-dos.
+    tokenChipStyle = {
+      // The text-highlight pair is themed for light and dark alike.
+      color: 'var(--notesgraph-text-highlight-foreground-orange, #b25e00)',
+      'background-color':
+        'var(--notesgraph-text-highlight-orange, rgba(255, 166, 0, 0.18))',
+      'border-radius': '10px',
+      padding: '0 6px',
+      'font-size': '0.8em',
+      'font-weight': '600',
+      'text-transform': 'uppercase',
+      'letter-spacing': '0.04em',
+    };
+  } else if (props.orgTag != null) {
     tokenChipStyle = {
       color: 'var(--notesgraph-brand-color, #8b7dff)',
       'background-color': 'rgba(139, 125, 255, 0.13)',

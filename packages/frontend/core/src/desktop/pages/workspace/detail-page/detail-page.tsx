@@ -27,6 +27,7 @@ import { useAgentFinishedNotification } from '@notesgraph/core/components/hooks/
 import { useAppSettingHelper } from '@notesgraph/core/components/hooks/notesgraph/use-app-setting-helper';
 import { useRegisterAgentCommands } from '@notesgraph/core/components/hooks/notesgraph/use-register-agent-commands';
 import { useRegisterBlocksuiteEditorCommands } from '@notesgraph/core/components/hooks/notesgraph/use-register-blocksuite-editor-commands';
+import { useRegisterGoalCommands } from '@notesgraph/core/components/hooks/notesgraph/use-register-goal-commands';
 import { useRegisterSelectionEditCommands } from '@notesgraph/core/components/hooks/notesgraph/use-register-selection-edit-commands';
 import { useActiveBlocksuiteEditor } from '@notesgraph/core/components/hooks/use-block-suite-editor';
 import { NotesGraphErrorBoundary } from '@notesgraph/core/components/notesgraph/notesgraph-error-boundary';
@@ -260,6 +261,7 @@ const DetailPageImpl = memo(function DetailPageImpl() {
   useRegisterBlocksuiteEditorCommands(editor, isActiveView);
   useRegisterSelectionEditCommands(editor, isActiveView);
   useRegisterAgentCommands(editor, isActiveView);
+  useRegisterGoalCommands(editor, isActiveView);
   useAgentFinishedNotification(isActiveView);
 
   const journalService = useService(JournalService);

@@ -9,10 +9,14 @@ import {
 import { VoiceTasksService } from '@notesgraph/core/modules/voice-tasks';
 import type { FrameworkProvider } from '@notesgraph/infra';
 
+import { markGoalToolbarItem } from './goal-toolbar-item';
+
 /**
  * A mic on the mobile keyboard toolbar that opens the dictation sheet, so a
  * batch of tasks can be spoken in right where the caret is. Placed second,
- * after the "+" panel, where it's reachable without scrolling the toolbar.
+ * after the "+" panel, where it's reachable without scrolling the toolbar,
+ * with the "Mark as goal" flag next to it. Both live in this one config
+ * because only the last keyboard toolbar config registered applies.
  */
 export function VoiceTasksKeyboardToolbarExtension(
   framework: FrameworkProvider
@@ -34,6 +38,6 @@ export function VoiceTasksKeyboardToolbarExtension(
 
   const [first, ...rest] = defaultKeyboardToolbarConfig.items;
   return KeyboardToolbarConfigExtension({
-    items: [first, dictateTasks, ...rest],
+    items: [first, dictateTasks, markGoalToolbarItem, ...rest],
   });
 }

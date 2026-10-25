@@ -9282,6 +9282,10 @@ export function useNotesGraphI18N(): {
       */
     ["com.notesgraph.integration.calendar.all-day"](): string;
     /**
+      * `Goals`
+      */
+    ["com.notesgraph.integration.calendar.goals"](): string;
+    /**
       * `Failed to load calendar accounts`
       */
     ["com.notesgraph.integration.calendar.account.load-error"](): string;
