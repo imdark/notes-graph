@@ -11,6 +11,7 @@ export { getSvgPath as getFigmaSquircleSvgPath } from './figma-squircle';
 export * from './file';
 export * from './formula-eval';
 export * from './fractional-indexing';
+export * from './goal-tag';
 export * from './image';
 export * from './insert';
 export * from './is-abort-error';

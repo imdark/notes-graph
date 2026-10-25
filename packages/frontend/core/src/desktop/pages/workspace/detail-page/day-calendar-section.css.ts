@@ -167,3 +167,40 @@ export const noteActionLabel = style({
     },
   },
 });
+
+/**
+ * Goals sit under the events in their own colour: a goal is not an event and
+ * not a to-do for today, and should not read as either.
+ */
+const goalColor = 'var(--notesgraph-text-highlight-foreground-orange, #b25e00)';
+
+export const goals = style({
+  display: 'flex',
+  flexDirection: 'column',
+  gap: '2px',
+  color: goalColor,
+  selectors: {
+    // Under the events, a rule sets the goals apart from them.
+    '&:not(:first-child)': {
+      marginTop: '6px',
+      paddingTop: '6px',
+      borderTop: `1px solid ${cssVar('borderColor')}`,
+    },
+  },
+});
+
+export const goalRow = style([
+  row,
+  {
+    color: goalColor,
+    fontWeight: 500,
+  },
+]);
+
+export const goalDot = style([
+  dot,
+  {
+    background: goalColor,
+    borderRadius: '2px',
+  },
+]);

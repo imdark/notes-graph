@@ -1,5 +1,6 @@
 import { LatexExtension } from '@blocksuite/notesgraph-inline-latex';
 import type { NotesGraphTextAttributes } from '@blocksuite/notesgraph-shared/types';
+import { GOAL_TAG } from '@blocksuite/notesgraph-shared/utils';
 import { InlineMarkdownExtension } from '@blocksuite/std/inline';
 import type { ExtensionType } from '@blocksuite/store';
 
@@ -323,6 +324,25 @@ export const OrgStatusKeywordMarkdown =
     },
   });
 
+/**
+ * Typing `#goal` and a space turns the tag into a goal badge. The text stays
+ * `#goal`; only the `orgTag` decoration is added, as the server does for tags
+ * it writes.
+ */
+export const GoalTagMarkdown =
+  InlineMarkdownExtension<NotesGraphTextAttributes>({
+    name: 'goal-tag',
+    pattern: new RegExp(`(?:^|\\s)#${GOAL_TAG}\\s$`, 'i'),
+    action: ({ inlineEditor, prefixText, inlineRange, pattern }) => {
+      if (!pattern.test(prefixText)) return;
+      const length = GOAL_TAG.length + 1;
+      inlineEditor.formatText(
+        { index: inlineRange.index - 1 - length, length },
+        { orgTag: GOAL_TAG }
+      );
+    },
+  });
+
 export const MarkdownExtensions: ExtensionType[] = [
   BoldItalicMarkdown,
   BoldMarkdown,
@@ -331,5 +351,6 @@ export const MarkdownExtensions: ExtensionType[] = [
   UnderthroughExtension,
   CodeExtension,
   OrgStatusKeywordMarkdown,
+  GoalTagMarkdown,
   LatexExtension,
 ];

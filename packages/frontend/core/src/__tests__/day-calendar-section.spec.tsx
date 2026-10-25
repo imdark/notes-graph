@@ -9,6 +9,7 @@ const tokens = vi.hoisted(() => ({
   IntegrationService: class IntegrationService {},
   CalendarEventNoteService: class CalendarEventNoteService {},
   PeekViewService: class PeekViewService {},
+  DocsSearchService: class DocsSearchService {},
 }));
 
 const state = vi.hoisted(() => ({
@@ -18,11 +19,17 @@ const state = vi.hoisted(() => ({
   notes: new Map<string, string>(),
   created: [] as string[],
   peeked: [] as string[],
+  goals: [] as Array<{ docId: string; blockId: string; text: string }>,
+  peekedBlocks: [] as string[][],
 }));
 
 vi.mock('@notesgraph/core/modules/integration', () => ({
   IntegrationService: tokens.IntegrationService,
   CalendarEventNoteService: tokens.CalendarEventNoteService,
+}));
+
+vi.mock('@notesgraph/core/modules/docs-search', () => ({
+  DocsSearchService: tokens.DocsSearchService,
 }));
 
 vi.mock('@notesgraph/core/modules/peek-view', () => ({
@@ -50,12 +57,20 @@ vi.mock('@notesgraph/infra', () => ({
     if (token === tokens.PeekViewService) {
       return {
         peekView: {
-          open: ({ docRef }: { docRef: { docId: string } }) => {
+          open: ({
+            docRef,
+          }: {
+            docRef: { docId: string; blockIds?: string[] };
+          }) => {
             state.peeked.push(docRef.docId);
+            if (docRef.blockIds) state.peekedBlocks.push(docRef.blockIds);
             return Promise.resolve();
           },
         },
       };
+    }
+    if (token === tokens.DocsSearchService) {
+      return { watchGoals: () => state.goals };
     }
     return {
       calendar: {
@@ -70,6 +85,7 @@ vi.mock('@notesgraph/infra', () => ({
   },
   // The component only reads the signal the stub above returns.
   useLiveData: (value: unknown) => value,
+  LiveData: { from: (value: unknown) => value },
 }));
 
 vi.mock('@notesgraph/i18n', () => {
@@ -78,6 +94,7 @@ vi.mock('@notesgraph/i18n', () => {
     'com.notesgraph.integration.calendar.all-day': 'All day',
     'com.notesgraph.integration.calendar.add-note': 'Add note',
     'com.notesgraph.integration.calendar.open-note': 'Open note',
+    'com.notesgraph.integration.calendar.goals': 'Goals',
     Untitled: 'Untitled',
   };
   return {
@@ -111,6 +128,8 @@ beforeEach(() => {
   state.notes = new Map();
   state.created = [];
   state.peeked = [];
+  state.goals = [];
+  state.peekedBlocks = [];
 });
 afterEach(cleanup);
 
@@ -188,5 +207,34 @@ describe('DayCalendarSection', () => {
 
     expect(state.created).toEqual([]);
     expect(state.peeked).toEqual(['existing']);
+  });
+
+  it('lists active goals after the events', () => {
+    state.events = [event()];
+    state.goals = [{ docId: 'd1', blockId: 'b1', text: 'Run a marathon' }];
+    render(<DayCalendarSection date="2026-09-29" />);
+
+    const section = screen.getByTestId('day-calendar-section');
+    const text = section.textContent ?? '';
+    expect(text.indexOf('Standup')).toBeLessThan(text.indexOf('Goals'));
+    expect(screen.getByText('Run a marathon')).toBeTruthy();
+  });
+
+  it('shows goals on a day with no events', () => {
+    state.goals = [{ docId: 'd1', blockId: 'b1', text: 'Learn Rust' }];
+    render(<DayCalendarSection date="2026-09-29" />);
+
+    expect(screen.getByTestId('day-calendar-goals')).toBeTruthy();
+    expect(screen.queryByText('Calendar')).toBeNull();
+  });
+
+  it("opens a goal's note at the goal's line", () => {
+    state.goals = [{ docId: 'd1', blockId: 'b1', text: 'Learn Rust' }];
+    render(<DayCalendarSection date="2026-09-29" />);
+
+    fireEvent.click(screen.getByRole('button', { name: /Learn Rust/ }));
+
+    expect(state.peeked).toEqual(['d1']);
+    expect(state.peekedBlocks).toEqual([['b1']]);
   });
 });
