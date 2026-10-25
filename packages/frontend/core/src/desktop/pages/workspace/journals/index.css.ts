@@ -25,6 +25,18 @@ export const body = style({
       borderTop: 'none',
     },
   },
+  // Same phone padding the mobile note page gives the calendar sections.
+  '@media': {
+    'screen and (max-width: 640px)': {
+      selectors: {
+        '&[data-mobile]': {
+          vars: {
+            '--notesgraph-editor-side-padding': '16px',
+          },
+        },
+      },
+    },
+  },
 });
 
 export const content = style({

@@ -59,8 +59,12 @@ export const JournalPlaceholder = ({ dateString }: { dateString: string }) => {
           date={dateString}
           overrideClassName={styles.docTitleContainer}
         />
-        <DayCalendarSection date={dateString} />
-        <DayScheduleSection date={dateString} />
+      </div>
+      {/* Outside .content: the sections pad themselves like the editor, so
+          inside its padding they came out narrower than on the created note. */}
+      <DayCalendarSection date={dateString} />
+      <DayScheduleSection date={dateString} />
+      <div className={styles.content}>
         <div className={styles.placeholder}>
           <div className={styles.placeholderIcon}>
             <TodayIcon />
