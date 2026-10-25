@@ -13,7 +13,12 @@ import { isMacOS } from '../../shared/utils';
 import { applicationMenuSubjects } from '../application-menu';
 import { beforeAppQuit } from '../cleanup';
 import { logger } from '../logger';
-import { openQuickAsk, QUICK_ASK_SHORTCUT } from '../quick-ask';
+import {
+  openQuickAsk,
+  openQuickCapture,
+  QUICK_ASK_SHORTCUT,
+  QUICK_CAPTURE_SHORTCUT,
+} from '../quick-ask';
 import {
   appGroups$,
   checkCanRecordMeeting,
@@ -140,6 +145,17 @@ class TrayState implements Disposable {
             logger.info('User action: Quick Ask');
             openQuickAsk().catch(err =>
               logger.error('Failed to open quick ask:', err)
+            );
+          },
+        },
+        {
+          label: 'Capture an Idea',
+          icon: icons.capture,
+          accelerator: QUICK_CAPTURE_SHORTCUT,
+          click: () => {
+            logger.info('User action: Capture');
+            openQuickCapture().catch(err =>
+              logger.error('Failed to open capture:', err)
             );
           },
         },

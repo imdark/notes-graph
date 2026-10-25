@@ -20,16 +20,33 @@ import {
 } from '../windows-manager';
 
 export const QUICK_ASK_SHORTCUT = 'CommandOrControl+Shift+Space';
-export const QUICK_ASK_WINDOW_NAME = 'quick-ask';
+// Command+Shift+M would take mute from call apps; Control+Option+Space is free.
+export const QUICK_CAPTURE_SHORTCUT = 'Control+Alt+Space';
 
-const QUICK_ASK_WIDTH = 480;
-const QUICK_ASK_HEIGHT = 640;
+const QUICK_WINDOW_WIDTH = 480;
+const QUICK_WINDOW_HEIGHT = 640;
 const MAX_PROMPT_LENGTH = 4000;
 
-let quickAskWindow: BrowserWindow | undefined;
-let loadedUrl: string | undefined;
+/**
+ * The small always-on-top windows over the workspace: Quick Ask (a chat
+ * seeded from the clipboard) and Capture (an idea into the Inbox). Each kind
+ * keeps its own window, so opening one doesn't drop what is in the other.
+ */
+type QuickWindowKind = 'ask' | 'capture';
 
-async function getAdditionalArguments() {
+const quickWindowConfig = {
+  ask: { name: 'quick-ask', title: 'Quick ask', path: 'chat' },
+  capture: { name: 'quick-capture', title: 'Capture', path: 'capture' },
+} satisfies Record<
+  QuickWindowKind,
+  { name: string; title: string; path: string }
+>;
+
+const quickWindows: Partial<
+  Record<QuickWindowKind, { window: BrowserWindow; loadedUrl?: string }>
+> = {};
+
+async function getAdditionalArguments(kind: QuickWindowKind) {
   const { getExposedMeta } = await import('../exposed');
   const mainExposedMeta = getExposedMeta();
   const helperProcessManager = await ensureHelperProcess();
@@ -37,7 +54,7 @@ async function getAdditionalArguments() {
   return [
     `--main-exposed-meta=` + JSON.stringify(mainExposedMeta),
     `--helper-exposed-meta=` + JSON.stringify(helperExposedMeta),
-    `--window-name=${QUICK_ASK_WINDOW_NAME}`,
+    `--window-name=${quickWindowConfig[kind].name}`,
   ];
 }
 
@@ -53,8 +70,16 @@ function getCurrentWorkspaceBasename() {
   return basename?.startsWith('/workspace/') ? basename : undefined;
 }
 
-function buildQuickAskUrl(basename: string, prompt: string) {
-  const url = new URL(`${basename}/chat`, mainWindowOrigin);
+// `quick=1` drops the tabs and sidebar (see core/src/utils/quick-ask.ts).
+function buildQuickWindowUrl(
+  kind: QuickWindowKind,
+  basename: string,
+  prompt?: string
+) {
+  const url = new URL(
+    `${basename}/${quickWindowConfig[kind].path}`,
+    mainWindowOrigin
+  );
   url.searchParams.set('quick', '1');
   if (prompt) {
     url.searchParams.set('prompt', prompt);
@@ -62,13 +87,13 @@ function buildQuickAskUrl(basename: string, prompt: string) {
   return url.href;
 }
 
-async function createQuickAskWindow() {
+async function createQuickWindow(kind: QuickWindowKind) {
   const helperProcessManager = await ensureHelperProcess();
   const cursor = screen.getCursorScreenPoint();
   const { workArea } = screen.getDisplayNearestPoint(cursor);
 
-  const width = Math.min(workArea.width, QUICK_ASK_WIDTH);
-  const height = Math.min(workArea.height, QUICK_ASK_HEIGHT);
+  const width = Math.min(workArea.width, QUICK_WINDOW_WIDTH);
+  const height = Math.min(workArea.height, QUICK_WINDOW_HEIGHT);
 
   const browserWindow = new BrowserWindow({
     width,
@@ -81,11 +106,11 @@ async function createQuickAskWindow() {
     maximizable: false,
     fullscreenable: false,
     show: false,
-    title: 'Quick ask',
+    title: quickWindowConfig[kind].title,
     webPreferences: buildWebPreferences({
       webgl: true,
       preload: join(__dirname, './preload.js'),
-      additionalArguments: await getAdditionalArguments(),
+      additionalArguments: await getAdditionalArguments(kind),
     }),
   });
 
@@ -103,38 +128,44 @@ async function createQuickAskWindow() {
   browserWindow.on('closed', () => {
     disconnectHelperProcess?.();
     disconnectHelperProcess = null;
-    quickAskWindow = undefined;
-    loadedUrl = undefined;
+    delete quickWindows[kind];
   });
 
   return browserWindow;
 }
 
-export async function openQuickAsk() {
+async function openQuickWindow(kind: QuickWindowKind) {
   const basename =
     launchStage.value === 'main' ? getCurrentWorkspaceBasename() : undefined;
   if (!basename) {
-    logger.info('quick ask: no workspace yet, showing main window');
+    logger.info(`quick ${kind}: no workspace yet, showing main window`);
     const mainWindow = await getMainWindow();
     mainWindow.show();
     mainWindow.focus();
     return;
   }
 
-  const prompt = clipboard.readText().trim().slice(0, MAX_PROMPT_LENGTH);
-  const url = buildQuickAskUrl(basename, prompt);
+  const prompt =
+    kind === 'ask'
+      ? clipboard.readText().trim().slice(0, MAX_PROMPT_LENGTH)
+      : undefined;
+  const url = buildQuickWindowUrl(kind, basename, prompt);
 
-  if (!quickAskWindow || quickAskWindow.isDestroyed()) {
-    quickAskWindow = await createQuickAskWindow();
+  let entry = quickWindows[kind];
+  if (!entry || entry.window.isDestroyed()) {
+    entry = { window: await createQuickWindow(kind) };
+    quickWindows[kind] = entry;
   }
-  const win = quickAskWindow;
+  const win = entry.window;
 
-  // Reloading drops an in-progress chat, so only navigate when the clipboard
-  // or workspace changed since the last open.
-  if (url !== loadedUrl) {
-    loadedUrl = url;
-    logger.info('quick ask: loading', basename);
-    win.loadURL(url).catch(err => logger.error('quick ask: load failed', err));
+  // Reloading drops an in-progress chat or capture, so only navigate when the
+  // clipboard or workspace changed since the last open.
+  if (url !== entry.loadedUrl) {
+    entry.loadedUrl = url;
+    logger.info(`quick ${kind}: loading`, basename);
+    win
+      .loadURL(url)
+      .catch(err => logger.error(`quick ${kind}: load failed`, err));
   }
 
   if (win.isMinimized()) {
@@ -146,32 +177,44 @@ export async function openQuickAsk() {
   }
 }
 
+export function openQuickAsk() {
+  return openQuickWindow('ask');
+}
+
+export function openQuickCapture() {
+  return openQuickWindow('capture');
+}
+
 export async function hideQuickAsk(e: IpcMainInvokeEvent) {
   const win = BrowserWindow.fromWebContents(e.sender);
-  if (win && win === quickAskWindow) {
+  if (win && Object.values(quickWindows).some(q => q.window === win)) {
     win.hide();
   }
 }
 
-export function registerQuickAskShortcut() {
+function registerShortcut(accelerator: string, open: () => Promise<void>) {
   let registered = false;
   try {
-    registered = globalShortcut.register(QUICK_ASK_SHORTCUT, () => {
-      openQuickAsk().catch(err => logger.error('quick ask: open failed', err));
+    registered = globalShortcut.register(accelerator, () => {
+      open().catch(err => logger.error('quick window: open failed', err));
     });
   } catch (err) {
-    logger.error('quick ask: shortcut registration threw', err);
+    logger.error('quick window: shortcut registration threw', err);
   }
   if (registered) {
-    logger.info('quick ask: registered', QUICK_ASK_SHORTCUT);
+    logger.info('quick window: registered', accelerator);
   } else {
     logger.warn(
-      'quick ask: could not register shortcut (taken by another app?)',
-      QUICK_ASK_SHORTCUT
+      'quick window: could not register shortcut (taken by another app?)',
+      accelerator
     );
   }
-
   app.on('will-quit', () => {
-    globalShortcut.unregister(QUICK_ASK_SHORTCUT);
+    globalShortcut.unregister(accelerator);
   });
+}
+
+export function registerQuickAskShortcut() {
+  registerShortcut(QUICK_ASK_SHORTCUT, openQuickAsk);
+  registerShortcut(QUICK_CAPTURE_SHORTCUT, openQuickCapture);
 }

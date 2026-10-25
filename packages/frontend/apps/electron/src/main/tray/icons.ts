@@ -10,4 +10,5 @@ export const icons = {
   page: join(resourcesPath, 'icons/doc-page.png'),
   edgeless: join(resourcesPath, 'icons/doc-edgeless.png'),
   monitor: join(resourcesPath, 'icons/monitor.png'),
+  capture: join(resourcesPath, 'icons/capture-mic.png'),
 };

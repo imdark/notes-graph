@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The app logo, scaled and moved up-left to make room for the mic. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:drawable="@mipmap/ic_launcher_foreground"
+        android:bottom="16dp"
+        android:right="16dp" />
+    <item android:drawable="@drawable/ic_launcher_capture_badge" />
+</layer-list>

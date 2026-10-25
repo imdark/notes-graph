@@ -4,6 +4,7 @@ import type { App } from 'electron';
 
 import { buildType, isDev } from './config';
 import { logger } from './logger';
+import { openQuickCapture } from './quick-ask';
 import { uiSubjects } from './ui';
 import {
   addTabWithUrl,
@@ -77,10 +78,17 @@ export function setupDeepLink(app: App) {
 }
 
 async function handleNotesGraphUrl(url: string) {
-  await showMainWindow();
-
   logger.info('open notesgraph url', url);
   const urlObj = new URL(url);
+
+  // notesgraph://capture, from the NotesGraph Capture launcher: just the
+  // capture window, over whatever else is on screen.
+  if (urlObj.hostname === 'capture') {
+    await openQuickCapture();
+    return;
+  }
+
+  await showMainWindow();
 
   if (urlObj.hostname === 'authentication') {
     const method = urlObj.searchParams.get('method');

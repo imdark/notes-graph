@@ -10,6 +10,10 @@ export const workbenchRoutes = [
     lazy: () => import('./pages/workspace/all-page/all-page'),
   },
   {
+    path: '/capture',
+    lazy: () => import('./pages/workspace/capture/index'),
+  },
+  {
     path: '/graph',
     lazy: () => import('./pages/workspace/graph/index'),
   },

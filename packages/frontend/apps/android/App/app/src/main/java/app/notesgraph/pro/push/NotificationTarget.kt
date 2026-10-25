@@ -13,6 +13,10 @@ import org.json.JSONObject
 object NotificationTarget {
     private const val EXTRA_OPEN = "ng_open_target"
     private const val EXTRA_HANDLED = "ng_open_handled"
+    private const val CAPTURE_TARGET = "{\"capture\":true}"
+
+    private fun isCaptureLaunch(intent: Intent) =
+        intent.component?.className?.endsWith(".CaptureLauncher") == true
 
     /**
      * The app, on `docId` (at `blockId`) in `workspaceId`; the Agents page
@@ -37,11 +41,15 @@ object NotificationTarget {
 
     /**
      * The target an intent carries, once: it is marked taken so a config
-     * change or a resume with the same intent doesn't open it again.
+     * change or a resume with the same intent doesn't open it again. The
+     * "NotesGraph Capture" launcher icon (an alias of MainActivity) carries
+     * capture mode.
      */
     fun take(intent: Intent?): String? {
         if (intent == null || intent.getBooleanExtra(EXTRA_HANDLED, false)) return null
-        val target = intent.getStringExtra(EXTRA_OPEN) ?: return null
+        val target = intent.getStringExtra(EXTRA_OPEN)
+            ?: CAPTURE_TARGET.takeIf { isCaptureLaunch(intent) }
+            ?: return null
         intent.putExtra(EXTRA_HANDLED, true)
         return target
     }
