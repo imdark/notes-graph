@@ -1,4 +1,11 @@
-import { Args, ID, Mutation, ResolveField, Resolver } from '@nestjs/graphql';
+import {
+  Args,
+  ID,
+  Int,
+  Mutation,
+  ResolveField,
+  Resolver,
+} from '@nestjs/graphql';
 
 import {
   MentionUserDocAccessDenied,
@@ -93,6 +100,17 @@ export class UserNotificationResolver {
   async readAllNotifications(@CurrentUser() me: UserType) {
     await this.service.markAllAsRead(me.id);
     return true;
+  }
+
+  @Mutation(() => Int, {
+    description:
+      'mark notifications as viewed, returns the count of unviewed notifications left',
+  })
+  async viewNotifications(
+    @CurrentUser() me: UserType,
+    @Args('ids', { type: () => [String] }) notificationIds: string[]
+  ) {
+    return await this.service.markAsViewed(me.id, notificationIds);
   }
 }
 

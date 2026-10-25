@@ -7,6 +7,7 @@ import {
   readAllNotificationsMutation,
   readNotificationMutation,
   type UnionNotificationBodyType,
+  viewNotificationsMutation,
 } from '@notesgraph/graphql';
 import { Store } from '@notesgraph/infra';
 import { map } from 'rxjs';
@@ -78,6 +79,16 @@ export class NotificationStore extends Store {
     return this.gqlService.gql({
       query: readAllNotificationsMutation,
     });
+  }
+
+  async viewNotifications(ids: string[]) {
+    const result = await this.gqlService.gql({
+      query: viewNotificationsMutation,
+      variables: {
+        ids,
+      },
+    });
+    return result.viewNotifications;
   }
 
   async mentionUser(

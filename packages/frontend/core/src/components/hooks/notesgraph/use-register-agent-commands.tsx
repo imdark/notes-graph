@@ -62,31 +62,6 @@ export function useRegisterAgentCommands(editor: Editor, active: boolean) {
 
     const unsubs: Array<() => void> = [() => showSubscription.unsubscribe()];
 
-    unsubs.push(
-      registerNotesGraphCommand({
-        id: 'editor:selection-monitor-block',
-        preconditionStrategy: () => paletteTarget.blockIds.length > 0,
-        category: 'editor:selection',
-        icon: <span>📡</span>,
-        label: {
-          title: 'Monitor this block…',
-          // Searched too: "monitor agent", "watch", "track a price".
-          subTitle:
-            'Keep it up to date from a website, a command or an agent: watch, track, alert',
-        },
-        run: () => {
-          const [blockId] = paletteTarget.blockIds;
-          if (!blockId) return;
-          const store = editor.editorContainer$.value?.host?.std.store;
-          dialogs.open('monitor-editor', {
-            docId: editor.doc.id,
-            blockId,
-            text: store?.getBlock(blockId)?.model.text?.toString() ?? '',
-          });
-        },
-      })
-    );
-
     for (const agent of agents) {
       unsubs.push(
         registerNotesGraphCommand({
@@ -114,6 +89,33 @@ export function useRegisterAgentCommands(editor: Editor, active: boolean) {
         })
       );
     }
+
+    // Registered after the agents: the palette lists commands in the order
+    // they were registered, and the monitor belongs under "Run agent: …".
+    unsubs.push(
+      registerNotesGraphCommand({
+        id: 'editor:selection-monitor-block',
+        preconditionStrategy: () => paletteTarget.blockIds.length > 0,
+        category: 'editor:selection',
+        icon: <span>📡</span>,
+        label: {
+          title: 'Monitor this block…',
+          // Searched too: "monitor agent", "watch", "track a price".
+          subTitle:
+            'Keep it up to date from a website, a command or an agent: watch, track, alert',
+        },
+        run: () => {
+          const [blockId] = paletteTarget.blockIds;
+          if (!blockId) return;
+          const store = editor.editorContainer$.value?.host?.std.store;
+          dialogs.open('monitor-editor', {
+            docId: editor.doc.id,
+            blockId,
+            text: store?.getBlock(blockId)?.model.text?.toString() ?? '',
+          });
+        },
+      })
+    );
 
     return () => {
       for (const unsub of unsubs) unsub();

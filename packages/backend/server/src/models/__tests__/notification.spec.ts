@@ -380,6 +380,46 @@ test('should count notifications by user id, include read notifications', async 
   t.is(count, 2);
 });
 
+test('should count unviewed notifications and mark notifications as viewed', async t => {
+  const mention = await models.notification.createMention({
+    userId: user.id,
+    body: {
+      workspaceId: workspace.id,
+      doc: {
+        id: docId,
+        title: 'doc-title',
+        blockId: 'blockId',
+        mode: DocMode.page,
+      },
+      createdByUserId: createdBy.id,
+    },
+  });
+  const invitation = await models.notification.createInvitation({
+    userId: user.id,
+    body: {
+      workspaceId: workspace.id,
+      createdByUserId: createdBy.id,
+      inviteId: randomUUID(),
+    },
+  });
+  t.is(await models.notification.countUnviewedByUserId(user.id), 2);
+
+  t.is(await models.notification.markAsViewed([mention.id], user.id), 1);
+  // viewing again changes nothing
+  t.is(await models.notification.markAsViewed([mention.id], user.id), 0);
+  // nor does viewing another user's notification
+  t.is(
+    await models.notification.markAsViewed([invitation.id], createdBy.id),
+    0
+  );
+  t.is(await models.notification.countUnviewedByUserId(user.id), 1);
+  // viewed notifications stay in the unread list
+  t.is(await models.notification.countByUserId(user.id), 2);
+
+  await models.notification.markAsRead(invitation.id, user.id);
+  t.is(await models.notification.countUnviewedByUserId(user.id), 0);
+});
+
 test('should create a comment notification', async t => {
   const commentId = randomUUID();
 

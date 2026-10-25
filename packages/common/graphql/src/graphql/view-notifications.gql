@@ -1,0 +1,3 @@
+mutation viewNotifications($ids: [String!]!) {
+  viewNotifications(ids: $ids)
+}

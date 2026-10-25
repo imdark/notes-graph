@@ -18,7 +18,7 @@ import app.notesgraph.pro.R
  * deployed, blocked, or failed. Its own channel, quieter than questions,
  * since nothing is held up waiting. One notification per run, tagged with
  * its job id, so a repeated report replaces rather than stacks. Tapping it
- * opens the run's note, which has the full account.
+ * opens the run's log on the Agents page, which has its summary.
  */
 object RunNotifications {
     private const val CHANNEL_ID = "agent-runs"
@@ -60,12 +60,12 @@ object RunNotifications {
         ) return
         ensureChannel(context)
 
-        // Opens the note the run was on, at its block, or the Agents page for one on none.
+        // Opens the run's log on the Agents page, where its summary is.
         val open = PendingIntent.getActivity(
             context,
             jobId.hashCode(),
             NotificationTarget.intent(
-                context, data["workspaceId"], data["docId"], data["blockId"]
+                context, data["workspaceId"], data["docId"], data["blockId"], jobId = jobId
             ),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )

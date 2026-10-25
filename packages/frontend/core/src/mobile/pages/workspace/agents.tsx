@@ -24,7 +24,8 @@ import {
 } from '@notesgraph/core/modules/agents';
 import { WorkbenchService } from '@notesgraph/core/modules/workbench';
 import { useLiveData, useService } from '@notesgraph/infra';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 
 import { PageHeader } from '../../components';
 import { Page } from '../../components/page';
@@ -74,6 +75,22 @@ const AgentRuns = () => {
     setLogRunId(runId);
   }, []);
   const closeLog = useCallback(() => setLogRunId(null), []);
+
+  // A tapped "run finished" notification lands here with `?job=<jobId>`:
+  // open that run's log, whose summary says how it went. Once per job, so
+  // closing the log doesn't reopen it; the runs may sync in after the page.
+  const [searchParams] = useSearchParams();
+  const jobParam = searchParams.get('job');
+  const openedJob = useRef<string | null>(null);
+  useEffect(() => {
+    if (!jobParam || openedJob.current === jobParam) return;
+    const match = runs.find(
+      run => run.remoteJobId === jobParam || run.id === jobParam
+    );
+    if (!match) return;
+    openedJob.current = jobParam;
+    openLog(match.id);
+  }, [jobParam, runs, openLog]);
 
   const openDoc = useCallback(
     (docId: string) => workbench.openDoc(docId, { at: 'active' }),

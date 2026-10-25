@@ -485,6 +485,23 @@ export class NotificationService {
   }
 
   /**
+   * Mark notifications shown in the inbox as viewed, so the badge on every
+   * device stops counting them; returns the count left
+   */
+  async markAsViewed(userId: string, notificationIds: string[]) {
+    if (notificationIds.length) {
+      const viewed = await this.models.notification.markAsViewed(
+        notificationIds,
+        userId
+      );
+      if (viewed > 0) {
+        await this.publishCountChanged(userId, 'viewed');
+      }
+    }
+    return await this.countUnviewedByUserId(userId);
+  }
+
+  /**
    * Find notifications by user id, order by createdAt desc
    */
   async findManyByUserId(userId: string, options?: PaginationInput) {
@@ -544,16 +561,20 @@ export class NotificationService {
     return await this.models.notification.countByUserId(userId);
   }
 
+  async countUnviewedByUserId(userId: string) {
+    return await this.models.notification.countUnviewedByUserId(userId);
+  }
+
   private async publishCountChanged(
     userId: string,
-    reason: 'created' | 'read' | 'read-all' | 'expired-cleanup'
+    reason: 'created' | 'read' | 'read-all' | 'viewed' | 'expired-cleanup'
   ) {
     if (!this.realtime) return;
     try {
       this.realtime.publish(
         'notification.count.changed',
         {},
-        { count: await this.countByUserId(userId), reason },
+        { count: await this.countUnviewedByUserId(userId), reason },
         { room: realtimeNotificationRoom(userId) }
       );
     } catch (error) {

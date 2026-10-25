@@ -50,6 +50,30 @@ export class ToggleButton extends WithDisposable(ShadowlessElement) {
         color: ${unsafeCSSVarV2('icon/primary', '#77757D')};
       }
     }
+
+    /* A collapsed block shows a "…" pill after the end of its last line,
+       past any inline dates and tags. A pseudo-element keeps it out of the
+       text model, so the caret and copy/paste ignore it. */
+    .${unsafeCSS(TOGGLE_BUTTON_PARENT_CLASS)}:has(
+        > blocksuite-toggle-button .toggle-icon[data-collapsed='true']
+      )
+      > rich-text
+      v-line:last-of-type
+      > div::after {
+      content: '…';
+      display: inline-flex;
+      align-items: center;
+      padding: 0 6px;
+      margin-left: 4px;
+      border-radius: 8px;
+      font-size: 0.78em;
+      line-height: 1.6;
+      vertical-align: baseline;
+      user-select: none;
+      pointer-events: none;
+      color: var(--notesgraph-text-secondary-color);
+      background: var(--notesgraph-hover-color, rgba(0, 0, 0, 0.04));
+    }
   `;
 
   override render() {

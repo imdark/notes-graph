@@ -495,6 +495,19 @@ export const questionText = style({
   whiteSpace: 'pre-wrap',
 });
 
+/** A finished run's answer, cut to four lines; the rest is in its summary. */
+export const reviewSummary = style({
+  display: '-webkit-box',
+  WebkitLineClamp: 4,
+  WebkitBoxOrient: 'vertical',
+  overflow: 'hidden',
+});
+
+export const reviewMore = style([
+  linkButton,
+  { alignSelf: 'flex-start', marginTop: -4 },
+]);
+
 export const questionDetail = style({
   margin: 0,
   maxHeight: 160,

@@ -1745,7 +1745,7 @@ export class WorkspaceMcpProvider {
             note: {
               type: 'string',
               description:
-                'Progress note appended as a child block under the task.',
+                'Progress note appended as a child block under the task. The first note collapses the task, so notes stay hidden until the user expands it.',
             },
             agent: agentInputSchema,
           },

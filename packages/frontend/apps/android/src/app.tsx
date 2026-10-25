@@ -385,10 +385,10 @@ try {
 }
 /**
  * Open what a tapped notification or home-screen widget is about: a finished
- * run's note (or the Agents page when it ran on none), a monitor's block, the
- * journal page for a date, or capture mode. Native calls this until it
- * returns true; false means the app has no workspace open yet. Another
- * workspace is opened by its URL, which reloads into it.
+ * run's log on the Agents page, a monitor's block, the journal page for a
+ * date, or capture mode. Native calls this until it returns true; false means
+ * the app has no workspace open yet. Another workspace is opened by its URL,
+ * which reloads into it.
  */
 (window as any).notesgraphOpenFromNotification = (payload: {
   workspaceId?: string;
@@ -396,6 +396,8 @@ try {
   blockId?: string;
   /** YYYY-MM-DD: that day's journal, or the page to start it from. */
   journal?: string;
+  /** A finished run's job: its log on the Agents page, over the note. */
+  jobId?: string;
   /** Capture mode, from the "NotesGraph Capture" launcher icon. */
   capture?: boolean;
 }): boolean => {
@@ -405,11 +407,15 @@ try {
   if (!currentWorkspaceId) return false;
   const workspaceId = payload?.workspaceId || currentWorkspaceId;
   const docId = payload?.docId;
+  // A page to open rather than a note: capture mode, a journal day, or a
+  // finished run's log, which wins over the note it ran on.
   const pagePath = payload?.capture
     ? '/capture'
     : payload?.journal
       ? `/journals?date=${encodeURIComponent(payload.journal)}`
-      : null;
+      : payload?.jobId
+        ? `/agents?job=${encodeURIComponent(payload.jobId)}`
+        : null;
   if (workspaceId !== currentWorkspaceId) {
     const blocks = payload?.blockId
       ? `?blockIds=${encodeURIComponent(payload.blockId)}`

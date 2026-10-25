@@ -11,6 +11,7 @@ pub(super) const PROP_TITLE: &str = "prop:title";
 pub(super) const PROP_TEXT: &str = "prop:text";
 pub(super) const PROP_TYPE: &str = "prop:type";
 pub(super) const PROP_CHECKED: &str = "prop:checked";
+pub(super) const PROP_COLLAPSED: &str = "prop:collapsed";
 pub(super) const PROP_LANGUAGE: &str = "prop:language";
 pub(super) const PROP_ORDER: &str = "prop:order";
 pub(super) const PROP_PREVIEW: &str = "prop:preview";
