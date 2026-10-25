@@ -2025,6 +2025,8 @@ export interface Mutation {
   uploadCommentAttachment: Scalars['String']['output'];
   upsertWorkspaceByokConfig: WorkspaceByokKeyConfigType;
   verifyEmail: Scalars['Boolean']['output'];
+  /** mark notifications as viewed, returns the count of unviewed notifications left */
+  viewNotifications: Scalars['Int']['output'];
 }
 
 export interface MutationAbortBlobUploadArgs {
@@ -2585,6 +2587,10 @@ export interface MutationUpsertWorkspaceByokConfigArgs {
 
 export interface MutationVerifyEmailArgs {
   token: Scalars['String']['input'];
+}
+
+export interface MutationViewNotificationsArgs {
+  ids: Array<Scalars['String']['input']>;
 }
 
 export interface NoCopilotProviderAvailableDataType {
@@ -7885,6 +7891,15 @@ export type VerifyEmailMutation = {
   verifyEmail: boolean;
 };
 
+export type ViewNotificationsMutationVariables = Exact<{
+  ids: Array<Scalars['String']['input']> | Scalars['String']['input'];
+}>;
+
+export type ViewNotificationsMutation = {
+  __typename?: 'Mutation';
+  viewNotifications: number;
+};
+
 export type WorkspaceBlobQuotaQueryVariables = Exact<{
   id: Scalars['String']['input'];
 }>;
@@ -9286,6 +9301,11 @@ export type Mutations =
       name: 'verifyEmailMutation';
       variables: VerifyEmailMutationVariables;
       response: VerifyEmailMutation;
+    }
+  | {
+      name: 'viewNotificationsMutation';
+      variables: ViewNotificationsMutationVariables;
+      response: ViewNotificationsMutation;
     }
   | {
       name: 'clearWorkspaceByokConfigsMutation';

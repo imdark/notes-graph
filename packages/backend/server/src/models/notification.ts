@@ -321,6 +321,28 @@ export class NotificationModel extends BaseModel {
   }
 
   /**
+   * Mark notifications as viewed, returns how many were not viewed before
+   */
+  async markAsViewed(notificationIds: string[], userId: string) {
+    const { count } = await this.db.notification.updateMany({
+      where: { id: { in: notificationIds }, userId, viewed: false },
+      data: {
+        viewed: true,
+      },
+    });
+    return count;
+  }
+
+  /**
+   * Count unread notifications the user has not viewed yet, for the badge
+   */
+  async countUnviewedByUserId(userId: string) {
+    return this.db.notification.count({
+      where: { userId, read: false, viewed: false },
+    });
+  }
+
+  /**
    * Find many notifications by user id, exclude read notifications by default
    */
   async findManyByUserId(

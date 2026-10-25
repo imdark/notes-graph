@@ -48,14 +48,12 @@ export class NotificationListService extends Service {
             // If the user is not logged in, we just ignore the result.
             return;
           }
-          const { edges, pageInfo, totalCount } = result;
-          this.notifications$.next([
-            ...this.notifications$.value,
-            ...edges.map(edge => edge.node),
-          ]);
+          const { edges, pageInfo } = result;
+          const loaded = edges.map(edge => edge.node);
+          this.notifications$.next([...this.notifications$.value, ...loaded]);
 
-          // keep the notification count in sync
-          this.notificationCount.setCount(totalCount);
+          // the list only loads what the inbox shows, so these are viewed
+          this.viewNotifications(loaded.map(notification => notification.id));
 
           this.hasMore$.next(pageInfo.hasNextPage);
           this.nextCursor$.next(pageInfo.endCursor ?? undefined);
@@ -79,13 +77,24 @@ export class NotificationListService extends Service {
     this.loadMore.reset();
   }
 
+  private viewNotifications(ids: string[]) {
+    if (ids.length === 0) {
+      return;
+    }
+    this.store
+      .viewNotifications(ids)
+      .then(count => this.notificationCount.setCount(count))
+      .catch(err => {
+        // the badge stays as it is; the next open tries again
+        console.error('Failed to mark notifications as viewed', err);
+      });
+  }
+
   async readNotification(id: string) {
+    // already viewed when the list showed it, so the badge count stays
     await this.store.readNotification(id);
     this.notifications$.next(
       this.notifications$.value.filter(notification => notification.id !== id)
-    );
-    this.notificationCount.setCount(
-      Math.max(this.notificationCount.count$.value - 1, 0)
     );
   }
 

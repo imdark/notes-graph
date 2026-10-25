@@ -22,7 +22,7 @@ export class NotificationRealtimeProvider implements OnModuleInit {
         name: 'notification.count.get',
         input,
         handle: async user => ({
-          count: await this.service.countByUserId(user.id),
+          count: await this.service.countUnviewedByUserId(user.id),
         }),
       },
       topic: {

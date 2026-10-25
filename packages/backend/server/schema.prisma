@@ -1401,6 +1401,8 @@ model Notification {
   updatedAt DateTime          @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
   level     NotificationLevel
   read      Boolean           @default(false)
+  // Shown in the inbox; the badge counts notifications not yet viewed
+  viewed    Boolean           @default(false)
   type      NotificationType
   body      Json              @db.JsonB
 
