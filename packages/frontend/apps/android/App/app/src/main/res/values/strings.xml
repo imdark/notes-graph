@@ -2,6 +2,7 @@
 <resources>
     <string name="app_name">NotesGraph</string>
     <string name="title_activity_main">NotesGraph</string>
+    <string name="capture_launcher_label">NG Capture</string>
     <string name="package_name">app.notesgraph.pro</string>
     <string name="custom_url_scheme">app.notesgraph.pro</string>
     <string name="app_lock_prompt_title">Unlock NotesGraph</string>

@@ -57,6 +57,21 @@
             </intent-filter>
         </activity>
 
+        <!-- Second launcher icon: opens straight into capture mode (see
+             push/NotificationTarget) -->
+        <activity-alias
+            android:name=".CaptureLauncher"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher_capture"
+            android:label="@string/capture_launcher_label"
+            android:roundIcon="@mipmap/ic_launcher_capture"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+
         <activity
             android:name=".ai.AIActivity"
             android:theme="@style/AppTheme.NoActionBar"

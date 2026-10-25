@@ -15,6 +15,7 @@ export {
 } from './services/voice-tasks';
 export { insertTasks } from './utils/insert-tasks';
 export { appendDictation, splitDictatedTasks } from './utils/split-tasks';
+export { writeCapture } from './utils/write-capture';
 
 export const configureVoiceTasksModule = (framework: Framework) => {
   framework.service(VoiceTasksService, container => {
