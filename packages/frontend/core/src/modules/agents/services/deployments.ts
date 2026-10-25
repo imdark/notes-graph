@@ -15,7 +15,9 @@ import {
 import type { DocsService } from '../../doc';
 import type { DocsSearchService } from '../../docs-search';
 import type { WorkspaceService } from '../../workspace';
+import type { AgentRun } from '../stores/agent-runs';
 import type { Agent } from '../stores/agents';
+import { runTargetsBlock } from './block-runs';
 import type { AgentContext } from './context';
 import {
   CLOUD_DEVICE_KEY,
@@ -570,6 +572,47 @@ export function shipBrief(
   };
 }
 
+/** A ship run's brief opens with its title; a deploy's is one of these. */
+const DEPLOY_BRIEF = /^# (?:Merge and deploy|Deploy) \d+ features?\b/;
+
+/**
+ * The deploy runs sent for what `run` worked on, newest first as `runs`
+ * comes: runs whose brief is a deploy and that were pointed at one of its
+ * blocks. Told by the brief, since the agent may retitle its run.
+ */
+export const deployRunsFor = (runs: AgentRun[], run: AgentRun): AgentRun[] => {
+  const blockIds = run.blockIds ?? (run.blockId ? [run.blockId] : []);
+  return runs.filter(
+    other =>
+      other.id !== run.id &&
+      other.docId === run.docId &&
+      DEPLOY_BRIEF.test(other.input ?? '') &&
+      blockIds.some(id => runTargetsBlock(other, id))
+  );
+};
+
+/**
+ * A block a run worked on, read from its note: what it is called, the status
+ * it carries (null for a plain block), and the pull request named in it.
+ * `stage` is set when that status is a ship stage.
+ */
+export interface RunTask extends ShipTaskDetails {
+  docId: string;
+  blockId: string;
+  status: string | null;
+  stage: ShipStage | null;
+}
+
+/** The tasks of a run a deploy takes: committed or merged, not yet live. */
+export const deployableTasks = (
+  tasks: RunTask[]
+): (ShipTask & ShipTaskDetails)[] =>
+  tasks.flatMap(task =>
+    task.stage === 'committed' || task.stage === 'merged'
+      ? [{ ...task, stage: task.stage, text: task.title }]
+      : []
+  );
+
 /**
  * What checking a live task found: it works, or it doesn't and `problem`
  * says how (may be empty).
@@ -1007,6 +1050,44 @@ export class DeploymentsService extends Service {
       })
     );
     return out;
+  }
+
+  /**
+   * The blocks `run` was pointed at, as their note has them now. A run on a
+   * task leaves it COMMITTED with its PR noted under it once its branch is
+   * pushed, and that is what a deploy of the run's result goes out with. A
+   * PR the run named only in its answer (`summary`) stands in for one the
+   * task doesn't name.
+   */
+  async runTasks(
+    run: Pick<AgentRun, 'docId' | 'blockId' | 'blockIds'>,
+    summary?: string | null
+  ): Promise<RunTask[]> {
+    const blockIds = run.blockIds ?? (run.blockId ? [run.blockId] : []);
+    if (blockIds.length === 0) return [];
+    const { doc, release } = this.docsService.open(run.docId);
+    try {
+      await doc.waitForSyncReady();
+      const docTitle = doc.title$.value || 'Untitled';
+      const fromSummary = summary ? findPullRequest(summary) : null;
+      return blockIds.flatMap(blockId => {
+        const model = doc.blockSuiteDoc.getBlock(blockId)?.model;
+        if (!model) return [];
+        return [
+          {
+            docId: run.docId,
+            blockId,
+            title: taskTitle(model),
+            docTitle,
+            status: readTaskStatus(model)?.text.trim() ?? null,
+            stage: readStage(model),
+            pullRequest: findPullRequest(subtreeText(model)) ?? fromSummary,
+          },
+        ];
+      });
+    } finally {
+      release();
+    }
   }
 
   /**

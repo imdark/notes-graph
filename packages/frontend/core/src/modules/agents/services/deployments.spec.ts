@@ -3,6 +3,7 @@
  */
 import { describe, expect, test } from 'vitest';
 
+import type { AgentRun } from '../stores/agent-runs';
 import type { Agent } from '../stores/agents';
 import {
   branchCheckCommand,
@@ -10,6 +11,8 @@ import {
   checksState,
   deleteBranchCommand,
   deletesBranch,
+  deployableTasks,
+  deployRunsFor,
   findPullRequest,
   isShipStage,
   liveCheckNote,
@@ -23,6 +26,7 @@ import {
   pullRequestNumber,
   pullRequestsCommand,
   pullRequestStage,
+  type RunTask,
   shipAgents,
   shipBrief,
   type ShipStage,
@@ -100,6 +104,86 @@ describe('shipTargets', () => {
     expect(shipTargets(tasks, 'deploy').map(t => t.blockId)).toEqual([
       'a',
       'b',
+    ]);
+  });
+});
+
+describe('deployRunsFor', () => {
+  const run = (id: string, patch: Partial<AgentRun>): AgentRun => ({
+    id,
+    agentId: 'claude',
+    agentName: 'Claude Code',
+    targetKind: 'selection',
+    docId: 'd1',
+    status: 'done',
+    startedAt: 0,
+    ...patch,
+  });
+  const worked = run('r1', { targetKind: 'block', blockId: 'a' });
+
+  test('deploy briefs on one of its blocks, not merges or other blocks', () => {
+    const runs = [
+      run('deploy', { blockIds: ['a'], input: '# Deploy 1 feature\n\n…' }),
+      run('both', {
+        blockIds: ['b', 'a'],
+        input: '# Merge and deploy 2 features\n',
+      }),
+      run('merge', { blockIds: ['a'], input: '# Merge 1 pull request\n' }),
+      run('other-block', { blockIds: ['c'], input: '# Deploy 1 feature\n' }),
+      run('other-doc', {
+        docId: 'd2',
+        blockIds: ['a'],
+        input: '# Deploy 1 feature\n',
+      }),
+      worked,
+    ];
+    expect(deployRunsFor(runs, worked).map(r => r.id)).toEqual([
+      'deploy',
+      'both',
+    ]);
+  });
+
+  test('a run on the whole note has no task to have been deployed', () => {
+    const onDoc = run('r2', { targetKind: 'doc' });
+    expect(
+      deployRunsFor(
+        [run('deploy', { blockIds: ['a'], input: '# Deploy 1 feature' })],
+        onDoc
+      )
+    ).toEqual([]);
+  });
+});
+
+describe('deployableTasks', () => {
+  const runTask = (
+    blockId: string,
+    stage: RunTask['stage'],
+    status: string | null
+  ): RunTask => ({
+    docId: 'd1',
+    blockId,
+    title: `task ${blockId}`,
+    docTitle: '2026-10-25',
+    status,
+    stage,
+    pullRequest: null,
+  });
+
+  test('committed and merged go out; live, open and plain blocks do not', () => {
+    const tasks = [
+      runTask('a', 'committed', 'COMMITTED'),
+      runTask('b', 'merged', 'MERGED'),
+      runTask('c', 'deployed', 'DEPLOYED'),
+      runTask('d', null, 'IN-PROGRESS'),
+      runTask('e', null, null),
+    ];
+    expect(deployableTasks(tasks)).toEqual([
+      expect.objectContaining({
+        blockId: 'a',
+        stage: 'committed',
+        text: 'task a',
+      }),
+      expect.objectContaining({ blockId: 'b', stage: 'merged' }),
     ]);
   });
 });
