@@ -19,7 +19,7 @@ class NotesGraphApp : Application() {
     override fun onCreate() {
         super.onCreate()
         _context = applicationContext
-        // Side processes (Hyperion's `:crash` screen) have no Firebase app, and
+        // Side processes have no Firebase app, and
         // touching Crashlytics there crashed the crash screen itself.
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && getProcessName() != packageName) {
             return
