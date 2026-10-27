@@ -8,8 +8,7 @@ import timber.log.Timber
 
 /**
  * Sends the web app's console output to Timber instead of Capacitor's own
- * logcat logger, so it shows up in Hyperion's log viewer (shake the device)
- * next to the native logs.
+ * logcat logger, so it shows up next to the native logs.
  */
 class ConsoleTimberChromeClient(bridge: Bridge) : BridgeWebChromeClient(bridge) {
 

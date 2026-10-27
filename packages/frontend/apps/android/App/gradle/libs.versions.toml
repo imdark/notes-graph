@@ -24,7 +24,6 @@ google-services            = "4.4.2"
 gradle-versions            = "0.52.0"
 hilt                       = "2.56.2"
 hilt-ext                   = "1.2.0"
-hyperion                   = "0.9.38"
 jna                        = "5.17.0"
 junit                      = "4.13.2"
 kotlin                     = "2.1.20"
@@ -86,9 +85,6 @@ hilt-android-testing                     = { module = "com.google.dagger:hilt-an
 hilt-compiler                            = { module = "com.google.dagger:hilt-android-compiler", version.ref = "hilt" }
 hilt-ext-compiler                        = { module = "androidx.hilt:hilt-compiler", version.ref = "hilt-ext" }
 hilt-ext-work                            = { module = "androidx.hilt:hilt-work", version.ref = "hilt-ext" }
-hyperion-core                            = { module = "com.willowtreeapps.hyperion:hyperion-core", version.ref = "hyperion" }
-hyperion-crash                           = { module = "com.willowtreeapps.hyperion:hyperion-crash", version.ref = "hyperion" }
-hyperion-timber                          = { module = "com.willowtreeapps.hyperion:hyperion-timber", version.ref = "hyperion" }
 jna                                      = { module = "net.java.dev.jna:jna", version.ref = "jna" }
 junit                                    = { module = "junit:junit", version.ref = "junit" }
 kotlinx-coroutines-android               = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-android", version.ref = "kotlinx-coroutines" }
