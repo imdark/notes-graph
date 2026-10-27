@@ -160,6 +160,34 @@ async function omniseek(settings: RunnerSettings, fetchImpl: typeof fetch) {
       `OmniSeek isn't running for the cloud runner (${url}: ${err}).`
     );
   }
+  // /healthz can pass while /mcp refuses the runner (token, Host header), and
+  // the run would then start with OmniSeek silently disconnected.
+  try {
+    const mcp = await fetchImpl(`${url}/mcp`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json, text/event-stream',
+        Authorization: `Bearer ${settings.omniseekToken}`,
+      },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'initialize',
+        params: {
+          protocolVersion: '2025-03-26',
+          capabilities: {},
+          clientInfo: { name: 'agent-runner', version: '1' },
+        },
+      }),
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!mcp.ok) throw new Error(`HTTP ${mcp.status}`);
+  } catch (err) {
+    throw new Error(
+      `OmniSeek is up but its MCP endpoint refused the cloud runner (${url}/mcp: ${err}). Check OMNISEEK_TOKEN.`
+    );
+  }
   return { url, token: settings.omniseekToken };
 }
 
