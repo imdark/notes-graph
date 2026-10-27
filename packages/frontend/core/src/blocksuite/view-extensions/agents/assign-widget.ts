@@ -194,9 +194,18 @@ export class AgentAssignWidget extends WidgetComponent {
 
   override updated() {
     // The line's text re-renders on its own schedule after an edit; measure
-    // once it has, not against the text as it was.
-    requestAnimationFrame(() => this._place());
+    // once it has, not against the text as it was. The text change reaches
+    // this widget before the editor has rendered it, so one frame measures the
+    // previous character's layout and the button only caught up a keystroke
+    // later; wait a second frame, then place again.
+    cancelAnimationFrame(this._placeFrame);
+    this._placeFrame = requestAnimationFrame(() => {
+      this._place();
+      this._placeFrame = requestAnimationFrame(() => this._place());
+    });
   }
+
+  private _placeFrame = 0;
 
   override disconnectedCallback() {
     super.disconnectedCallback();
