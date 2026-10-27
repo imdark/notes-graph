@@ -70,8 +70,9 @@ jobs:
           build-args: GITHUB_SHA=${{ github.sha }}
           tags: ${{ steps.ecr.outputs.registry }}/notesgraph:${{ github.sha }}
           push: true
-          cache-from: type=gha,scope=prod-image
-          cache-to: type=gha,scope=prod-image,mode=max
+          # No layer cache: `COPY . .` comes before yarn install, so a new
+          # commit rebuilds every expensive layer anyway, and exporting the
+          # cache cost 14 min to save ~25 s.
 
       - name: Roll the box
         env:
