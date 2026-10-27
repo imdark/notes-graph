@@ -9,6 +9,7 @@ on:
     branches: [ci-prod-image-build]
     paths:
       - .github/workflows/prod-image-build.yml
+      - .github/deployment/node/Dockerfile.selfhost
   workflow_dispatch:
 
 permissions:
@@ -57,6 +58,7 @@ jobs:
           context: .
           file: .github/deployment/node/Dockerfile.selfhost
           platforms: linux/amd64
+          build-args: GITHUB_SHA=${{ github.sha }}
           tags: notesgraph:prod
           load: true
           cache-from: type=gha,scope=prod-image

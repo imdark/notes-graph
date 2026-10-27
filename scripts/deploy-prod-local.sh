@@ -40,6 +40,7 @@ decompressor() { command -v zstd >/dev/null && echo "zstd -d" || echo "gzip -d";
 
 log "docker buildx (linux/amd64) — cold cache is slow on an arm Mac"
 docker buildx build --platform linux/amd64 \
+  --build-arg GITHUB_SHA="$(git rev-parse HEAD)" \
   -f "$DOCKERFILE" -t "$IMAGE" --load .
 
 if [[ "${1:-}" == "--build" ]]; then
