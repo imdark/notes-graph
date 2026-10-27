@@ -138,8 +138,17 @@ export class Narrator {
         return;
       }
       this.started = true;
-      const init = event as { model?: string; cwd?: string };
+      const init = event as {
+        model?: string;
+        cwd?: string;
+        mcp_servers?: Array<{ name: string; status: string }>;
+      };
       this.say(`▶ started · model ${init.model ?? '?'} · ${init.cwd ?? ''}`);
+      for (const server of init.mcp_servers ?? []) {
+        if (server.status !== 'connected') {
+          this.say(`! MCP server ${server.name} is ${server.status}`);
+        }
+      }
     } else if (event.type === 'assistant') {
       if (!sub) this.steps += 1;
       const parts = Array.isArray(event.message?.content)

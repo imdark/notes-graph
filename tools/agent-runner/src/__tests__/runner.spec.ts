@@ -575,6 +575,34 @@ describe('running a job', () => {
     ).rejects.toThrow(/OmniSeek isn't set up/);
   });
 
+  test('a research run fails early when OmniSeek is healthy but its /mcp refuses the runner', async () => {
+    const fetchImpl = (async (url: string) =>
+      url.endsWith('/healthz')
+        ? new Response('{"ok":true}')
+        : new Response('no', { status: 401 })) as unknown as typeof fetch;
+    await expect(
+      runJob(
+        job({
+          model: 'research',
+          profile: profile({ mcpServers: ['notesgraph', 'run', 'omniseek'] }),
+        }),
+        {
+          api: api(),
+          workspaceId: 'ws-1',
+          settings: {
+            ...settings(),
+            omniseekUrl: 'http://omniseek:8765',
+            omniseekToken: 't',
+          },
+          query: fakeQuery([success('x')]),
+          say: () => {},
+          signal: new AbortController().signal,
+          fetchImpl,
+        }
+      )
+    ).rejects.toThrow(/MCP endpoint refused/);
+  });
+
   test('answers a health check itself and never runs the script it was sent', async () => {
     const lines: string[] = [];
     const outcome = await runJob(
