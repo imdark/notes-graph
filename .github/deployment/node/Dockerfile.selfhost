@@ -10,6 +10,7 @@
 # 7.6 GB prod box (two concurrent box builds OOM'd it on 2026-07-20).
 #
 #   docker buildx build --platform linux/amd64 \
+#     --build-arg GITHUB_SHA="$(git rev-parse HEAD)" \
 #     -f .github/deployment/node/Dockerfile.selfhost -t notesgraph:prod --load .
 #
 # Produces the same runtime layer as .github/deployment/node/Dockerfile.
@@ -43,8 +44,11 @@ RUN yarn workspace @notesgraph/server-native build \
  && cp -f server-native.node server-native.arm64.node \
  && cp -f server-native.node server-native.armv7.node
 
-# Front-end + server bundles (stable, self-hosted).
-RUN BUILD_TYPE=stable SELF_HOSTED=true yarn notesgraph bundle -p @notesgraph/web \
+# Front-end + server bundles (stable, self-hosted). The HTML plugin stamps the
+# commit; .git is not in the build context, so it reads GITHUB_SHA instead.
+ARG GITHUB_SHA
+RUN test -n "$GITHUB_SHA" || { echo "pass --build-arg GITHUB_SHA=\$(git rev-parse HEAD)"; exit 1; } \
+ && BUILD_TYPE=stable SELF_HOSTED=true yarn notesgraph bundle -p @notesgraph/web \
  && BUILD_TYPE=stable SELF_HOSTED=true yarn notesgraph bundle -p @notesgraph/admin \
  && BUILD_TYPE=stable SELF_HOSTED=true yarn notesgraph bundle -p @notesgraph/mobile \
  && yarn workspace @notesgraph/server build
