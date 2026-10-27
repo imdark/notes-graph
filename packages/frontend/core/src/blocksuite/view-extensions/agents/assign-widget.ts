@@ -17,6 +17,8 @@ import {
   AgentRunSessionService,
   AgentsService,
   type AgentTarget,
+  deviceState,
+  FleetService,
   isOpenTask,
   isPlainBlock,
 } from '@notesgraph/core/modules/agents';
@@ -288,13 +290,30 @@ export class AgentAssignWidget extends WidgetComponent {
     const framework = this._framework;
     if (!framework) return;
 
-    const agents = framework.get(AgentsService).agentsFor$('block').value;
+    const fleet = framework.get(FleetService);
+    const stopWatching = fleet.watch();
+    const nowSeconds = Date.now() / 1000;
+    const offline = new Set(
+      fleet.devices$.value
+        .filter(device => deviceState(device, nowSeconds) === 'offline')
+        .map(device => device.key)
+    );
+    // Agents on a machine whose monitoring reports it down go last. The sort
+    // is stable, so each half keeps its order.
+    const agents = [...framework.get(AgentsService).agentsFor$('block').value]
+      .map(agent => ({
+        agent,
+        down: !!agent.deviceKey && offline.has(agent.deviceKey),
+      }))
+      .sort((a, b) => Number(a.down) - Number(b.down))
+      .map(({ agent }) => agent);
     this._menuOpen = true;
     popMenu(popupTargetFromElement(e.currentTarget as HTMLElement), {
       options: {
         title: { text: 'Assign to agent' },
         onClose: () => {
           this._menuOpen = false;
+          stopWatching();
         },
         items: [
           menu.group({
