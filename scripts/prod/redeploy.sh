@@ -9,8 +9,15 @@
 # Before the migration runs it takes a DB + config backup into
 # /opt/notesgraph/backups (keeps the newest 5), so a bad migration/deploy is
 # recoverable. Set SKIP_DB_BACKUP=1 to bypass the backup (not recommended).
+#
+# The GitHub deploy (.github/workflows/deploy-prod.yml, via deploy-image.sh)
+# builds the server image on a runner and sets NOTESGRAPH_IMAGE to it in ECR:
+# then the server build here is skipped, the image is pulled and tagged
+# notesgraph:prod, and everything after (sidecars, backup, roll) is the same.
+# NOTESGRAPH_SRC is the tree to work from (default: the rsynced one).
 set -euo pipefail
-cd /home/ubuntu/notes-graph
+SRC="${NOTESGRAPH_SRC:-/home/ubuntu/notes-graph}"
+cd "$SRC"
 source "$HOME/.cargo/env" 2>/dev/null || true
 export NODE_OPTIONS="--max-old-space-size=6144"
 
@@ -39,40 +46,22 @@ step_end() {
   fi
 }
 
-# What this deploy is, for the Deployments screen to check pull requests
-# against: the commit, whether the synced tree had uncommitted changes on top
-# of it, and the pull requests merged into it ("Merge pull request #N" on the
-# first-parent line). Read before the build touches the tree; the server image
-# copies packages/backend/server, so the server serves it from /app.
-git rev-parse HEAD >/dev/null 2>&1 && node -e '
-  const { execSync } = require("node:child_process");
-  const git = args => execSync(`git ${args}`, { encoding: "utf8" }).trim();
-  const prs = git("log --first-parent --merges -n 500 --format=%s HEAD")
-    .split("\n")
-    .map(line => /^Merge pull request #(\d+)/.exec(line)?.[1])
-    .filter(Boolean)
-    .map(Number);
-  let repo = "";
-  try {
-    // owner/name, as in a pull request URL, from git@ or https remotes.
-    repo = git("config --get remote.origin.url")
-      .replace(/\.git$/, "")
-      .replace(/^.*github\.com[:/]/, "");
-  } catch {}
-  const record = {
-    repo,
-    commit: git("rev-parse HEAD"),
-    branch: git("rev-parse --abbrev-ref HEAD"),
-    subject: git("log -1 --format=%s HEAD"),
-    dirty: git("status --porcelain --untracked-files=no") !== "",
-    deployedAt: new Date().toISOString(),
-    pullRequests: prs,
-  };
-  require("node:fs").writeFileSync(
-    "packages/backend/server/deploy-info.json",
-    JSON.stringify(record, null, 2)
-  );
-' || echo "deploy record: skipped (no git checkout)"
+if [ -n "${NOTESGRAPH_IMAGE:-}" ]; then
+  step "pull prebuilt server image"
+  # The ECR helper signs in with the box's instance role; a throwaway docker
+  # config keeps it out of ubuntu's own.
+  ECR_DOCKER_CONFIG="$(mktemp -d)"
+  echo "{\"credHelpers\":{\"${NOTESGRAPH_IMAGE%%/*}\":\"ecr-login\"}}" > "$ECR_DOCKER_CONFIG/config.json"
+  DOCKER_CONFIG="$ECR_DOCKER_CONFIG" docker pull "$NOTESGRAPH_IMAGE"
+  rm -rf "$ECR_DOCKER_CONFIG"
+  docker tag "$NOTESGRAPH_IMAGE" notesgraph:prod
+else
+# Build the server image here (the rsync deploy from deploy-prod.sh).
+
+# What this deploy is, for the Deployments screen. Read before the build
+# touches the tree.
+git rev-parse HEAD >/dev/null 2>&1 && node scripts/prod/deploy-info.mjs \
+  || echo "deploy record: skipped (no git checkout)"
 
 step "yarn install"
 yarn install
@@ -84,7 +73,7 @@ cd packages/backend/native
 cp -f server-native.node server-native.x64.node
 cp -f server-native.node server-native.arm64.node
 cp -f server-native.node server-native.armv7.node
-cd /home/ubuntu/notes-graph
+cd "$SRC"
 
 # The three frontend bundles are plain JS/CSS with nothing arch-specific in
 # them, so they can be built on the dev machine (many fast cores) and shipped,
@@ -138,6 +127,7 @@ test -d packages/frontend/apps/mobile/dist || { echo "FATAL: mobile dist missing
 # "server bundle done in 724s" was really the bundle plus this whole block.
 step "image assembly (prod deps, prisma, docker image)"
 /opt/notesgraph/image-build.sh
+fi
 step "linkcard sidecar image"
 # Measured at 374s, rebuilt on every single deploy, for a sidecar that rarely
 # changes. Docker's own layer cache cannot help: the Dockerfile does `COPY . .`

@@ -1,0 +1,117 @@
+name: Deploy prod
+
+# Deploys main to app.notesgraph.com without SSH or stored keys:
+#   1. builds the server image here (Dockerfile.selfhost), so the RAM-heavy
+#      bundling never runs on the 7.6 GB box;
+#   2. pushes it to the private ECR repo notesgraph;
+#   3. runs scripts/prod/deploy-image.sh on the box over SSM, which pulls the
+#      image and does the rest (landing page, sidecars, backup, roll).
+#
+# AWS access is a short-lived OIDC session for the notesgraph-github-deploy
+# role, which only jobs in the `production` environment (main only) can
+# assume; see scripts/prod/setup-github-deploy-aws.sh.
+#
+# Run it from the Actions tab, or: gh workflow run deploy-prod.yml
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: us-east-2
+  INSTANCE_ID: i-025bea042bd6b9b1d
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: https://app.notesgraph.com
+    timeout-minutes: 120
+    steps:
+      # Full history: deploy-info lists the pull requests merged into HEAD.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Deploy record
+        run: node scripts/prod/deploy-info.mjs
+
+      # The runner ships ~14 GB free; the build needs more.
+      - name: Free disk
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+            /opt/hostedtoolcache/CodeQL /usr/local/share/boost "$AGENT_TOOLSDIRECTORY"
+          sudo docker image prune -af
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::726029337107:role/notesgraph-github-deploy
+          aws-region: ${{ env.AWS_REGION }}
+
+      - id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build and push image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: .github/deployment/node/Dockerfile.selfhost
+          platforms: linux/amd64
+          build-args: GITHUB_SHA=${{ github.sha }}
+          tags: ${{ steps.ecr.outputs.registry }}/notesgraph:${{ github.sha }}
+          push: true
+          cache-from: type=gha,scope=prod-image
+          cache-to: type=gha,scope=prod-image,mode=max
+
+      - name: Roll the box
+        env:
+          IMAGE: ${{ steps.ecr.outputs.registry }}/notesgraph:${{ github.sha }}
+          SHA: ${{ github.sha }}
+        run: |
+          # As ubuntu: bring the deploy checkout to this commit, then run its
+          # deploy-image.sh. The repo is public, so the fetch needs no token.
+          script=$(cat <<EOF
+          set -e
+          D=/home/ubuntu/notes-graph-deploy
+          test -d \$D/.git || git clone -q --filter=blob:none https://github.com/${GITHUB_REPOSITORY} \$D
+          git -C \$D fetch -q origin $SHA
+          git -C \$D checkout -q -f --detach $SHA
+          exec bash \$D/scripts/prod/deploy-image.sh $IMAGE
+          EOF
+          )
+          params=$(jq -n --arg s "$script" \
+            '{commands: ["sudo -u ubuntu -H bash -c " + ($s | @sh)], executionTimeout: ["3600"]}')
+          id=$(aws ssm send-command --instance-ids "$INSTANCE_ID" \
+            --document-name AWS-RunShellScript --comment "deploy $SHA" \
+            --parameters "$params" --query Command.CommandId --output text)
+          echo "SSM command $id"
+
+          # Wait for it; a deploy takes longer than `aws ssm wait` allows.
+          for _ in $(seq 1 240); do
+            status=$(aws ssm get-command-invocation --command-id "$id" \
+              --instance-id "$INSTANCE_ID" --query Status --output text 2>/dev/null || echo Pending)
+            case "$status" in
+              Pending|InProgress|Delayed) sleep 15 ;;
+              *) break ;;
+            esac
+          done
+          aws ssm get-command-invocation --command-id "$id" --instance-id "$INSTANCE_ID" \
+            --query '[StandardOutputContent, StandardErrorContent]' --output text
+          echo "status: $status"
+          [ "$status" = Success ]
+
+      - name: Verify
+        run: |
+          code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 https://app.notesgraph.com)
+          echo "app.notesgraph.com -> HTTP $code"
+          [ "$code" -lt 400 ]
