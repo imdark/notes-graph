@@ -70,11 +70,42 @@ export class ToggleButton extends WithDisposable(ShadowlessElement) {
       line-height: 1.6;
       vertical-align: baseline;
       user-select: none;
-      pointer-events: none;
+      cursor: pointer;
       color: var(--notesgraph-text-secondary-color);
       background: var(--notesgraph-hover-color, rgba(0, 0, 0, 0.04));
     }
   `;
+
+  // The pill is a pseudo-element, so it has no click target of its own: a
+  // click on the line element itself (not on a text span) that lands right of
+  // the last glyph is a click on the pill.
+  private readonly _onPillClick = (e: MouseEvent) => {
+    if (!this.collapsed) return;
+    const target = e.target;
+    if (!(target instanceof HTMLElement) || !target.parentElement) return;
+    const line = target.closest('v-line');
+    if (!line || (target !== line && target.parentElement !== line)) return;
+    const lastChild = target.lastElementChild ?? target;
+    const textRight = lastChild.getBoundingClientRect().right;
+    if (e.clientX < textRight) return;
+    e.preventDefault();
+    e.stopPropagation();
+    this.updateCollapsed(false);
+  };
+
+  private _pillHost: Element | null = null;
+
+  override connectedCallback() {
+    super.connectedCallback();
+    this._pillHost = this.closest(`.${TOGGLE_BUTTON_PARENT_CLASS}`);
+    this._pillHost?.addEventListener('click', this._onPillClick, true);
+  }
+
+  override disconnectedCallback() {
+    this._pillHost?.removeEventListener('click', this._onPillClick, true);
+    this._pillHost = null;
+    super.disconnectedCallback();
+  }
 
   override render() {
     const toggleDownTemplate = html`
