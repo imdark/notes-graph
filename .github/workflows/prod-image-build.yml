@@ -1,0 +1,72 @@
+name: Prod image build
+
+# Builds the prod server image (.github/deployment/node/Dockerfile.selfhost)
+# on a GitHub runner, to see whether a GitHub Actions deploy can take the
+# build off the 7.6 GB box. Build only: no secrets, nothing pushed or shipped.
+
+on:
+  push:
+    branches: [ci-prod-image-build]
+    paths:
+      - .github/workflows/prod-image-build.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: prod-image-build
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Runner resources
+        run: |
+          nproc
+          free -h
+          df -h /
+
+      # The runner ships ~14 GB free; the build context, yarn cache, cargo
+      # target and the image layers need more than that.
+      - name: Free disk
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+            /opt/hostedtoolcache/CodeQL /usr/local/share/boost "$AGENT_TOOLSDIRECTORY"
+          sudo docker image prune -af
+          df -h /
+
+      # Sample memory and disk every 30s, so the log shows how close the
+      # build comes to the runner's limits.
+      - name: Start resource sampler
+        run: |
+          nohup bash -c 'while true; do
+            echo "$(date +%T) mem_used_mb=$(free -m | awk "/Mem:/{print \$3}") disk_used=$(df -h / | awk "NR==2{print \$3}")"
+            sleep 30
+          done' > /tmp/resources.log 2>&1 &
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: .github/deployment/node/Dockerfile.selfhost
+          platforms: linux/amd64
+          tags: notesgraph:prod
+          load: true
+          cache-from: type=gha,scope=prod-image
+          cache-to: type=gha,scope=prod-image,mode=max
+
+      - name: Image size
+        run: docker image ls notesgraph:prod
+
+      - name: Resource samples
+        if: always()
+        run: |
+          sort -t= -k2 -n /tmp/resources.log | tail -1 | sed 's/^/peak mem sample: /'
+          cat /tmp/resources.log
