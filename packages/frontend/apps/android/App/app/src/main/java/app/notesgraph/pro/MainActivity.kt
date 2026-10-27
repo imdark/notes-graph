@@ -230,6 +230,9 @@ class MainActivity : BridgeActivity(), AIButtonPlugin.Callback, NotesGraphThemeP
         // had a moment to reach the server the widgets read from.
         if (NoteWidgets.widgetIds(this).isNotEmpty()) {
             NoteWidgetWorker.refresh(this, delaySeconds = 20)
+            // The half-hourly pass was only set up when a widget was added or
+            // the launcher asked; make sure it exists. KEEP leaves one alone.
+            NoteWidgetWorker.schedule(this)
         }
         // Cover on the way out, so the notes are not the first frame shown on
         // return before onResume decides whether to lock; a return within the

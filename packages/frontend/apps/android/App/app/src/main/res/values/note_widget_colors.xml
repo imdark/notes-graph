@@ -1,7 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- The app's own page colours, so the widget reads like a note in the app. -->
-    <color name="note_widget_background">@color/layer.background.primary</color>
-    <color name="note_widget_text">#141414</color>
-    <color name="note_widget_secondary">#616161</color>
+    <color name="note_widget_background">@color/note_widget_background_light</color>
+    <color name="note_widget_text">@color/note_widget_text_light</color>
+    <color name="note_widget_secondary">@color/note_widget_secondary_light</color>
+
+    <!-- Both looks, for a widget set to Light or Dark whatever the phone uses. -->
+    <color name="note_widget_background_light">@color/layer.background.primary</color>
+    <color name="note_widget_text_light">#141414</color>
+    <color name="note_widget_secondary_light">#616161</color>
+    <color name="note_widget_background_dark">@color/layer.background.primary.dark</color>
+    <color name="note_widget_text_dark">#EDEDED</color>
+    <color name="note_widget_secondary_dark">#A8A8A8</color>
 </resources>

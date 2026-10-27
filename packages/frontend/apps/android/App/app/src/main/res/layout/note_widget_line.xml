@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Size and the space around each line are the widget's settings, set in NoteWidgetViews. -->
 <TextView xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/note_widget_line"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:lineSpacingMultiplier="1.15"
-    android:paddingTop="2dp"
-    android:paddingBottom="2dp"
+    android:paddingTop="1dp"
+    android:paddingBottom="1dp"
     android:textColor="@color/note_widget_text"
     android:textSize="14sp" />

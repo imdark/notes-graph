@@ -61,6 +61,10 @@ internal object AgentApi {
     suspend fun get(server: String, path: String) =
         send(server) { Request.Builder().url(server.trimEnd('/') + path).get() }
 
+    /** A signed-in GraphQL query; the note widget reads calendar events with it. */
+    suspend fun graphql(server: String, query: String, variables: JSONObject) =
+        post(server, "/graphql", JSONObject().put("query", query).put("variables", variables))
+
     private suspend fun post(server: String, path: String, body: JSONObject) =
         send(server) {
             Request.Builder().url(server.trimEnd('/') + path).post(body.toString().toRequestBody(json))

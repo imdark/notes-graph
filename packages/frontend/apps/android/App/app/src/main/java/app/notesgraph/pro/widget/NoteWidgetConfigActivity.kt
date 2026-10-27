@@ -22,9 +22,13 @@ import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -110,6 +114,7 @@ class NoteWidgetConfigActivity : FragmentActivity() {
             NotesGraphTheme(mode = if (dark) ThemeMode.Dark else ThemeMode.Light) {
                 Surface(modifier = Modifier.fillMaxSize()) {
                     ChooseScreen(
+                        widgetId = widgetId,
                         onChoose = ::choose,
                         onOpenApp = {
                             startActivity(
@@ -124,11 +129,13 @@ class NoteWidgetConfigActivity : FragmentActivity() {
         }
     }
 
-    private fun choose(workspace: NoteWidgets.Workspace, docId: String?, title: String) {
-        val config = NoteWidgets.Config(workspace.server, workspace.workspaceId, docId, title)
+    private fun choose(config: NoteWidgets.Config) {
         lifecycleScope.launch {
             NoteWidgets.setConfig(applicationContext, widgetId, config)
-            NoteWidgetViews.render(applicationContext, widgetId, config, null)
+            // A new look on the same note redraws the copy it has at once.
+            NoteWidgetViews.render(
+                applicationContext, widgetId, config, NoteWidgets.content(applicationContext, widgetId),
+            )
             NoteWidgetWorker.schedule(applicationContext)
             NoteWidgetWorker.refresh(applicationContext)
             setResult(RESULT_OK, result())
@@ -139,14 +146,20 @@ class NoteWidgetConfigActivity : FragmentActivity() {
 
 @Composable
 private fun ChooseScreen(
-    onChoose: (NoteWidgets.Workspace, String?, String) -> Unit,
+    widgetId: Int,
+    onChoose: (NoteWidgets.Config) -> Unit,
     onOpenApp: () -> Unit,
 ) {
     val context = LocalContext.current
     var loaded by remember { mutableStateOf(false) }
     var workspace by remember { mutableStateOf<NoteWidgets.Workspace?>(null) }
+    // Set when changing a widget already on the home screen.
+    var existing by remember { mutableStateOf<NoteWidgets.Config?>(null) }
+    var style by remember { mutableStateOf(NoteWidgets.Style()) }
     LaunchedEffect(Unit) {
         workspace = NoteWidgets.workspace(context.applicationContext)
+        existing = NoteWidgets.config(context.applicationContext, widgetId)
+        existing?.let { style = it.style }
         loaded = true
     }
 
@@ -158,11 +171,33 @@ private fun ChooseScreen(
             .padding(horizontal = 20.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
+        val current = workspace
+        val shown = existing
+        if (loaded && (current != null || shown != null)) {
+            LookSettings(style) { style = it }
+            if (shown != null) {
+                val what = if (shown.journal) {
+                    stringResource(R.string.note_widget_config_journal)
+                } else {
+                    shown.title.ifBlank { stringResource(R.string.note_widget_untitled) }
+                }
+                Button(
+                    onClick = { onChoose(shown.copy(style = style)) },
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                ) {
+                    Text(
+                        stringResource(R.string.note_widget_config_keep, what),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+            HorizontalDivider()
+        }
         Text(
             stringResource(R.string.note_widget_config_title),
             style = MaterialTheme.typography.titleLarge,
         )
-        val current = workspace
         when {
             !loaded -> Unit
             current == null -> {
@@ -172,8 +207,11 @@ private fun ChooseScreen(
                 }
             }
             else -> {
+                fun config(docId: String?, title: String) = NoteWidgets.Config(
+                    current.server, current.workspaceId, docId, title, style,
+                )
                 Button(
-                    onClick = { onChoose(current, null, "") },
+                    onClick = { onChoose(config(null, "")) },
                     modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
                 ) {
                     Text(stringResource(R.string.note_widget_config_journal))
@@ -182,7 +220,84 @@ private fun ChooseScreen(
                     stringResource(R.string.note_widget_config_journal_hint),
                     style = MaterialTheme.typography.bodySmall,
                 )
-                NoteSearch(current) { docId, title -> onChoose(current, docId, title) }
+                NoteSearch(current) { docId, title -> onChoose(config(docId, title)) }
+            }
+        }
+    }
+}
+
+/** Text size, line spacing and colours, each a row of segmented buttons. */
+@Composable
+private fun LookSettings(style: NoteWidgets.Style, onChange: (NoteWidgets.Style) -> Unit) {
+    Text(
+        stringResource(R.string.note_widget_config_look),
+        style = MaterialTheme.typography.titleLarge,
+    )
+    Choice(
+        label = stringResource(R.string.note_widget_config_text_size),
+        options = NoteWidgets.TextSize.entries,
+        selected = style.textSize,
+        name = {
+            stringResource(
+                when (it) {
+                    NoteWidgets.TextSize.Small -> R.string.note_widget_config_small
+                    NoteWidgets.TextSize.Medium -> R.string.note_widget_config_medium
+                    NoteWidgets.TextSize.Large -> R.string.note_widget_config_large
+                }
+            )
+        },
+        onSelect = { onChange(style.copy(textSize = it)) },
+    )
+    Choice(
+        label = stringResource(R.string.note_widget_config_spacing),
+        options = NoteWidgets.Spacing.entries,
+        selected = style.spacing,
+        name = {
+            stringResource(
+                when (it) {
+                    NoteWidgets.Spacing.Compact -> R.string.note_widget_config_compact
+                    NoteWidgets.Spacing.Normal -> R.string.note_widget_config_normal
+                    NoteWidgets.Spacing.Roomy -> R.string.note_widget_config_roomy
+                }
+            )
+        },
+        onSelect = { onChange(style.copy(spacing = it)) },
+    )
+    Choice(
+        label = stringResource(R.string.note_widget_config_theme),
+        options = NoteWidgets.Theme.entries,
+        selected = style.theme,
+        name = {
+            stringResource(
+                when (it) {
+                    NoteWidgets.Theme.System -> R.string.note_widget_config_system
+                    NoteWidgets.Theme.Light -> R.string.note_widget_config_light
+                    NoteWidgets.Theme.Dark -> R.string.note_widget_config_dark
+                }
+            )
+        },
+        onSelect = { onChange(style.copy(theme = it)) },
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun <T> Choice(
+    label: String,
+    options: List<T>,
+    selected: T,
+    name: @Composable (T) -> String,
+    onSelect: (T) -> Unit,
+) {
+    Text(label, style = MaterialTheme.typography.labelLarge)
+    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+        options.forEachIndexed { index, option ->
+            SegmentedButton(
+                selected = option == selected,
+                onClick = { onSelect(option) },
+                shape = SegmentedButtonDefaults.itemShape(index = index, count = options.size),
+            ) {
+                Text(name(option), maxLines = 1)
             }
         }
     }
