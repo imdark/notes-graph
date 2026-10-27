@@ -13,6 +13,7 @@ import {
   sparklinePath,
   type Trend,
 } from '@notesgraph/core/modules/agents';
+import { WorkspaceDialogService } from '@notesgraph/core/modules/dialogs';
 import { WorkbenchService } from '@notesgraph/core/modules/workbench';
 import { useLiveData, useService } from '@notesgraph/infra';
 import { cssVar } from '@toeverything/theme';
@@ -173,20 +174,42 @@ const MonitorRow = ({
   );
 };
 
-/** A monitor's row, with "Fix it" beside it while it is failing. */
+/** A monitor's row, with "Edit" beside it and "Fix it" while it is failing. */
 const MonitorItem = (props: {
   monitor: Monitor;
   now: number;
   onOpen: (monitor: Monitor) => void;
-}) =>
-  props.monitor.enabled && props.monitor.lastError ? (
+}) => {
+  const dialogService = useService(WorkspaceDialogService);
+  const { monitor } = props;
+  const edit = useCallback(() => {
+    dialogService.open('monitor-editor', {
+      docId: monitor.docId,
+      blockId: monitor.blockId,
+      monitorId: monitor.id,
+    });
+  }, [dialogService, monitor]);
+  // The editor dialog is only registered on desktop.
+  const canEdit = !BUILD_CONFIG.isMobileEdition;
+  const failing = monitor.enabled && monitor.lastError;
+  if (!canEdit && !failing) return <MonitorRow {...props} />;
+  return (
     <div className={styles.monitorItem}>
       <MonitorRow {...props} />
-      <FixItButton failure={monitorFailure(props.monitor)} />
+      {canEdit ? (
+        <Button
+          variant="plain"
+          onClick={edit}
+          tooltip={`Change what ${monitor.name} watches, how often, and its alerts`}
+          data-testid="monitoring-monitor-edit"
+        >
+          Edit
+        </Button>
+      ) : null}
+      {failing ? <FixItButton failure={monitorFailure(monitor)} /> : null}
     </div>
-  ) : (
-    <MonitorRow {...props} />
   );
+};
 
 /** The most "jobs at once" a machine may be set to (the server's cap). */
 const MAX_JOBS_AT_ONCE = 16;
