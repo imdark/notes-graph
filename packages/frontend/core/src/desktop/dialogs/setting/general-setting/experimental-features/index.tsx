@@ -140,8 +140,19 @@ const ExperimentalFeaturesItem = ({
     <div className={styles.rowContainer}>
       <div className={styles.switchRow}>
         {t[flag.displayName]()}
-        <Switch data-testid={flagKey} checked={value} onChange={onChange} />
+        <Switch
+          data-testid={flagKey}
+          checked={value}
+          onChange={onChange}
+          disabled={flag.adminOverride !== undefined}
+        />
       </div>
+      {flag.adminOverride !== undefined && (
+        <div className={styles.description}>
+          Turned {flag.adminOverride ? 'on' : 'off'} for everyone by your
+          server&apos;s admin.
+        </div>
+      )}
       {!!flag.description && (
         <Tooltip content={t[flag.description]()}>
           <div className={styles.description}>{t[flag.description]()}</div>

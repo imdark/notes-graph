@@ -60,6 +60,10 @@ export const workbenchRoutes = [
     lazy: () => import('./pages/workspace/deployments'),
   },
   {
+    path: '/feature-flags',
+    lazy: () => import('./pages/workspace/feature-flags'),
+  },
+  {
     path: '/monitoring',
     lazy: () => import('./pages/workspace/monitoring'),
   },

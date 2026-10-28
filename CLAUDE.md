@@ -57,3 +57,17 @@ and triggers an approval prompt every time.
 
 Prefer these allowlisted scripts over ad-hoc piped commands so the loop stays
 prompt-free.
+
+## Adding a feature flag
+
+New features ship behind a flag in
+`packages/frontend/core/src/modules/feature-flag/constant.ts`, and every flag
+carries the commit that added it (`commit`), which the Deployments screen and
+the Feature flags page check against prod's build.
+
+1. Add the flag with `commit: ''`, and commit it.
+2. Run `node scripts/stamp-feature-flags.mjs`; it fills in that commit. Commit
+   the stamp.
+
+`constant.spec.ts` fails on a flag with no commit. Merge with a merge commit
+(as `gh pr merge --merge` does) so the hash survives onto main.

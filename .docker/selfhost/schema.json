@@ -831,6 +831,11 @@
           "type": "boolean",
           "description": "Whether allow guest users to create demo workspaces.\n@default true",
           "default": true
+        },
+        "featureOverrides": {
+          "type": "object",
+          "description": "App feature flags an admin has turned on (true) or off (false) for everyone, by flag key. A flag not listed follows its default and each user’s own setting.\n@default {}",
+          "default": {}
         }
       }
     },

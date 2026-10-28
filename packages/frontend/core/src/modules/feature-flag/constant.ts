@@ -8,6 +8,7 @@ const isAndroid = BUILD_CONFIG.isAndroid;
 
 export const NOTESGRAPH_FLAGS = {
   enable_ai: {
+    commit: '90139f5c8c793de8bb232a3889349d1674bb66f8',
     category: 'notesgraph',
     displayName:
       'com.notesgraph.settings.workspace.experimental-features.enable-ai.name',
@@ -18,6 +19,7 @@ export const NOTESGRAPH_FLAGS = {
     defaultState: true,
   },
   enable_ai_network_search: {
+    commit: '90139f5c8c793de8bb232a3889349d1674bb66f8',
     category: 'notesgraph',
     displayName:
       'com.notesgraph.settings.workspace.experimental-features.enable-ai-network-search.name',
@@ -28,6 +30,7 @@ export const NOTESGRAPH_FLAGS = {
     defaultState: true,
   },
   enable_ai_playground: {
+    commit: '90139f5c8c793de8bb232a3889349d1674bb66f8',
     category: 'notesgraph',
     displayName:
       'com.notesgraph.settings.workspace.experimental-features.enable-ai-model-switch.name',
@@ -37,6 +40,7 @@ export const NOTESGRAPH_FLAGS = {
     defaultState: isCanaryBuild,
   },
   enable_edgeless_text: {
+    commit: '90139f5c8c793de8bb232a3889349d1674bb66f8',
     category: 'blocksuite',
     bsFlag: 'enable_edgeless_text',
     displayName:
@@ -47,6 +51,7 @@ export const NOTESGRAPH_FLAGS = {
     defaultState: true,
   },
   enable_color_picker: {
+    commit: '90139f5c8c793de8bb232a3889349d1674bb66f8',
     category: 'blocksuite',
     bsFlag: 'enable_color_picker',
     displayName:
@@ -57,6 +62,7 @@ export const NOTESGRAPH_FLAGS = {
     defaultState: true,
   },
   enable_ai_chat_block: {
+    commit: '90139f5c8c793de8bb232a3889349d1674bb66f8',
     category: 'blocksuite',
     bsFlag: 'enable_ai_chat_block',
     displayName:
@@ -67,6 +73,7 @@ export const NOTESGRAPH_FLAGS = {
     defaultState: true,
   },
   enable_ai_onboarding: {
+    commit: '90139f5c8c793de8bb232a3889349d1674bb66f8',
     category: 'blocksuite',
     bsFlag: 'enable_ai_onboarding',
     displayName:
@@ -77,6 +84,7 @@ export const NOTESGRAPH_FLAGS = {
     defaultState: true,
   },
   enable_mind_map_import: {
+    commit: '90139f5c8c793de8bb232a3889349d1674bb66f8',
     category: 'blocksuite',
     bsFlag: 'enable_mind_map_import',
     displayName:
@@ -87,6 +95,7 @@ export const NOTESGRAPH_FLAGS = {
     defaultState: true,
   },
   enable_block_meta: {
+    commit: '90139f5c8c793de8bb232a3889349d1674bb66f8',
     category: 'blocksuite',
     bsFlag: 'enable_block_meta',
     displayName:
@@ -98,6 +107,7 @@ export const NOTESGRAPH_FLAGS = {
   },
 
   enable_emoji_folder_icon: {
+    commit: '90139f5c8c793de8bb232a3889349d1674bb66f8',
     category: 'notesgraph',
     displayName:
       'com.notesgraph.settings.workspace.experimental-features.enable-emoji-folder-icon.name',
@@ -110,6 +120,7 @@ export const NOTESGRAPH_FLAGS = {
     defaultState: true,
   },
   enable_emoji_doc_icon: {
+    commit: '90139f5c8c793de8bb232a3889349d1674bb66f8',
     category: 'notesgraph',
     displayName:
       'com.notesgraph.settings.workspace.experimental-features.enable-emoji-doc-icon.name',
@@ -121,6 +132,7 @@ export const NOTESGRAPH_FLAGS = {
     defaultState: true,
   },
   enable_editor_settings: {
+    commit: '90139f5c8c793de8bb232a3889349d1674bb66f8',
     category: 'notesgraph',
     displayName:
       'com.notesgraph.settings.workspace.experimental-features.enable-editor-settings.name',
@@ -130,6 +142,7 @@ export const NOTESGRAPH_FLAGS = {
     defaultState: true,
   },
   enable_theme_editor: {
+    commit: '90139f5c8c793de8bb232a3889349d1674bb66f8',
     category: 'notesgraph',
     displayName:
       'com.notesgraph.settings.workspace.experimental-features.enable-theme-editor.name',
@@ -141,6 +154,7 @@ export const NOTESGRAPH_FLAGS = {
     defaultState: isCanaryBuild,
   },
   enable_advanced_block_visibility: {
+    commit: '90139f5c8c793de8bb232a3889349d1674bb66f8',
     category: 'blocksuite',
     bsFlag: 'enable_advanced_block_visibility',
     displayName:
@@ -151,6 +165,7 @@ export const NOTESGRAPH_FLAGS = {
     defaultState: false,
   },
   enable_mobile_keyboard_toolbar: {
+    commit: '90139f5c8c793de8bb232a3889349d1674bb66f8',
     category: 'blocksuite',
     bsFlag: 'enable_mobile_keyboard_toolbar',
     displayName:
@@ -161,6 +176,7 @@ export const NOTESGRAPH_FLAGS = {
     defaultState: isMobile,
   },
   enable_mobile_linked_doc_menu: {
+    commit: '90139f5c8c793de8bb232a3889349d1674bb66f8',
     category: 'blocksuite',
     bsFlag: 'enable_mobile_linked_doc_menu',
     displayName:
@@ -171,6 +187,7 @@ export const NOTESGRAPH_FLAGS = {
     defaultState: isMobile,
   },
   enable_mobile_edgeless_editing: {
+    commit: '90139f5c8c793de8bb232a3889349d1674bb66f8',
     category: 'notesgraph',
     displayName:
       'com.notesgraph.settings.workspace.experimental-features.enable-mobile-edgeless-editing.name',
@@ -180,6 +197,7 @@ export const NOTESGRAPH_FLAGS = {
     defaultState: false,
   },
   enable_pdf_embed_preview: {
+    commit: '90139f5c8c793de8bb232a3889349d1674bb66f8',
     category: 'notesgraph',
     displayName:
       'com.notesgraph.settings.workspace.experimental-features.enable-pdf-embed-preview.name',
@@ -189,6 +207,7 @@ export const NOTESGRAPH_FLAGS = {
     defaultState: true,
   },
   enable_editor_rtl: {
+    commit: '90139f5c8c793de8bb232a3889349d1674bb66f8',
     category: 'notesgraph',
     displayName:
       'com.notesgraph.settings.workspace.experimental-features.enable-editor-rtl.name',
@@ -198,6 +217,7 @@ export const NOTESGRAPH_FLAGS = {
     defaultState: false,
   },
   enable_mobile_ai_button: {
+    commit: '90139f5c8c793de8bb232a3889349d1674bb66f8',
     category: 'notesgraph',
     displayName: 'Enable AI Button',
     description: 'Enable AI Button on mobile',
@@ -205,6 +225,7 @@ export const NOTESGRAPH_FLAGS = {
     defaultState: isMobile && isIOS,
   },
   enable_mermaid_wasm_native_renderer: {
+    commit: '90139f5c8c793de8bb232a3889349d1674bb66f8',
     category: 'notesgraph',
     displayName: 'Enable Native Mermaid Renderer',
     description:
@@ -213,6 +234,7 @@ export const NOTESGRAPH_FLAGS = {
     defaultState: isIOS || isAndroid,
   },
   enable_turbo_renderer: {
+    commit: '90139f5c8c793de8bb232a3889349d1674bb66f8',
     category: 'blocksuite',
     bsFlag: 'enable_turbo_renderer',
     displayName: 'Enable Turbo Renderer',
@@ -221,6 +243,7 @@ export const NOTESGRAPH_FLAGS = {
     defaultState: false,
   },
   enable_dom_renderer: {
+    commit: '90139f5c8c793de8bb232a3889349d1674bb66f8',
     category: 'blocksuite',
     bsFlag: 'enable_dom_renderer',
     displayName: 'Enable DOM Renderer',
@@ -229,6 +252,7 @@ export const NOTESGRAPH_FLAGS = {
     defaultState: false,
   },
   enable_edgeless_scribbled_style: {
+    commit: '90139f5c8c793de8bb232a3889349d1674bb66f8',
     category: 'blocksuite',
     bsFlag: 'enable_edgeless_scribbled_style',
     displayName:
@@ -239,6 +263,7 @@ export const NOTESGRAPH_FLAGS = {
     defaultState: false,
   },
   enable_table_virtual_scroll: {
+    commit: '90139f5c8c793de8bb232a3889349d1674bb66f8',
     category: 'blocksuite',
     bsFlag: 'enable_table_virtual_scroll',
     displayName:
@@ -249,6 +274,7 @@ export const NOTESGRAPH_FLAGS = {
     defaultState: false,
   },
   enable_setting_subpage_animation: {
+    commit: '90139f5c8c793de8bb232a3889349d1674bb66f8',
     category: 'notesgraph',
     displayName: 'Enable Setting Subpage Animation',
     description: 'Apply animation for setting subpage open/close',
@@ -256,6 +282,7 @@ export const NOTESGRAPH_FLAGS = {
     defaultState: false,
   },
   enable_adapter_panel: {
+    commit: '90139f5c8c793de8bb232a3889349d1674bb66f8',
     category: 'notesgraph',
     displayName:
       'com.notesgraph.settings.workspace.experimental-features.enable-adapter-panel.name',
@@ -265,6 +292,7 @@ export const NOTESGRAPH_FLAGS = {
     defaultState: false,
   },
   enable_view_analytics_panel: {
+    commit: '90139f5c8c793de8bb232a3889349d1674bb66f8',
     category: 'notesgraph',
     displayName: 'Enable View Analytics Panel',
     description: 'Show the View analytics tab in the right sidebar.',
@@ -272,6 +300,7 @@ export const NOTESGRAPH_FLAGS = {
     defaultState: false,
   },
   enable_two_step_journal_confirmation: {
+    commit: '90139f5c8c793de8bb232a3889349d1674bb66f8',
     category: 'notesgraph',
     displayName: 'Enable Two Step Journal Confirmation',
     description:
@@ -280,6 +309,7 @@ export const NOTESGRAPH_FLAGS = {
     defaultState: isCanaryBuild,
   },
   enable_send_detailed_object_to_ai: {
+    commit: '90139f5c8c793de8bb232a3889349d1674bb66f8',
     category: 'notesgraph',
     displayName:
       'com.notesgraph.settings.workspace.experimental-features.enable-ai-send-detailed-object.name',
@@ -289,6 +319,7 @@ export const NOTESGRAPH_FLAGS = {
     defaultState: true,
   },
   enable_battery_save_mode: {
+    commit: '90139f5c8c793de8bb232a3889349d1674bb66f8',
     category: 'notesgraph',
     displayName: 'Enable Battery Save Mode (Require Restart)',
     description:
@@ -297,6 +328,7 @@ export const NOTESGRAPH_FLAGS = {
     defaultState: isMobile,
   },
   enable_mobile_database_editing: {
+    commit: '90139f5c8c793de8bb232a3889349d1674bb66f8',
     category: 'blocksuite',
     bsFlag: 'enable_mobile_database_editing',
     displayName: 'Enable Mobile Database Editing',
@@ -305,6 +337,7 @@ export const NOTESGRAPH_FLAGS = {
     defaultState: false,
   },
   enable_pdfmake_export: {
+    commit: '90139f5c8c793de8bb232a3889349d1674bb66f8',
     category: 'blocksuite',
     bsFlag: 'enable_pdfmake_export',
     displayName: 'Enable PDF Export',
@@ -314,6 +347,7 @@ export const NOTESGRAPH_FLAGS = {
     defaultState: false,
   },
   enable_debug_console: {
+    commit: '90139f5c8c793de8bb232a3889349d1674bb66f8',
     category: 'notesgraph',
     displayName: 'Enable Debug Console',
     description:
@@ -322,6 +356,7 @@ export const NOTESGRAPH_FLAGS = {
     defaultState: false,
   },
   enable_suggest_parent: {
+    commit: '90139f5c8c793de8bb232a3889349d1674bb66f8',
     category: 'notesgraph',
     displayName: 'Suggest parent notes',
     description:

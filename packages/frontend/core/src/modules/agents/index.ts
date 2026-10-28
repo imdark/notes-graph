@@ -33,6 +33,8 @@ export {
   deployableTasks,
   DeploymentsService,
   deployRunsFor,
+  flagStage,
+  type FlagStage,
   type LiveCheck,
   type MergeReadiness,
   mergeReadiness,
