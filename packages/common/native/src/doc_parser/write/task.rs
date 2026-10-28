@@ -15,12 +15,15 @@ use super::{
     schema::{NOTE_FLAVOUR, PROP_CHECKED, PROP_COLLAPSED, PROP_TEXT, PROP_TITLE, SYS_CHILDREN},
   },
   ParseError,
-  builder::{insert_block_map, insert_children, insert_sys_fields, insert_text, text_ops_from_plain},
+  builder::{
+    insert_block_map, insert_children, insert_sys_fields, insert_text, linked_text_ops, text_ops_from_plain,
+  },
 };
 
 const DATABASE_FLAVOUR: &str = "notesgraph:database";
 const LIST_FLAVOUR: &str = "notesgraph:list";
 const PARAGRAPH_FLAVOUR: &str = "notesgraph:paragraph";
+const CODE_FLAVOUR: &str = "notesgraph:code";
 
 /// One query board (virtual kanban/table) found in a doc.
 #[derive(Debug, serde::Serialize)]
@@ -744,7 +747,12 @@ pub fn update_block_text(
     text.remove(0, len)?;
   }
   if !new_text.is_empty() {
-    text.insert(0, new_text)?;
+    // Bare URLs become links, as when typed; a code block's text stays literal.
+    if get_flavour(&block).as_deref() == Some(CODE_FLAVOUR) {
+      text.insert(0, new_text)?;
+    } else {
+      text.apply_delta(&linked_text_ops(new_text))?;
+    }
   }
 
   stamp_attribution(&doc, &blocks_map, block_id, agent, now_naive_iso)?;
@@ -1372,6 +1380,51 @@ mod tests {
     let merged = doc.encode_update_v1().expect("encode");
     // the differ still parses the doc afterwards
     update_doc(&merged, "- [ ] Alpha\n- [ ] Beta\n- [ ] Gamma", "doc-1").expect("markdown update still works");
+  }
+
+  #[test]
+  fn test_update_block_text_links_bare_urls() {
+    let binary = doc_with("First paragraph");
+    let doc = load_doc(&binary, Some("doc-1")).expect("load");
+    let index = build_block_index(&doc.get_map("blocks").expect("blocks"));
+    let block_id = index
+      .block_pool
+      .iter()
+      .find(|(_, block)| get_flavour(block).as_deref() == Some(PARAGRAPH_FLAVOUR))
+      .map(|(id, _)| id.clone())
+      .expect("paragraph");
+
+    let delta = update_block_text(
+      &binary,
+      "doc-1",
+      &block_id,
+      "Deal at https://example.com/rtx-5090.",
+      Some("claude"),
+      "2026-10-28T06:00",
+    )
+    .expect("update");
+    let mut doc = load_doc(&binary, Some("doc-1")).expect("load");
+    doc.apply_update_from_binary_v1(delta).expect("apply");
+    let block = doc
+      .get_map("blocks")
+      .expect("blocks")
+      .get(&block_id)
+      .and_then(|v| v.to_map())
+      .expect("block");
+    let text = block.get(PROP_TEXT).and_then(|v| v.to_text()).expect("text");
+    assert_eq!(text.to_string(), "Deal at https://example.com/rtx-5090.");
+    let linked: Vec<String> = text
+      .to_delta()
+      .into_iter()
+      .filter_map(|op| match op {
+        TextDeltaOp::Insert {
+          insert: TextInsert::Text(text),
+          format: Some(format),
+        } if format.get("link") == Some(&Any::String(text.clone())) => Some(text),
+        _ => None,
+      })
+      .collect();
+    assert_eq!(linked, vec!["https://example.com/rtx-5090".to_string()]);
   }
 
   #[test]
