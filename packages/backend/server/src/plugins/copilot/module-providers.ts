@@ -41,6 +41,7 @@ import { AttachmentAdmissionHost } from './runtime/hosts/attachment-admission';
 import { AttachmentMaterializer } from './runtime/hosts/attachment-materializer';
 import { CapabilityPolicyHost } from './runtime/hosts/capability-policy-host';
 import { ConversationHost } from './runtime/hosts/conversation-host';
+import { CurrentDocHost } from './runtime/hosts/current-doc-host';
 import { ImageResultHost } from './runtime/hosts/image-result-host';
 import { ResponsePostprocessor } from './runtime/hosts/response-postprocessor';
 import { ToolExecutorHost } from './runtime/hosts/tool-executor-host';
@@ -103,6 +104,7 @@ export const COPILOT_RUNTIME_PROVIDERS = [
   AttachmentMaterializer,
   AttachmentAdmissionHost,
   ActionStreamHost,
+  CurrentDocHost,
   ImageResultHost,
   ResponsePostprocessor,
   CopilotStorage,
