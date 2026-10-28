@@ -3,6 +3,7 @@ import type {
   NotesGraphInlineEditor,
   NotesGraphTextAttributes,
 } from '@blocksuite/notesgraph-shared/types';
+import { isValidUrl } from '@blocksuite/notesgraph-shared/utils';
 import { ShadowlessElement } from '@blocksuite/std';
 import {
   type AttributeRenderer,
@@ -112,6 +113,29 @@ export class RichText extends WithDisposable(ShadowlessElement) {
       ?.getData('text/plain')
       ?.replace(/\r?\n|\r/g, '\n');
     if (!text) return;
+
+    // A pasted URL links, as it does in a paragraph (whose paste goes through
+    // the page clipboard, not here): over a selection it links the selected
+    // text, else it goes in linked to itself. Where the schema has no link
+    // (attributes are normalized against it) it stays plain text.
+    const url = text.trim();
+    if (/^https?:\/\/\S+$/i.test(url) && isValidUrl(url)) {
+      const link = { link: url } as Parameters<
+        typeof inlineEditor.insertText
+      >[2];
+      if (inlineRange.length > 0) {
+        inlineEditor.formatText(inlineRange, link!);
+      } else {
+        inlineEditor.insertText(inlineRange, url, link);
+        inlineEditor.setInlineRange({
+          index: inlineRange.index + url.length,
+          length: 0,
+        });
+      }
+      e.preventDefault();
+      e.stopPropagation();
+      return;
+    }
 
     inlineEditor.insertText(inlineRange, text);
     inlineEditor.setInlineRange({

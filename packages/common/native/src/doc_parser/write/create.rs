@@ -87,7 +87,7 @@ fn insert_block_trees(doc: &Doc, blocks_map: &mut Map, blocks: &[BlockNode]) -> 
 
 #[cfg(test)]
 mod tests {
-  use y_octo::{Any, DocOptions};
+  use y_octo::{Any, DocOptions, TextDeltaOp, TextInsert};
 
   use super::{
     super::super::{
@@ -272,6 +272,54 @@ mod tests {
     }
 
     assert!(found);
+  }
+
+  #[test]
+  fn test_table_cells_keep_links_and_formatting() {
+    let markdown = "| Model | Source |\n| --- | --- |\n| **ZOTAC MEK** | [gpudeals](https://gpudeals.net/rtx) |\n| $4,599.99 | see https://a.com/x |";
+    let doc_id = "table-links";
+    let bin = build_full_doc("Title", markdown, doc_id).expect("create doc");
+    let mut doc = DocOptions::new().with_guid(doc_id.to_string()).build();
+    doc.apply_update_from_binary_v1(&bin).expect("apply update");
+
+    let blocks_map = doc.get_map("blocks").expect("blocks map");
+    // Every cell's delta, as (text, link, bold) runs.
+    let mut runs: Vec<(String, Option<String>, bool)> = Vec::new();
+    for (_, value) in blocks_map.iter() {
+      if let Some(block_map) = value.to_map()
+        && get_string(&block_map, "sys:flavour").as_deref() == Some("notesgraph:table")
+      {
+        for key in block_map.keys() {
+          if key.starts_with("prop:cells.") && key.ends_with(".text") {
+            let text = block_map.get(key).and_then(|v| v.to_text()).expect("cell text");
+            for op in text.to_delta() {
+              if let TextDeltaOp::Insert {
+                insert: TextInsert::Text(text),
+                format,
+              } = op
+              {
+                let link = format.as_ref().and_then(|f| match f.get("link") {
+                  Some(Any::String(url)) => Some(url.clone()),
+                  _ => None,
+                });
+                let bold = format.as_ref().is_some_and(|f| f.contains_key("bold"));
+                runs.push((text, link, bold));
+              }
+            }
+          }
+        }
+      }
+    }
+    let has = |text: &str, link: Option<&str>, bold: bool| {
+      runs
+        .iter()
+        .any(|(t, l, b)| t == text && l.as_deref() == link && *b == bold)
+    };
+    assert!(has("gpudeals", Some("https://gpudeals.net/rtx"), false), "{runs:?}");
+    assert!(has("https://a.com/x", Some("https://a.com/x"), false), "{runs:?}");
+    assert!(has("ZOTAC MEK", None, true), "{runs:?}");
+    assert!(has("$4,599.99", None, false), "{runs:?}");
+    assert!(!runs.iter().any(|(t, _, _)| t.contains("](") || t.contains("**")), "{runs:?}");
   }
 
   #[test]

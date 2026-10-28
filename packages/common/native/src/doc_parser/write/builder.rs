@@ -1,7 +1,7 @@
 use y_octo::{TextAttributes, TextDeltaOp, TextInsert};
 
 use super::{
-  super::markdown::{UrlSegment, split_bare_urls},
+  super::markdown::{UrlSegment, parse_markdown_blocks, split_bare_urls},
   super::schema::{
     PROP_CAPTION, PROP_CELLS_PREFIX, PROP_CHECKED, PROP_COLUMNS_PREFIX, PROP_HEIGHT, PROP_LANGUAGE, PROP_ORDER,
     PROP_PREVIEW, PROP_ROWS_PREFIX, PROP_SOURCE_ID, PROP_TEXT, PROP_TYPE, PROP_URL, PROP_VIDEO_ID, PROP_WIDTH, SYS_CHILDREN,
@@ -307,12 +307,32 @@ pub(super) fn apply_table_block_props(doc: &Doc, block: &mut Map, rows: &[Vec<St
         doc,
         block,
         &table_cell_text_key(&row_id, column_id),
-        &text_ops_from_plain(cell_text),
+        &table_cell_ops(cell_text),
       )?;
     }
   }
 
   Ok(())
+}
+
+/// A table cell's text as delta ops. The table parser keeps a cell's inline
+/// markdown as text ("[name](url)", "**bold**"), so a cell with a link, a URL
+/// or such markers is parsed again as a paragraph for its formatting: links
+/// then click. Anything else, or a cell that doesn't come back as one plain
+/// paragraph, stays as written.
+fn table_cell_ops(cell: &str) -> Vec<TextDeltaOp> {
+  let marked = ["](", "http://", "https://", "**", "~~", "`"]
+    .iter()
+    .any(|marker| cell.contains(marker));
+  if marked
+    && let Ok(blocks) = parse_markdown_blocks(cell)
+    && let [only] = blocks.as_slice()
+    && only.children.is_empty()
+    && only.spec.flavour == BlockFlavour::Paragraph
+  {
+    return only.spec.text.clone();
+  }
+  text_ops_from_plain(cell)
 }
 
 pub(super) struct ApplyBlockOptions {
