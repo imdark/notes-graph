@@ -86,8 +86,8 @@ status (rendered `COMMITTED`/`MERGED`/`DEPLOYED`; only `done` writes CLOSED):
 | status      | set when                                                                     |
 | ----------- | ---------------------------------------------------------------------------- |
 | `committed` | the work is committed on its branch (PR opened or pushed)                    |
-| `merged`    | that branch landed on `main` (`gh pr view <branch> --json state` → `MERGED`) |
-| `deployed`  | a prod deploy containing `main` finished (`DEPLOY-DONE`)                     |
+| `merged`    | that branch landed on `stage` (`gh pr view <branch> --json state` → `MERGED`) |
+| `deployed`  | a release containing it was deployed (the `Deploy prod` run succeeded)        |
 | `done`      | the deployed change was verified live                                        |
 
 Stages only move forward. Before finishing, sweep: `list_blocks
@@ -125,34 +125,22 @@ set.call(input,"text"); input.dispatchEvent(new Event("input",{bubbles:true}));`
 Deploy is outward-facing → **confirm with the user before a prod deploy** unless
 they've already said to deploy this run.
 
-**Delay the deploy until you've finished a few cards — never deploy per card.**
-A full deploy is ~8–15 min and rebuilds every bundle + a fresh docker image
-regardless of how small the change was, so batching several cards into one
-deploy is the whole economy. A good rhythm: pull a run of cards, then one deploy.
-Because branches stack, the newest branch's working tree already contains every
-card's changes — deploy from there (`deploy-prod.sh` rsyncs the working tree,
-uncommitted included).
+**Batch: merge cards into `stage`, release once — never deploy per card.**
+PRs target `stage` (the default branch). A release fast-forwards `main` to
+`stage` and starts the GitHub deploy (`.github/workflows/deploy-prod.yml`):
+the image builds on a GitHub runner (~21 min), then the box pulls it and rolls
+over SSM. No SSH or AWS login is needed from here.
 
-**You can keep working — even pull and finish more cards — while a deploy runs.**
-`deploy-prod.sh` rsyncs the tree **once at launch**; after the log reaches
-`==> remote build + restart` the build is entirely on the box, so local edits,
-commits, and branch switches no longer affect the in-flight deploy. Watch the
-milestones with the Monitor and keep going.
-
-- **Never start a second deploy while one is running** — this is the one hard
-  concurrency rule. `deploy-prod.sh` holds a flock and a concurrent build OOM'd
-  prod once. Wait for `DEPLOY-EXITED`/`DEPLOY-DONE` before launching another.
-- Launch detached: `scripts/deploy-bg.sh` (logs `/tmp/notesgraph-deploy.log`).
-- Watch via the **Monitor tool** running `scripts/deploy-watch.sh` (streams
-  milestones, exits `DEPLOY-EXITED`). The stack only rolls at `DEPLOY-DONE`
-  (brief 502 while it boots) — killing the build before then is safe.
+- See what would ship: `scripts/release.sh --plan`.
+- Release (after the user confirms): `scripts/release.sh --yes`.
+- Watch: `gh run watch <run id> --exit-status` in the background (the id is
+  in `gh run list --workflow deploy-prod.yml --limit 1`). Deploys queue rather
+  than overlap, and the box holds a build lock.
+- You can keep working while it runs: it deploys `main` at the released
+  commit, nothing local.
 - Verify: `curl -s -o /dev/null -w "%{http_code}" https://app.notesgraph.com/` → 200.
-- Then promote what it shipped: `merged` cards → `deployed` at `DEPLOY-DONE`,
-  and `deployed` → `done` once you've checked the change on prod. A deploy of
-  an unmerged (stacked) working tree doesn't make a card `merged`; it waits
-  until its branch lands on `main` and a deploy of `main` ships it.
-- SSH IP allowlist rotates (cellular/CGNAT); the script auto-opens ingress. If AWS
-  SSO expired it can't — suggest the user run `! aws login`.
+- Then promote what it shipped: `merged` cards → `deployed` once the run
+  succeeds, and `deployed` → `done` once you've checked the change on prod.
 - Mobile ships separately via the `deploy-android-apk` skill.
 
 ## Hard rules

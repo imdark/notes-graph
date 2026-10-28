@@ -9,7 +9,25 @@ Prod is a single EC2 box (`18.225.203.37`, Ubuntu) running a docker-compose stac
 (caddy, notesgraph server, postgres, redis, linkcard) behind Caddy. DNS for
 `notesgraph.com` + `app.notesgraph.com` is GoDaddy → the box (no CDN).
 
-## Command
+## Release (the normal way)
+
+PRs merge into `stage` (the default branch). A release ships everything on
+`stage` in one deploy:
+
+```bash
+scripts/release.sh --plan    # the PRs that would ship
+scripts/release.sh --yes     # fast-forward main to stage + start the GitHub deploy
+```
+
+The deploy is `.github/workflows/deploy-prod.yml`: it builds the image on a
+GitHub runner (~21 min, nothing heavy on the box), pushes it to ECR, and runs
+`scripts/prod/deploy-image.sh` on the box over SSM (landing page, sidecars,
+backup, roll). No SSH or AWS login from here; it works from a cloud agent too.
+Watch it with `gh run watch <id> --exit-status`; the run id is in
+`gh run list --workflow deploy-prod.yml --limit 1`. AWS setup:
+`scripts/prod/setup-github-deploy-aws.sh`.
+
+## Laptop deploy (fallback)
 
 ```bash
 ./scripts/deploy-prod.sh              # full: rsync tree + rebuild all bundles + docker image + roll stack
