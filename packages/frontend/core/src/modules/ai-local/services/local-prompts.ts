@@ -7,8 +7,10 @@
  * Image / mind-map / slides actions are not supported locally and fall back to
  * the generic assistant prompt.
  */
+// Not "running locally on the user's device": a small model repeated it back
+// as what the conversation was about.
 export const LOCAL_SYSTEM_PROMPT =
-  "You are a helpful AI assistant inside NotesGraph, running locally on the user's device. Answer concisely.";
+  "You are a helpful assistant inside NotesGraph, the user's notes app. When the user's message includes the note they are looking at, answer about that note's content. Answer concisely.";
 
 const LOCAL_PROMPT_INSTRUCTIONS: Record<string, string> = {
   'Chat With NotesGraph AI': LOCAL_SYSTEM_PROMPT,

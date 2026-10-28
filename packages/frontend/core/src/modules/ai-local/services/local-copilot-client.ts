@@ -47,6 +47,50 @@ async function augmentWithContext(
   }
 }
 
+/** Reads the note the chat sits beside, as its title and markdown. */
+export type ReadCurrentDoc = (
+  docId: string
+) => Promise<{ title: string; markdown: string } | null>;
+
+/**
+ * Most of the open note a turn carries: the default model (Llama 3.2 1B) has
+ * a few thousand tokens for the note, the history and its answer together.
+ */
+export const MAX_CURRENT_DOC_CHARS = 6000;
+
+/**
+ * The open note, folded into the latest user turn (as RAG does): its title
+ * and text, cut to fit. Without it the model saw only the note's id, and a
+ * small one talked about the id instead of the page.
+ */
+export function withCurrentDoc(
+  messages: LocalChatMessage[],
+  doc: { title: string; markdown: string }
+): LocalChatMessage[] {
+  let lastUserIdx = -1;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i].role === 'user') {
+      lastUserIdx = i;
+      break;
+    }
+  }
+  if (lastUserIdx < 0) return messages;
+  const markdown = doc.markdown.trim();
+  const body =
+    markdown.length > MAX_CURRENT_DOC_CHARS
+      ? `${markdown.slice(0, MAX_CURRENT_DOC_CHARS)}\n\n[the rest of the note is cut]`
+      : markdown;
+  const augmented = [...messages];
+  augmented[lastUserIdx] = {
+    ...augmented[lastUserIdx],
+    content:
+      `I am looking at my note "${doc.title.trim() || 'Untitled'}". ` +
+      `"This", "it" or "the page" mean this note:\n\n${body}\n\n---\n\n` +
+      augmented[lastUserIdx].content,
+  };
+  return augmented;
+}
+
 /**
  * A stand-in for the browser `EventSource` that streams a local model's tokens
  * in the SSE shape the AI text pipeline expects (see `toTextStream`):
@@ -66,7 +110,11 @@ class LocalChatEventSource extends EventTarget {
   constructor(
     private readonly llm: LocalLLMService,
     private readonly messages: LocalChatMessage[],
-    private readonly docEmbedder?: DocEmbedder
+    private readonly docEmbedder?: DocEmbedder,
+    private readonly currentDoc?: () => Promise<{
+      title: string;
+      markdown: string;
+    } | null>
   ) {
     super();
     this.run().catch(() => {
@@ -77,10 +125,15 @@ class LocalChatEventSource extends EventTarget {
   private async run() {
     let reply = '';
     try {
-      // RAG: prepend relevant note excerpts (no-op if nothing is indexed).
-      const messages = this.docEmbedder
-        ? await augmentWithContext(this.docEmbedder, this.messages)
-        : this.messages;
+      // Beside a note, the note is the context; otherwise RAG prepends
+      // excerpts from the notes (no-op if nothing is indexed). Not both: a
+      // small model mixed other notes' excerpts into answers about the page.
+      const doc = await this.currentDoc?.().catch(() => null);
+      const messages = doc
+        ? withCurrentDoc(this.messages, doc)
+        : this.docEmbedder
+          ? await augmentWithContext(this.docEmbedder, this.messages)
+          : this.messages;
       for await (const token of this.llm.chatStream(messages, {
         signal: this.abort.signal,
       })) {
@@ -120,11 +173,14 @@ export class LocalCopilotClient extends CopilotClient {
     string,
     { docs: Map<string, object>; files: Map<string, object> }
   >();
+  /** The note each session's latest message was sent beside. */
+  private readonly currentDocs = new Map<string, string>();
 
   constructor(
     private readonly llm: LocalLLMService,
     private readonly docEmbedder?: DocEmbedder,
-    private readonly vision?: LocalVisionService
+    private readonly vision?: LocalVisionService,
+    private readonly readCurrentDoc?: ReadCurrentDoc
   ) {
     super(
       (() =>
@@ -168,8 +224,17 @@ export class LocalCopilotClient extends CopilotClient {
     // Parameterized actions (e.g. "Translate to", "Change tone to") carry the
     // target as params rather than in the text — surface it to the model.
     const params = (options as { params?: Record<string, unknown> }).params;
+    // The open note goes in whole when the turn streams (withCurrentDoc), not
+    // as "currentDocId: …", which the model took for the subject.
+    const currentDocId = params?.currentDocId;
+    if (typeof currentDocId === 'string' && currentDocId) {
+      this.currentDocs.set(options.sessionId, currentDocId);
+    } else {
+      this.currentDocs.delete(options.sessionId);
+    }
     if (params && typeof params === 'object') {
       const hint = Object.entries(params)
+        .filter(([key]) => key !== 'currentDocId')
         .filter(([, v]) => typeof v === 'string' || typeof v === 'number')
         .map(([k, v]) => `${k}: ${v}`)
         .join(', ');
@@ -209,10 +274,13 @@ export class LocalCopilotClient extends CopilotClient {
     options: Parameters<CopilotClient['chatTextStream']>[0]
   ): EventSource {
     const messages = this.sessions.get(options.sessionId) ?? [];
+    const docId = this.currentDocs.get(options.sessionId);
+    const read = this.readCurrentDoc;
     return new LocalChatEventSource(
       this.llm,
       messages,
-      this.docEmbedder
+      this.docEmbedder,
+      docId && read ? () => read(docId) : undefined
     ) as unknown as EventSource;
   }
 
@@ -379,7 +447,10 @@ export class LocalCopilotClient extends CopilotClient {
 export function createLocalAIRequestService(
   llm: LocalLLMService,
   docEmbedder?: DocEmbedder,
-  vision?: LocalVisionService
+  vision?: LocalVisionService,
+  readCurrentDoc?: ReadCurrentDoc
 ) {
-  return new AIRequestService(new LocalCopilotClient(llm, docEmbedder, vision));
+  return new AIRequestService(
+    new LocalCopilotClient(llm, docEmbedder, vision, readCurrentDoc)
+  );
 }
