@@ -56,7 +56,13 @@ function firstNumber(body: string): string | null {
   const text = html ? htmlToText(body) : body;
   const currency = text.match(/[$€£¥]\s?(-?[\d,]+(?:\.\d+)?)/);
   if (currency) return cleanNumber(currency[1]);
-  const numbers = text.match(/-?\d[\d,]*(?:\.\d+)?/g) ?? [];
+  // "30-year fixed 7.40%": a number that is a term ("30-year") labels the
+  // value, it isn't the value.
+  const numbers = [
+    ...text.matchAll(
+      /-?\d[\d,]*(?:\.\d+)?(?!\d|\.\d|,\d|\s?-?\s?(?:years?|yrs?|months?|days?|weeks?)\b)/gi
+    ),
+  ].map(m => m[0]);
   const plain = html ? numbers.find(n => !isBareYear(n)) : numbers[0];
   return plain ? cleanNumber(plain) : null;
 }

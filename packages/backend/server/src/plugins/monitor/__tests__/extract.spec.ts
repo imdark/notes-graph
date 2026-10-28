@@ -38,6 +38,16 @@ test('a page’s copyright year is not its number', t => {
   t.is(extract('2026\n', { type: 'number' }), '2026');
 });
 
+test('a term like "30-year" labels the rate, it is not the rate', t => {
+  t.is(
+    extract('<td>30-year fixed (non-ARM)</td><td>7.40%</td>', {
+      type: 'number',
+    }),
+    '7.40'
+  );
+  t.is(extract('15 year fixed 6.9', { type: 'number' }), '6.9');
+});
+
 test('a regex takes its first capture group from the page text', t => {
   const html = '<td>30-year fixed</td><td>6.42%</td>';
   t.is(
