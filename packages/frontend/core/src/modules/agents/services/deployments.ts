@@ -485,6 +485,21 @@ const FIX_STEP =
   'For one that conflicts with main: check out its branch, merge main into it, resolve the conflicts keeping both sides’ intent, typecheck and run the tests it touches, push, then merge. For failing checks, fix those the change caused; checks that fail on main too don’t hold a merge up.';
 
 /**
+ * Where the Android app's own code lives: the Capacitor app and its native
+ * plugins. A deploy that changed any of it also rebuilds the APK.
+ */
+const ANDROID_PATHS = [
+  'packages/frontend/apps/android',
+  'packages/frontend/mobile-native',
+];
+
+/**
+ * The APK is published by hand from a device, after the prod deploy: an
+ * rsync during a build dies on the APK assets being rewritten.
+ */
+const ANDROID_STEP = `Then the Android app: list what this deploy changed there, \`git diff --name-only <commit prod ran before>..<commit it runs now> -- ${ANDROID_PATHS.join(' ')}\`. If anything changed, build and publish the APK the way this repo does (the deploy-android-apk skill), only once the prod deploy has finished. If nothing changed, don't build it, and say the APK was left as it was.`;
+
+/**
  * What the agent of a ship run reads: the tasks, and what to do with them.
  * `github` adds what GitHub says of their pull requests, and `untracked`
  * open pull requests no task names, for a merge to take on too.
@@ -542,6 +557,7 @@ export function shipBrief(
               ]
             : []),
           'Update to the latest main, then deploy it to production the way this repo does (the deploy-prod skill). Never stop a deploy midway.',
+          ANDROID_STEP,
           "Once the deploy has finished, move each task that went out to `deployed` with a note naming the deployed commit. Don't mark any done: that waits for someone to check it live.",
           'If the deploy fails, leave the tasks as they are and put what failed in a note on each.',
         ];
