@@ -332,6 +332,16 @@ export class AgentAssignWidget extends WidgetComponent {
                 prefix: PlusIcon(),
                 select: () => this._createAndAssign(),
               }),
+              // The monitor editor is a desktop dialog.
+              ...(BUILD_CONFIG.isMobileEdition
+                ? []
+                : [
+                    menu.action({
+                      name: 'Monitor…',
+                      prefix: html`<span>📡</span>`,
+                      select: () => this._monitor(),
+                    }),
+                  ]),
             ],
           }),
         ],
@@ -353,6 +363,14 @@ export class AgentAssignWidget extends WidgetComponent {
       .get(AgentRunSessionService)
       .start(agent, this._target)
       .catch(console.error);
+  }
+
+  private _monitor() {
+    this._framework?.get(WorkspaceDialogService).open('monitor-editor', {
+      docId: this.std.store.id,
+      blockId: this.model.id,
+      text: this.model.text?.toString() ?? '',
+    });
   }
 
   private _createAndAssign() {
