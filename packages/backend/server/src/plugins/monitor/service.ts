@@ -48,7 +48,10 @@ export interface MonitorSpec {
   url?: string;
   command?: string;
   extract?: ExtractSpec;
-  /** agent: what to do each run, and the device harness to do it with. */
+  /**
+   * agent: what to do each run, and the device harness to do it with. The run
+   * reports a number with NotesGraph's report_monitor_value tool.
+   */
   instructions?: string;
   model?: string;
   tools?: string[];
@@ -205,6 +208,7 @@ export class MonitorService {
     );
     await this.models.monitor.update(monitor.id, {
       pendingJobId: job.id,
+      reportedValue: null,
       lastRunAt: new Date(),
     });
   }
@@ -214,14 +218,28 @@ export class MonitorService {
   async onJobFinished(event: Events['registry.job.finished']) {
     const monitor = await this.models.monitor.findByPendingJob(event.jobId);
     if (!monitor) return;
-    await this.models.monitor.update(monitor.id, { pendingJobId: null });
+    await this.models.monitor.update(monitor.id, {
+      pendingJobId: null,
+      reportedValue: null,
+    });
     try {
       if (event.status !== 'done') {
         throw new Error(event.error || `The device job was ${event.status}`);
       }
       const result = event.result ?? '';
       if (monitor.kind === 'agent') {
-        // The agent wrote the block itself; its closing answer is the reading.
+        // The agent wrote the block itself. The reading is the number it
+        // reported with report_monitor_value, never one read out of its prose.
+        if (monitor.reportedValue !== null) {
+          await this.record(monitor, monitor.reportedValue, { write: false });
+          return;
+        }
+        if (isNumeric(monitor.condition as unknown as Condition)) {
+          throw new Error(
+            'The agent finished without reporting its number with report_monitor_value'
+          );
+        }
+        // Not watching a number: its closing answer is the reading.
         const summary = result.trim() || '(no summary)';
         await this.record(monitor, summary.slice(0, MAX_VALUE_CHARS), {
           write: false,
@@ -471,14 +489,20 @@ export class MonitorService {
   }
 }
 
+/** An above/below condition compares a number, so the run must report one. */
+const isNumeric = (condition: Condition | null) =>
+  condition?.type === 'above' || condition?.type === 'below';
+
 /**
- * What an agent monitor is told each run: its own instructions, and to keep
- * the one block current through NotesGraph's update_block tool.
+ * What an agent monitor is told each run: its own instructions, to keep the
+ * one block current through NotesGraph's update_block tool, and to report
+ * the number it watches with report_monitor_value.
  */
 export function agentInstructions(
-  monitor: Pick<Monitor, 'docId' | 'blockId' | 'name'>,
+  monitor: Pick<Monitor, 'id' | 'docId' | 'blockId' | 'name' | 'condition'>,
   spec: MonitorSpec
 ) {
+  const condition = monitor.condition as unknown as Condition | null;
   return [
     (spec.instructions ?? '').trim(),
     '',
@@ -486,7 +510,14 @@ export function agentInstructions(
     `up to date: block ${monitor.blockId} in doc ${monitor.docId}. When you`,
     "have the answer, replace that block's text with a short summary of it",
     '(one line, with the key numbers and the source) using the NotesGraph',
-    'update_block tool. Do not ask questions; work with what you can find.',
+    'update_block tool.',
+    isNumeric(condition)
+      ? `This monitor alerts when its number goes ${condition?.type} ${condition?.value}, so ` +
+        `you must report that number with the NotesGraph report_monitor_value tool ` +
+        `(monitorId ${monitor.id}): the bare number, in the unit the instructions use.`
+      : `If what you watch is a single number (a price, a count, a rate), report it ` +
+        `with the NotesGraph report_monitor_value tool (monitorId ${monitor.id}).`,
+    'Do not ask questions; work with what you can find.',
     'Finish with that same one-line summary.',
   ].join('\n');
 }

@@ -1961,6 +1961,8 @@ model Monitor {
   failureCount    Int       @default(0) @map("failure_count")
   /// The device job a command or agent run is waiting on.
   pendingJobId    String?   @map("pending_job_id") @db.VarChar
+  /// The number the pending agent run reported with report_monitor_value.
+  reportedValue   String?   @map("reported_value") @db.Text
   createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
 

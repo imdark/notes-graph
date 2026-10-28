@@ -1860,6 +1860,61 @@ export class WorkspaceMcpProvider {
         },
       });
 
+      // A monitor run's reading, as a number the agent states, so nothing has
+      // to read one out of its closing text (MonitorService.onJobFinished).
+      const reportMonitorValue = defineTool({
+        name: 'report_monitor_value',
+        title: 'Report Monitor Value',
+        description:
+          "Report the number a scheduled agent monitor watches (a price, a count, a rate): it becomes the monitor's reading, which its alerts compare and its trend charts. Call it during the monitor's run with the monitorId its instructions give, with the bare number (1899, not \"$1,899\"). Calling it again in the same run replaces the value.",
+        parser: z.object({
+          monitorId: z.string(),
+          value: z.number().finite(),
+        }),
+        inputSchema: {
+          type: 'object',
+          properties: {
+            monitorId: {
+              type: 'string',
+              description: "The monitor's id, from its run instructions",
+            },
+            value: {
+              type: 'number',
+              description:
+                'The number itself: no currency sign, unit or thousands separators',
+            },
+          },
+          required: ['monitorId', 'value'],
+          additionalProperties: false,
+        },
+        execute: async ({ monitorId, value }) => {
+          const monitor = await this.models.monitor.get(monitorId);
+          if (
+            !monitor ||
+            monitor.workspaceId !== workspaceId ||
+            monitor.createdBy !== userId
+          ) {
+            return toolError(`Monitor with id ${monitorId} not found.`);
+          }
+          if (monitor.kind !== 'agent') {
+            return toolError(
+              'Only an agent monitor takes a reported value; a check reads its own.'
+            );
+          }
+          if (!monitor.pendingJobId) {
+            return toolError(
+              'No run of this monitor is in progress, so there is nothing to report to.'
+            );
+          }
+          await this.models.monitor.update(monitorId, {
+            reportedValue: String(value),
+          });
+          return toolText(
+            JSON.stringify({ success: true, monitorId, value })
+          );
+        },
+      });
+
       const linkDocument = defineTool({
         name: 'link_document',
         title: 'Link Document',
@@ -2535,6 +2590,7 @@ export class WorkspaceMcpProvider {
         linkDocument,
         updateTask,
         updateBlock,
+        reportMonitorValue,
         createDiagram,
         drawOnCanvasTool
       );
