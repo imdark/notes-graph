@@ -42,6 +42,7 @@ export class TableBlockComponent extends CaptionedBlockComponent<TableBlockModel
     this.setAttribute(RANGE_SYNC_EXCLUDE_ATTR, 'true');
     this.setAttribute(RANGE_QUERY_EXCLUDE_ATTR, 'true');
     this.style.position = 'relative';
+    this.dataManager.repairPlainTextCells();
     const doc = this.ownerDocument;
     this.disposables.addFromEvent(doc, 'selectionchange', () => {
       const hasExternalNativeSelection = this.hasExternalNativeSelection();

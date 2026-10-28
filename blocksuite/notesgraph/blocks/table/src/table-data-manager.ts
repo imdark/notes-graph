@@ -77,6 +77,27 @@ export class TableDataManager {
     return this.model.props.cells$.value[`${rowId}:${columnId}`];
   }
 
+  /**
+   * Turn cells whose text is a plain string into Text. The server's markdown
+   * writer stored agent-written tables that way, and a cell binds to a Text,
+   * so those showed empty. Returns how many cells it repaired.
+   */
+  repairPlainTextCells(): number {
+    if (this.model.store.readonly) return 0;
+    const plain = Object.entries(this.model.props.cells).filter(
+      ([, cell]) => typeof (cell?.text as unknown) === 'string'
+    );
+    if (plain.length === 0) return 0;
+    this.model.store.transact(() => {
+      for (const [id, cell] of plain) {
+        this.model.props.cells[id] = {
+          text: new Text(cell.text as unknown as string),
+        };
+      }
+    });
+    return plain.length;
+  }
+
   addRow(after?: number) {
     const order = this.getOrder(this.rows$.value, after);
     const rowId = nanoid();
