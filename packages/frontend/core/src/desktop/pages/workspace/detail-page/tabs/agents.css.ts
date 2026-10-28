@@ -2,6 +2,16 @@ import { cssVar } from '@toeverything/theme';
 import { cssVarV2 } from '@toeverything/theme/v2';
 import { keyframes, style } from '@vanilla-extract/css';
 
+/**
+ * Text a person may want to copy: a run's log, answer, details and errors.
+ * The mobile app turns selection off app-wide (mobile/styles/mobile.css.ts),
+ * so these turn it back on.
+ */
+const selectableText = {
+  userSelect: 'text',
+  WebkitUserSelect: 'text',
+} as const;
+
 export const root = style({
   height: '100%',
 });
@@ -87,6 +97,7 @@ export const agentRunning = style({
 });
 
 export const output = style({
+  ...selectableText,
   fontSize: cssVar('fontSm'),
   lineHeight: 1.6,
   color: cssVarV2('text/primary'),
@@ -95,6 +106,7 @@ export const output = style({
 });
 
 export const error = style({
+  ...selectableText,
   fontSize: cssVar('fontSm'),
   lineHeight: 1.6,
   color: cssVarV2('status/error'),
@@ -226,6 +238,7 @@ export const changesScroll = style({
 });
 
 export const runDetails = style({
+  ...selectableText,
   display: 'grid',
   gridTemplateColumns: 'max-content 1fr',
   gap: '6px 16px',
@@ -244,6 +257,7 @@ export const runDetailValue = style({
 });
 
 export const runDetailInput = style({
+  ...selectableText,
   margin: 0,
   maxHeight: 240,
   overflow: 'auto',
@@ -314,6 +328,7 @@ export const logPlaceholder = style({
 });
 
 export const logLines = style({
+  ...selectableText,
   // Grows to the longest line so every row's highlight spans the full width.
   display: 'inline-block',
   minWidth: '100%',
@@ -488,6 +503,7 @@ export const questionLabel = style({
 });
 
 export const questionText = style({
+  ...selectableText,
   margin: 0,
   fontSize: cssVar('fontSm'),
   lineHeight: 1.5,
@@ -510,6 +526,7 @@ export const reviewBar = style({
 
 /** A finished run's answer, cut to four lines; the rest is in its summary. */
 export const reviewSummary = style({
+  ...selectableText,
   display: '-webkit-box',
   WebkitLineClamp: 4,
   WebkitBoxOrient: 'vertical',
@@ -600,6 +617,7 @@ export const questionInput = style({
 // (ai-chat-input): a rounded box with the files above the text and the
 // attach and send buttons below it.
 export const forkReplyText = style({
+  ...selectableText,
   width: '100%',
   minWidth: 0,
   fontSize: cssVar('fontSm'),
