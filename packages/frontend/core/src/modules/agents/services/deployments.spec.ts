@@ -219,6 +219,19 @@ describe('shipBrief', () => {
     expect(brief.text).toContain('`deployed`');
   });
 
+  test('a deploy rebuilds the APK only when it changed the Android app', () => {
+    const brief = shipBrief([task('b', 'merged')], 'deploy');
+    expect(brief.text).toContain(
+      '-- packages/frontend/apps/android packages/frontend/mobile-native'
+    );
+    expect(brief.text).toContain('deploy-android-apk');
+    expect(brief.text).toContain("If nothing changed, don't build it");
+    // After the prod deploy, never alongside it.
+    expect(brief.text.indexOf('deploy-android-apk')).toBeGreaterThan(
+      brief.text.indexOf('deploy-prod')
+    );
+  });
+
   test('a deploy of merged work only goes straight to deploying', () => {
     const brief = shipBrief([task('b', 'merged')], 'deploy');
     expect(brief.title).toBe('Deploy 1 feature');
@@ -230,6 +243,7 @@ describe('shipBrief', () => {
     expect(brief.title).toBe('Merge 1 pull request');
     expect(brief.text).toContain("Don't deploy.");
     expect(brief.text).not.toContain('deploy-prod');
+    expect(brief.text).not.toContain('deploy-android-apk');
   });
 
   test('says what GitHub says, and takes pull requests no task names', () => {
