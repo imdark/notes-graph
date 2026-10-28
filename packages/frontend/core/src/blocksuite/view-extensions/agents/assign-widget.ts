@@ -62,7 +62,7 @@ const END_GAP_PX = 8;
 /**
  * A small button at the end of a to-do line that no agent is on yet,
  * offering to hand the task to one: pick an existing agent, or make a new one
- * and hand it to that.
+ * and hand it to that, or (on desktop) set up a monitor to keep it up to date.
  *
  * Shown while the line is hovered or the caret is in it — on a phone, tapping
  * into the line is what brings it up. Once a run is asked for, the task goes
@@ -332,6 +332,16 @@ export class AgentAssignWidget extends WidgetComponent {
                 prefix: PlusIcon(),
                 select: () => this._createAndAssign(),
               }),
+              // The monitor editor is only registered on desktop.
+              ...(BUILD_CONFIG.isMobileEdition
+                ? []
+                : [
+                    menu.action({
+                      name: 'Monitor this block…',
+                      prefix: html`<span>📡</span>`,
+                      select: () => this._openMonitorEditor(),
+                    }),
+                  ]),
             ],
           }),
         ],
@@ -360,6 +370,15 @@ export class AgentAssignWidget extends WidgetComponent {
     if (!framework) return;
     framework.get(WorkspaceDialogService).open('agent-editor', {}, agent => {
       if (agent) this._assign(agent);
+    });
+  }
+
+  /** Keep this line up to date from a website, a command or an agent. */
+  private _openMonitorEditor() {
+    this._framework?.get(WorkspaceDialogService).open('monitor-editor', {
+      docId: this.std.store.id,
+      blockId: this.model.id,
+      text: this.model.text?.toString() ?? '',
     });
   }
 
