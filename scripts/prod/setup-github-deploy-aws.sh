@@ -24,6 +24,10 @@ REGION=us-east-2
 INSTANCE=i-025bea042bd6b9b1d
 REPO=notesgraph
 GITHUB_REPO=imdark/notes-graph
+# The repo's OIDC tokens use GitHub's immutable subject (owner and repo ids),
+# not repo:imdark/notes-graph; a renamed or re-created repo can't match it.
+#   gh api repos/imdark/notes-graph/actions/oidc/customization/sub
+GITHUB_SUB_PREFIX="repo:imdark@5001453/notes-graph@1369815044"
 BOX_ROLE=notesgraph-prod-box
 DEPLOY_ROLE=notesgraph-github-deploy
 OIDC_ARN="arn:aws:iam::$ACCOUNT:oidc-provider/token.actions.githubusercontent.com"
@@ -93,7 +97,7 @@ TRUST='{
     "Action": "sts:AssumeRoleWithWebIdentity",
     "Condition": {"StringEquals": {
       "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
-      "token.actions.githubusercontent.com:sub": "repo:'"$GITHUB_REPO"':environment:production"
+      "token.actions.githubusercontent.com:sub": "'"$GITHUB_SUB_PREFIX"':environment:production"
     }}
   }]
 }'
