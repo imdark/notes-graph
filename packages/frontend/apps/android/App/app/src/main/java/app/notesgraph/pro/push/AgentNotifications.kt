@@ -52,11 +52,12 @@ object AgentNotifications {
 
     fun show(context: Context, question: AgentQuestion, error: String? = null) {
         ensureChannel(context)
-        val title = if (question.isPermission) {
-            "${question.agentName} wants permission"
-        } else {
-            "${question.agentName} asks you"
-        }
+        // The task leads, so a run says what it is on; the agent and what it
+        // wants follow, as before when there is no task title.
+        val asks = if (question.isPermission) "wants permission" else "asks you"
+        val title = question.title.ifEmpty { "${question.agentName} $asks" }
+        val asker = if (question.title.isEmpty()) null else "${question.agentName} $asks"
+
         val body = buildString {
             append(question.text)
             if (question.isPermission && question.detail.isNotEmpty()) {
@@ -80,7 +81,8 @@ object AgentNotifications {
                     .setContentText("Unlock to see it and answer.")
                     .build()
             )
-        if (error != null) builder.setSubText("Not sent: $error")
+        val sub = listOfNotNull(asker, error?.let { "Not sent: $it" }).joinToString(" · ")
+        if (sub.isNotEmpty()) builder.setSubText(sub)
         // Lets [pending] find what is still waiting; "Sent" replaces this
         // notification without it.
         builder.addExtras(Bundle().apply { putBundle(EXTRA_QUESTION, question.toBundle()) })
@@ -105,7 +107,7 @@ object AgentNotifications {
     /** The answer landed: say so briefly, then get out of the way. */
     fun sent(context: Context, question: AgentQuestion, summary: String) {
         val builder = base(context, question)
-            .setContentTitle(question.agentName)
+            .setContentTitle(question.heading)
             .setContentText(summary)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setOnlyAlertOnce(true)

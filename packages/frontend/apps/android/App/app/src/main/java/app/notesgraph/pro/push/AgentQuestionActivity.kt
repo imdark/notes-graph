@@ -260,7 +260,15 @@ private fun QuestionScreen(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        Text(current.agentName, style = MaterialTheme.typography.titleLarge)
+        // The task asking, then the agent working on it.
+        Text(current.heading, style = MaterialTheme.typography.titleLarge)
+        if (current.title.isNotEmpty()) {
+            Text(
+                current.agentName,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
         when (val s = state) {
             LoadState.Loading -> Text("Loading…")
             is LoadState.Closed -> {

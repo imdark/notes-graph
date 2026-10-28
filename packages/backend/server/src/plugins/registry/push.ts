@@ -27,7 +27,7 @@ export function questionPushData(
   serverBaseUrl: string,
   job: Pick<
     RegistryJob,
-    'id' | 'workspaceId' | 'agentName' | 'docId' | 'blockId'
+    'id' | 'workspaceId' | 'agentName' | 'docId' | 'blockId' | 'title'
   >,
   question: Pick<
     RegistryJobQuestion,
@@ -45,6 +45,9 @@ export function questionPushData(
     questionId: question.id,
     kind: question.kind,
     agentName: job.agentName,
+    // What the run is on (its block's text, or the agent's own name for it),
+    // so the notification says which task asks, not only which agent.
+    title: clip(job.title ?? '', 200),
     text: clip(question.text, MAX_PUSH_TEXT),
     detail: clip(question.detail ?? '', MAX_PUSH_DETAIL),
     options: JSON.stringify(
@@ -56,6 +59,7 @@ export function questionPushData(
   if (bytes(data) > MAX_DATA_BYTES) data.detail = '';
   if (bytes(data) > MAX_DATA_BYTES) data.options = '[]';
   if (bytes(data) > MAX_DATA_BYTES) data.text = clip(data.text, 200);
+  if (bytes(data) > MAX_DATA_BYTES) data.title = clip(data.title, 80);
   return data;
 }
 

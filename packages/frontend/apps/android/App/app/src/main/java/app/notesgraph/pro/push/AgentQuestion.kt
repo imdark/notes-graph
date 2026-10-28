@@ -20,11 +20,16 @@ data class AgentQuestion(
     /** "question" wants text back; "permission" wants allow or deny. */
     val kind: String,
     val agentName: String,
+    /** What the run is on: its block's text, or the agent's name for it; may be empty. */
+    val title: String,
     val text: String,
     val detail: String,
     val options: List<String>,
 ) {
     val isPermission get() = kind == "permission"
+
+    /** Which task is asking: the run's title, else (an older server) the agent. */
+    val heading get() = title.ifEmpty { agentName }
 
     fun toBundle() = Bundle().apply {
         putString("server", server)
@@ -35,6 +40,7 @@ data class AgentQuestion(
         putString("questionId", questionId)
         putString("kind", kind)
         putString("agentName", agentName)
+        putString("title", title)
         putString("text", text)
         putString("detail", detail)
         putStringArrayList("options", ArrayList(options))
@@ -48,8 +54,8 @@ data class AgentQuestion(
             }.getOrDefault(emptyList())
             return build(
                 data["server"], data["workspaceId"], data["jobId"], data["docId"],
-                data["blockId"], data["questionId"], data["kind"], data["agentName"], data["text"],
-                data["detail"], options,
+                data["blockId"], data["questionId"], data["kind"], data["agentName"], data["title"],
+                data["text"], data["detail"], options,
             )
         }
 
@@ -57,15 +63,16 @@ data class AgentQuestion(
             build(
                 it.getString("server"), it.getString("workspaceId"), it.getString("jobId"),
                 it.getString("docId"), it.getString("blockId"), it.getString("questionId"), it.getString("kind"),
-                it.getString("agentName"), it.getString("text"), it.getString("detail"),
+                it.getString("agentName"), it.getString("title"), it.getString("text"),
+                it.getString("detail"),
                 it.getStringArrayList("options") ?: emptyList(),
             )
         }
 
         private fun build(
             server: String?, workspaceId: String?, jobId: String?, docId: String?,
-            blockId: String?, questionId: String?, kind: String?, agentName: String?, text: String?,
-            detail: String?, options: List<String>,
+            blockId: String?, questionId: String?, kind: String?, agentName: String?, title: String?,
+            text: String?, detail: String?, options: List<String>,
         ): AgentQuestion? {
             if (server.isNullOrEmpty() || workspaceId.isNullOrEmpty() ||
                 jobId.isNullOrEmpty() || questionId.isNullOrEmpty()
@@ -79,6 +86,7 @@ data class AgentQuestion(
                 questionId = questionId,
                 kind = if (kind == "permission") "permission" else "question",
                 agentName = agentName?.takeIf { it.isNotEmpty() } ?: "Agent",
+                title = title.orEmpty().trim(),
                 text = text.orEmpty(),
                 detail = detail.orEmpty(),
                 options = options,
