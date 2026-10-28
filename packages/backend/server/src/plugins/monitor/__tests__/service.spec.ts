@@ -28,6 +28,7 @@ const monitorRow = (over: Record<string, unknown> = {}): any => ({
   lastError: null,
   failureCount: 0,
   pendingJobId: null,
+  reportedValue: null,
   ...over,
 });
 
@@ -198,6 +199,63 @@ test('the device job’s output becomes the reading', async t => {
   t.true(writes[0][3].startsWith('EUR: 42'));
 });
 
+const agentDone = (result: string) => ({
+  workspaceId: 'ws',
+  jobId: 'job-1',
+  agentId: 'monitor',
+  deviceKey: 'mac',
+  kind: 'agent',
+  status: 'done' as const,
+  result,
+  error: null,
+});
+
+test('an agent run’s reported number is the reading, not its prose', async t => {
+  const monitor = monitorRow({
+    kind: 'agent',
+    source: null,
+    deviceKey: 'mac',
+    pendingJobId: 'job-1',
+    reportedValue: '1899',
+    lastValue: '2049',
+    condition: { type: 'below', value: 2000 },
+  });
+  const { service, writes, readings, updates, alerts } = setup({ monitor });
+  await service.onJobFinished(agentDone('RTX 5090 at $1,899 (2 left)'));
+  t.like(updates[0], { pendingJobId: null, reportedValue: null });
+  t.is(writes.length, 0);
+  t.is(readings[0].value, '1899');
+  t.true(readings[0].alerted);
+  t.regex(alerts[0].input.body.reason, /below 2000/);
+});
+
+test('an above/below agent run that reported no number fails', async t => {
+  const monitor = monitorRow({
+    kind: 'agent',
+    source: null,
+    deviceKey: 'mac',
+    pendingJobId: 'job-1',
+    condition: { type: 'above', value: 100 },
+  });
+  const { service, readings } = setup({ monitor });
+  await service.onJobFinished(agentDone('About 120 open issues'));
+  t.is(readings[0].value, null);
+  t.regex(readings[0].error, /report_monitor_value/);
+});
+
+test('a new agent run forgets the last run’s reported number', async t => {
+  const monitor = monitorRow({
+    kind: 'agent',
+    source: null,
+    deviceKey: 'mac',
+    reportedValue: '7',
+    spec: { instructions: 'Count open issues.' },
+  });
+  const { service, updates } = setup({ monitor });
+  await service.run({ monitorId: 'm1' });
+  t.like(updates.at(-1), { pendingJobId: 'job-1', reportedValue: null });
+});
+
 test('an agent run’s summary is the reading; the agent wrote the block itself', async t => {
   const monitor = monitorRow({
     kind: 'agent',
@@ -253,12 +311,34 @@ test('an agent monitor with no model runs as Claude Code', async t => {
 
 test('an agent is told which block to keep current', t => {
   const text = agentInstructions(
-    { name: 'GPU deals', docId: 'doc', blockId: 'blk' },
+    {
+      id: 'm1',
+      name: 'GPU deals',
+      docId: 'doc',
+      blockId: 'blk',
+      condition: { type: 'change' },
+    },
     { instructions: 'Find RTX 5090 deals under $2,000.' }
   );
   t.true(text.startsWith('Find RTX 5090 deals'));
   t.regex(text, /block blk in doc doc/);
   t.regex(text, /update_block/);
+  t.regex(text, /If what you watch is a single number.*report_monitor_value/s);
+});
+
+test('an above/below agent is told it must report its number', t => {
+  const text = agentInstructions(
+    {
+      id: 'm1',
+      name: 'GPU deals',
+      docId: 'doc',
+      blockId: 'blk',
+      condition: { type: 'below', value: 2000 },
+    },
+    { instructions: 'Find the lowest RTX 5090 price.' }
+  );
+  t.regex(text, /goes below 2000, so you must report/);
+  t.regex(text, /report_monitor_value tool \(monitorId m1\)/);
 });
 
 test('validate refuses a check that runs too often or has no URL', t => {
