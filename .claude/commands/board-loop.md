@@ -75,8 +75,8 @@ is **never** marked done just because the code is written. Each is a custom
 | status      | set when                                                                     |
 | ----------- | ---------------------------------------------------------------------------- |
 | `committed` | the work is committed on its branch (PR opened or pushed)                    |
-| `merged`    | that branch landed on `main` (`gh pr view <branch> --json state` → `MERGED`) |
-| `deployed`  | a prod deploy containing `main` finished (`DEPLOY-DONE`)                     |
+| `merged`    | that branch landed on `stage` (`gh pr view <branch> --json state` → `MERGED`) |
+| `deployed`  | a release containing it was deployed (the `Deploy prod` run succeeded)        |
 | `done`      | the deployed change was verified live — writes CLOSED                        |
 
 Stages only move forward. Before finishing a run, sweep the board:
@@ -85,19 +85,17 @@ promote each card whose next condition now holds, with a one-line note.
 
 ## Deploying
 
-Batch it — deploy once after a run of cards, not per card (a full deploy is ~8–15
-min and OOM-risky if overlapped).
+Batch it: PRs merge into `stage` (the default branch), and one release ships
+them all. A release fast-forwards `main` to `stage` and starts the GitHub
+deploy, which builds the image on a runner (~21 min) and rolls the box over SSM.
 
-- Launch detached: `scripts/deploy-bg.sh` (writes `/tmp/notesgraph-deploy.log`).
-- Watch with the Monitor tool running `scripts/deploy-watch.sh` — it streams
-  milestones/errors and exits `DEPLOY-EXITED` when the deploy finishes.
-- **Never run two deploys at once** — `deploy-prod.sh` holds a flock, and a second
-  concurrent build OOM'd prod once. Let one finish before starting the next.
+- See what would ship: `scripts/release.sh --plan`.
+- Release (confirm with the user first): `scripts/release.sh --yes`.
+- Watch: `gh run watch <run id> --exit-status` in the background (the id is
+  in `gh run list --workflow deploy-prod.yml --limit 1`).
 - Verify after: `curl -s -o /dev/null -w "%{http_code}" https://app.notesgraph.com/` → 200.
-- Then promote the cards this deploy shipped: `merged` → `deployed` once it
-  finishes, and `deployed` → `done` once you've checked the change on prod.
-  Deploying a working tree that isn't merged doesn't make a card `merged` —
-  it stays where it is until its branch lands and a deploy of `main` ships it.
+- Then promote the cards this release shipped: `merged` → `deployed` once the
+  run succeeds, and `deployed` → `done` once you've checked the change on prod.
 
 ## Hard rules (learned the hard way)
 
