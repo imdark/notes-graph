@@ -8,6 +8,7 @@ pub(crate) use delta::{
   extract_inline_references_from_value, text_to_inline_markdown,
 };
 #[cfg(test)]
+pub(crate) use inline::{UrlSegment, split_bare_urls};
 pub(crate) use parser::MAX_MARKDOWN_CHARS;
 pub(crate) use parser::{MAX_BLOCKS, parse_markdown_blocks};
 pub(crate) use render::{MarkdownRenderer, MarkdownWriter};

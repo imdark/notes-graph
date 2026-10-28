@@ -1,6 +1,7 @@
-use y_octo::{TextDeltaOp, TextInsert};
+use y_octo::{TextAttributes, TextDeltaOp, TextInsert};
 
 use super::{
+  super::markdown::{UrlSegment, split_bare_urls},
   super::schema::{
     PROP_CAPTION, PROP_CELLS_PREFIX, PROP_CHECKED, PROP_COLUMNS_PREFIX, PROP_HEIGHT, PROP_LANGUAGE, PROP_ORDER,
     PROP_PREVIEW, PROP_ROWS_PREFIX, PROP_SOURCE_ID, PROP_TEXT, PROP_TYPE, PROP_URL, PROP_VIDEO_ID, PROP_WIDTH, SYS_CHILDREN,
@@ -81,6 +82,28 @@ pub(crate) fn text_ops_from_plain(text: &str) -> Vec<TextDeltaOp> {
       format: None,
     }]
   }
+}
+
+/// Plain text as delta ops, its bare URLs as links, as the editor links a
+/// typed URL (markdown::split_bare_urls).
+pub(crate) fn linked_text_ops(text: &str) -> Vec<TextDeltaOp> {
+  split_bare_urls(text)
+    .into_iter()
+    .map(|segment| match segment {
+      UrlSegment::Text(text) => TextDeltaOp::Insert {
+        insert: TextInsert::Text(text.to_string()),
+        format: None,
+      },
+      UrlSegment::Url(url) => {
+        let mut format = TextAttributes::new();
+        format.insert("link".into(), Any::String(url.to_string()));
+        TextDeltaOp::Insert {
+          insert: TextInsert::Text(url.to_string()),
+          format: Some(format),
+        }
+      }
+    })
+    .collect()
 }
 
 pub(super) fn insert_children(doc: &Doc, block: &mut Map, children: &[String]) -> Result<(), ParseError> {

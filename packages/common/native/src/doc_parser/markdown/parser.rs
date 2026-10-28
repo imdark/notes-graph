@@ -13,7 +13,7 @@ use super::{
       TableSpec, count_tree_nodes,
     },
   },
-  inline::InlineStyle,
+  inline::{InlineStyle, UrlSegment, split_bare_urls},
 };
 
 const DEFAULT_CODE_LANG: &str = "plain text";
@@ -137,6 +137,22 @@ impl InlineState {
       }
     }
     Some(attrs)
+  }
+}
+
+/// Text into a block, its bare URLs as links (see split_bare_urls). Not in a
+/// code block, whose text is literal, nor inside a link, which has its own.
+fn push_linked_text(block: &mut BlockDraft, text: &str, inline: &InlineState) {
+  let in_link = inline.stack.iter().any(|attr| attr.style == InlineStyle::Link);
+  if in_link || block.flavour == BlockFlavour::Code {
+    block.push_text(text, inline.attrs());
+    return;
+  }
+  for segment in split_bare_urls(text) {
+    match segment {
+      UrlSegment::Text(text) => block.push_text(text, inline.attrs()),
+      UrlSegment::Url(url) => block.push_text(url, inline.attrs_with(InlineAttr::link(url.to_string()))),
+    }
   }
 }
 
@@ -613,11 +629,9 @@ fn parse_markdown_inner(markdown: &str) -> Result<MarkdownDocument, ParseError> 
         if let Some(image) = pending_image.as_mut() {
           image.caption.push_str(&text);
         } else if let Some(block) = active.as_mut() {
-          let attrs = inline.attrs();
-          block.push_text(&text, attrs);
+          push_linked_text(block, &text, &inline);
         } else if let Some(item) = list_items.last_mut() {
-          let attrs = inline.attrs();
-          item.push_text(&text, attrs);
+          push_linked_text(item, &text, &inline);
         }
       }
       Event::Html(html) | Event::InlineHtml(html) => {
@@ -1673,6 +1687,49 @@ mod tests {
     });
 
     assert!(matches!(link_value, Some(Any::String(value)) if value == "https://example.com"));
+  }
+
+  /// Every run of a block's text that carries a link, as (text, url).
+  fn linked_runs(spec: &BlockSpec) -> Vec<(String, String)> {
+    spec
+      .text
+      .iter()
+      .filter_map(|op| match op {
+        TextDeltaOp::Insert {
+          insert: TextInsert::Text(text),
+          format: Some(attrs),
+        } => match attrs.get(InlineStyle::Link.key()) {
+          Some(Any::String(url)) => Some((text.clone(), url.clone())),
+          _ => None,
+        },
+        _ => None,
+      })
+      .collect()
+  }
+
+  #[test]
+  fn test_parse_markdown_links_bare_urls() {
+    let markdown = "- eBay $5,498. https://gpudeals.net/gpus/rtx-5090.html\n- **bold https://a.com/x**, [named](https://b.com)\n\n```\nhttps://c.com\n```";
+    let doc = parse_markdown(markdown).expect("parse markdown");
+    let first = &doc.blocks[0].spec;
+    assert_eq!(
+      linked_runs(first),
+      vec![(
+        "https://gpudeals.net/gpus/rtx-5090.html".to_string(),
+        "https://gpudeals.net/gpus/rtx-5090.html".to_string()
+      )]
+    );
+    // Bold stays on the linked URL; a named link keeps its own text.
+    let second = &doc.blocks[1].spec;
+    assert_eq!(
+      linked_runs(second),
+      vec![
+        ("https://a.com/x".to_string(), "https://a.com/x".to_string()),
+        ("named".to_string(), "https://b.com".to_string()),
+      ]
+    );
+    // A code block's text is literal.
+    assert!(linked_runs(&doc.blocks[2].spec).is_empty());
   }
 
   #[test]
