@@ -27,6 +27,7 @@ import { NavigationPanelDocNode } from '../../nodes/doc';
 import { HasChildrenContext } from '../../nodes/doc/has-children-context';
 import { NavigationPanelProjectNode } from '../../nodes/project';
 import { NavigationPanelTreeNode, NavigationPanelTreeRoot } from '../../tree';
+import { useProgressiveCount } from './use-progressive-count';
 
 const InboxNodeIcon = ({ className }: { className?: string }) => (
   <svg
@@ -116,6 +117,7 @@ const InboxNode = ({
     (value: boolean) => navigationPanelService.setCollapsed(path, value),
     [navigationPanelService, path]
   );
+  const shown = useProgressiveCount(orphanIds.length, !collapsed);
 
   return (
     <NavigationPanelTreeNode
@@ -126,7 +128,7 @@ const InboxNode = ({
       collapsible
       data-testid="navigation-panel-notes-inbox"
     >
-      {orphanIds.map(id => (
+      {orphanIds.slice(0, shown).map(id => (
         <NavigationPanelDocNode
           key={id}
           docId={id}
@@ -160,6 +162,7 @@ const JournalNode = ({
     (value: boolean) => navigationPanelService.setCollapsed(path, value),
     [navigationPanelService, path]
   );
+  const shown = useProgressiveCount(journalIds.length, !collapsed);
 
   return (
     <NavigationPanelTreeNode
@@ -170,7 +173,7 @@ const JournalNode = ({
       collapsible
       data-testid="navigation-panel-notes-journal"
     >
-      {journalIds.map(id => (
+      {journalIds.slice(0, shown).map(id => (
         <NavigationPanelDocNode
           key={id}
           docId={id}
@@ -465,7 +468,9 @@ export const NavigationPanelNotes = () => {
         el.scrollIntoView({ block: 'nearest' });
         return;
       }
-      if (attempts++ < 60) {
+      // Long Inbox/Journal lists mount in batches (useProgressiveCount), so
+      // the row can take a few seconds to exist.
+      if (attempts++ < 600) {
         raf = requestAnimationFrame(tryScroll);
       }
     };
