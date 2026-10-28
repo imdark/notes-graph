@@ -12,6 +12,7 @@ import { ChatQuerySchema } from '../types';
 import { CapabilityRuntime } from './capability-runtime';
 import { CapabilityPolicyHost } from './hosts/capability-policy-host';
 import { ConversationHost } from './hosts/conversation-host';
+import { CurrentDocHost } from './hosts/current-doc-host';
 import { ImageResultHost } from './hosts/image-result-host';
 import { TurnPersistence } from './hosts/turn-persistence';
 
@@ -23,7 +24,8 @@ export class TurnOrchestrator {
     private readonly capabilityPolicy: CapabilityPolicyHost,
     private readonly runtime: CapabilityRuntime,
     private readonly imageResults: ImageResultHost,
-    private readonly turnPersistence: TurnPersistence
+    private readonly turnPersistence: TurnPersistence,
+    private readonly currentDoc: CurrentDocHost
   ) {}
 
   private async buildPromptParams(
@@ -68,10 +70,14 @@ export class TurnOrchestrator {
       latestTurn: prepared.latestTurn,
       includeContextFiles: selection.includeContextFiles,
     });
-    const finalMessage = prepared.session.finish({
-      ...prepared.params,
-      ...promptParams,
-    });
+    const params = { ...prepared.params, ...promptParams };
+    // The page the chat sits beside, so the model knows what "this" is.
+    const currentDoc = await this.currentDoc.promptParams(
+      userId,
+      prepared.session.config.workspaceId,
+      params.currentDocId
+    );
+    const finalMessage = prepared.session.finish({ ...params, ...currentDoc });
 
     return {
       prepared,

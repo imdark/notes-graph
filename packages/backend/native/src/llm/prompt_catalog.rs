@@ -332,7 +332,43 @@ fn builtin_from_token(name: &str) -> Option<PromptBuiltin> {
 
 #[cfg(test)]
 mod tests {
+  use llm_adapter::core::prompt_template::render_tokens;
+
   use super::*;
+
+  /// The chat prompt's system message, rendered with these params.
+  fn chat_system(params: Value) -> String {
+    let prompt = built_in_prompt("Chat With NotesGraph AI").expect("chat prompt");
+    let system = prompt
+      .messages
+      .iter()
+      .find(|message| message.role == "system")
+      .expect("system message");
+    render_tokens(&parse_template(&system.content).expect("parse"), &[&params])
+  }
+
+  #[test]
+  fn chat_prompt_puts_the_open_document_in_context() {
+    let rendered = chat_system(serde_json::json!({
+      "notesgraph::hasCurrentDoc": true,
+      "currentDocId": "doc-1",
+      "currentDocTitle": "RTX 5090 desktop deal research",
+      "currentDocContent": "## Bottom line\n\nA prebuilt is the way under $6,000.",
+    }));
+    assert!(rendered.contains("it is the topic of the conversation"));
+    assert!(rendered.contains("Title: RTX 5090 desktop deal research"));
+    assert!(rendered.contains("<document_content>\n## Bottom line\n\nA prebuilt is the way under $6,000.\n</document_content>"));
+    assert!(rendered.contains("call the doc_read tool with docId doc-1"));
+
+    // Without its content (unreadable), it still points at doc_read.
+    let bare = chat_system(serde_json::json!({
+      "notesgraph::hasCurrentDoc": true,
+      "currentDocId": "doc-1",
+    }));
+    assert!(!bare.contains("<document_content>"));
+    assert!(!bare.contains("Title:"));
+    assert!(bare.contains("call the doc_read tool with docId doc-1"));
+  }
 
   #[test]
   fn should_expand_partials_and_collect_prompt_params() {
