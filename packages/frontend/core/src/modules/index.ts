@@ -37,6 +37,7 @@ import { configureEditorSettingModule } from './editor-setting';
 import { configureExplorerIconModule } from './explorer-icon';
 import { configureFavoriteModule } from './favorite';
 import { configureFeatureFlagModule } from './feature-flag';
+import { configureFeatureFlagAdminModule } from './feature-flag/admin';
 import { configureFolderSyncModule } from './folder-sync';
 import { configureGlobalContextModule } from './global-context';
 import { configureHomeDocModule } from './home-doc';
@@ -100,6 +101,7 @@ export function configureCommonModules(framework: Framework) {
   configureNavigationModule(framework);
   configureTagModule(framework);
   configureCloudModule(framework);
+  configureFeatureFlagAdminModule(framework);
   configureQuotaModule(framework);
   configurePermissionsModule(framework);
   configureProjectsModule(framework);

@@ -14,6 +14,7 @@ import {
   deployableTasks,
   deployRunsFor,
   findPullRequest,
+  flagStage,
   isShipStage,
   liveCheckNote,
   mergeCommand,
@@ -561,5 +562,39 @@ describe('liveCheckNote', () => {
     expect(liveCheckNote({ works: false, problem: '   ' }, at)).toBe(
       `Checked live ${day}: doesn't work.`
     );
+  });
+});
+
+describe('flagStage', () => {
+  const deploy = {
+    repo: 'imdark/notes-graph',
+    commit: 'c0ffee',
+    branch: 'main',
+    subject: 'Merge pull request #9',
+    dirty: false,
+    deployedAt: '2026-10-27T00:00:00Z',
+    pullRequests: [9],
+    featureFlags: { enable_x: 'a'.repeat(40) },
+  };
+
+  test('deployed when prod lists the flag with its commit', () => {
+    expect(flagStage('enable_x', 'a'.repeat(40), deploy)).toBe('deployed');
+  });
+
+  test('not deployed when prod lacks it or has another commit', () => {
+    expect(flagStage('enable_y', 'b'.repeat(40), deploy)).toBe('not-deployed');
+    expect(flagStage('enable_x', 'b'.repeat(40), deploy)).toBe('not-deployed');
+  });
+
+  test('unknown without a record, a stamped record, or a commit', () => {
+    expect(flagStage('enable_x', 'a'.repeat(40), null)).toBeNull();
+    expect(flagStage('enable_x', 'a'.repeat(40), undefined)).toBeNull();
+    expect(
+      flagStage('enable_x', 'a'.repeat(40), {
+        ...deploy,
+        featureFlags: undefined,
+      })
+    ).toBeNull();
+    expect(flagStage('enable_x', '', deploy)).toBeNull();
   });
 });

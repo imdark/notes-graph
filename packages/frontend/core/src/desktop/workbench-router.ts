@@ -34,6 +34,10 @@ export const workbenchRoutes = [
     lazy: () => import('./pages/workspace/deployments/index'),
   },
   {
+    path: '/feature-flags',
+    lazy: () => import('./pages/workspace/feature-flags/index'),
+  },
+  {
     path: '/monitoring',
     lazy: () => import('./pages/workspace/monitoring/index'),
   },

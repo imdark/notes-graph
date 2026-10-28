@@ -20,6 +20,11 @@ export interface DeployInfo {
   deployedAt: string;
   /** Pull requests merged into `commit` (newest first, bounded). */
   pullRequests: number[];
+  /**
+   * The app's feature flags in this build, by the commit that added each.
+   * Missing on records from before flags were stamped.
+   */
+  featureFlags?: Record<string, string>;
 }
 
 const DEPLOY_INFO_FILE = 'deploy-info.json';

@@ -124,6 +124,11 @@ export const agentSelect = style({
   fontSize: 14,
 });
 
+export const flagSelect = style([
+  agentSelect,
+  { flex: '0 0 auto', width: 200, maxWidth: '45%' },
+]);
+
 export const runStatus = style({
   fontSize: 13,
   lineHeight: 1.5,
