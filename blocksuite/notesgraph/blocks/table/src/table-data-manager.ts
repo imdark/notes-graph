@@ -81,6 +81,8 @@ export class TableDataManager {
    * Turn cells whose text is a plain string into Text. The server's markdown
    * writer stored agent-written tables that way, and a cell binds to a Text,
    * so those showed empty. Returns how many cells it repaired.
+   *
+   * Not while the block mounts (see TableBlockComponent.firstUpdated).
    */
   repairPlainTextCells(): number {
     if (this.model.store.readonly) return 0;

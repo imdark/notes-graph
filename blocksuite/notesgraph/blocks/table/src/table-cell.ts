@@ -34,6 +34,7 @@ import { computed, effect, signal } from '@preact/signals-core';
 import { html, nothing } from 'lit';
 import { property, query } from 'lit/decorators.js';
 import { classMap } from 'lit/directives/class-map.js';
+import { keyed } from 'lit/directives/keyed.js';
 import { ref } from 'lit/directives/ref.js';
 import { styleMap } from 'lit/directives/style-map.js';
 
@@ -748,7 +749,11 @@ export class TableCell extends SignalWatcher(
         class=${cellContainerStyle}
         style=${this.tdStyle()}
       >
-        <rich-text
+        ${keyed(
+          // A new rich-text when the cell's Text is replaced (a repaired
+          // plain-string cell): one keeps the inline editor it first bound.
+          this.text,
+          html`<rich-text
           ${ref(this.richText$)}
           data-disable-ask-ai
           data-not-block-text
@@ -769,7 +774,8 @@ export class TableCell extends SignalWatcher(
               ? getViewportElement(this.topContenteditableElement.host)
               : null}"
           data-parent-flavour="notesgraph:table"
-        ></rich-text>
+        ></rich-text>`
+        )}
         ${this.renderOptionsButton()} ${this.renderColumnIndicator()}
         ${this.renderRowIndicator()}
       </td>
