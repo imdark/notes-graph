@@ -752,6 +752,7 @@ test('push data fits FCM by giving up the tool input first', t => {
       agentName: 'coder',
       docId: 'doc-1',
       blockId: 'block-1',
+      title: 'Fix the phone home-screen widget',
     },
     {
       id: 'q1',
@@ -765,6 +766,8 @@ test('push data fits FCM by giving up the tool input first', t => {
   t.is(data.server, 'https://app.notesgraph.com');
   t.is(data.kind, 'permission');
   t.is(data.blockId, 'block-1');
+  // Which task asks, not only which agent.
+  t.is(data.title, 'Fix the phone home-screen widget');
   t.true(Buffer.byteLength(JSON.stringify(data)) <= 3_500);
   t.true(data.detail.length <= 1_200);
 });
