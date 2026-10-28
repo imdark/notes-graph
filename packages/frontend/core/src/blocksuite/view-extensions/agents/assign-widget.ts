@@ -202,7 +202,29 @@ export class AgentAssignWidget extends WidgetComponent {
 
   override disconnectedCallback() {
     super.disconnectedCallback();
+    this._textObserver?.disconnect();
+    this._observedEditor = null;
     this._reserveLine(null, 0);
+  }
+
+  private _textObserver: MutationObserver | null = null;
+  private _observedEditor: HTMLElement | null = null;
+
+  /**
+   * The Yjs change fires before the inline editor has put the typed character
+   * in the DOM, so measuring after it can see the text as it was. Re-place on
+   * the DOM's own change, so the button moves on every character.
+   */
+  private _watchText(editor: HTMLElement) {
+    if (this._observedEditor === editor) return;
+    this._textObserver?.disconnect();
+    this._observedEditor = editor;
+    this._textObserver ??= new MutationObserver(() => this._place());
+    this._textObserver.observe(editor, {
+      characterData: true,
+      childList: true,
+      subtree: true,
+    });
   }
 
   /** The block's own line comes before its children, so the first rich text in it is this line's. */
@@ -251,6 +273,7 @@ export class AgentAssignWidget extends WidgetComponent {
     const parent = this.offsetParent;
     const editor = this._lineEditor();
     if (!parent || !editor) return;
+    this._watchText(editor);
 
     const rects = lineTextRects(editor);
     const line = editor.getBoundingClientRect();
