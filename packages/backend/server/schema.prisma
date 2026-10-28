@@ -1753,6 +1753,9 @@ model RegistryDevice {
   /// Jobs its runners may run at once; null leaves it to the runner's own
   /// setting. Set from the app, never by registration.
   maxJobs       Int?      @map("max_jobs")
+  /// Only server admins may run jobs here (the prod host's own runner). Set
+  /// by an admin from the app, never by registration.
+  adminOnly     Boolean   @default(false) @map("admin_only")
   registeredBy  String?   @map("registered_by") @db.VarChar
   createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt     DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)

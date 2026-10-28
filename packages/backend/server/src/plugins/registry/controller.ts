@@ -115,7 +115,7 @@ export class RegistryController {
       agentTarget:
         agentTarget === undefined ? undefined : agentTarget === 'true',
     });
-    return { devices };
+    return { devices: await this.service.viewFor(user.id, devices) };
   }
 
   @Get('/workspaces/:workspaceId/devices/:key')
@@ -130,7 +130,8 @@ export class RegistryController {
     if (!device) {
       throw new NotFoundException(`No device '${key}' in this workspace`);
     }
-    return { device };
+    const [viewed] = await this.service.viewFor(user.id, [device]);
+    return { device: viewed };
   }
 
   /** Create or update a device. Idempotent on (workspace, key). */
@@ -181,6 +182,34 @@ export class RegistryController {
     return { device };
   }
 
+  /**
+   * Only server admins may run jobs on the device (the prod host's runner).
+   * Its own call, like max-jobs, so `wf` re-registering never clears it.
+   */
+  @Post('/workspaces/:workspaceId/devices/:key/admin-only')
+  async setAdminOnly(
+    @CurrentUser() user: CurrentUserType,
+    @Param('workspaceId') workspaceId: string,
+    @Param('key') key: string,
+    @Body() body: { adminOnly?: boolean }
+  ) {
+    this.assertEnabled();
+    await this.ac
+      .user(user.id)
+      .workspace(workspaceId)
+      .assert('Workspace.Settings.Update');
+    const device = await this.service.setAdminOnly(
+      workspaceId,
+      user.id,
+      key,
+      body?.adminOnly
+    );
+    if (!device) {
+      throw new NotFoundException(`No device '${key}' in this workspace`);
+    }
+    return { device };
+  }
+
   @Delete('/workspaces/:workspaceId/devices/:key')
   async remove(
     @CurrentUser() user: CurrentUserType,
@@ -192,7 +221,7 @@ export class RegistryController {
       .user(user.id)
       .workspace(workspaceId)
       .assert('Workspace.Settings.Update');
-    const removed = await this.service.remove(workspaceId, key);
+    const removed = await this.service.remove(workspaceId, key, user.id);
     return { ok: removed > 0, removed };
   }
 
