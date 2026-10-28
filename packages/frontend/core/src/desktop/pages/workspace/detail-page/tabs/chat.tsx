@@ -27,6 +27,7 @@ import { NotificationServiceImpl } from '@notesgraph/core/blocksuite/view-extens
 import { useAIChatConfig } from '@notesgraph/core/components/hooks/notesgraph/use-ai-chat-config';
 import { useAISpecs } from '@notesgraph/core/components/hooks/notesgraph/use-ai-specs';
 import { useAISubscribe } from '@notesgraph/core/components/hooks/notesgraph/use-ai-subscribe';
+import { storeMarkdown } from '@notesgraph/core/modules/agents/services/context';
 import {
   AIDraftService,
   AIToolsConfigService,
@@ -125,7 +126,16 @@ export const EditorChatPanel = ({
         ? createLocalAIRequestService(
             localLLMService,
             docEmbedder,
-            localVisionService
+            localVisionService,
+            // The note this panel sits beside, for the on-device model,
+            // which otherwise saw only its id.
+            async docId =>
+              doc && doc.id === docId
+                ? {
+                    title: doc.meta?.title ?? '',
+                    markdown: await storeMarkdown(doc),
+                  }
+                : null
           )
         : createAIRequestService(
             graphqlService.gql,
@@ -134,6 +144,7 @@ export const EditorChatPanel = ({
           ),
     [
       backend,
+      doc,
       localLLMService,
       docEmbedder,
       localVisionService,

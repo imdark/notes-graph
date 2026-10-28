@@ -55,3 +55,72 @@ describe('LocalCopilotClient context', () => {
     await expect(local.getSession()).resolves.toBeUndefined();
   });
 });
+
+describe('LocalCopilotClient chat beside a note', () => {
+  /** A model that records what it was sent and answers "ok". */
+  const recordingLlm = () => {
+    const sent: { role: string; content: string }[][] = [];
+    const llm = {
+      async *chatStream(messages: { role: string; content: string }[]) {
+        sent.push(messages.map(m => ({ ...m })));
+        yield 'ok';
+      },
+    } as unknown as LocalLLMService;
+    return { llm, sent };
+  };
+
+  const finished = (source: EventSource) =>
+    new Promise<void>(resolve =>
+      source.addEventListener('error', () => resolve())
+    );
+
+  test('the open note is the context, not its id', async () => {
+    const { llm, sent } = recordingLlm();
+    const embedder = {
+      store: {
+        stats: async () => {
+          throw new Error('beside a note, other notes are not searched');
+        },
+      },
+    };
+    const local = new LocalCopilotClient(
+      llm,
+      embedder as never,
+      undefined,
+      async docId =>
+        docId === 'doc-1'
+          ? {
+              title: 'RTX 5090 desktop deal research',
+              markdown: 'A prebuilt is the way under $6,000.',
+            }
+          : null
+    );
+    const sessionId = await local.createSession({
+      promptName: 'Chat With NotesGraph AI',
+    } as never);
+    await local.createMessage({
+      sessionId,
+      content: 'summarise this page',
+      params: { currentDocId: 'doc-1' },
+    } as never);
+    await finished(local.chatTextStream({ sessionId } as never));
+
+    const turn = sent[0].at(-1)!;
+    expect(turn.role).toBe('user');
+    expect(turn.content).toContain('"RTX 5090 desktop deal research"');
+    expect(turn.content).toContain('A prebuilt is the way under $6,000.');
+    expect(turn.content).toMatch(/summarise this page$/);
+    expect(turn.content).not.toContain('currentDocId');
+    expect(turn.content).not.toContain('doc-1');
+    // The note rides along for the turn; the history keeps what was asked.
+    const second = await local.createMessage({
+      sessionId,
+      content: 'and the cheapest?',
+      params: { currentDocId: 'doc-1' },
+    } as never);
+    expect(second).toBeTruthy();
+    await finished(local.chatTextStream({ sessionId } as never));
+    const history = sent[1].filter(m => m.role === 'user');
+    expect(history[0].content).toBe('summarise this page');
+  });
+});
