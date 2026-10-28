@@ -9,7 +9,11 @@ import {
   draftSelectedModelsCommand,
   getSelectedModelsCommand,
 } from '@blocksuite/notesgraph-shared/commands';
-import { LifeCycleWatcher, type UIEventHandler } from '@blocksuite/std';
+import {
+  LifeCycleWatcher,
+  TextSelection,
+  type UIEventHandler,
+} from '@blocksuite/std';
 
 /**
  * ReadOnlyClipboard is a class that provides a read-only clipboard for the root block.
@@ -18,10 +22,13 @@ import { LifeCycleWatcher, type UIEventHandler } from '@blocksuite/std';
 export class ReadOnlyClipboard extends LifeCycleWatcher {
   static override key = 'notesgraph-readonly-clipboard';
 
-  protected readonly _copySelectedInPage = (onCopy?: () => void) => {
+  protected readonly _copySelectedInPage = (
+    onCopy?: () => void,
+    onCopyError?: (error: unknown) => void
+  ) => {
     return this.std.command
       .chain()
-      .with({ onCopy })
+      .with({ onCopy, onCopyError })
       .pipe(getSelectedModelsCommand, { types: ['block', 'text', 'image'] })
       .pipe(draftSelectedModelsCommand)
       .pipe(copySelectedModelsCommand);
@@ -48,9 +55,53 @@ export class ReadOnlyClipboard extends LifeCycleWatcher {
     });
   };
 
+  /**
+   * Puts the selected text on the event's own clipboard, as plain text, and
+   * says whether there was any. The rich copy that follows writes through
+   * `navigator.clipboard`, which an Android WebView refuses ("Write
+   * permission denied"); with the native copy prevented, nothing reached the
+   * clipboard there. The event's clipboard needs no permission, and where the
+   * rich copy works it replaces this.
+   */
+  protected readonly _setPlainText = (e: ClipboardEvent) => {
+    const text =
+      this.std.host.ownerDocument.getSelection()?.toString() ||
+      this._selectedText();    if (!text || !e.clipboardData) return false;
+    e.clipboardData.setData('text/plain', text);
+    return true;
+  };
+
+  /**
+   * The selection's plain text from the models, for when the browser has no
+   * native selection to read: whole selected blocks, a text selection cut to
+   * its range at both ends.
+   */
+  private readonly _selectedText = () => {
+    const textSelection = this.std.selection.find(TextSelection);
+    const [, { selectedModels }] = this.std.command.exec(
+      getSelectedModelsCommand,
+      { types: ['block', 'text'], mode: 'flat' }
+    );
+    return (selectedModels ?? [])
+      .map(model => {
+        const text = model.text?.toString() ?? '';
+        if (!textSelection) return text;
+        const { from, to } = textSelection;
+        const start = model.id === from.blockId ? from.index : 0;
+        const end = !to
+          ? from.index + from.length
+          : model.id === to.blockId
+            ? to.index + to.length
+            : text.length;
+        return text.slice(start, end);
+      })
+      .join('\n');
+  };
+
   onPageCopy: UIEventHandler = ctx => {
     const e = ctx.get('clipboardState').raw;
     e.preventDefault();
+    this._setPlainText(e);
 
     this._copySelectedInPage().run();
   };

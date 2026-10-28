@@ -86,6 +86,9 @@ export class PageClipboard extends ReadOnlyClipboard {
   onPageCut: UIEventHandler = ctx => {
     const e = ctx.get('clipboardState').raw;
     e.preventDefault();
+    // The text is on the clipboard already, so the cut goes ahead even when
+    // the rich copy can't be written (an Android WebView refuses it).
+    const copiedPlain = this._setPlainText(e);
 
     // Cut-line: the platform cut combo with a collapsed cursor cuts the
     // whole line — expand the selection to the full line so the copy
@@ -112,7 +115,12 @@ export class PageClipboard extends ReadOnlyClipboard {
       }
     }
 
-    this._copySelectedInPage(() => {
+    // What was selected when the cut began: by the time the clipboard write
+    // settles, Android has collapsed the selection to a caret, and deleting
+    // that removed nothing.
+    const selections = this.std.selection.value;
+    const deleteSelected = () => {
+      this.std.selection.set(selections);
       this.std.command
         .chain()
         .try<{}>(cmd => [
@@ -120,6 +128,9 @@ export class PageClipboard extends ReadOnlyClipboard {
           cmd.pipe(getSelectedModelsCommand).pipe(deleteSelectedModelsCommand),
         ])
         .run();
+    };
+    this._copySelectedInPage(deleteSelected, () => {
+      if (copiedPlain) deleteSelected();
     }).run();
   };
 
