@@ -1,10 +1,14 @@
 package app.notesgraph.pro.widget
 
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.app.PendingIntent
 import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProvider
 import android.content.Context
 import android.content.Intent
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.graphics.Typeface
 import android.os.Build
 import android.text.SpannableString
@@ -15,14 +19,17 @@ import android.text.style.StyleSpan
 import android.util.TypedValue
 import android.view.View
 import android.widget.RemoteViews
+import androidx.core.app.NotificationCompat
 import androidx.core.widget.RemoteViewsCompat
 import androidx.work.BackoffPolicy
 import androidx.work.Constraints
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.ExistingWorkPolicy
+import androidx.work.ForegroundInfo
 import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.OutOfQuotaPolicy
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
@@ -55,6 +62,7 @@ class NoteWidgetProvider : AppWidgetProvider() {
 
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action == ACTION_REFRESH) {
+            NoteWidgetViews.showRefreshing(context)
             NoteWidgetWorker.refresh(context)
             return
         }
@@ -97,10 +105,50 @@ class NoteWidgetWorker(
         return if (offline && runAttemptCount < MAX_RETRIES) Result.retry() else Result.success()
     }
 
+    /**
+     * Before Android 12 an expedited refresh runs as a brief foreground
+     * service, which must show something; from 12 on this isn't shown.
+     */
+    override suspend fun getForegroundInfo(): ForegroundInfo {
+        val manager = applicationContext.getSystemService(NotificationManager::class.java)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+            manager.getNotificationChannel(REFRESH_CHANNEL) == null
+        ) {
+            manager.createNotificationChannel(
+                NotificationChannel(
+                    REFRESH_CHANNEL,
+                    applicationContext.getString(R.string.note_widget_refresh_channel),
+                    NotificationManager.IMPORTANCE_MIN,
+                )
+            )
+        }
+        val notification = NotificationCompat.Builder(applicationContext, REFRESH_CHANNEL)
+            .setSmallIcon(R.drawable.ic_ai)
+            .setContentTitle(applicationContext.getString(R.string.note_widget_refreshing))
+            .setPriority(NotificationCompat.PRIORITY_MIN)
+            .setSilent(true)
+            .build()
+        return ForegroundInfo(REFRESH_NOTIFICATION_ID, notification)
+    }
+
     companion object {
         private const val REFRESH_WORK = "note-widget-refresh"
         private const val PERIODIC_WORK = "note-widget-periodic"
         private const val MAX_RETRIES = 4
+        private const val REFRESH_CHANNEL = "note-widget-refresh"
+        private const val REFRESH_NOTIFICATION_ID = 0x5717
+
+        private val NETWORK =
+            Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()
+
+        /** What a failed connection says on the widget: which way it failed. */
+        fun networkFailure(e: IOException): Int = when (e) {
+            is java.net.UnknownHostException -> R.string.note_widget_offline
+            is java.net.SocketTimeoutException -> R.string.note_widget_timed_out
+            is java.net.ConnectException -> R.string.note_widget_unreachable
+            is javax.net.ssl.SSLException -> R.string.note_widget_tls_failed
+            else -> R.string.note_widget_connection_failed
+        }
 
         /** Read and redraw one widget; false when the connection failed. */
         suspend fun refreshOne(context: Context, widgetId: Int): Boolean {
@@ -113,7 +161,9 @@ class NoteWidgetWorker(
                 return true
             }
             val cached = NoteWidgets.content(context, widgetId)
-            if (cached == null) NoteWidgetViews.render(context, widgetId, config, null)
+            if (cached == null) {
+                NoteWidgetViews.render(context, widgetId, config, null, refreshing = true)
+            }
             var offline = false
             val content = try {
                 NoteWidgets.fetch(config)
@@ -126,7 +176,7 @@ class NoteWidgetWorker(
                 offline = e is IOException
                 val reason = when (e) {
                     is AgentApi.HttpError -> e.message
-                    is IOException -> context.getString(R.string.note_widget_offline)
+                    is IOException -> context.getString(networkFailure(e))
                     else -> e.message
                 } ?: e.javaClass.simpleName
                 cached?.copy(error = reason) ?: NoteWidgets.Content(
@@ -142,10 +192,27 @@ class NoteWidgetWorker(
             return !offline
         }
 
-        /** Redraw every widget from the server, after [delaySeconds]. */
+        /**
+         * Redraw every widget from the server, after [delaySeconds].
+         *
+         * The refresh button's run is expedited and asks for a network: plain
+         * background work ran with the app's network cut off (seen on an S24
+         * with Battery Saver on: blocked=BATTERY_SAVER|APP_BACKGROUND), so the
+         * DNS lookup failed and the widget said "no connection" with the
+         * phone online. An expedited job is let through Battery Saver; past
+         * its quota it runs as ordinary work.
+         */
         fun refresh(context: Context, delaySeconds: Long = 0) {
             val request = OneTimeWorkRequestBuilder<NoteWidgetWorker>()
-                .setInitialDelay(delaySeconds, TimeUnit.SECONDS)
+                .apply {
+                    // An initial delay and expedited don't go together.
+                    if (delaySeconds > 0) {
+                        setInitialDelay(delaySeconds, TimeUnit.SECONDS)
+                    } else {
+                        setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
+                    }
+                }
+                .setConstraints(NETWORK)
                 .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
                 .build()
             WorkManager.getInstance(context)
@@ -155,9 +222,7 @@ class NoteWidgetWorker(
         /** Every half hour, which also turns a journal widget over to the new day. */
         fun schedule(context: Context) {
             val request = PeriodicWorkRequestBuilder<NoteWidgetWorker>(30, TimeUnit.MINUTES)
-                .setConstraints(
-                    Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()
-                )
+                .setConstraints(NETWORK)
                 .build()
             WorkManager.getInstance(context)
                 .enqueueUniquePeriodicWork(PERIODIC_WORK, ExistingPeriodicWorkPolicy.KEEP, request)
@@ -171,19 +236,60 @@ class NoteWidgetWorker(
 
 internal object NoteWidgetViews {
 
+    /**
+     * Spin in the refresh button's place on every widget, at once, so a press
+     * shows before the refresh is picked up. The next [render] puts the
+     * button back. Offline the refresh waits for a network, so it would spin
+     * until then: the button stays as it is.
+     */
+    fun showRefreshing(context: Context) {
+        if (!phoneOnline(context)) return
+        val ids = NoteWidgets.widgetIds(context)
+        if (ids.isEmpty()) return
+        val views = RemoteViews(context.packageName, R.layout.note_widget)
+        setRefreshing(views, true)
+        AppWidgetManager.getInstance(context).partiallyUpdateAppWidget(ids, views)
+    }
+
+    /**
+     * Whether the phone has a working internet connection, on any network.
+     * Not the app's active network: with Battery Saver on and the app in the
+     * background that reads as none, the app's own access being what is
+     * blocked, though the (expedited) refresh still runs.
+     */
+    @Suppress("DEPRECATION")
+    private fun phoneOnline(context: Context): Boolean {
+        val connectivity = context.getSystemService(ConnectivityManager::class.java)
+            ?: return false
+        return connectivity.allNetworks.any { network ->
+            connectivity.getNetworkCapabilities(network)?.run {
+                hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
+                    hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+            } == true
+        }
+    }
+
+    private fun setRefreshing(views: RemoteViews, refreshing: Boolean) {
+        views.setViewVisibility(R.id.note_widget_refresh, if (refreshing) View.GONE else View.VISIBLE)
+        views.setViewVisibility(R.id.note_widget_refreshing, if (refreshing) View.VISIBLE else View.GONE)
+    }
+
     fun render(
         context: Context,
         widgetId: Int,
         config: NoteWidgets.Config?,
         content: NoteWidgets.Content?,
+        refreshing: Boolean = false,
     ) {
         val views = RemoteViews(context.packageName, R.layout.note_widget)
         views.setOnClickPendingIntent(R.id.note_widget_refresh, refreshIntent(context, widgetId))
         views.setViewVisibility(R.id.note_widget_status, View.GONE)
+        setRefreshing(views, refreshing)
 
         if (config == null) {
             views.setTextViewText(R.id.note_widget_title, context.getString(R.string.app_name))
             views.setViewVisibility(R.id.note_widget_refresh, View.GONE)
+            views.setViewVisibility(R.id.note_widget_refreshing, View.GONE)
             showMessage(views, context.getString(R.string.note_widget_choose))
             val choose = PendingIntent.getActivity(
                 context,
@@ -207,6 +313,7 @@ internal object NoteWidgetViews {
         if (AppLock.isEnabled(context)) {
             views.setTextViewText(R.id.note_widget_title, context.getString(R.string.app_name))
             views.setViewVisibility(R.id.note_widget_refresh, View.GONE)
+            views.setViewVisibility(R.id.note_widget_refreshing, View.GONE)
             showMessage(views, context.getString(R.string.note_widget_locked))
             colors(context, config.style.theme)?.let { applyColors(views, it) }
             update(context, widgetId, views)
