@@ -10,6 +10,23 @@
 
 const DEFAULT_APP_BASE = 'https://app.notesgraph.com';
 
+// Every step that waits on the page gets a deadline, so a stalled image host
+// or a page that never answers fails the clip with a reason instead of
+// leaving the popup on "Clipping…" forever.
+const READ_PAGE_MS = 15_000;
+const IMAGE_MS = 8_000;
+const VIDEO_MS = 20_000;
+
+function withTimeout(promise, ms, message) {
+  let timer;
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error(message)), ms);
+    }),
+  ]).finally(() => clearTimeout(timer));
+}
+
 async function getAppBase() {
   try {
     const { appBaseUrl } = await chrome.storage.sync.get('appBaseUrl');
@@ -22,9 +39,10 @@ async function getAppBase() {
 /**
  * Runs IN the active page (isolated world, after extract-clip.js injected the
  * `extractClip` global). Fetches each image with the page's credentials and
- * returns it as a data URL so the bytes survive the hop to the app.
+ * returns it as a data URL so the bytes survive the hop to the app. Images
+ * load at once, each given `imageMs`; one that is slower is left out.
  */
-async function captureInPage() {
+async function captureInPage(imageMs) {
   /* global extractClip */
   const clip = extractClip();
   const toDataUrl = blob =>
@@ -34,19 +52,23 @@ async function captureInPage() {
       fr.onerror = reject;
       fr.readAsDataURL(blob);
     });
-  const imageData = [];
-  for (const url of clip.images.slice(0, 12)) {
+  const load = async url => {
     try {
-      const res = await fetch(url, { credentials: 'include' });
-      if (!res.ok) continue;
+      // The signal covers the body too, so a stream that stalls midway ends.
+      const res = await fetch(url, {
+        credentials: 'include',
+        signal: AbortSignal.timeout(imageMs),
+      });
+      if (!res.ok) return null;
       const blob = await res.blob();
-      if (!blob.type.startsWith('image/') || blob.size > 8_000_000) continue;
-      imageData.push({ url, mime: blob.type, dataUrl: await toDataUrl(blob) });
+      if (!blob.type.startsWith('image/') || blob.size > 8_000_000) return null;
+      return { url, mime: blob.type, dataUrl: await toDataUrl(blob) };
     } catch {
-      /* skip unreachable image */
+      return null; // unreachable or too slow: skip it
     }
-  }
-  return { ...clip, imageData };
+  };
+  const loaded = await Promise.all(clip.images.slice(0, 12).map(load));
+  return { ...clip, imageData: loaded.filter(Boolean) };
 }
 
 /**
@@ -98,14 +120,19 @@ function deliverToApp(payload) {
  */
 async function assembleCapturedVideo(tabId) {
   try {
-    const frames = await chrome.scripting.executeScript({
-      target: { tabId, allFrames: true },
-      world: 'MAIN',
-      func: async () =>
-        typeof window.__ngAssembleCapturedVideo === 'function'
-          ? await window.__ngAssembleCapturedVideo()
-          : null,
-    });
+    // Past the deadline the clip goes ahead without the video.
+    const frames = await withTimeout(
+      chrome.scripting.executeScript({
+        target: { tabId, allFrames: true },
+        world: 'MAIN',
+        func: async () =>
+          typeof window.__ngAssembleCapturedVideo === 'function'
+            ? await window.__ngAssembleCapturedVideo()
+            : null,
+      }),
+      VIDEO_MS,
+      'video capture timed out'
+    );
     let best = null;
     for (const f of frames) {
       const r = f && f.result;
@@ -154,14 +181,19 @@ async function clipActiveTab() {
     throw new Error('This page cannot be clipped.');
   }
 
-  await chrome.scripting.executeScript({
-    target: { tabId: tab.id },
-    files: ['extract-clip.js'],
-  });
-  const [{ result: clip }] = await chrome.scripting.executeScript({
-    target: { tabId: tab.id },
-    func: captureInPage,
-  });
+  const [{ result: clip }] = await withTimeout(
+    chrome.scripting
+      .executeScript({ target: { tabId: tab.id }, files: ['extract-clip.js'] })
+      .then(() =>
+        chrome.scripting.executeScript({
+          target: { tabId: tab.id },
+          func: captureInPage,
+          args: [IMAGE_MS],
+        })
+      ),
+    READ_PAGE_MS,
+    "The page didn't respond. Reload it and try again."
+  );
 
   const attachmentsData = {};
   const imageKeys = [];
