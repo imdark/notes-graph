@@ -7,6 +7,8 @@ import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProvider
 import android.content.Context
 import android.content.Intent
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.graphics.Typeface
 import android.os.Build
 import android.text.SpannableString
@@ -60,6 +62,7 @@ class NoteWidgetProvider : AppWidgetProvider() {
 
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action == ACTION_REFRESH) {
+            NoteWidgetViews.showRefreshing(context)
             NoteWidgetWorker.refresh(context)
             return
         }
@@ -158,7 +161,9 @@ class NoteWidgetWorker(
                 return true
             }
             val cached = NoteWidgets.content(context, widgetId)
-            if (cached == null) NoteWidgetViews.render(context, widgetId, config, null)
+            if (cached == null) {
+                NoteWidgetViews.render(context, widgetId, config, null, refreshing = true)
+            }
             var offline = false
             val content = try {
                 NoteWidgets.fetch(config)
@@ -231,19 +236,60 @@ class NoteWidgetWorker(
 
 internal object NoteWidgetViews {
 
+    /**
+     * Spin in the refresh button's place on every widget, at once, so a press
+     * shows before the refresh is picked up. The next [render] puts the
+     * button back. Offline the refresh waits for a network, so it would spin
+     * until then: the button stays as it is.
+     */
+    fun showRefreshing(context: Context) {
+        if (!phoneOnline(context)) return
+        val ids = NoteWidgets.widgetIds(context)
+        if (ids.isEmpty()) return
+        val views = RemoteViews(context.packageName, R.layout.note_widget)
+        setRefreshing(views, true)
+        AppWidgetManager.getInstance(context).partiallyUpdateAppWidget(ids, views)
+    }
+
+    /**
+     * Whether the phone has a working internet connection, on any network.
+     * Not the app's active network: with Battery Saver on and the app in the
+     * background that reads as none, the app's own access being what is
+     * blocked, though the (expedited) refresh still runs.
+     */
+    @Suppress("DEPRECATION")
+    private fun phoneOnline(context: Context): Boolean {
+        val connectivity = context.getSystemService(ConnectivityManager::class.java)
+            ?: return false
+        return connectivity.allNetworks.any { network ->
+            connectivity.getNetworkCapabilities(network)?.run {
+                hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
+                    hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+            } == true
+        }
+    }
+
+    private fun setRefreshing(views: RemoteViews, refreshing: Boolean) {
+        views.setViewVisibility(R.id.note_widget_refresh, if (refreshing) View.GONE else View.VISIBLE)
+        views.setViewVisibility(R.id.note_widget_refreshing, if (refreshing) View.VISIBLE else View.GONE)
+    }
+
     fun render(
         context: Context,
         widgetId: Int,
         config: NoteWidgets.Config?,
         content: NoteWidgets.Content?,
+        refreshing: Boolean = false,
     ) {
         val views = RemoteViews(context.packageName, R.layout.note_widget)
         views.setOnClickPendingIntent(R.id.note_widget_refresh, refreshIntent(context, widgetId))
         views.setViewVisibility(R.id.note_widget_status, View.GONE)
+        setRefreshing(views, refreshing)
 
         if (config == null) {
             views.setTextViewText(R.id.note_widget_title, context.getString(R.string.app_name))
             views.setViewVisibility(R.id.note_widget_refresh, View.GONE)
+            views.setViewVisibility(R.id.note_widget_refreshing, View.GONE)
             showMessage(views, context.getString(R.string.note_widget_choose))
             val choose = PendingIntent.getActivity(
                 context,
@@ -267,6 +313,7 @@ internal object NoteWidgetViews {
         if (AppLock.isEnabled(context)) {
             views.setTextViewText(R.id.note_widget_title, context.getString(R.string.app_name))
             views.setViewVisibility(R.id.note_widget_refresh, View.GONE)
+            views.setViewVisibility(R.id.note_widget_refreshing, View.GONE)
             showMessage(views, context.getString(R.string.note_widget_locked))
             colors(context, config.style.theme)?.let { applyColors(views, it) }
             update(context, widgetId, views)
