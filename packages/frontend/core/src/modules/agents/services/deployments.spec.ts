@@ -28,11 +28,17 @@ import {
   pullRequestsCommand,
   pullRequestStage,
   type RunTask,
+  deployedNote,
+  lastLogLine,
+  SHIP_AUTOMATIONS,
   shipAgents,
   shipBrief,
+  shipReportText,
+  shipsWithAutomations,
   type ShipStage,
   shipTargets,
   shownStage,
+  stepResult,
   stuckReason,
 } from './deployments';
 
@@ -610,5 +616,60 @@ describe('flagStage', () => {
       })
     ).toBeNull();
     expect(flagStage('enable_x', '', deploy)).toBeNull();
+  });
+});
+
+describe('shipping with automations', () => {
+  test('the cloud runner has no deploy; a wf device has', () => {
+    expect(shipsWithAutomations({ deviceKey: 'cloud' })).toBe(false);
+    expect(shipsWithAutomations({ deviceKey: undefined })).toBe(false);
+    expect(shipsWithAutomations({ deviceKey: 'laptop' })).toBe(true);
+  });
+
+  test('the ship automations are wf actions: a gh merge and a cloud deploy', () => {
+    expect(SHIP_AUTOMATIONS.merge.code).toContain('type: custom_command');
+    expect(SHIP_AUTOMATIONS.merge.code).toContain(
+      'gh pr merge {input.number} -R {input.repo} --merge'
+    );
+    expect(SHIP_AUTOMATIONS.deploy.code).toContain('type: cloud_deploy');
+    expect(SHIP_AUTOMATIONS.deploy.timeoutSeconds).toBe(60 * 60);
+  });
+
+  test('a step result and the last log line are read off a run', () => {
+    expect(stepResult({ deploy: { commit: 'abc' } }, 'deploy')).toEqual({
+      commit: 'abc',
+    });
+    expect(stepResult({ deploy: 'x' }, 'deploy')).toEqual({});
+    expect(lastLogLine('one\ntwo\n\n')).toBe('two');
+    expect(lastLogLine(undefined)).toBe('');
+  });
+
+  test('a deploy notes its short commit', () => {
+    expect(deployedNote('abcdef1234', new Date(2026, 9, 25))).toMatch(
+      /^Deployed abcdef1 on /
+    );
+  });
+
+  test('the report says what went out and what needs fixing', () => {
+    const report = shipReportText({
+      merged: [task('a', 'merged')],
+      leftOut: [{ task: task('b', 'committed'), why: 'conflicts\nmore' }],
+      deployed: {
+        commit: 'abcdef1234',
+        verify: 'https://x/ answered HTTP 200',
+      },
+    });
+    expect(report.ok).toBe(false);
+    expect(report.title).toBe('Deployed abcdef1');
+    expect(report.message).toBe(
+      `1 task now DEPLOYED, waiting to be checked live. https://x/ answered HTTP 200 "task b" wasn't merged (conflicts). Fix & merge with Claude from the Deployments page.`
+    );
+    expect(shipReportText({ merged: [], leftOut: [], deployed: null })).toEqual(
+      {
+        ok: false,
+        title: 'Nothing deployed',
+        message: 'Nothing was merged to deploy.',
+      }
+    );
   });
 });

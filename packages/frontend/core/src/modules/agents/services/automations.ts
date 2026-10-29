@@ -47,7 +47,7 @@ export interface Automation {
   name: string;
   docId: string | null;
   blockId: string | null;
-  runtime: string;
+  runtime: AutomationRuntime;
   triggers: AutomationTrigger[];
   secrets: string[];
   timeoutSeconds: number;
@@ -60,8 +60,16 @@ export interface Automation {
   deployments: { target: string; versionId: string; deployedAt: number }[];
 }
 
+/**
+ * How the code runs: 'node' is JavaScript; 'shell' is JavaScript given `sh`
+ * too, to run commands on the device; 'actions' is YAML in wf's own action
+ * language. The last two need a device running wf.
+ */
+export type AutomationRuntime = 'node' | 'shell' | 'actions';
+
 export interface AutomationDraft {
   name: string;
+  runtime?: AutomationRuntime;
   triggers: AutomationTrigger[];
   secrets: string[];
   timeoutSeconds: number;
@@ -118,11 +126,31 @@ console.log('started by', input);
 return { ok: true };
 `;
 
+/** What a new wf actions automation starts with. */
+export const BLANK_ACTIONS_CODE = `# wf actions, run in order on the device by wf. {input.x} is filled from
+# what started the run, {steps.<id>.stdout} from an earlier command. Types
+# include custom_command, cloud_deploy and notification.
+actions:
+  - id: hello
+    type: custom_command
+    command: echo started by {input.type}
+`;
+
+/** What each runtime is called in the editor. */
+export const AUTOMATION_RUNTIME_LABELS: Record<AutomationRuntime, string> = {
+  node: 'JavaScript',
+  shell: 'JavaScript with sh (wf devices)',
+  actions: 'wf actions YAML (wf devices)',
+};
+
 /** The webhook URL for a token, on this server. */
 export const webhookUrl = (baseUrl: string, token: string) =>
   `${baseUrl.replace(/\/$/, '')}/api/automations/hooks/${token}`;
 
 const REFRESH_MS = 30_000;
+/** How often a run being waited on is read again. */
+const RUN_POLL_MS = 2_000;
+const ACTIVE_RUN_STATUSES = new Set<AutomationRunStatus>(['queued', 'running']);
 
 export class AutomationsService extends Service {
   constructor(
@@ -298,12 +326,54 @@ export class AutomationsService extends Service {
     await this.revalidate().catch(() => {});
   }
 
-  async runNow(id: string, input?: unknown): Promise<AutomationRun> {
+  /** Run it now, on `target` or the first device it is deployed to. */
+  async runNow(
+    id: string,
+    input?: unknown,
+    target?: string
+  ): Promise<AutomationRun> {
     const { run } = await this.json<{ run: AutomationRun }>(`/${id}/run`, {
       method: 'POST',
-      body: JSON.stringify({ input: input ?? null }),
+      body: JSON.stringify({ input: input ?? null, target }),
     });
     return run;
+  }
+
+  /**
+   * Follow a run until it ends, calling `onUpdate` with each read of it
+   * (logs included). Resolves with the ended run; rejects when `signal`
+   * aborts first.
+   */
+  async waitForRun(
+    id: string,
+    runId: string,
+    {
+      signal,
+      onUpdate,
+      intervalMs = RUN_POLL_MS,
+    }: {
+      signal?: AbortSignal;
+      onUpdate?: (run: AutomationRun) => void;
+      intervalMs?: number;
+    } = {}
+  ): Promise<AutomationRun> {
+    for (;;) {
+      signal?.throwIfAborted();
+      const run = await this.run(id, runId);
+      onUpdate?.(run);
+      if (!ACTIVE_RUN_STATUSES.has(run.status)) return run;
+      await new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(resolve, intervalMs);
+        signal?.addEventListener(
+          'abort',
+          () => {
+            clearTimeout(timer);
+            reject(signal.reason);
+          },
+          { once: true }
+        );
+      });
+    }
   }
 
   async runs(id: string): Promise<AutomationRun[]> {
