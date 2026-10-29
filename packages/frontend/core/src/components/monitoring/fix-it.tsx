@@ -2,6 +2,7 @@ import { Button, notify } from '@notesgraph/component';
 import { AgentRunLogDialog } from '@notesgraph/core/desktop/pages/workspace/detail-page/tabs/agent-run-log';
 import {
   AgentRunsStore,
+  CLOUD_DEVICE_KEY,
   type DeviceCheck,
   fixKey,
   FixTaskService,
@@ -19,14 +20,50 @@ const when = (seconds: number | null) =>
 const machineLine = (device: RegistryDevice) =>
   `Machine: ${device.name} (${device.key}${device.host ? `, ${device.user ? `${device.user}@` : ''}${device.host}` : ''})`;
 
-/** Run it on the machine itself when it takes jobs and is reachable. */
-const machineKey = (device: RegistryDevice, online: boolean) =>
-  device.agentTarget && online ? device.key : undefined;
+/**
+ * The machine that fixes the cloud runner's problems: the server it runs on,
+ * registered with `role=prod-host`. The runner's container shares the host's
+ * disk, memory and load, so its checks are the host's; but it can't reach
+ * Docker or the host's files to fix them. Only one this person may run on
+ * and that is up.
+ */
+export const hostFor = (
+  devices: RegistryDevice[],
+  online: (device: RegistryDevice) => boolean
+): RegistryDevice | undefined =>
+  devices.find(
+    device =>
+      device.labels?.role === 'prod-host' && device.agentTarget && online(device)
+  );
+
+/**
+ * Run it on the machine itself when it takes jobs and is reachable; a cloud
+ * runner's problem on the server it runs on, when there is one.
+ */
+const machineKey = (
+  device: RegistryDevice,
+  online: boolean,
+  host?: RegistryDevice
+) =>
+  device.key === CLOUD_DEVICE_KEY && host
+    ? host.key
+    : device.agentTarget && online
+      ? device.key
+      : undefined;
+
+/** Says where a cloud runner's fix runs, and why. */
+const hostLine = (device: RegistryDevice, host?: RegistryDevice) =>
+  device.key === CLOUD_DEVICE_KEY && host
+    ? [
+        `Run on ${host.name} (${host.key}), the server this runner is on: the runner's container shares its disk, memory and load but can't reach Docker or the host's files.`,
+      ]
+    : [];
 
 export const checkFailure = (
   device: RegistryDevice,
   check: DeviceCheck,
-  online: boolean
+  online: boolean,
+  host?: RegistryDevice
 ): HealthFailure => ({
   title: `${check.name} ${check.status} on ${device.name}${check.detail ? `: ${check.detail}` : ''}`,
   details: [
@@ -34,14 +71,16 @@ export const checkFailure = (
     ...(check.detail ? [`Detail: ${check.detail}`] : []),
     `Checked: ${when(device.checkedAt)}.`,
     machineLine(device),
+    ...hostLine(device, host),
   ],
-  deviceKey: machineKey(device, online),
+  deviceKey: machineKey(device, online, host),
 });
 
 export const machineFailure = (
   device: RegistryDevice,
   state: string,
-  online: boolean
+  online: boolean,
+  host?: RegistryDevice
 ): HealthFailure => ({
   title: `${device.name} is ${state}${device.statusDetail ? `: ${device.statusDetail}` : ''}`,
   details: [
@@ -49,8 +88,9 @@ export const machineFailure = (
     ...(device.statusDetail ? [`Detail: ${device.statusDetail}`] : []),
     `Checked: ${when(device.checkedAt)}.`,
     machineLine(device),
+    ...hostLine(device, host),
   ],
-  deviceKey: machineKey(device, online),
+  deviceKey: machineKey(device, online, host),
 });
 
 export const monitorFailure = (monitor: Monitor): HealthFailure => ({
