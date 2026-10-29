@@ -364,6 +364,15 @@ export const NOTESGRAPH_FLAGS = {
     configurable: true,
     defaultState: true,
   },
+  enable_monitor_run_button: {
+    commit: '',
+    category: 'notesgraph',
+    displayName: 'Run a monitor from its editor',
+    description:
+      'A Run button in the monitor editor: saves the changes, runs the monitor once and shows what it got.',
+    configurable: true,
+    defaultState: true,
+  },
 } satisfies { [key in string]: FlagInfo };
 
 // oxlint-disable-next-line no-redeclare
