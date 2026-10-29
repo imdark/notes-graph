@@ -60,6 +60,8 @@ export interface DeviceDto {
   channel: string;
   pin: string | null;
   agentTarget: boolean;
+  /** Only server admins may run jobs here. */
+  adminOnly: boolean;
   /** Jobs its runners may run at once; null leaves it to the runner. */
   maxJobs: number | null;
   labels: Record<string, unknown>;
@@ -89,6 +91,7 @@ export function toDeviceDto(device: RegistryDevice): DeviceDto {
     channel: device.channel,
     pin: device.pin,
     agentTarget: device.agentTarget,
+    adminOnly: device.adminOnly,
     maxJobs: device.maxJobs,
     labels: (device.labels ?? {}) as Record<string, unknown>,
     state: device.state,

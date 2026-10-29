@@ -127,6 +127,24 @@ export function pullRequestStage(
 }
 
 /**
+ * Whether prod's build has a feature flag, told by the commit that added it
+ * (see scripts/stamp-feature-flags.mjs): `deployed` when prod lists the flag
+ * with that commit, `not-deployed` when it doesn't. Null when that can't be
+ * told: no deploy record, a record from before flags were stamped, or a flag
+ * with no commit.
+ */
+export type FlagStage = 'deployed' | 'not-deployed';
+
+export function flagStage(
+  key: string,
+  commit: string,
+  deploy: DeployInfo | null | undefined
+): FlagStage | null {
+  if (!commit || !deploy?.featureFlags) return null;
+  return deploy.featureFlags[key] === commit ? 'deployed' : 'not-deployed';
+}
+
+/**
  * Where a task shows on the Deployments page: the stage noted on it, moved
  * on when its pull request is further along. Merged on GitHub (`merged`,
  * from the pull request list or a branch check) puts a COMMITTED task with

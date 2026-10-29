@@ -29,6 +29,7 @@ function makeService(
     budget?: number;
     spent?: number;
     gates?: any;
+    admins?: string[];
   } = {}
 ) {
   const created: any[] = [];
@@ -37,6 +38,10 @@ function makeService(
   const models: any = {
     registryDevice: {
       get: async () => options.device ?? null,
+    },
+    userFeature: {
+      has: async (userId: string, name: string) =>
+        name === 'administrator' && (options.admins ?? []).includes(userId),
     },
     registryJob: {
       heldUntil: async () => options.heldUntil ?? null,
@@ -781,6 +786,31 @@ test('appended log text gets a stamp at each inner line start', t => {
     stampInnerLines('tail\n→ read_file\n\nok\n', stamp),
     'tail\n' + stamp + '→ read_file\n\n' + stamp + 'ok\n'
   );
+});
+
+test('only a server admin can run work on an admin-only device', async t => {
+  const device = { ...agentTarget, name: 'prod host', adminOnly: true };
+  const { service, created } = makeService({ device, admins: ['admin-1'] });
+  await t.throwsAsync(
+    service.enqueue(workspaceId, 'member-1', 'laptop', { instructions: 'df -h' }),
+    { message: /Only a server admin can run agents on 'prod host'/ }
+  );
+  await t.throwsAsync(
+    service.enqueueAutomation(
+      workspaceId,
+      'member-1',
+      'laptop',
+      { id: 'a1', name: 'prune' },
+      {}
+    ),
+    { message: /Only a server admin/ }
+  );
+  t.is(created.length, 0);
+
+  const job = await service.enqueue(workspaceId, 'admin-1', 'laptop', {
+    instructions: 'df -h',
+  });
+  t.is(job.id, 'job-1');
 });
 
 test('a job asked for while its device is at the session limit waits too', async t => {

@@ -456,6 +456,26 @@ export class RegistryJobService {
     @Optional() private readonly gates?: JobGates
   ) {}
 
+  /**
+   * An admin-only device (the prod host, whose runner has a shell there) runs
+   * work only for server admins: every way onto it (agent runs, monitors,
+   * triage, health checks, automations) comes through here as the person it
+   * runs for.
+   */
+  private async assertMayRunOn(
+    device: { adminOnly: boolean; name: string },
+    userId: string
+  ) {
+    if (
+      device.adminOnly &&
+      !(await this.models.userFeature.has(userId, 'administrator'))
+    ) {
+      throw new ActionForbidden(
+        `Only a server admin can run agents on '${device.name}'.`
+      );
+    }
+  }
+
   /** Push without holding up the request it rides on, or failing it. */
   private notify(send: (push: AgentPushService) => Promise<void>) {
     if (!this.push) return;
@@ -482,6 +502,7 @@ export class RegistryJobService {
         `Device '${deviceKey}' is not an agent target. Re-register it with agent execution allowed.`
       );
     }
+    await this.assertMayRunOn(device, userId);
 
     const instructions = String(body.instructions ?? '').trim();
     if (!instructions) {
@@ -651,6 +672,7 @@ export class RegistryJobService {
         `Device '${deviceKey}' is not an agent target. Re-register it with agent execution allowed.`
       );
     }
+    await this.assertMayRunOn(device, userId);
     const job = await this.models.registryJob.create({
       workspaceId,
       deviceKey,

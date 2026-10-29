@@ -3,6 +3,7 @@ import './config';
 import { Module } from '@nestjs/common';
 
 import { DeployInfoController } from './deploy-info';
+import { FeatureFlagsController } from './feature-flags';
 import {
   AppConfigResolver,
   ServerConfigResolver,
@@ -22,7 +23,7 @@ export class ServerConfigModule {}
     ServerFeatureConfigResolver,
     AppConfigResolver,
   ],
-  controllers: [DeployInfoController],
+  controllers: [DeployInfoController, FeatureFlagsController],
 })
 export class ServerConfigResolverModule {}
 export type { DeployInfo } from './deploy-info';

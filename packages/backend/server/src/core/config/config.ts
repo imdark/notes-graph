@@ -4,6 +4,7 @@ import { defineModuleConfig } from '../../base';
 
 export interface ServerFlags {
   allowGuestDemoWorkspace: boolean;
+  featureOverrides: ConfigItem<Record<string, boolean>>;
 }
 
 declare global {
@@ -80,5 +81,10 @@ defineModuleConfig('flags', {
   allowGuestDemoWorkspace: {
     desc: 'Whether allow guest users to create demo workspaces.',
     default: true,
+  },
+  featureOverrides: {
+    desc: 'App feature flags an admin has turned on (true) or off (false) for everyone, by flag key. A flag not listed follows its default and each user’s own setting.',
+    default: {},
+    shape: z.record(z.string(), z.boolean()),
   },
 });

@@ -5,7 +5,7 @@ import { Injectable, Logger, Optional } from '@nestjs/common';
 // ZodError and HttpError. A plain HttpException falls to its else branch and
 // is reported as a 500, so a caller is told "an internal error occurred"
 // about input that is entirely their own to fix.
-import { BadRequest, Config, EventBus } from '../../base';
+import { ActionForbidden, BadRequest, Config, EventBus } from '../../base';
 import { Models } from '../../models';
 import {
   DEVICE_KINDS,
@@ -89,6 +89,7 @@ export class RegistryService {
     // Only count against the cap when this is a new device, so re-registering
     // an existing one keeps working at the limit.
     const existing = await this.models.registryDevice.get(workspaceId, key);
+    await this.assertMayChange(existing, userId);
     if (!existing) {
       const max = this.config.registry.maxDevicesPerWorkspace;
       const count = (await this.models.registryDevice.list(workspaceId)).length;
@@ -125,12 +126,66 @@ export class RegistryService {
     return toDeviceDto(device);
   }
 
+  /** Whether this user is a server admin, who alone runs admin-only devices. */
+  isAdmin(userId: string): Promise<boolean> {
+    return this.models.userFeature.has(userId, 'administrator');
+  }
+
+  /**
+   * An admin-only device (the prod host) is re-registered or removed only by
+   * an admin: otherwise anyone who can register devices could drop the record
+   * and register it again without the flag.
+   */
+  private async assertMayChange(
+    device: { adminOnly: boolean; name: string } | null,
+    userId: string
+  ) {
+    if (device?.adminOnly && !(await this.isAdmin(userId))) {
+      throw new ActionForbidden(
+        `Only a server admin can change '${device.name}'.`
+      );
+    }
+  }
+
+  /**
+   * Devices as this user sees them: an admin-only one is not a job target for
+   * anyone else, so pickers and Fix it never send their work there.
+   */
+  async viewFor(userId: string, devices: DeviceDto[]): Promise<DeviceDto[]> {
+    if (!devices.some(device => device.adminOnly)) return devices;
+    if (await this.isAdmin(userId)) return devices;
+    return devices.map(device =>
+      device.adminOnly ? { ...device, agentTarget: false } : device
+    );
+  }
+
   async list(
     workspaceId: string,
     filter: { kind?: string; agentTarget?: boolean } = {}
   ): Promise<DeviceDto[]> {
     const devices = await this.models.registryDevice.list(workspaceId, filter);
     return devices.map(toDeviceDto);
+  }
+
+  /** Only server admins may run jobs on the device; only an admin sets it. */
+  async setAdminOnly(
+    workspaceId: string,
+    userId: string,
+    key: string,
+    adminOnly: unknown
+  ): Promise<DeviceDto | null> {
+    if (typeof adminOnly !== 'boolean') {
+      throw new BadRequest('adminOnly must be true or false');
+    }
+    if (!(await this.isAdmin(userId))) {
+      throw new ActionForbidden('Only a server admin can set this.');
+    }
+    const device = await this.models.registryDevice.setAdminOnly(
+      workspaceId,
+      this.normalizeKey(key),
+      adminOnly
+    );
+    return device ? toDeviceDto(device) : null;
   }
 
   async get(workspaceId: string, key: string): Promise<DeviceDto | null> {
@@ -170,11 +225,17 @@ export class RegistryService {
     return device ? toDeviceDto(device) : null;
   }
 
-  async remove(workspaceId: string, key: string): Promise<number> {
-    return this.models.registryDevice.delete(
-      workspaceId,
-      this.normalizeKey(key)
+  async remove(
+    workspaceId: string,
+    key: string,
+    userId: string
+  ): Promise<number> {
+    const normalized = this.normalizeKey(key);
+    await this.assertMayChange(
+      await this.models.registryDevice.get(workspaceId, normalized),
+      userId
     );
+    return this.models.registryDevice.delete(workspaceId, normalized);
   }
 
   async recordStatus(

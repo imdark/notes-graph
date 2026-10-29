@@ -7,6 +7,7 @@ import {
   canFixToMerge,
   type DeployInfo,
   DeploymentsService,
+  flagStage,
   type LiveCheck,
   type MergeReadiness,
   mergeReadiness,
@@ -24,6 +25,7 @@ import {
   shownStage,
   stuckReason,
 } from '@notesgraph/core/modules/agents';
+import { NOTESGRAPH_FLAGS } from '@notesgraph/core/modules/feature-flag';
 import { WorkbenchService } from '@notesgraph/core/modules/workbench';
 import { useLiveData, useService } from '@notesgraph/infra';
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -150,6 +152,34 @@ const ProdLine = ({ deploy }: { deploy: DeployInfo | null | undefined }) => {
       Prod runs <code>{deploy.commit.slice(0, 7)}</code> ({deploy.subject}),
       deployed {new Date(deploy.deployedAt).toLocaleString()}
       {deploy.dirty ? ', with uncommitted changes on top' : ''}.
+    </div>
+  );
+};
+
+/**
+ * The app's feature flags checked against prod's build by the commit that
+ * added each: those this app has and prod doesn't are merged into what this
+ * app was built from but not deployed.
+ */
+const FlagsLine = ({
+  deploy,
+  onOpen,
+}: {
+  deploy: DeployInfo | null | undefined;
+  onOpen: () => void;
+}) => {
+  if (!deploy?.featureFlags) return null;
+  const missing = Object.entries(NOTESGRAPH_FLAGS).filter(
+    ([key, flag]) => flagStage(key, flag.commit, deploy) === 'not-deployed'
+  );
+  return (
+    <div className={styles.sectionHint} data-testid="deployments-flags">
+      {missing.length === 0
+        ? 'Prod has every feature flag this app has. '
+        : `Not in prod yet: ${missing.map(([key]) => key).join(', ')}. `}
+      <button className={styles.link} onClick={onOpen}>
+        Feature flags
+      </button>
     </div>
   );
 };
@@ -653,6 +683,10 @@ export const DeploymentsView = () => {
   return (
     <div className={styles.content} data-testid="deployments-view">
       <ProdLine deploy={deployInfo} />
+      <FlagsLine
+        deploy={deployInfo}
+        onOpen={() => workbench.open('/feature-flags')}
+      />
       {shippable ? (
         candidates.length > 0 && agent ? (
           <div className={styles.shipBar}>

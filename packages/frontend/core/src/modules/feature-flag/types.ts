@@ -3,6 +3,12 @@ import type { BlockSuiteFlags } from '@blocksuite/notesgraph/shared/services';
 type FeedbackType = 'discord' | 'email' | 'github';
 
 export type FlagInfo = {
+  /**
+   * The commit that added the flag, checked against what prod was deployed
+   * from. A new flag starts with `commit: ''`; once it is committed,
+   * `node scripts/stamp-feature-flags.mjs` fills it in.
+   */
+  commit: string;
   displayName: string;
   description?: string;
   configurable?: boolean;

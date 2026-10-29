@@ -133,6 +133,19 @@ export class RegistryDeviceModel extends BaseModel {
     return count ? this.get(workspaceId, key) : null;
   }
 
+  /** Whether only server admins may run jobs here. */
+  async setAdminOnly(
+    workspaceId: string,
+    key: string,
+    adminOnly: boolean
+  ): Promise<RegistryDevice | null> {
+    const { count } = await this.db.registryDevice.updateMany({
+      where: { workspaceId, key },
+      data: { adminOnly },
+    });
+    return count ? this.get(workspaceId, key) : null;
+  }
+
   async updateStatus(
     workspaceId: string,
     key: string,

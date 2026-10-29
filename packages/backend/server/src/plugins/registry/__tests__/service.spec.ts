@@ -15,7 +15,9 @@ import { toDeviceDto } from '../types';
 const workspaceId = 'ws-1';
 const userId = 'user-1';
 
-function makeService(options: { devices?: any[]; max?: number } = {}) {
+function makeService(
+  options: { devices?: any[]; max?: number; admins?: string[] } = {}
+) {
   const devices = options.devices ?? [];
   const stored: any[] = [];
   const models: any = {
@@ -57,6 +59,16 @@ function makeService(options: { devices?: any[]; max?: number } = {}) {
         const existing = devices.find(d => d.key === key);
         return existing ? { ...existing, ...patch } : null;
       },
+      setAdminOnly: async (_ws: string, key: string, adminOnly: boolean) => {
+        const existing = devices.find(d => d.key === key);
+        if (existing) existing.adminOnly = adminOnly;
+        return existing ?? null;
+      },
+      delete: async () => 1,
+    },
+    userFeature: {
+      has: async (user: string, name: string) =>
+        name === 'administrator' && (options.admins ?? []).includes(user),
     },
   };
   const config: any = {
@@ -255,3 +267,75 @@ function toDeviceDtoInput() {
     updatedAt: new Date(0),
   };
 }
+
+/** A device as stored, for the admin-only rules. */
+const stored = (over: Record<string, unknown> = {}): any => ({
+  id: 'uuid-9',
+  workspaceId,
+  key: 'prod',
+  name: 'prod host',
+  kind: 'machine',
+  host: 'prod.local',
+  user: 'ubuntu',
+  port: 22,
+  parentKey: null,
+  path: null,
+  recipe: 'generic',
+  repo: null,
+  branch: 'main',
+  channel: 'stable',
+  pin: null,
+  agentTarget: true,
+  adminOnly: true,
+  maxJobs: null,
+  labels: {},
+  state: 'ok',
+  statusDetail: null,
+  version: null,
+  checkedAt: null,
+  checks: [],
+  createdAt: new Date(0),
+  updatedAt: new Date(0),
+  ...over,
+});
+
+test('an admin-only device is not a job target for anyone but an admin', async t => {
+  const prod = stored();
+  const laptop = stored({ key: 'laptop', name: 'laptop', adminOnly: false });
+  const { service } = makeService({ devices: [prod, laptop], admins: ['admin'] });
+  const dtos = [toDeviceDto(prod), toDeviceDto(laptop)];
+
+  const member = await service.viewFor(userId, dtos);
+  t.deepEqual(
+    member.map(d => [d.key, d.agentTarget, d.adminOnly]),
+    [
+      ['prod', false, true],
+      ['laptop', true, false],
+    ]
+  );
+  const admin = await service.viewFor('admin', dtos);
+  t.true(admin[0].agentTarget);
+});
+
+test('only an admin re-registers, removes or flags an admin-only device', async t => {
+  const { service } = makeService({ devices: [stored()], admins: ['admin'] });
+
+  await t.throwsAsync(service.register(workspaceId, userId, { key: 'prod' }), {
+    message: /Only a server admin can change 'prod host'/,
+  });
+  await t.throwsAsync(service.remove(workspaceId, 'prod', userId), {
+    message: /Only a server admin/,
+  });
+  await t.throwsAsync(
+    service.setAdminOnly(workspaceId, userId, 'prod', false),
+    { message: /Only a server admin can set this/ }
+  );
+
+  t.is(await service.remove(workspaceId, 'prod', 'admin'), 1);
+  const flagged = await service.setAdminOnly(workspaceId, 'admin', 'prod', true);
+  t.true(flagged?.adminOnly);
+  await t.throwsAsync(
+    service.setAdminOnly(workspaceId, 'admin', 'prod', 'yes'),
+    { message: /adminOnly must be true or false/ }
+  );
+});
