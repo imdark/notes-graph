@@ -25,6 +25,8 @@
     <string name="note_widget_unreachable">can\'t reach the server</string>
     <string name="note_widget_tls_failed">secure connection failed</string>
     <string name="note_widget_connection_failed">connection failed</string>
+    <string name="note_widget_refresh_channel">Widget refresh</string>
+    <string name="note_widget_refreshing">Refreshing the widget</string>
     <string name="note_widget_all_day">All day</string>
     <string name="note_widget_config_title">Show on this widget</string>
     <string name="note_widget_config_look">Look</string>

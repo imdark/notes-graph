@@ -1,5 +1,7 @@
 package app.notesgraph.pro.widget
 
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.app.PendingIntent
 import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProvider
@@ -15,14 +17,17 @@ import android.text.style.StyleSpan
 import android.util.TypedValue
 import android.view.View
 import android.widget.RemoteViews
+import androidx.core.app.NotificationCompat
 import androidx.core.widget.RemoteViewsCompat
 import androidx.work.BackoffPolicy
 import androidx.work.Constraints
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.ExistingWorkPolicy
+import androidx.work.ForegroundInfo
 import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.OutOfQuotaPolicy
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
@@ -97,10 +102,38 @@ class NoteWidgetWorker(
         return if (offline && runAttemptCount < MAX_RETRIES) Result.retry() else Result.success()
     }
 
+    /**
+     * Before Android 12 an expedited refresh runs as a brief foreground
+     * service, which must show something; from 12 on this isn't shown.
+     */
+    override suspend fun getForegroundInfo(): ForegroundInfo {
+        val manager = applicationContext.getSystemService(NotificationManager::class.java)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+            manager.getNotificationChannel(REFRESH_CHANNEL) == null
+        ) {
+            manager.createNotificationChannel(
+                NotificationChannel(
+                    REFRESH_CHANNEL,
+                    applicationContext.getString(R.string.note_widget_refresh_channel),
+                    NotificationManager.IMPORTANCE_MIN,
+                )
+            )
+        }
+        val notification = NotificationCompat.Builder(applicationContext, REFRESH_CHANNEL)
+            .setSmallIcon(R.drawable.ic_ai)
+            .setContentTitle(applicationContext.getString(R.string.note_widget_refreshing))
+            .setPriority(NotificationCompat.PRIORITY_MIN)
+            .setSilent(true)
+            .build()
+        return ForegroundInfo(REFRESH_NOTIFICATION_ID, notification)
+    }
+
     companion object {
         private const val REFRESH_WORK = "note-widget-refresh"
         private const val PERIODIC_WORK = "note-widget-periodic"
         private const val MAX_RETRIES = 4
+        private const val REFRESH_CHANNEL = "note-widget-refresh"
+        private const val REFRESH_NOTIFICATION_ID = 0x5717
 
         private val NETWORK =
             Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()
@@ -155,15 +188,25 @@ class NoteWidgetWorker(
         }
 
         /**
-         * Redraw every widget from the server, after [delaySeconds]. Asks for
-         * a network like the half-hourly pass: work that doesn't is run with
-         * the app's network cut off while it's in the background (battery
-         * saving, Doze, sleeping apps), so the refresh button reported "no
-         * connection" with the phone online.
+         * Redraw every widget from the server, after [delaySeconds].
+         *
+         * The refresh button's run is expedited and asks for a network: plain
+         * background work ran with the app's network cut off (seen on an S24
+         * with Battery Saver on: blocked=BATTERY_SAVER|APP_BACKGROUND), so the
+         * DNS lookup failed and the widget said "no connection" with the
+         * phone online. An expedited job is let through Battery Saver; past
+         * its quota it runs as ordinary work.
          */
         fun refresh(context: Context, delaySeconds: Long = 0) {
             val request = OneTimeWorkRequestBuilder<NoteWidgetWorker>()
-                .setInitialDelay(delaySeconds, TimeUnit.SECONDS)
+                .apply {
+                    // An initial delay and expedited don't go together.
+                    if (delaySeconds > 0) {
+                        setInitialDelay(delaySeconds, TimeUnit.SECONDS)
+                    } else {
+                        setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
+                    }
+                }
                 .setConstraints(NETWORK)
                 .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
                 .build()
