@@ -365,7 +365,7 @@ export const NOTESGRAPH_FLAGS = {
     defaultState: true,
   },
   enable_deploy_with_automations: {
-    commit: '',
+    commit: 'efc80e3e44f72bbab0cdaf255426f159dbeb8354',
     category: 'notesgraph',
     displayName: 'Deploy with automations',
     description:
