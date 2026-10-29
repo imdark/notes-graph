@@ -40,6 +40,8 @@ import app.notesgraph.pro.push.NotificationTarget
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import timber.log.Timber
 import java.io.IOException
@@ -172,6 +174,11 @@ class NoteWidgetWorker(
                 // leaving the app); it is not a failure to show.
                 throw e
             } catch (e: Exception) {
+                // OkHttp reports a call cancelled by a newer refresh as an
+                // IOException("Canceled"), which is not a lost connection.
+                if (!currentCoroutineContext().isActive || e.message == "Canceled") {
+                    throw CancellationException("note widget refresh replaced", e)
+                }
                 Timber.w(e, "[note-widget] could not read the note for widget $widgetId")
                 offline = e is IOException
                 val reason = when (e) {
