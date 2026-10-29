@@ -3,7 +3,7 @@
  *
  * Flow: inject the extractor into the active tab (the user's authenticated
  * session) → capture title/text/images (fetched IN the page so cookies/referer
- * are the user's) → open the NotesGraph app's /import-clipper receiver → hand
+ * are the user's) → open the NotesGraph app's /clipper/import receiver → hand
  * off a ClipperInput via window.postMessage. The app persists the attachments
  * as blobs (ImportClipperService + MarkdownTransformer.importMarkdownWithAssets).
  */
@@ -73,8 +73,11 @@ async function captureInPage(imageMs) {
 
 /**
  * Runs IN the opened NotesGraph app tab: rebuild Blobs from the data URLs and
- * post the ClipperInput to the /import-clipper page (same-window postMessage,
- * which the app already listens for). Retries a few times to beat SPA hydration.
+ * post the ClipperInput to the /clipper/import page (same-window postMessage,
+ * which the app already listens for). The page's listener only exists once its
+ * lazily loaded route has run, well after the tab says it's complete, so this
+ * keeps sending until the import reports success or 20s pass. The page keeps
+ * the first copy it gets; later ones only replace the port it answers on.
  */
 function deliverToApp(payload) {
   const attachments = {};
@@ -93,25 +96,27 @@ function deliverToApp(payload) {
     title: payload.title,
     contentMarkdown: payload.contentMarkdown,
     contentHtml: payload.contentHtml || '',
+    sourceUrl: payload.sourceUrl,
     attachments,
     workspace: payload.workspace,
   };
   let done = false;
-  const channel = new MessageChannel();
-  channel.port1.onmessage = () => {
-    done = true;
-  };
+  const started = Date.now();
   const send = () => {
-    if (done) return;
+    if (done || Date.now() - started > 20_000) return;
+    // A port can be transferred only once, so each send gets its own.
+    const channel = new MessageChannel();
+    channel.port1.onmessage = () => {
+      done = true;
+    };
     window.postMessage(
       { type: 'notesgraph-clipper:import', payload: clipperInput },
       '*',
       [channel.port2]
     );
+    setTimeout(send, 500);
   };
   send();
-  setTimeout(send, 600);
-  setTimeout(send, 1500);
 }
 
 /**
@@ -224,11 +229,13 @@ async function clipActiveTab() {
     contentHtml: '',
     attachmentsData,
     videos: clip.videos,
+    // Kept on the note as where the clip came from.
+    sourceUrl: clip.url,
     workspace: 'last-open-workspace',
   };
 
   const appBase = await getAppBase();
-  const appTab = await chrome.tabs.create({ url: `${appBase}/import-clipper` });
+  const appTab = await chrome.tabs.create({ url: `${appBase}/clipper/import` });
   await waitForTabComplete(appTab.id);
   await chrome.scripting.executeScript({
     target: { tabId: appTab.id },
