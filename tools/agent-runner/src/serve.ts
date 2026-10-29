@@ -106,6 +106,11 @@ async function runAutomation(
   const ticker = setInterval(() => void reporter.tick(), opts.tickMs ?? 2000);
   try {
     if (!job.payload?.code) throw new CodeFailed('The job carries no code');
+    if (job.payload.shell || (job.payload.runtime ?? 'node') !== 'node') {
+      throw new CodeFailed(
+        `${job.payload.runtime ?? 'shell'} automations run on a device with wf, not on the cloud runner`
+      );
+    }
     const output = await runCode(
       {
         code: job.payload.code,

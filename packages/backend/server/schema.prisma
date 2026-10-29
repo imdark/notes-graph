@@ -2006,7 +2006,7 @@ model Automation {
   /// The note block the automation was made from, if any.
   docId            String?   @map("doc_id") @db.VarChar
   blockId          String?   @map("block_id") @db.VarChar
-  /// 'node' today.
+  /// 'node' (JavaScript), 'shell' (JavaScript given `sh`) or 'actions' (wf's actions YAML); the last two on wf devices only.
   runtime          String    @default("node") @db.VarChar
   /// [{type: 'cron', expr, tz?} | {type: 'interval', minutes}
   ///  | {type: 'event', event, filter?} | {type: 'webhook'} | {type: 'manual'}]

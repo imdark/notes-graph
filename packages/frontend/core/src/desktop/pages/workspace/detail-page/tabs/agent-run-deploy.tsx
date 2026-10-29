@@ -8,6 +8,8 @@ import {
   deployRunsFor,
   type RunTask,
   shipAgents,
+  shipReportText,
+  shipsWithAutomations,
 } from '@notesgraph/core/modules/agents';
 import { useLiveData, useService } from '@notesgraph/infra';
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -33,9 +35,10 @@ const nothingToDeploy = (tasks: RunTask[]): string => {
  * Deploy what a finished run made, and follow the deploys sent for it.
  *
  * The run's task, once its branch is pushed, carries COMMITTED and its pull
- * request; Deploy hands it to Claude Code on a device, as the Deployments
- * page does, to merge it and deploy main. Those runs are listed below, each
- * opening its own log.
+ * request; Deploy merges it and deploys main with the merge and deploy
+ * automations, run by wf on the ship agent's device, as the Deployments
+ * page does. From the cloud runner, which has no deploy, it goes to Claude
+ * Code instead; those runs are listed below, each opening its own log.
  */
 export const AgentRunDeploy = ({
   run,
@@ -63,6 +66,8 @@ export const AgentRunDeploy = ({
   // Read again as each deploy ends, since it moves the task on.
   const [tasks, setTasks] = useState<RunTask[] | null>(null);
   const [readError, setReadError] = useState<string | null>(null);
+  // Bumped when a deploy through the automations ends, which moves it on.
+  const [deploysDone, setDeploysDone] = useState(0);
   const endedDeploys = deployRuns.filter(
     other => other.status !== 'running'
   ).length;
@@ -91,13 +96,42 @@ export const AgentRunDeploy = ({
     return () => {
       cancelled = true;
     };
-  }, [deployments, docId, blockKey, summary, endedDeploys]);
+  }, [deployments, docId, blockKey, summary, endedDeploys, deploysDone]);
 
   const toDeploy = useMemo(() => deployableTasks(tasks ?? []), [tasks]);
   const [sending, setSending] = useState(false);
+  // What the automations are doing now, or how they ended.
+  const [progress, setProgress] = useState<{
+    line: string;
+    error?: boolean;
+  } | null>(null);
   const deploy = useCallback(() => {
     if (!agent || toDeploy.length === 0) return;
     setSending(true);
+    if (shipsWithAutomations(agent)) {
+      setProgress({ line: 'Starting…' });
+      deployments
+        .mergeAndDeploy(agent, toDeploy, line => setProgress({ line }))
+        .then(report => {
+          const { ok, title, message } = shipReportText(report);
+          setProgress({
+            line: `${title}. ${message}`,
+            error: !report.deployed,
+          });
+          (ok ? notify.success : notify.error)({ title, message });
+        })
+        .catch(err => {
+          const message = err instanceof Error ? err.message : String(err);
+          setProgress({ line: message, error: true });
+          notify.error({ title: "The deploy didn't go out", message });
+        })
+        .finally(() => {
+          setSending(false);
+          // Its task moved on: read it again.
+          setDeploysDone(n => n + 1);
+        });
+      return;
+    }
     deployments
       .ship(agent, toDeploy, 'deploy')
       .then(target => {
@@ -151,7 +185,14 @@ export const AgentRunDeploy = ({
         )}
         {toDeploy.length > 0 ? (
           <div className={styles.sessionActions}>
-            {agent ? (
+            {agent && shipsWithAutomations(agent) ? (
+              <span className={styles.hint}>
+                wf on {agent.deviceKey}{' '}
+                {toDeploy.some(task => task.stage === 'committed')
+                  ? 'merges its pull request with the merge automation, then deploys main with the deploy automation.'
+                  : 'deploys main, where it is merged already, with the deploy automation.'}
+              </span>
+            ) : agent ? (
               <span className={styles.hint}>
                 Goes to {agent.name} on {agent.deviceKey}, which{' '}
                 {toDeploy.some(task => task.stage === 'committed')
@@ -173,9 +214,17 @@ export const AgentRunDeploy = ({
               onClick={deploy}
               data-testid="agent-run-deploy-button"
             >
-              {sending ? 'Sending…' : 'Deploy'}
+              {sending ? 'Deploying…' : 'Deploy'}
             </Button>
           </div>
+        ) : null}
+        {progress ? (
+          <p
+            className={progress.error ? styles.error : styles.hint}
+            data-testid="agent-run-deploy-progress"
+          >
+            {progress.line}
+          </p>
         ) : null}
       </div>
 
