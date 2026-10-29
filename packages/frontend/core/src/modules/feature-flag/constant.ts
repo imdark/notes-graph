@@ -365,7 +365,7 @@ export const NOTESGRAPH_FLAGS = {
     defaultState: true,
   },
   enable_monitor_run_button: {
-    commit: '',
+    commit: 'dc60a8a1238d18f8c62cf2799e7b38c7f2f3d4a8',
     category: 'notesgraph',
     displayName: 'Run a monitor from its editor',
     description:
