@@ -23,6 +23,7 @@ import { MonitoringAgentPanel } from './agent';
 import {
   checkFailure,
   FixItButton,
+  hostFor,
   machineFailure,
   monitorFailure,
 } from './fix-it';
@@ -63,10 +64,12 @@ const CheckRow = ({
   check,
   device,
   online,
+  host,
 }: {
   check: DeviceCheck;
   device: RegistryDevice;
   online: boolean;
+  host?: RegistryDevice;
 }) => (
   <div className={styles.check} title={check.detail}>
     <span className={styles.dot} data-state={check.status} />
@@ -88,7 +91,7 @@ const CheckRow = ({
       </span>
     )}
     {check.status !== 'ok' ? (
-      <FixItButton failure={checkFailure(device, check, online)} />
+      <FixItButton failure={checkFailure(device, check, online, host)} />
     ) : null}
   </div>
 );
@@ -317,6 +320,7 @@ const MachineCard = ({
   checking,
   now,
   onOpenMonitor,
+  host,
 }: {
   device: RegistryDevice;
   folders: RegistryDevice[];
@@ -324,6 +328,8 @@ const MachineCard = ({
   checking: boolean;
   now: number;
   onOpenMonitor: (monitor: Monitor) => void;
+  /** The server the cloud runner is on, which fixes its problems. */
+  host?: RegistryDevice;
 }) => {
   const fleet = useService(FleetService);
   const monitorsService = useService(MonitorsService);
@@ -388,7 +394,8 @@ const MachineCard = ({
               failure={machineFailure(
                 device,
                 STATE_LABEL[state].toLowerCase(),
-                state !== 'offline'
+                state !== 'offline',
+                host
               )}
             />
           ) : null}
@@ -402,6 +409,7 @@ const MachineCard = ({
               check={c}
               device={device}
               online={state !== 'offline'}
+              host={host}
             />
           ))}
         </div>
@@ -472,6 +480,10 @@ export const MonitoringView = () => {
     [devices]
   );
   const summary = useMemo(() => fleetSummary(machines, now), [machines, now]);
+  const host = useMemo(
+    () => hostFor(machines, d => deviceState(d, now) !== 'offline'),
+    [machines, now]
+  );
   const attention = summary.degraded + summary.offline + summary.unknown;
 
   /** A machine's monitors: those on it, and on the folders it holds. */
@@ -659,6 +671,7 @@ export const MonitoringView = () => {
                 checking={checking.has(machine.key)}
                 now={now}
                 onOpenMonitor={openMonitor}
+                host={host}
               />
             ))}
           </div>
