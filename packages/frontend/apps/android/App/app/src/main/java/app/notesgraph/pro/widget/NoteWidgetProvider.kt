@@ -33,9 +33,14 @@ import app.notesgraph.pro.push.NotificationTarget
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import timber.log.Timber
 import java.io.IOException
+import java.net.ConnectException
+import java.net.SocketTimeoutException
+import java.net.UnknownHostException
 import java.util.Date
 import java.util.concurrent.TimeUnit
 import kotlin.math.roundToInt
@@ -122,11 +127,19 @@ class NoteWidgetWorker(
                 // leaving the app); it is not a failure to show.
                 throw e
             } catch (e: Exception) {
+                // OkHttp reports a call cancelled by a newer refresh as an
+                // IOException("Canceled"), which is not a lost connection.
+                if (!currentCoroutineContext().isActive || e.message == "Canceled") {
+                    throw CancellationException("note widget refresh replaced", e)
+                }
                 Timber.w(e, "[note-widget] could not read the note for widget $widgetId")
                 offline = e is IOException
                 val reason = when (e) {
                     is AgentApi.HttpError -> e.message
-                    is IOException -> context.getString(R.string.note_widget_offline)
+                    is UnknownHostException, is ConnectException, is SocketTimeoutException ->
+                        context.getString(R.string.note_widget_offline)
+                    // Other IO failures (TLS, a dropped stream) are not "no connection".
+                    is IOException -> e.message?.let { "${e.javaClass.simpleName}: $it" }
                     else -> e.message
                 } ?: e.javaClass.simpleName
                 cached?.copy(error = reason) ?: NoteWidgets.Content(
