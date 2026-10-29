@@ -20,7 +20,13 @@
     <string name="note_widget_note_empty">This note is empty. Tap to write in it.</string>
     <string name="note_widget_failed">Couldn\'t load this note. Tap refresh to try again.</string>
     <string name="note_widget_stale">Couldn\'t refresh (%1$s). Showing the last copy.</string>
-    <string name="note_widget_offline">no connection</string>
+    <string name="note_widget_offline">no network</string>
+    <string name="note_widget_timed_out">the server took too long</string>
+    <string name="note_widget_unreachable">can\'t reach the server</string>
+    <string name="note_widget_tls_failed">secure connection failed</string>
+    <string name="note_widget_connection_failed">connection failed</string>
+    <string name="note_widget_refresh_channel">Widget refresh</string>
+    <string name="note_widget_refreshing">Refreshing the widget</string>
     <string name="note_widget_all_day">All day</string>
     <string name="note_widget_config_title">Show on this widget</string>
     <string name="note_widget_config_look">Look</string>
