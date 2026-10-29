@@ -11,6 +11,7 @@ import {
   shipReportText,
   shipsWithAutomations,
 } from '@notesgraph/core/modules/agents';
+import { FeatureFlagService } from '@notesgraph/core/modules/feature-flag';
 import { useLiveData, useService } from '@notesgraph/infra';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
@@ -51,6 +52,10 @@ export const AgentRunDeploy = ({
   onOpenRun: (runId: string) => void;
 }) => {
   const deployments = useService(DeploymentsService);
+  // Deploy with the merge and deploy automations instead of Claude Code.
+  const withAutomations = useLiveData(
+    useService(FeatureFlagService).flags.enable_deploy_with_automations.$
+  );
   const agentsService = useService(AgentsService);
   const runsStore = useService(AgentRunsStore);
   const now = useMinuteTick();
@@ -108,7 +113,7 @@ export const AgentRunDeploy = ({
   const deploy = useCallback(() => {
     if (!agent || toDeploy.length === 0) return;
     setSending(true);
-    if (shipsWithAutomations(agent)) {
+    if (withAutomations && shipsWithAutomations(agent)) {
       setProgress({ line: 'Starting…' });
       deployments
         .mergeAndDeploy(agent, toDeploy, line => setProgress({ line }))
@@ -148,7 +153,7 @@ export const AgentRunDeploy = ({
         })
       )
       .finally(() => setSending(false));
-  }, [agent, deployments, toDeploy]);
+  }, [agent, deployments, toDeploy, withAutomations]);
 
   return (
     <div className={styles.changesScroll} data-testid="agent-run-deploy">

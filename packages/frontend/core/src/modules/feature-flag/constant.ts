@@ -364,6 +364,15 @@ export const NOTESGRAPH_FLAGS = {
     configurable: true,
     defaultState: true,
   },
+  enable_deploy_with_automations: {
+    commit: '',
+    category: 'notesgraph',
+    displayName: 'Deploy with automations',
+    description:
+      "Deploy from the Deployments page and a run's Deploy tab without a model: wf on the ship agent's device merges the pull requests and runs the cloud deploy as automations. Pull requests that don't merge cleanly still go to Claude Code.",
+    configurable: true,
+    defaultState: false,
+  },
 } satisfies { [key in string]: FlagInfo };
 
 // oxlint-disable-next-line no-redeclare

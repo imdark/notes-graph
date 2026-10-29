@@ -27,7 +27,10 @@ import {
   shownStage,
   stuckReason,
 } from '@notesgraph/core/modules/agents';
-import { NOTESGRAPH_FLAGS } from '@notesgraph/core/modules/feature-flag';
+import {
+  FeatureFlagService,
+  NOTESGRAPH_FLAGS,
+} from '@notesgraph/core/modules/feature-flag';
 import { WorkbenchService } from '@notesgraph/core/modules/workbench';
 import { useLiveData, useService } from '@notesgraph/infra';
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -200,6 +203,10 @@ const FlagsLine = ({
  */
 export const DeploymentsView = () => {
   const deployments = useService(DeploymentsService);
+  // Deploy with the merge and deploy automations instead of Claude Code.
+  const withAutomations = useLiveData(
+    useService(FeatureFlagService).flags.enable_deploy_with_automations.$
+  );
   const agentsService = useService(AgentsService);
   const sessions = useService(AgentRunSessionService);
   const workbench = useService(WorkbenchService).workbench;
@@ -624,7 +631,12 @@ export const DeploymentsView = () => {
    */
   const ship = useCallback(
     async (action: ShipAction) => {
-      if (action === 'deploy' && agent && shipsWithAutomations(agent)) {
+      if (
+        action === 'deploy' &&
+        agent &&
+        withAutomations &&
+        shipsWithAutomations(agent)
+      ) {
         await deployWithAutomations();
         return;
       }
@@ -668,6 +680,7 @@ export const DeploymentsView = () => {
     [
       agent,
       deployWithAutomations,
+      withAutomations,
       mergeOne,
       pullsByUrl,
       refresh,

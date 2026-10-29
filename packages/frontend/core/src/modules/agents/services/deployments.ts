@@ -1060,18 +1060,19 @@ export class DeploymentsService extends Service {
   }
 
   /**
-   * Merge a pull request with the merge automation on the agent's device
-   * (on the cloud runner, through its GitHub request), with no AI: for
-   * those GitHub says merge cleanly. Throws with what `gh` said when it
+   * Merge a pull request through wf on the agent's device (`gh`, or with
+   * `withAutomation` the merge automation; on the cloud runner, through its
+   * GitHub request), with no AI: for those GitHub says merge cleanly. Throws with what `gh` said when it
    * doesn't, which is the cue to hand it to Claude Code. The task it ships,
    * if any, goes to MERGED.
    */
   async merge(
     agent: Agent,
     pr: Pick<PullRequest, 'repo' | 'number' | 'url'>,
-    task?: Pick<ShipTask, 'docId' | 'blockId'>
+    task?: Pick<ShipTask, 'docId' | 'blockId'>,
+    { withAutomation = false }: { withAutomation?: boolean } = {}
   ): Promise<void> {
-    if (agent.deviceKey === CLOUD_DEVICE_KEY) {
+    if (!withAutomation || !shipsWithAutomations(agent)) {
       await this.runCommand(
         agent,
         { op: 'merge', repo: pr.repo, number: pr.number },
@@ -1231,7 +1232,9 @@ export class DeploymentsService extends Service {
       }
       onProgress?.(`Merging ${repo}#${number}…`);
       try {
-        await this.merge(agent, { repo, number, url: task.pullRequest }, task);
+        await this.merge(agent, { repo, number, url: task.pullRequest }, task, {
+          withAutomation: true,
+        });
         merged.push({ ...task, stage: 'merged' });
       } catch (err) {
         leftOut.push({
