@@ -102,6 +102,18 @@ class NoteWidgetWorker(
         private const val PERIODIC_WORK = "note-widget-periodic"
         private const val MAX_RETRIES = 4
 
+        private val NETWORK =
+            Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()
+
+        /** What a failed connection says on the widget: which way it failed. */
+        fun networkFailure(e: IOException): Int = when (e) {
+            is java.net.UnknownHostException -> R.string.note_widget_offline
+            is java.net.SocketTimeoutException -> R.string.note_widget_timed_out
+            is java.net.ConnectException -> R.string.note_widget_unreachable
+            is javax.net.ssl.SSLException -> R.string.note_widget_tls_failed
+            else -> R.string.note_widget_connection_failed
+        }
+
         /** Read and redraw one widget; false when the connection failed. */
         suspend fun refreshOne(context: Context, widgetId: Int): Boolean {
             val config = NoteWidgets.config(context, widgetId)
@@ -126,7 +138,7 @@ class NoteWidgetWorker(
                 offline = e is IOException
                 val reason = when (e) {
                     is AgentApi.HttpError -> e.message
-                    is IOException -> context.getString(R.string.note_widget_offline)
+                    is IOException -> context.getString(networkFailure(e))
                     else -> e.message
                 } ?: e.javaClass.simpleName
                 cached?.copy(error = reason) ?: NoteWidgets.Content(
@@ -142,10 +154,17 @@ class NoteWidgetWorker(
             return !offline
         }
 
-        /** Redraw every widget from the server, after [delaySeconds]. */
+        /**
+         * Redraw every widget from the server, after [delaySeconds]. Asks for
+         * a network like the half-hourly pass: work that doesn't is run with
+         * the app's network cut off while it's in the background (battery
+         * saving, Doze, sleeping apps), so the refresh button reported "no
+         * connection" with the phone online.
+         */
         fun refresh(context: Context, delaySeconds: Long = 0) {
             val request = OneTimeWorkRequestBuilder<NoteWidgetWorker>()
                 .setInitialDelay(delaySeconds, TimeUnit.SECONDS)
+                .setConstraints(NETWORK)
                 .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
                 .build()
             WorkManager.getInstance(context)
@@ -155,9 +174,7 @@ class NoteWidgetWorker(
         /** Every half hour, which also turns a journal widget over to the new day. */
         fun schedule(context: Context) {
             val request = PeriodicWorkRequestBuilder<NoteWidgetWorker>(30, TimeUnit.MINUTES)
-                .setConstraints(
-                    Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()
-                )
+                .setConstraints(NETWORK)
                 .build()
             WorkManager.getInstance(context)
                 .enqueueUniquePeriodicWork(PERIODIC_WORK, ExistingPeriodicWorkPolicy.KEEP, request)
