@@ -68,6 +68,10 @@ export interface AutomationPayload {
   code: string;
   input: unknown;
   timeoutSeconds: number;
+  /** 'node', or 'shell' / 'actions', for wf on a device only: refused here. */
+  runtime?: string;
+  /** Set for a runtime that runs commands on the device. */
+  shell?: boolean;
 }
 
 /** The job kinds a runner can claim. */

@@ -23,7 +23,12 @@ import { CurrentUser, Public } from '../../core/auth';
 import { PermissionAccess } from '../../core/permission';
 import { Models, sha256 } from '../../models';
 import { AUTOMATION_TEMPLATES } from './hooks';
-import { AutomationService, MAX_TIMEOUT_SECONDS } from './service';
+import {
+  AUTOMATION_RUNTIMES,
+  type AutomationRuntime,
+  AutomationService,
+  maxTimeoutSeconds,
+} from './service';
 import {
   hasTrigger,
   nextRunAt,
@@ -84,6 +89,7 @@ export function parseDefinition(body: Record<string, any>, partial: boolean) {
     name?: string;
     docId?: string | null;
     blockId?: string | null;
+    runtime?: AutomationRuntime;
     triggers?: Trigger[];
     secrets?: string[];
     timeoutSeconds?: number;
@@ -101,6 +107,14 @@ export function parseDefinition(body: Record<string, any>, partial: boolean) {
     out.docId = body.docId ? String(body.docId) : null;
   if (body.blockId !== undefined) {
     out.blockId = body.blockId ? String(body.blockId) : null;
+  }
+  if (body.runtime !== undefined) {
+    if (!AUTOMATION_RUNTIMES.includes(body.runtime)) {
+      throw new BadRequest(
+        `runtime must be one of: ${AUTOMATION_RUNTIMES.join(', ')}`
+      );
+    }
+    out.runtime = body.runtime;
   }
   if (body.triggers !== undefined || !partial) {
     try {
@@ -121,7 +135,7 @@ export function parseDefinition(body: Record<string, any>, partial: boolean) {
     if (!Number.isFinite(timeout) || timeout < 1) {
       throw new BadRequest('timeoutSeconds must be at least 1');
     }
-    out.timeoutSeconds = Math.min(Math.round(timeout), MAX_TIMEOUT_SECONDS);
+    out.timeoutSeconds = Math.round(timeout);
   }
   if (body.maxRetries !== undefined) {
     const retries = Number(body.maxRetries);
@@ -133,6 +147,13 @@ export function parseDefinition(body: Record<string, any>, partial: boolean) {
   if (body.enabled !== undefined) out.enabled = !!body.enabled;
   return out;
 }
+
+/**
+ * Cap a timeout at what its runtime allows: a shell automation may run a
+ * deploy, which takes far longer than code calling an API.
+ */
+export const capTimeout = (seconds: number, runtime: string) =>
+  Math.min(seconds, maxTimeoutSeconds(runtime));
 
 function parseCode(raw: unknown) {
   const code = typeof raw === 'string' ? raw : '';
@@ -195,6 +216,12 @@ export class AutomationController {
   ) {
     await this.assertManage(user, workspaceId);
     const definition = parseDefinition(body ?? {}, false);
+    if (definition.timeoutSeconds !== undefined) {
+      definition.timeoutSeconds = capTimeout(
+        definition.timeoutSeconds,
+        definition.runtime ?? 'node'
+      );
+    }
     const code = body?.code === undefined ? null : parseCode(body.code);
     const triggers = definition.triggers ?? [];
     const token = hasTrigger(triggers, 'webhook') ? newWebhookToken() : null;
@@ -266,6 +293,12 @@ export class AutomationController {
     await this.assertManage(user, workspaceId);
     const existing = await this.automations.getOwned(workspaceId, id);
     const changes = parseDefinition(body ?? {}, true);
+    if (changes.timeoutSeconds !== undefined || changes.runtime !== undefined) {
+      changes.timeoutSeconds = capTimeout(
+        changes.timeoutSeconds ?? existing.timeoutSeconds,
+        changes.runtime ?? existing.runtime
+      );
+    }
     const triggers =
       changes.triggers ?? (existing.triggers as unknown as Trigger[]);
     const enabled = changes.enabled ?? existing.enabled;

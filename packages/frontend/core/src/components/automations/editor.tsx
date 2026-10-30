@@ -2,10 +2,14 @@ import { Button, Input, notify, Switch } from '@notesgraph/component';
 import {
   type Automation,
   AUTOMATION_EVENTS,
+  AUTOMATION_RUNTIME_LABELS,
   type AutomationEvent,
+  type AutomationRuntime,
   type AutomationsService,
   type AutomationTrigger,
   type AutomationTriggerType,
+  BLANK_ACTIONS_CODE,
+  BLANK_AUTOMATION_CODE,
 } from '@notesgraph/core/modules/agents';
 import { useCallback, useMemo, useState } from 'react';
 
@@ -261,6 +265,21 @@ export const AutomationEditor = ({
   const [enabled, setEnabled] = useState(existing?.enabled ?? true);
   const [triggers, setTriggers] = useState<AutomationTrigger[]>(start.triggers);
   const [code, setCode] = useState(start.code);
+  const [runtime, setRuntime] = useState<AutomationRuntime>(
+    existing?.runtime ?? 'node'
+  );
+  // Switching between JavaScript and YAML swaps an untouched starter for
+  // the other's.
+  const changeRuntime = (next: AutomationRuntime) => {
+    setRuntime(next);
+    setCode(current =>
+      next === 'actions' && current === BLANK_AUTOMATION_CODE
+        ? BLANK_ACTIONS_CODE
+        : next !== 'actions' && current === BLANK_ACTIONS_CODE
+          ? BLANK_AUTOMATION_CODE
+          : current
+    );
+  };
   const [secrets, setSecrets] = useState<string[]>(existing?.secrets ?? []);
   const [timeout, setTimeoutSeconds] = useState(
     String(existing?.timeoutSeconds ?? 60)
@@ -283,6 +302,7 @@ export const AutomationEditor = ({
     setSaving(true);
     const draft = {
       name: name.trim(),
+      runtime,
       triggers,
       secrets,
       timeoutSeconds: Number(timeout) || 60,
@@ -331,6 +351,7 @@ export const AutomationEditor = ({
     name,
     onSaved,
     retries,
+    runtime,
     secrets,
     service,
     target,
@@ -415,7 +436,32 @@ export const AutomationEditor = ({
       </div>
 
       <label className={styles.field}>
-        Code (JavaScript)
+        Written in
+        <select
+          className={styles.select}
+          value={runtime}
+          onChange={e => changeRuntime(e.target.value as AutomationRuntime)}
+          data-testid="automation-runtime"
+        >
+          {(Object.keys(AUTOMATION_RUNTIME_LABELS) as AutomationRuntime[]).map(
+            value => (
+              <option key={value} value={value}>
+                {AUTOMATION_RUNTIME_LABELS[value]}
+              </option>
+            )
+          )}
+        </select>
+        {runtime === 'shell' ? (
+          <span className={styles.hint}>
+            <code>await sh(command, {'{cwd}'})</code> runs a command on the
+            device and resolves to <code>{'{code, output}'}</code>; a failing
+            one throws.
+          </span>
+        ) : null}
+      </label>
+
+      <label className={styles.field}>
+        {runtime === 'actions' ? 'Actions (YAML)' : 'Code (JavaScript)'}
         <textarea
           className={styles.code}
           value={code}

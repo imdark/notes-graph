@@ -3,12 +3,29 @@
  *
  * Flow: inject the extractor into the active tab (the user's authenticated
  * session) → capture title/text/images (fetched IN the page so cookies/referer
- * are the user's) → open the NotesGraph app's /import-clipper receiver → hand
+ * are the user's) → open the NotesGraph app's /clipper/import receiver → hand
  * off a ClipperInput via window.postMessage. The app persists the attachments
  * as blobs (ImportClipperService + MarkdownTransformer.importMarkdownWithAssets).
  */
 
 const DEFAULT_APP_BASE = 'https://app.notesgraph.com';
+
+// Every step that waits on the page gets a deadline, so a stalled image host
+// or a page that never answers fails the clip with a reason instead of
+// leaving the popup on "Clipping…" forever.
+const READ_PAGE_MS = 15_000;
+const IMAGE_MS = 8_000;
+const VIDEO_MS = 20_000;
+
+function withTimeout(promise, ms, message) {
+  let timer;
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error(message)), ms);
+    }),
+  ]).finally(() => clearTimeout(timer));
+}
 
 async function getAppBase() {
   try {
@@ -22,9 +39,10 @@ async function getAppBase() {
 /**
  * Runs IN the active page (isolated world, after extract-clip.js injected the
  * `extractClip` global). Fetches each image with the page's credentials and
- * returns it as a data URL so the bytes survive the hop to the app.
+ * returns it as a data URL so the bytes survive the hop to the app. Images
+ * load at once, each given `imageMs`; one that is slower is left out.
  */
-async function captureInPage() {
+async function captureInPage(imageMs) {
   /* global extractClip */
   const clip = extractClip();
   const toDataUrl = blob =>
@@ -34,25 +52,32 @@ async function captureInPage() {
       fr.onerror = reject;
       fr.readAsDataURL(blob);
     });
-  const imageData = [];
-  for (const url of clip.images.slice(0, 12)) {
+  const load = async url => {
     try {
-      const res = await fetch(url, { credentials: 'include' });
-      if (!res.ok) continue;
+      // The signal covers the body too, so a stream that stalls midway ends.
+      const res = await fetch(url, {
+        credentials: 'include',
+        signal: AbortSignal.timeout(imageMs),
+      });
+      if (!res.ok) return null;
       const blob = await res.blob();
-      if (!blob.type.startsWith('image/') || blob.size > 8_000_000) continue;
-      imageData.push({ url, mime: blob.type, dataUrl: await toDataUrl(blob) });
+      if (!blob.type.startsWith('image/') || blob.size > 8_000_000) return null;
+      return { url, mime: blob.type, dataUrl: await toDataUrl(blob) };
     } catch {
-      /* skip unreachable image */
+      return null; // unreachable or too slow: skip it
     }
-  }
-  return { ...clip, imageData };
+  };
+  const loaded = await Promise.all(clip.images.slice(0, 12).map(load));
+  return { ...clip, imageData: loaded.filter(Boolean) };
 }
 
 /**
  * Runs IN the opened NotesGraph app tab: rebuild Blobs from the data URLs and
- * post the ClipperInput to the /import-clipper page (same-window postMessage,
- * which the app already listens for). Retries a few times to beat SPA hydration.
+ * post the ClipperInput to the /clipper/import page (same-window postMessage,
+ * which the app already listens for). The page's listener only exists once its
+ * lazily loaded route has run, well after the tab says it's complete, so this
+ * keeps sending until the import reports success or 20s pass. The page keeps
+ * the first copy it gets; later ones only replace the port it answers on.
  */
 function deliverToApp(payload) {
   const attachments = {};
@@ -71,25 +96,27 @@ function deliverToApp(payload) {
     title: payload.title,
     contentMarkdown: payload.contentMarkdown,
     contentHtml: payload.contentHtml || '',
+    sourceUrl: payload.sourceUrl,
     attachments,
     workspace: payload.workspace,
   };
   let done = false;
-  const channel = new MessageChannel();
-  channel.port1.onmessage = () => {
-    done = true;
-  };
+  const started = Date.now();
   const send = () => {
-    if (done) return;
+    if (done || Date.now() - started > 20_000) return;
+    // A port can be transferred only once, so each send gets its own.
+    const channel = new MessageChannel();
+    channel.port1.onmessage = () => {
+      done = true;
+    };
     window.postMessage(
       { type: 'notesgraph-clipper:import', payload: clipperInput },
       '*',
       [channel.port2]
     );
+    setTimeout(send, 500);
   };
   send();
-  setTimeout(send, 600);
-  setTimeout(send, 1500);
 }
 
 /**
@@ -98,14 +125,19 @@ function deliverToApp(payload) {
  */
 async function assembleCapturedVideo(tabId) {
   try {
-    const frames = await chrome.scripting.executeScript({
-      target: { tabId, allFrames: true },
-      world: 'MAIN',
-      func: async () =>
-        typeof window.__ngAssembleCapturedVideo === 'function'
-          ? await window.__ngAssembleCapturedVideo()
-          : null,
-    });
+    // Past the deadline the clip goes ahead without the video.
+    const frames = await withTimeout(
+      chrome.scripting.executeScript({
+        target: { tabId, allFrames: true },
+        world: 'MAIN',
+        func: async () =>
+          typeof window.__ngAssembleCapturedVideo === 'function'
+            ? await window.__ngAssembleCapturedVideo()
+            : null,
+      }),
+      VIDEO_MS,
+      'video capture timed out'
+    );
     let best = null;
     for (const f of frames) {
       const r = f && f.result;
@@ -154,14 +186,19 @@ async function clipActiveTab() {
     throw new Error('This page cannot be clipped.');
   }
 
-  await chrome.scripting.executeScript({
-    target: { tabId: tab.id },
-    files: ['extract-clip.js'],
-  });
-  const [{ result: clip }] = await chrome.scripting.executeScript({
-    target: { tabId: tab.id },
-    func: captureInPage,
-  });
+  const [{ result: clip }] = await withTimeout(
+    chrome.scripting
+      .executeScript({ target: { tabId: tab.id }, files: ['extract-clip.js'] })
+      .then(() =>
+        chrome.scripting.executeScript({
+          target: { tabId: tab.id },
+          func: captureInPage,
+          args: [IMAGE_MS],
+        })
+      ),
+    READ_PAGE_MS,
+    "The page didn't respond. Reload it and try again."
+  );
 
   const attachmentsData = {};
   const imageKeys = [];
@@ -192,11 +229,13 @@ async function clipActiveTab() {
     contentHtml: '',
     attachmentsData,
     videos: clip.videos,
+    // Kept on the note as where the clip came from.
+    sourceUrl: clip.url,
     workspace: 'last-open-workspace',
   };
 
   const appBase = await getAppBase();
-  const appTab = await chrome.tabs.create({ url: `${appBase}/import-clipper` });
+  const appTab = await chrome.tabs.create({ url: `${appBase}/clipper/import` });
   await waitForTabComplete(appTab.id);
   await chrome.scripting.executeScript({
     target: { tabId: appTab.id },

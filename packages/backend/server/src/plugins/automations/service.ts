@@ -38,6 +38,24 @@ export interface RunTrigger {
 export const DOC_UPDATED_DEBOUNCE_MS = 60_000;
 /** Longest a run may be given. */
 export const MAX_TIMEOUT_SECONDS = 15 * 60;
+/** Longest a shell automation's run may be given: long enough for a deploy. */
+export const MAX_SHELL_TIMEOUT_SECONDS = 60 * 60;
+
+/**
+ * How an automation's code runs on its device. 'node': JavaScript. 'shell':
+ * JavaScript given `sh` too, to run commands there. 'actions': YAML in wf's
+ * own action language (custom_command, cloud_deploy, notification...). The
+ * last two run on wf devices only; the cloud runner refuses them.
+ */
+export const AUTOMATION_RUNTIMES = ['node', 'shell', 'actions'] as const;
+export type AutomationRuntime = (typeof AUTOMATION_RUNTIMES)[number];
+
+/** Whether its code runs commands on the device, which wf alone allows. */
+export const runsCommands = (runtime: string) =>
+  runtime === 'shell' || runtime === 'actions';
+
+export const maxTimeoutSeconds = (runtime: string) =>
+  runsCommands(runtime) ? MAX_SHELL_TIMEOUT_SECONDS : MAX_TIMEOUT_SECONDS;
 /** Most input a run carries (a webhook body, an event). */
 export const MAX_INPUT_BYTES = 256 * 1024;
 
@@ -140,8 +158,14 @@ export class AutomationService implements OnModuleInit {
           versionId: version.id,
           code: version.code,
           input: capInput(input),
-          timeoutSeconds: automation.timeoutSeconds,
+          timeoutSeconds: Math.min(
+            automation.timeoutSeconds,
+            maxTimeoutSeconds(automation.runtime)
+          ),
           secrets: automation.secrets,
+          runtime: automation.runtime,
+          // What a runner from before `runtime` reads; it runs no YAML.
+          shell: runsCommands(automation.runtime),
         }
       );
       await this.models.automation.update(automation.id, {
@@ -521,4 +545,5 @@ export function capInput(input: unknown): Prisma.InputJsonValue | null {
  * A prestart run unfinished after this long is given up on, so a job held
  * for a hook no runner picks up doesn't wait for ever.
  */
-export const PRESTART_GIVE_UP_MS = MAX_TIMEOUT_SECONDS * 1000 + 15 * 60_000;
+export const PRESTART_GIVE_UP_MS =
+  MAX_SHELL_TIMEOUT_SECONDS * 1000 + 15 * 60_000;
