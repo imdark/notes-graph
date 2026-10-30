@@ -98,18 +98,29 @@ export class NotesGraphKeyboardToolbar extends SignalWatcher(
     }
   };
 
+  private get _keyboardHeight() {
+    return this.keyboard.staticHeight$.value !== 0
+      ? this.keyboard.staticHeight$.value
+      : 330;
+  }
+
+  /**
+   * How much of the window the virtual keyboard covers: what it didn't
+   * already take by shrinking the window. Zero where the window shrinks for
+   * the whole keyboard, the full keyboard where it is drawn over the page.
+   */
+  private get _keyboardOverlap() {
+    return Math.max(0, this._keyboardHeight - this._viewportShrink$.value);
+  }
+
   private get panelHeight() {
     if (!this._expanded$.value) return this.keyboard.appTabSafeArea$.value;
-    const keyboardHeight =
-      this.keyboard.staticHeight$.value !== 0
-        ? this.keyboard.staticHeight$.value
-        : 330;
-    if (this.panelOpened) return `${keyboardHeight}px`;
+    if (this.panelOpened) return `${this._keyboardHeight}px`;
     // With the keyboard up and no panel, the panel only holds the toolbar above
     // the keyboard by sitting behind it. Where the window already shrank for
     // the keyboard there is nothing to sit behind: a full-height panel would
     // cover the lines being typed.
-    return `${Math.max(0, keyboardHeight - this._viewportShrink$.value)}px`;
+    return `${this._keyboardOverlap}px`;
   }
 
   private get panelPaddingBottom() {
@@ -188,18 +199,23 @@ export class NotesGraphKeyboardToolbar extends SignalWatcher(
         if (!block) return;
 
         // Where the line must stay above. With a panel open, that's the top
-        // of the toolbar. Otherwise it's the toolbar's bar sitting on the
-        // visible area's bottom: measured from the visual viewport so it's
-        // right both where the keyboard covers the page (iOS) and where the
-        // window shrinks for it (Android). The toolbar's own box is wrong
-        // while Android resizes: its panel is keyboard-tall for a moment.
+        // of the toolbar. Otherwise it's the toolbar's bar sitting on top of
+        // the keyboard: the visual viewport's bottom, less whatever part of
+        // the keyboard is drawn over the window rather than shrinking it.
+        // That's right both where the keyboard covers the page and where the
+        // window shrinks for it. The toolbar's own box is wrong while the
+        // window resizes: its panel is keyboard-tall for a moment.
         const bar = this.querySelector('.keyboard-toolbar');
         const viewport = window.visualViewport;
+        const keyboardOverlap = this.keyboard.visible$.peek()
+          ? this._keyboardOverlap
+          : 0;
         const y1 =
           this.panelOpened || !bar || !viewport
             ? this.getBoundingClientRect().y
             : viewport.offsetTop +
               viewport.height -
+              keyboardOverlap -
               bar.getBoundingClientRect().height;
         const gap = 8;
 
