@@ -467,7 +467,9 @@ export const AgentRunLogDialog = ({
       // The dialog is capped at the viewport height; without this the
       // content past the cap (the log's bottom, the buttons) is clipped
       // and can't be reached on a phone.
-      contentStyle={{ overflowY: 'auto', overscrollBehavior: 'contain' }}
+      contentOptions={{
+        style: { overflowY: 'auto', overscrollBehavior: 'contain' },
+      }}
       title={
         run
           ? `${run.title || run.agentName} · ${statusLabel[run.status]}`
