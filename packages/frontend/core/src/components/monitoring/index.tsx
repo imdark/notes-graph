@@ -192,8 +192,7 @@ const MonitorItem = (props: {
       monitorId: monitor.id,
     });
   }, [dialogService, monitor]);
-  // The editor dialog is only registered on desktop.
-  const canEdit = !BUILD_CONFIG.isMobileEdition;
+  const canEdit = true;
   const failing = monitor.enabled && monitor.lastError;
   if (!canEdit && !failing) return <MonitorRow {...props} />;
   return (
