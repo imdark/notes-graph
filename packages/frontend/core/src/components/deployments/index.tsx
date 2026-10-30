@@ -430,9 +430,13 @@ export const DeploymentsView = () => {
     [allSessions, sent]
   );
 
-  // Pull requests wf is merging right now, by URL.
+  // Pull requests wf is merging right now, by URL. Each is its own branch
+  // into stage, so any number can merge at once; only the same one can't.
   const [merging, setMerging] = useState<Set<string>>(() => new Set());
-  const busy = merging.size > 0 || !!session?.running;
+  // A Merge or Deploy from the bar, which works through the list itself.
+  const [shipping, setShipping] = useState(false);
+  const claudeBusy = !!session?.running;
+  const busy = shipping || claudeBusy;
 
   /** Merge through wf, no AI. Resolves to whether it merged. */
   const mergeOne = useCallback(
@@ -576,44 +580,56 @@ export const DeploymentsView = () => {
    */
   const ship = useCallback(
     async (action: ShipAction) => {
-      const helpNeeded: Row[] = [];
-      const mergedNow = new Set<string>();
-      for (const row of toMerge) {
-        const pr = row.pullRequest
-          ? pullsByUrl.get(row.pullRequest)
-          : undefined;
-        const readiness = pr?.state === 'open' ? mergeReadiness(pr) : null;
-        if (
-          pr &&
-          readiness &&
-          mergesDirectly(readiness) &&
-          (await mergeOne(pr, row))
-        ) {
-          mergedNow.add(rowKey(row));
-          continue;
+      setShipping(true);
+      try {
+        const helpNeeded: Row[] = [];
+        const mergedNow = new Set<string>();
+        // All at once: each is its own branch, and one that turns out to
+        // conflict fails on its own and goes to Claude Code.
+        await Promise.all(
+          toMerge.map(async row => {
+            const pr = row.pullRequest
+              ? pullsByUrl.get(row.pullRequest)
+              : undefined;
+            // Already being merged from its own button.
+            if (pr && merging.has(pr.url)) return;
+            const readiness =
+              pr?.state === 'open' ? mergeReadiness(pr) : null;
+            if (
+              pr &&
+              readiness &&
+              mergesDirectly(readiness) &&
+              (await mergeOne(pr, row))
+            ) {
+              mergedNow.add(rowKey(row));
+              return;
+            }
+            // A draft isn't ready to go, whoever merges it.
+            if (readiness !== 'draft') helpNeeded.push(row);
+          })
+        );
+        if (action === 'merge') {
+          if (helpNeeded.length > 0) await sendToClaude('merge', helpNeeded);
+          else if (mergedNow.size > 0) {
+            notify.success({
+              title: `Merged ${mergedNow.size}`,
+              message: 'wf merged them on GitHub; their tasks are MERGED.',
+            });
+          }
+          refresh();
+          return;
         }
-        // A draft isn't ready to go, whoever merges it.
-        if (readiness !== 'draft') helpNeeded.push(row);
+        await sendToClaude(
+          'deploy',
+          toDeploy.map(row =>
+            mergedNow.has(rowKey(row)) ? { ...row, stage: 'merged' } : row
+          )
+        );
+      } finally {
+        setShipping(false);
       }
-      if (action === 'merge') {
-        if (helpNeeded.length > 0) await sendToClaude('merge', helpNeeded);
-        else if (mergedNow.size > 0) {
-          notify.success({
-            title: `Merged ${mergedNow.size}`,
-            message: 'wf merged them on GitHub; their tasks are MERGED.',
-          });
-        }
-        refresh();
-        return;
-      }
-      await sendToClaude(
-        'deploy',
-        toDeploy.map(row =>
-          mergedNow.has(rowKey(row)) ? { ...row, stage: 'merged' } : row
-        )
-      );
     },
-    [mergeOne, pullsByUrl, refresh, sendToClaude, toDeploy, toMerge]
+    [merging, mergeOne, pullsByUrl, refresh, sendToClaude, toDeploy, toMerge]
   );
 
   const openTask = useCallback(
@@ -648,7 +664,7 @@ export const DeploymentsView = () => {
         {mergesDirectly(readiness) ? (
           <Button
             size="default"
-            disabled={busy}
+            disabled={merging.has(pr.url)}
             loading={merging.has(pr.url)}
             onClick={() => {
               mergeOne(pr, row)
@@ -665,7 +681,7 @@ export const DeploymentsView = () => {
         {canFixToMerge(readiness) && (row || rows.length > 0) ? (
           <Button
             size="default"
-            disabled={busy}
+            disabled={claudeBusy}
             onClick={() => {
               sendToClaude('merge', row ? [row] : [], row ? [] : [pr]).catch(
                 () => {}
@@ -758,7 +774,9 @@ export const DeploymentsView = () => {
           {readyItems.length > 0 ? (
             <button
               className={styles.link}
-              disabled={checking || busy || github.loading}
+              disabled={
+                checking || busy || merging.size > 0 || github.loading
+              }
               onClick={() => {
                 checkBranches().catch(() => {});
               }}
