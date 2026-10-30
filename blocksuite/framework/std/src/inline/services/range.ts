@@ -259,7 +259,9 @@ export class RangeService<TextAttributes extends BaseTextAttributes> {
         if (this.editor.renderService.rendering) {
           const subscription = editor.slots.renderComplete.subscribe(() => {
             subscription.unsubscribe();
-            this.syncInlineRange(newInlineRange);
+            // Re-read the current range: the one captured at typing time is
+            // stale if the user clicked elsewhere while rendering.
+            this.syncInlineRange();
           });
         } else {
           this.syncInlineRange();
@@ -287,9 +289,12 @@ export class RangeService<TextAttributes extends BaseTextAttributes> {
    */
   syncInlineRange = (inlineRange?: InlineRange | null) => {
     if (!this.editor.mounted || this._syncInlineRangeLock) return;
-    inlineRange = inlineRange ?? this.editor.getInlineRange();
+    const explicitRange = inlineRange;
 
     const handler = () => {
+      // Resolve at apply time: if this ran after a render wait, the range
+      // read earlier may predate a newer click.
+      inlineRange = explicitRange ?? this.editor.getInlineRange();
       const selection = document.getSelection();
       if (!selection) return;
       if (!this.editor.rootElement) return;
