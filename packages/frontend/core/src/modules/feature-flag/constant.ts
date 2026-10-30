@@ -374,7 +374,7 @@ export const NOTESGRAPH_FLAGS = {
     defaultState: true,
   },
   enable_monitor_skills: {
-    commit: '',
+    commit: '65316ef3dc21a3fd2f8086fd2a8349512fdda9fe',
     category: 'notesgraph',
     displayName: 'Skills for agent monitors',
     description:
