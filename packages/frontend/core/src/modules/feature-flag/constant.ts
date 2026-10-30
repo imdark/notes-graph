@@ -383,7 +383,7 @@ export const NOTESGRAPH_FLAGS = {
     defaultState: false,
   },
   enable_deploy_repo_branches: {
-    commit: '',
+    commit: 'e1a2782c9328023f5840e8742ca03261a7685e07',
     category: 'notesgraph',
     displayName: 'Branches per repo on Deployments',
     description:
