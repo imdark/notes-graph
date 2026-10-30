@@ -376,9 +376,9 @@ export const NOTESGRAPH_FLAGS = {
   enable_monitor_skills: {
     commit: '65316ef3dc21a3fd2f8086fd2a8349512fdda9fe',
     category: 'notesgraph',
-    displayName: 'Skills for agent monitors',
+    displayName: 'Enable skills on monitors',
     description:
-      'Choose the skills an agent monitor runs with, such as a "Skill: <name>" note with how to check a price, instead of the default set.',
+      'Assign skills to an agent monitor by hand: built-in skills or a "Skill: <name>" note.',
     configurable: true,
     defaultState: false,
   },

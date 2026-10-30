@@ -56,9 +56,9 @@ export interface MonitorSpec {
   model?: string;
   tools?: string[];
   /**
-   * agent: the skills the run gets (catalog names, or `note:<docId>` for a
-   * "Skill: <name>" note), in place of the model's defaults. Unset keeps
-   * the defaults.
+   * agent: skills assigned to the run (catalog names, or `note:<docId>` for
+   * a "Skill: <name>" note), in place of the model's defaults. None
+   * assigned keeps the defaults.
    */
   skills?: string[];
 }
@@ -501,12 +501,13 @@ export class MonitorService {
 const isNumeric = (condition: Condition | null) =>
   condition?.type === 'above' || condition?.type === 'below';
 
-/** The skills an agent monitor chose, or undefined to keep the defaults. */
+/** The skills assigned to an agent monitor, or undefined for none. */
 export function monitorSkills(spec: MonitorSpec): string[] | undefined {
   if (!Array.isArray(spec.skills)) return undefined;
-  return spec.skills.filter(
+  const skills = spec.skills.filter(
     (skill): skill is string => typeof skill === 'string' && !!skill.trim()
   );
+  return skills.length ? skills : undefined;
 }
 
 /**
@@ -533,12 +534,6 @@ export function agentInstructions(
         `(monitorId ${monitor.id}): the bare number, in the unit the instructions use.`
       : `If what you watch is a single number (a price, a count, a rate), report it ` +
         `with the NotesGraph report_monitor_value tool (monitorId ${monitor.id}).`,
-    ...(monitorSkills(spec)?.length
-      ? [
-          'Skills were chosen for this monitor: read each skill you have before',
-          'you start, and follow it.',
-        ]
-      : []),
     'Do not ask questions; work with what you can find.',
     'Finish with that same one-line summary.',
   ].join('\n');

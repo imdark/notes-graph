@@ -12,7 +12,6 @@ import {
   AgentsService,
   CLAUDE_CODE_MODEL,
   type ConditionType,
-  defaultSkillsFor,
   type ExtractType,
   isDeviceClaudeModel,
   MIN_INTERVAL_MINUTES,
@@ -189,10 +188,8 @@ export const MonitorEditorDialog = ({
     existing?.spec.instructions ?? ''
   );
   const [model, setModel] = useState(existing?.spec.model ?? CLAUDE_CODE_MODEL);
-  // Undefined until chosen: the run gets the model's default skills.
-  const [skills, setSkills] = useState<string[] | undefined>(
-    existing?.spec.skills
-  );
+  // Skills assigned by hand; with none the run keeps the model's defaults.
+  const [skills, setSkills] = useState<string[]>(existing?.spec.skills ?? []);
   // The workspace's "Skill: <name>" notes, offered beside the catalog.
   const [skillNotes, setSkillNotes] = useState<SkillNote[]>([]);
   const [deviceKey, setDeviceKey] = useState(existing?.deviceKey ?? '');
@@ -249,17 +246,13 @@ export const MonitorEditorDialog = ({
     };
   }, [remoteRunner, showSkills, workspaceId]);
 
-  const toggleSkill = useCallback(
-    (skill: string) => {
-      const current = skills ?? defaultSkillsFor(model);
-      setSkills(
-        current.includes(skill)
-          ? current.filter(s => s !== skill)
-          : [...current, skill]
-      );
-    },
-    [model, skills]
-  );
+  const toggleSkill = useCallback((skill: string) => {
+    setSkills(current =>
+      current.includes(skill)
+        ? current.filter(s => s !== skill)
+        : [...current, skill]
+    );
+  }, []);
 
   // Picking an agent copies what it does, so later edits to it don't change
   // a monitor that's already running.
@@ -270,11 +263,10 @@ export const MonitorEditorDialog = ({
       if (!agent) return;
       setInstructions(agent.instructions);
       setModel(runAs(agent).model);
-      if (skillsEnabled) setSkills(agent.skills);
       if (agent.deviceKey) setDeviceKey(agent.deviceKey);
       if (name === 'Monitor' || !name.trim()) setName(agent.name);
     },
-    [deviceAgents, name, skillsEnabled]
+    [deviceAgents, name]
   );
 
   const draft = useCallback((): MonitorDraft => {
@@ -303,7 +295,11 @@ export const MonitorEditorDialog = ({
                 tools:
                   (agent ? runAs(agent).tools : existing?.spec.tools) ?? [],
                 // With the flag off, a monitor keeps what it was saved with.
-                skills: skillsEnabled ? skills : existing?.spec.skills,
+                skills: skillsEnabled
+                  ? skills.length
+                    ? skills
+                    : undefined
+                  : existing?.spec.skills,
               },
       intervalMinutes: Math.max(interval, minimum),
       condition:
@@ -620,9 +616,7 @@ export const MonitorEditorDialog = ({
                     ].map(({ ref, label, title }) => (
                       <label key={ref} className={styles.check} title={title}>
                         <Checkbox
-                          checked={(skills ?? defaultSkillsFor(model)).includes(
-                            ref
-                          )}
+                          checked={skills.includes(ref)}
                           onChange={() => toggleSkill(ref)}
                           data-testid={`monitor-skill-${ref}`}
                         />
@@ -631,11 +625,8 @@ export const MonitorEditorDialog = ({
                     ))}
                   </div>
                   <span className={styles.hint}>
-                    {skills
-                      ? 'Each run reads these skills and follows them.'
-                      : 'Following the default set for this model; tick or untick to choose your own.'}{' '}
-                    A note titled “Skill: &lt;name&gt;” (how to check a price,
-                    say) is offered here too.
+                    Assign the skills this monitor runs with. A note titled
+                    “Skill: &lt;name&gt;” is offered here too.
                   </span>
                 </div>
               ) : null}

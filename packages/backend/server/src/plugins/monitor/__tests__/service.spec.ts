@@ -309,10 +309,9 @@ test('an agent monitor with no model runs as Claude Code', async t => {
   t.is(queued[0][3].model, 'claude-code');
   // No skills chosen: the job keeps the model's defaults.
   t.is(queued[0][3].skills, undefined);
-  t.notRegex(queued[0][3].instructions, /Skills were chosen/);
 });
 
-test('an agent monitor runs with only the skills it chose', async t => {
+test('an agent monitor runs with only the skills assigned to it', async t => {
   const monitor = monitorRow({
     kind: 'agent',
     source: null,
@@ -326,7 +325,6 @@ test('an agent monitor runs with only the skills it chose', async t => {
   await service.run({ monitorId: 'm1' });
   const body = queued[0][3];
   t.deepEqual(body.skills, ['note:verify-doc', 'omniseek-investigate']);
-  t.regex(body.instructions, /read each skill you have before/);
 });
 
 test('an agent is told which block to keep current', t => {
