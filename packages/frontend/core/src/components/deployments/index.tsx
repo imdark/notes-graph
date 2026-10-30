@@ -5,6 +5,8 @@ import {
   type AgentTarget,
   agentTargetKey,
   canFixToMerge,
+  type Agent,
+  type DeployCiRun,
   type DeployInfo,
   DeploymentsService,
   flagStage,
@@ -142,6 +144,48 @@ const NotLiveBadge = ({
 };
 
 /** What prod runs, so a merge can be checked for being live. */
+/**
+ * Shown while a deploy of prod is queued or running in GitHub Actions; opens
+ * its CI run.
+ */
+export const DeployInProgress = ({ runs }: { runs: DeployCiRun[] }) => {
+  if (runs.length === 0) return null;
+  return (
+    <div className={styles.sectionHint} data-testid="deploy-in-progress">
+      {runs.map(run => (
+        <a
+          key={run.url}
+          href={run.url}
+          target="_blank"
+          rel="noreferrer"
+          className={styles.badge}
+        >
+          {run.status === 'queued' ? 'Deploy queued' : 'Deploy in progress'}
+          {run.startedAt
+            ? ` since ${new Date(run.startedAt).toLocaleTimeString()}`
+            : ''}{' '}
+          · open CI run
+        </a>
+      ))}
+    </div>
+  );
+};
+
+/** Poll GitHub for running deploys while `agent` can ask; null-safe. */
+export const useDeployCiRuns = (agent: Agent | undefined): DeployCiRun[] => {
+  const deployments = useService(DeploymentsService);
+  const runs = useLiveData(deployments.deployCiRuns$);
+  const repo = useLiveData(deployments.deployInfo$)?.repo;
+  useEffect(() => {
+    if (!agent || !repo) return;
+    const read = () => deployments.refreshDeployCiRuns(agent, repo);
+    read().catch(() => {});
+    const timer = setInterval(() => read().catch(() => {}), 30_000);
+    return () => clearInterval(timer);
+  }, [agent, deployments, repo]);
+  return runs;
+};
+
 const ProdLine = ({ deploy }: { deploy: DeployInfo | null | undefined }) => {
   if (deploy === undefined) return null;
   if (deploy === null) {
@@ -306,6 +350,7 @@ export const DeploymentsView = () => {
     () => (reposKey ? reposKey.split(',') : []),
     [reposKey]
   );
+  const deployCiRuns = useDeployCiRuns(agent);
   const refresh = useCallback(() => {
     if (agent) deployments.refreshPullRequests(agent, repos).catch(() => {});
   }, [agent, deployments, repos]);
@@ -756,6 +801,7 @@ export const DeploymentsView = () => {
 
   return (
     <div className={styles.content} data-testid="deployments-view">
+      <DeployInProgress runs={deployCiRuns} />
       <ProdLine deploy={deployInfo} />
       <FlagsLine
         deploy={deployInfo}
