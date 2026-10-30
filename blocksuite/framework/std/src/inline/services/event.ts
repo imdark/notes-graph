@@ -448,12 +448,50 @@ export class EventService<TextAttributes extends BaseTextAttributes> {
     }
   };
 
+  /**
+   * Where the caret is as the composition ends, read off the DOM, which still
+   * holds the composed text: a tap elsewhere in the line ends the
+   * composition, and the selection already sits where the tap landed. Only
+   * read with an idle queue; a busy one leaves the DOM mid-rerender.
+   */
+  private readonly _compositionEndCaret = (): number | null => {
+    if (this._pendingInputs > 0) return null;
+    const range = this.editor.rangeService.getNativeRange();
+    if (!range || !range.collapsed || !this._isRangeCompletelyInRoot(range)) {
+      return null;
+    }
+    return this.editor.toInlineRange(range)?.index ?? null;
+  };
+
+  /**
+   * The caret after the commit: the end of the committed text, unless a tap
+   * moved it elsewhere while composing. Then the commit must not pull it
+   * back, or the tap is lost and has to be repeated. The caret was read
+   * against the DOM, where the composed text replaced the composition range,
+   * so a caret past it moves by however much the commit differs from it.
+   */
+  private readonly _caretAfterCommit = (
+    caret: number | null,
+    composedIndex: number,
+    composedLength: number,
+    insertIndex: number,
+    insertLength: number
+  ): number => {
+    const composedEnd = composedIndex + composedLength;
+    const committedEnd = insertIndex + insertLength;
+    if (caret === null || caret === composedEnd) return committedEnd;
+    if (caret <= composedIndex) return caret;
+    if (caret > composedEnd) return caret - composedEnd + committedEnd;
+    return insertIndex + Math.min(caret - composedIndex, insertLength);
+  };
+
   private readonly _onCompositionEnd = async (
     event: CompositionEvent,
     composition: {
       inlineRange: InlineRange | null;
       textInserted: boolean;
       embedTrim: CompositionEmbedTrim;
+      caret: number | null;
     }
   ) => {
     this._isComposing = false;
@@ -518,7 +556,16 @@ export class EventService<TextAttributes extends BaseTextAttributes> {
         ctx.attributes
       );
       this.editor.setInlineRange({
-        index: Math.min(insertIndex + newData.length, this.editor.yTextLength),
+        index: Math.min(
+          this._caretAfterCommit(
+            composition.caret,
+            inlineRange.index,
+            event.data?.length ?? 0,
+            insertIndex,
+            newData.length
+          ),
+          this.editor.yTextLength
+        ),
         length: 0,
       });
     } else {
@@ -742,6 +789,7 @@ export class EventService<TextAttributes extends BaseTextAttributes> {
         inlineRange: this._compositionInlineRange,
         textInserted: this._compositionTextInserted,
         embedTrim: this._compositionEmbedTrim,
+        caret: this._compositionEndCaret(),
       };
       this._enqueueInput(() => this._onCompositionEnd(e, composition));
     });
