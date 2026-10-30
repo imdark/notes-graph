@@ -155,7 +155,10 @@ const MonitorRow = ({
       className={styles.monitorRow}
       onClick={() => onOpen(monitor)}
       title={
-        monitor.lastError ?? `Open the block ${monitor.name} keeps up to date`
+        monitor.lastError ??
+        (BUILD_CONFIG.isMobileEdition
+          ? `Edit ${monitor.name}`
+          : `Open the block ${monitor.name} keeps up to date`)
       }
       data-testid="monitoring-monitor"
     >
@@ -192,12 +195,15 @@ const MonitorItem = (props: {
       monitorId: monitor.id,
     });
   }, [dialogService, monitor]);
-  const canEdit = true;
+  // On mobile there's no room for a separate Edit button: the row opens the
+  // editor instead of the block.
+  const canEdit = !BUILD_CONFIG.isMobileEdition;
+  const row = canEdit ? props : { ...props, onOpen: edit };
   const failing = monitor.enabled && monitor.lastError;
-  if (!canEdit && !failing) return <MonitorRow {...props} />;
+  if (!canEdit && !failing) return <MonitorRow {...row} />;
   return (
     <div className={styles.monitorItem}>
-      <MonitorRow {...props} />
+      <MonitorRow {...row} />
       {canEdit ? (
         <Button
           variant="plain"
