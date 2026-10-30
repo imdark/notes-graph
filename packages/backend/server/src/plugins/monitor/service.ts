@@ -55,6 +55,12 @@ export interface MonitorSpec {
   instructions?: string;
   model?: string;
   tools?: string[];
+  /**
+   * agent: the skills the run gets (catalog names, or `note:<docId>` for a
+   * "Skill: <name>" note), in place of the model's defaults. Unset keeps
+   * the defaults.
+   */
+  skills?: string[];
 }
 
 export interface MonitorAlerts {
@@ -152,6 +158,7 @@ export class MonitorService {
           model: spec.model ?? 'claude-code',
           instructions: agentInstructions(monitor, spec),
           tools: spec.tools ?? [],
+          skills: monitorSkills(spec),
           agentName: monitor.name,
         });
         return;
@@ -189,6 +196,7 @@ export class MonitorService {
       instructions: string;
       agentName: string;
       tools?: string[];
+      skills?: string[];
     }
   ) {
     if (!monitor.deviceKey) throw new Error('No device chosen to run this on');
@@ -493,6 +501,14 @@ export class MonitorService {
 const isNumeric = (condition: Condition | null) =>
   condition?.type === 'above' || condition?.type === 'below';
 
+/** The skills an agent monitor chose, or undefined to keep the defaults. */
+export function monitorSkills(spec: MonitorSpec): string[] | undefined {
+  if (!Array.isArray(spec.skills)) return undefined;
+  return spec.skills.filter(
+    (skill): skill is string => typeof skill === 'string' && !!skill.trim()
+  );
+}
+
 /**
  * What an agent monitor is told each run: its own instructions, to keep the
  * one block current through NotesGraph's update_block tool, and to report
@@ -517,6 +533,12 @@ export function agentInstructions(
         `(monitorId ${monitor.id}): the bare number, in the unit the instructions use.`
       : `If what you watch is a single number (a price, a count, a rate), report it ` +
         `with the NotesGraph report_monitor_value tool (monitorId ${monitor.id}).`,
+    ...(monitorSkills(spec)?.length
+      ? [
+          'Skills were chosen for this monitor: read each skill you have before',
+          'you start, and follow it.',
+        ]
+      : []),
     'Do not ask questions; work with what you can find.',
     'Finish with that same one-line summary.',
   ].join('\n');

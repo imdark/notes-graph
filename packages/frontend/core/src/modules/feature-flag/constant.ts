@@ -373,6 +373,15 @@ export const NOTESGRAPH_FLAGS = {
     configurable: true,
     defaultState: true,
   },
+  enable_monitor_skills: {
+    commit: '',
+    category: 'notesgraph',
+    displayName: 'Skills for agent monitors',
+    description:
+      'Choose the skills an agent monitor runs with, such as a "Skill: <name>" note with how to check a price, instead of the default set.',
+    configurable: true,
+    defaultState: false,
+  },
   enable_deploy_with_automations: {
     commit: 'efc80e3e44f72bbab0cdaf255426f159dbeb8354',
     category: 'notesgraph',

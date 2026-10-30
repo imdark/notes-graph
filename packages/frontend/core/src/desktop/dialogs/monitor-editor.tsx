@@ -8,9 +8,11 @@ import {
 } from '@notesgraph/component';
 import {
   type Agent,
+  AGENT_SKILLS,
   AgentsService,
   CLAUDE_CODE_MODEL,
   type ConditionType,
+  defaultSkillsFor,
   type ExtractType,
   isDeviceClaudeModel,
   MIN_INTERVAL_MINUTES,
@@ -19,6 +21,7 @@ import {
   MonitorsService,
   RemoteAgentRunnerService,
   RESEARCH_MODEL,
+  type SkillNote,
   WEEK_MINUTES,
 } from '@notesgraph/core/modules/agents';
 import type { DialogComponentProps } from '@notesgraph/core/modules/dialogs';
@@ -145,6 +148,9 @@ export const MonitorEditorDialog = ({
   const runEnabled = useLiveData(
     useService(FeatureFlagService).flags.enable_monitor_run_button.$
   );
+  const skillsEnabled = useLiveData(
+    useService(FeatureFlagService).flags.enable_monitor_skills.$
+  );
   const existing = useMemo(
     () => monitors.find(m => m.id === monitorId),
     [monitorId, monitors]
@@ -183,6 +189,12 @@ export const MonitorEditorDialog = ({
     existing?.spec.instructions ?? ''
   );
   const [model, setModel] = useState(existing?.spec.model ?? CLAUDE_CODE_MODEL);
+  // Undefined until chosen: the run gets the model's default skills.
+  const [skills, setSkills] = useState<string[] | undefined>(
+    existing?.spec.skills
+  );
+  // The workspace's "Skill: <name>" notes, offered beside the catalog.
+  const [skillNotes, setSkillNotes] = useState<SkillNote[]>([]);
   const [deviceKey, setDeviceKey] = useState(existing?.deviceKey ?? '');
   const [interval, setInterval] = useState(existing?.intervalMinutes ?? 60);
   const [conditionType, setConditionType] = useState<ConditionType>(
@@ -222,6 +234,33 @@ export const MonitorEditorDialog = ({
       .catch(() => setDevices([]));
   }, [deviceKey, needsDevice, remoteRunner, workspaceId]);
 
+  const showSkills = skillsEnabled && what === 'agent';
+  useEffect(() => {
+    if (!showSkills) return;
+    let cancelled = false;
+    remoteRunner
+      .skillNotes(workspaceId)
+      .then(list => {
+        if (!cancelled) setSkillNotes(list);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [remoteRunner, showSkills, workspaceId]);
+
+  const toggleSkill = useCallback(
+    (skill: string) => {
+      const current = skills ?? defaultSkillsFor(model);
+      setSkills(
+        current.includes(skill)
+          ? current.filter(s => s !== skill)
+          : [...current, skill]
+      );
+    },
+    [model, skills]
+  );
+
   // Picking an agent copies what it does, so later edits to it don't change
   // a monitor that's already running.
   const pickAgent = useCallback(
@@ -231,10 +270,11 @@ export const MonitorEditorDialog = ({
       if (!agent) return;
       setInstructions(agent.instructions);
       setModel(runAs(agent).model);
+      if (skillsEnabled) setSkills(agent.skills);
       if (agent.deviceKey) setDeviceKey(agent.deviceKey);
       if (name === 'Monitor' || !name.trim()) setName(agent.name);
     },
-    [deviceAgents, name]
+    [deviceAgents, name, skillsEnabled]
   );
 
   const draft = useCallback((): MonitorDraft => {
@@ -262,6 +302,8 @@ export const MonitorEditorDialog = ({
                 model,
                 tools:
                   (agent ? runAs(agent).tools : existing?.spec.tools) ?? [],
+                // With the flag off, a monitor keeps what it was saved with.
+                skills: skillsEnabled ? skills : existing?.spec.skills,
               },
       intervalMinutes: Math.max(interval, minimum),
       condition:
@@ -290,6 +332,8 @@ export const MonitorEditorDialog = ({
     name,
     needsDevice,
     pattern,
+    skills,
+    skillsEnabled,
     url,
     what,
   ]);
@@ -558,6 +602,43 @@ export const MonitorEditorDialog = ({
                   with a one-line summary.
                 </span>
               </div>
+              {showSkills ? (
+                <div className={styles.field}>
+                  <span className={styles.label}>Skills</span>
+                  <div className={styles.checkGrid}>
+                    {[
+                      ...AGENT_SKILLS.map(({ name: skill, desc }) => ({
+                        ref: skill,
+                        label: skill,
+                        title: desc,
+                      })),
+                      ...skillNotes.map(({ ref, name: skill, title }) => ({
+                        ref,
+                        label: `${skill} (note)`,
+                        title: `From the note “${title}”`,
+                      })),
+                    ].map(({ ref, label, title }) => (
+                      <label key={ref} className={styles.check} title={title}>
+                        <Checkbox
+                          checked={(skills ?? defaultSkillsFor(model)).includes(
+                            ref
+                          )}
+                          onChange={() => toggleSkill(ref)}
+                          data-testid={`monitor-skill-${ref}`}
+                        />
+                        {label}
+                      </label>
+                    ))}
+                  </div>
+                  <span className={styles.hint}>
+                    {skills
+                      ? 'Each run reads these skills and follows them.'
+                      : 'Following the default set for this model; tick or untick to choose your own.'}{' '}
+                    A note titled “Skill: &lt;name&gt;” (how to check a price,
+                    say) is offered here too.
+                  </span>
+                </div>
+              ) : null}
             </>
           ) : null}
 
