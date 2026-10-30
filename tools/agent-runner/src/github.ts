@@ -24,7 +24,8 @@ export type GitHubRequest =
   | { op: 'list'; repos: string[] }
   | { op: 'merge'; repo: string; number: number }
   | { op: 'check'; prs: PullRef[] }
-  | { op: 'delete'; prs: PullRef[] };
+  | { op: 'delete'; prs: PullRef[] }
+  | { op: 'runs'; repo: string };
 
 /** Runs `gh` with these arguments and returns its stdout; throws with stderr. */
 export type Gh = (args: string[]) => Promise<string>;
@@ -104,6 +105,8 @@ export function parseGitHubRequest(job: Job): GitHubRequest {
     case 'check':
     case 'delete':
       return { op: raw.op, prs: pullRefs(raw.prs) };
+    case 'runs':
+      return { op: 'runs', repo: repoName(raw.repo) };
     default:
       throw new Error(`Unknown Deployments request: ${String(raw?.op)}`);
   }
@@ -227,6 +230,31 @@ export async function answerGitHubRequest(
         request.repo,
         '--merge',
       ]);
+    case 'runs': {
+      // Queued and running deploys, as deployRunsCommand prints them.
+      const out: string[] = [];
+      for (const status of ['in_progress', 'queued']) {
+        out.push(
+          await gh([
+            'run',
+            'list',
+            '-R',
+            request.repo,
+            '--workflow',
+            'deploy-prod.yml',
+            '--status',
+            status,
+            '--limit',
+            '5',
+            '--json',
+            'url,status,createdAt',
+            '--jq',
+            '.[]',
+          ])
+        );
+      }
+      return out.join('\n');
+    }
     case 'check': {
       // One tab-separated line each, as branchCheckCommand prints.
       const lines: string[] = [];

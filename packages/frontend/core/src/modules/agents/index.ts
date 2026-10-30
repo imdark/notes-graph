@@ -33,6 +33,7 @@ export { AgentContextService } from './services/context';
 export {
   type BranchCheck,
   canFixToMerge,
+  type DeployCiRun,
   deployableTasks,
   DeploymentsService,
   deployRunsFor,

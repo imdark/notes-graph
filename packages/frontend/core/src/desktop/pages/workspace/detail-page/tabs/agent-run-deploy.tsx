@@ -15,6 +15,10 @@ import { FeatureFlagService } from '@notesgraph/core/modules/feature-flag';
 import { useLiveData, useService } from '@notesgraph/infra';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
+import {
+  DeployInProgress,
+  useDeployCiRuns,
+} from '@notesgraph/core/components/deployments';
 import { RunRow, useMinuteTick } from './agent-run-row';
 import * as styles from './agents.css';
 
@@ -62,6 +66,10 @@ export const AgentRunDeploy = ({
 
   const agents = useLiveData(agentsService.agents$);
   const agent = useMemo(() => shipAgents(agents)[0], [agents]);
+  const deployCiRuns = useDeployCiRuns(agent);
+  useEffect(() => {
+    deployments.refreshDeployInfo().catch(() => {});
+  }, [deployments]);
   const docRuns = useLiveData(
     useMemo(() => runsStore.watchRunsForDoc(run.docId), [runsStore, run.docId])
   );
@@ -157,6 +165,7 @@ export const AgentRunDeploy = ({
 
   return (
     <div className={styles.changesScroll} data-testid="agent-run-deploy">
+      <DeployInProgress runs={deployCiRuns} />
       <div className={styles.section}>
         <span className={styles.sectionLabel}>What it would deploy</span>
         {tasks === null ? (

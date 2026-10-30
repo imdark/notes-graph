@@ -182,12 +182,7 @@ export function shownStage(
  * merged regardless, so fixing them with Claude Code is offered, not forced.
  */
 export type MergeReadiness =
-  | 'ready'
-  | 'unknown'
-  | 'conflicts'
-  | 'failing'
-  | 'pending'
-  | 'draft';
+  'ready' | 'unknown' | 'conflicts' | 'failing' | 'pending' | 'draft';
 
 export const mergeReadiness = (pr: PullRequest): MergeReadiness =>
   pr.draft
@@ -379,7 +374,51 @@ export type GitHubRequest =
   | { op: 'list'; repos: string[] }
   | { op: 'merge'; repo: string; number: number }
   | { op: 'check'; prs: Pick<PullRequest, 'repo' | 'number'>[] }
-  | { op: 'delete'; prs: Pick<PullRequest, 'repo' | 'number'>[] };
+  | { op: 'delete'; prs: Pick<PullRequest, 'repo' | 'number'>[] }
+  | { op: 'runs'; repo: string };
+
+/** The GitHub Actions workflow that deploys prod (.github/workflows). */
+export const DEPLOY_WORKFLOW = 'deploy-prod.yml';
+
+/** A run of the deploy workflow that has not ended, as GitHub Actions has it. */
+export interface DeployCiRun {
+  url: string;
+  status: 'queued' | 'in_progress';
+  /** Epoch ms. */
+  startedAt: number | null;
+}
+
+/**
+ * The shell command that lists the deploy workflow's runs that are queued or
+ * running, one JSON object a line.
+ */
+export function deployRunsCommand(repo: string): string {
+  const list = (status: string) =>
+    `gh run list -R ${shellQuote(repo)} --workflow ${DEPLOY_WORKFLOW} --status ${status} --limit 5 --json url,status,createdAt --jq '.[]'`;
+  return `${list('in_progress')} && ${list('queued')}`;
+}
+
+/** {@link deployRunsCommand}'s output, oldest run first. */
+export function parseDeployCiRuns(output: string): DeployCiRun[] {
+  const runs: DeployCiRun[] = [];
+  for (const line of output.split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed.startsWith('{')) continue;
+    try {
+      const raw = JSON.parse(trimmed);
+      if (typeof raw.url !== 'string') continue;
+      const at = Date.parse(raw.createdAt);
+      runs.push({
+        url: raw.url,
+        status: raw.status === 'queued' ? 'queued' : 'in_progress',
+        startedAt: Number.isFinite(at) ? at : null,
+      });
+    } catch {
+      continue;
+    }
+  }
+  return runs.sort((a, b) => (a.startedAt ?? 0) - (b.startedAt ?? 0));
+}
 
 /** Agent ids of {@link GitHubRequest} jobs start with this. */
 export const GITHUB_AGENT_PREFIX = 'github:';
@@ -852,6 +891,29 @@ export class DeploymentsService extends Service {
   readonly branchChecks$ = new LiveData<ReadonlyMap<string, BranchCheck>>(
     new Map()
   );
+
+  /**
+   * Deploys of prod that are queued or running in GitHub Actions. Empty until
+   * read; each links to its CI run.
+   */
+  readonly deployCiRuns$ = new LiveData<DeployCiRun[]>([]);
+
+  /** Ask GitHub, through the agent's device, which deploys are under way. */
+  async refreshDeployCiRuns(agent: Agent, repo?: string): Promise<void> {
+    const target = repo || this.deployInfo$.value?.repo;
+    if (!target) return;
+    try {
+      const output = await this.runCommand(
+        agent,
+        { op: 'runs', repo: target },
+        deployRunsCommand(target),
+        'List running deploys'
+      );
+      this.deployCiRuns$.setValue(parseDeployCiRuns(output));
+    } catch {
+      // The indicator is a hint; leave it as it was.
+    }
+  }
 
   async refreshDeployInfo(): Promise<void> {
     try {
