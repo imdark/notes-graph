@@ -517,6 +517,18 @@ export function agentInstructions(
         `(monitorId ${monitor.id}): the bare number, in the unit the instructions use.`
       : `If what you watch is a single number (a price, a count, a rate), report it ` +
         `with the NotesGraph report_monitor_value tool (monitorId ${monitor.id}).`,
+    'Verify what you report. An article, review, deal roundup or search snippet',
+    'is a lead, never the answer: open the seller or source page itself and',
+    'confirm today that the exact product (model and configuration) is listed,',
+    'in stock and at that price. If a link now leads to a different product, or',
+    'the page shows sold out or a different price, discard that lead.',
+    'If a page blocks you (403, captcha, bot wall), try another way to read it',
+    'before giving up: the retailer\'s product feed or search API, a cached copy,',
+    'a price-tracker page (PCPartPicker, CamelCamelCamel, Google Shopping) that',
+    'names the seller, or another retailer. Say in the summary which figures were',
+    'confirmed on the seller page and which only came from a secondary source;',
+    'only report as the monitor value a figure you confirmed, and if none could',
+    'be confirmed, say so rather than reporting an unverified one.',
     'Do not ask questions; work with what you can find.',
     'Finish with that same one-line summary.',
   ].join('\n');

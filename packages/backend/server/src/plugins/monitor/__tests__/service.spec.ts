@@ -341,6 +341,23 @@ test('an above/below agent is told it must report its number', t => {
   t.regex(text, /report_monitor_value tool \(monitorId m1\)/);
 });
 
+test('an agent must verify on the seller page and get past a 403', t => {
+  const text = agentInstructions(
+    {
+      id: 'm1',
+      name: 'GPU deals',
+      docId: 'doc',
+      blockId: 'blk',
+      condition: { type: 'change' },
+    },
+    { instructions: 'Find the lowest RTX 5090 price.' }
+  );
+  t.regex(text, /open the seller or source page itself/);
+  t.regex(text, /different product/);
+  t.regex(text, /403, captcha, bot wall/);
+  t.regex(text, /only report as the monitor value a figure you confirmed/);
+});
+
 test('validate refuses a check that runs too often or has no URL', t => {
   const { service } = setup();
   t.throws(() =>
