@@ -12,14 +12,14 @@ browser session**, so it captures content on sites a server crawler can't reach
    script — no page-CSP exceptions needed.
 2. `background.js` fetches each image **in the page** (so your cookies/referer
    apply), turns them into data URLs, builds a markdown body that references
-   them, then opens the app's **`/import-clipper`** page and posts a
+   them, then opens the app's **`/clipper/import`** page and posts a
    `ClipperInput { title, contentMarkdown, contentHtml, attachments }` to it via
    `window.postMessage`.
 3. The app (`ImportClipperService` + `MarkdownTransformer.importMarkdownWithAssets`)
    stores the attachments as **workspace blobs** and creates the doc — so the
    clipped images are archived and survive the original being deleted.
 
-This reuses the existing `/import-clipper` receiver; nothing else in the app
+This reuses the existing `/clipper/import` receiver; nothing else in the app
 needs to change.
 
 ## Load it (unpacked)

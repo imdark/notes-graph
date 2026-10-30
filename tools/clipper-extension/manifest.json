@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "NotesGraph Web Clipper",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Clip the current page — its text and images — into NotesGraph, from your own logged-in browser session (so it works on LinkedIn/Facebook, where servers can't reach).",
   "permissions": ["activeTab", "scripting", "tabs", "storage"],
   "host_permissions": ["<all_urls>"],

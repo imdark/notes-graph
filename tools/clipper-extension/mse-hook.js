@@ -178,16 +178,27 @@
             : null;
         });
       };
-      // Stop the recorder to flush the final chunk, then assemble.
-      if (best.recorder && !best.stopped) {
+      // Stop the recorder to flush the final chunk, then assemble. An
+      // inactive recorder never fires 'stop', so only wait on a live one, and
+      // not for long: past that, assemble what was recorded.
+      if (
+        best.recorder &&
+        !best.stopped &&
+        best.recorder.state !== 'inactive'
+      ) {
         return new Promise(function (resolve) {
-          best.recorder.addEventListener('stop', function () {
+          let done = false;
+          const once = function () {
+            if (done) return;
+            done = true;
             finish().then(resolve);
-          });
+          };
+          best.recorder.addEventListener('stop', once);
+          setTimeout(once, 3000);
           try {
             best.recorder.stop();
           } catch {
-            finish().then(resolve);
+            once();
           }
         });
       }
