@@ -28,6 +28,7 @@ import {
   CLOUD_DEVICE_KEY,
   COMMAND_MODEL,
   type DeployInfo,
+  type DeployRepo,
   isDeviceClaudeModel,
   type RemoteAgentRunnerService,
   type RemoteJob,
@@ -182,7 +183,12 @@ export function shownStage(
  * merged regardless, so fixing them with Claude Code is offered, not forced.
  */
 export type MergeReadiness =
-  'ready' | 'unknown' | 'conflicts' | 'failing' | 'pending' | 'draft';
+  | 'ready'
+  | 'unknown'
+  | 'conflicts'
+  | 'failing'
+  | 'pending'
+  | 'draft';
 
 export const mergeReadiness = (pr: PullRequest): MergeReadiness =>
   pr.draft
@@ -374,7 +380,12 @@ export type GitHubRequest =
   | { op: 'list'; repos: string[] }
   | { op: 'merge'; repo: string; number: number }
   | { op: 'check'; prs: Pick<PullRequest, 'repo' | 'number'>[] }
-  | { op: 'delete'; prs: Pick<PullRequest, 'repo' | 'number'>[] }
+  | {
+      op: 'delete';
+      prs: Pick<PullRequest, 'repo' | 'number'>[];
+      /** Branches the repos' settings name, never deleted. */
+      keep?: string[];
+    }
   | { op: 'runs'; repo: string };
 
 /** The GitHub Actions workflow that deploys prod (.github/workflows). */
@@ -511,12 +522,23 @@ export function stuckReason(
   return null;
 }
 
-/** Whether a checked branch is merged, still there and safe to delete. */
-export const deletesBranch = (check: BranchCheck) =>
+/**
+ * Whether a checked branch is merged, still there and safe to delete:
+ * never main and the like, nor a branch a repo's setting names (`keep`).
+ */
+export const deletesBranch = (
+  check: BranchCheck,
+  keep: ReadonlySet<string> = new Set()
+) =>
   check.state === 'merged' &&
   check.branchExists &&
   !!check.branch &&
-  !KEPT_BRANCHES.has(check.branch);
+  !KEPT_BRANCHES.has(check.branch) &&
+  !keep.has(check.branch);
+
+/** The branches the repos' settings name: never deleted. */
+export const keptBranches = (repos: readonly DeployRepo[]) =>
+  new Set(repos.flatMap(repo => [repo.baseBranch, repo.deployBranch]));
 
 /** The command that deletes a merged pull request's branch on GitHub. */
 export const deleteBranchCommand = (
@@ -658,15 +680,70 @@ const READINESS_TEXT: Record<MergeReadiness, string> = {
   draft: 'draft',
 };
 
+/**
+ * How a brief names the branches: each repo's own, when the screen has them
+ * set (listed in the brief), or main, as before there was a setting.
+ */
+const branchWords = (repos: readonly DeployRepo[] | undefined) =>
+  repos
+    ? {
+        base: 'its repo’s base branch',
+        deploy: 'commit of the repo’s deploy branch',
+      }
+    : { base: 'main', deploy: 'main' };
+
 /** What GitHub says of a pull request, for a brief. */
-const githubLine = (pr: PullRequest | undefined) =>
+const githubLine = (pr: PullRequest | undefined, base: string) =>
   pr
-    ? `   - on GitHub: ${pr.state === 'merged' ? 'already merged' : READINESS_TEXT[mergeReadiness(pr)]} (branch ${pr.branch})`
+    ? `   - on GitHub: ${
+        pr.state === 'merged'
+          ? 'already merged'
+          : READINESS_TEXT[mergeReadiness(pr)].replace('main', base)
+      } (branch ${pr.branch})`
     : null;
 
 /** What to do about a pull request that conflicts or fails its checks. */
-const FIX_STEP =
-  'For one that conflicts with main: check out its branch, merge main into it, resolve the conflicts keeping both sides’ intent, typecheck and run the tests it touches, push, then merge. For failing checks, fix those the change caused; checks that fail on main too don’t hold a merge up.';
+const fixStep = (base: string) =>
+  `For one that conflicts with ${base}: check out its branch, merge ${base} into it, resolve the conflicts keeping both sides’ intent, typecheck and run the tests it touches, push, then merge. For failing checks, fix those the change caused; checks that fail on ${base} too don’t hold a merge up.`;
+
+/**
+ * The repos a ship touches: those of its tasks' and untracked pull
+ * requests, and, for a deploy, the one prod deploys.
+ */
+export function shipRepos(
+  tasks: Pick<ShipTaskDetails, 'pullRequest'>[],
+  untracked: Pick<PullRequest, 'repo'>[],
+  deployedRepo?: string | null
+): string[] {
+  const repos = new Set<string>();
+  for (const task of tasks) {
+    const repo = task.pullRequest ? repoOf(task.pullRequest) : null;
+    if (repo) repos.add(repo);
+  }
+  for (const pr of untracked) repos.add(pr.repo);
+  if (deployedRepo) repos.add(deployedRepo);
+  return [...repos].sort();
+}
+
+/** Thrown when a ship touches a repo whose branches aren't set. */
+export class DeployRepoMissing extends Error {
+  constructor(readonly repos: string[]) {
+    super(
+      `Set the base and deploy branches for ${repos.join(', ')} under Repos on the Deployments screen first.`
+    );
+  }
+}
+
+/** The settings for `repos`; throws {@link DeployRepoMissing} for any unset. */
+export function deployReposFor(
+  repos: string[],
+  settings: readonly DeployRepo[]
+): DeployRepo[] {
+  const byRepo = new Map(settings.map(setting => [setting.repo, setting]));
+  const missing = repos.filter(repo => !byRepo.has(repo));
+  if (missing.length > 0) throw new DeployRepoMissing(missing);
+  return repos.map(repo => byRepo.get(repo) as DeployRepo);
+}
 
 /**
  * Where the Android app's own code lives: the Capacitor app and its native
@@ -686,13 +763,17 @@ const ANDROID_STEP = `Then the Android app: list what this deploy changed there,
 /**
  * What the agent of a ship run reads: the tasks, and what to do with them.
  * `github` adds what GitHub says of their pull requests, and `untracked`
- * open pull requests no task names, for a merge to take on too.
+ * open pull requests no task names, for a merge to take on too. `repos`
+ * are the branches of the repos it touches (see {@link deployReposFor});
+ * without them it says main.
  */
 export function shipBrief(
   tasks: (ShipTask & ShipTaskDetails)[],
   action: ShipAction,
-  github: { pulls?: PullRequest[]; untracked?: PullRequest[] } = {}
+  github: { pulls?: PullRequest[]; untracked?: PullRequest[] } = {},
+  repos?: readonly DeployRepo[]
 ): AgentContext {
+  const words = branchWords(repos);
   const pullsByUrl = new Map((github.pulls ?? []).map(pr => [pr.url, pr]));
   const untracked = github.untracked ?? [];
   const toMerge = tasks.filter(task => task.stage === 'committed');
@@ -709,7 +790,8 @@ export function shipBrief(
       `   - status: ${task.stage.toUpperCase()}`,
       `   - pull request: ${task.pullRequest ?? 'none named; find it from the task’s notes or the branch'}`,
       githubLine(
-        task.pullRequest ? pullsByUrl.get(task.pullRequest) : undefined
+        task.pullRequest ? pullsByUrl.get(task.pullRequest) : undefined,
+        words.base
       ),
       `   - task: block ${task.blockId} in note "${task.docTitle}" (doc ${task.docId})`,
     ]
@@ -720,27 +802,30 @@ export function shipBrief(
     [
       `${i + 1}. ${pr.title}`,
       `   - pull request: ${pr.url}`,
-      githubLine(pr),
+      githubLine(pr, words.base),
     ].join('\n')
   );
+  const mergeInto = repos
+    ? 'into its repo’s base branch (`gh pr merge --merge`; a pull request whose base is another branch gets `gh pr edit --base <base branch>` first)'
+    : 'into main (`gh pr merge --merge`)';
   const steps =
     action === 'merge'
       ? [
-          'Merge each pull request above into main (`gh pr merge --merge`), oldest first. Fetch main again between merges.',
-          FIX_STEP,
+          `Merge each pull request above ${mergeInto}, oldest first. Fetch ${words.base} again between merges.`,
+          fixStep(words.base),
           'If you cannot make one merge safely, leave it, say why in a note on its task, and go on with the rest.',
           "Move each task you merged to `merged` with update_task, with a note naming the merge commit. Don't deploy.",
         ]
       : [
           ...(toMerge.length > 0
             ? [
-                'First merge the pull request of each COMMITTED task into main (`gh pr merge --merge`), oldest first.',
-                FIX_STEP,
+                `First merge the pull request of each COMMITTED task ${mergeInto}, oldest first.`,
+                fixStep(words.base),
                 'If you cannot make one merge safely, leave it out of this deploy and say why in a note on its task.',
                 'Move each task you merged to `merged` with update_task, with a note naming the merge commit.',
               ]
             : []),
-          'Update to the latest main, then deploy it to production the way this repo does (the deploy-prod skill). Never stop a deploy midway.',
+          `Update to the latest ${words.deploy}, then deploy it to production the way this repo does (the deploy-prod skill). Never stop a deploy midway.`,
           ANDROID_STEP,
           "Once the deploy has finished, move each task that went out to `deployed` with a note naming the deployed commit. Don't mark any done: that waits for someone to check it live.",
           'If the deploy fails, leave the tasks as they are and put what failed in a note on each.',
@@ -760,6 +845,18 @@ export function shipBrief(
           : 'Ship these features to production.'
       }`,
       '',
+      ...(repos && repos.length > 0
+        ? [
+            '## Branches',
+            '',
+            'Set per repo on the Deployments screen; use these, never a guess.',
+            ...repos.map(
+              repo =>
+                `- ${repo.repo}: pull requests merge into \`${repo.baseBranch}\`; prod deploys from \`${repo.deployBranch}\``
+            ),
+            '',
+          ]
+        : []),
       ...(lines.length > 0 ? ['## Features', '', ...lines, ''] : []),
       ...(untrackedLines.length > 0
         ? ['## Pull requests no task names', '', ...untrackedLines, '']
@@ -922,6 +1019,66 @@ export class DeploymentsService extends Service {
       // An older server has no endpoint: same as no record.
       this.deployInfo$.setValue(null);
     }
+  }
+
+  /**
+   * Each repo's branches as set on the screen. Undefined until read; null
+   * when the server can't say (an older one, or a local workspace).
+   */
+  readonly deployRepos$ = new LiveData<DeployRepo[] | null | undefined>(
+    undefined
+  );
+
+  async refreshDeployRepos(): Promise<void> {
+    try {
+      this.deployRepos$.setValue(
+        await this.remote.deployRepos(this.workspaceId)
+      );
+    } catch {
+      this.deployRepos$.setValue(null);
+    }
+  }
+
+  async setDeployRepo(repo: DeployRepo): Promise<void> {
+    this.deployRepos$.setValue(
+      await this.remote.setDeployRepo(this.workspaceId, repo)
+    );
+  }
+
+  async removeDeployRepo(repo: string): Promise<void> {
+    this.deployRepos$.setValue(
+      await this.remote.removeDeployRepo(this.workspaceId, repo)
+    );
+  }
+
+  /**
+   * The branches of the repos a ship touches, from the screen's setting.
+   * Throws {@link DeployRepoMissing} for a repo without one, so nothing
+   * ships on a guess.
+   */
+  async shipBranches(
+    tasks: (ShipTask & Pick<ShipTaskDetails, 'pullRequest'>)[],
+    action: ShipAction,
+    untracked: PullRequest[] = []
+  ): Promise<DeployRepo[]> {
+    if (this.deployRepos$.value === undefined) await this.refreshDeployRepos();
+    const settings = this.deployRepos$.value;
+    if (settings === null) {
+      throw new Error(
+        "This server can't keep repo branches yet; deploy the server first."
+      );
+    }
+    if (action === 'deploy' && this.deployInfo$.value === undefined) {
+      await this.refreshDeployInfo();
+    }
+    return deployReposFor(
+      shipRepos(
+        shipTargets(tasks, action),
+        action === 'merge' ? untracked : [],
+        action === 'deploy' ? this.deployInfo$.value?.repo : null
+      ),
+      settings ?? []
+    );
   }
 
   private get workspaceId(): string {
@@ -1194,14 +1351,15 @@ export class DeploymentsService extends Service {
     const known = new Map(this.branchChecks$.value);
     for (const check of checks) known.set(check.url, check);
     this.branchChecks$.setValue(known);
-    const toDelete = checks.filter(deletesBranch);
+    const keep = keptBranches(this.deployRepos$.value ?? []);
+    const toDelete = checks.filter(check => deletesBranch(check, keep));
     const deleted: BranchCheck[] = [];
     const failed: string[] = [];
     if (toDelete.length > 0) {
       // One job for all of them; each line says whether its delete went.
       const output = await this.runCommand(
         agent,
-        { op: 'delete', prs: refs(toDelete) },
+        { op: 'delete', prs: refs(toDelete), keep: [...keep] },
         toDelete
           .map(
             check =>
@@ -1543,7 +1701,9 @@ export class DeploymentsService extends Service {
     tasks: (ShipTask & ShipTaskDetails)[],
     action: ShipAction,
     github: { pulls?: PullRequest[]; untracked?: PullRequest[] } = {},
-    placeAt?: Pick<ShipTask, 'docId' | 'blockId'>
+    placeAt?: Pick<ShipTask, 'docId' | 'blockId'>,
+    /** The touched repos' branches (see deployReposFor); main without. */
+    repos?: DeployRepo[]
   ): Promise<AgentTarget | null> {
     const chosen = shipTargets(tasks, action);
     const untracked = action === 'merge' ? (github.untracked ?? []) : [];
@@ -1563,7 +1723,7 @@ export class DeploymentsService extends Service {
       .start(
         agent,
         target,
-        shipBrief(chosen, action, { pulls: github.pulls, untracked })
+        shipBrief(chosen, action, { pulls: github.pulls, untracked }, repos)
       )
       .catch(() => {
         // The run's own record carries any failure.

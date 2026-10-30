@@ -400,6 +400,37 @@ export function monthStart(now = new Date()): Date {
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
 }
 
+/** A GitHub repo as owner/name, as in its pull request URLs. */
+export const parseRepoName = (value: unknown): string | null =>
+  typeof value === 'string' && /^[\w.-]+\/[\w.-]+$/.test(value.trim())
+    ? value.trim()
+    : null;
+
+/**
+ * A git branch name, as `git check-ref-format --branch` would take it,
+ * near enough: the shell commands it ends up in quote it as well.
+ */
+export const parseBranchName = (value: unknown): string | null => {
+  if (typeof value !== 'string') return null;
+  const name = value.trim();
+  return /^[\w][\w./-]*$/.test(name) &&
+    !name.includes('..') &&
+    !name.endsWith('/') &&
+    !name.endsWith('.lock') &&
+    name.length <= 200
+    ? name
+    : null;
+};
+
+/** A repo's branches as the Deployments screen ships it. */
+export interface DeployRepoDto {
+  repo: string;
+  /** Where its pull requests merge. */
+  baseBranch: string;
+  /** What prod deploys from. */
+  deployBranch: string;
+}
+
 export interface AgentBudgetDto {
   /** Null: no budget, runs are never refused for cost. */
   monthlyUsd: number | null;
@@ -1335,6 +1366,49 @@ export class RegistryJobService {
     }
     await this.models.registryJob.setBudget(workspaceId, monthlyUsd, userId);
     return this.budget(workspaceId);
+  }
+
+  async deployRepos(workspaceId: string): Promise<DeployRepoDto[]> {
+    const rows = await this.models.registryJob.listDeployRepos(workspaceId);
+    return rows.map(({ repo, baseBranch, deployBranch }) => ({
+      repo,
+      baseBranch,
+      deployBranch,
+    }));
+  }
+
+  /** Set a repo's branches; both are needed, as neither is ever guessed. */
+  async setDeployRepo(
+    workspaceId: string,
+    userId: string,
+    body: Record<string, unknown>
+  ): Promise<DeployRepoDto[]> {
+    const repo = parseRepoName(body.repo);
+    if (!repo) throw new BadRequest('repo must be owner/name');
+    const baseBranch = parseBranchName(body.baseBranch);
+    const deployBranch = parseBranchName(body.deployBranch);
+    if (!baseBranch || !deployBranch) {
+      throw new BadRequest(
+        'baseBranch and deployBranch must both be branch names'
+      );
+    }
+    await this.models.registryJob.setDeployRepo(
+      workspaceId,
+      repo,
+      { baseBranch, deployBranch },
+      userId
+    );
+    return this.deployRepos(workspaceId);
+  }
+
+  async removeDeployRepo(
+    workspaceId: string,
+    body: Record<string, unknown>
+  ): Promise<DeployRepoDto[]> {
+    const repo = parseRepoName(body.repo);
+    if (!repo) throw new BadRequest('repo must be owner/name');
+    await this.models.registryJob.removeDeployRepo(workspaceId, repo);
+    return this.deployRepos(workspaceId);
   }
 
   /** Ended runs created in the last `days` days, newest first. */

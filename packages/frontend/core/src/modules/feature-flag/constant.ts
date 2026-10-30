@@ -382,6 +382,15 @@ export const NOTESGRAPH_FLAGS = {
     configurable: true,
     defaultState: false,
   },
+  enable_deploy_repo_branches: {
+    commit: '',
+    category: 'notesgraph',
+    displayName: 'Branches per repo on Deployments',
+    description:
+      'Set each repo’s base branch (where its pull requests merge) and deploy branch (what prod deploys from) under Repos on the Deployments page. Merges and deploys sent to Claude Code use them, a repo without them is refused rather than guessed as main, and neither branch is ever deleted as a merged branch.',
+    configurable: true,
+    defaultState: false,
+  },
 } satisfies { [key in string]: FlagInfo };
 
 // oxlint-disable-next-line no-redeclare

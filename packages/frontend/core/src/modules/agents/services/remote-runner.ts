@@ -290,6 +290,20 @@ export interface RemoteJobUpdate {
  * What the server's running build was deployed from (`deploy-info.json`,
  * written by scripts/prod/redeploy.sh). Null where a build has no record.
  */
+/**
+ * A repo's branches as the Deployments screen ships it: set per repo on the
+ * screen, never guessed, since they differ (stage and main for a repo that
+ * releases from stage).
+ */
+export interface DeployRepo {
+  /** owner/name, as in its pull request URLs. */
+  repo: string;
+  /** Where its pull requests merge. */
+  baseBranch: string;
+  /** What prod deploys from. */
+  deployBranch: string;
+}
+
 export interface DeployInfo {
   /** owner/name, as in its pull request URLs. */
   repo: string;
@@ -444,6 +458,36 @@ export class RemoteAgentRunnerService extends Service {
       `${this.base(workspaceId)}/jobs/${encodeURIComponent(jobId)}/share`,
       { method: 'DELETE' }
     );
+  }
+
+  /** Each repo's branches, as the Deployments screen ships it. */
+  async deployRepos(workspaceId: string): Promise<DeployRepo[]> {
+    const data = await this.json<{ repos: DeployRepo[] }>(
+      `${this.base(workspaceId)}/deploy-repos`
+    );
+    return data.repos;
+  }
+
+  async setDeployRepo(
+    workspaceId: string,
+    repo: DeployRepo
+  ): Promise<DeployRepo[]> {
+    const data = await this.json<{ repos: DeployRepo[] }>(
+      `${this.base(workspaceId)}/deploy-repos`,
+      { method: 'POST', body: JSON.stringify(repo) }
+    );
+    return data.repos;
+  }
+
+  async removeDeployRepo(
+    workspaceId: string,
+    repo: string
+  ): Promise<DeployRepo[]> {
+    const data = await this.json<{ repos: DeployRepo[] }>(
+      `${this.base(workspaceId)}/deploy-repos/remove`,
+      { method: 'POST', body: JSON.stringify({ repo }) }
+    );
+    return data.repos;
   }
 
   /** List the devices in this workspace that accept agent work. */

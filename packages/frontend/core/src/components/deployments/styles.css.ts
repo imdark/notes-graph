@@ -161,6 +161,12 @@ export const problemInput = style({
   minWidth: 0,
 });
 
+/** A branch or repo name field on a Repos row. */
+export const repoInput = style({
+  flex: '1 1 120px',
+  minWidth: 0,
+});
+
 export const badge = style({
   padding: '1px 6px',
   borderRadius: 4,

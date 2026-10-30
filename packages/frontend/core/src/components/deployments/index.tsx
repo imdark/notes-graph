@@ -9,6 +9,7 @@ import {
   type DeployCiRun,
   type DeployInfo,
   DeploymentsService,
+  type DeployRepo,
   flagStage,
   type LiveCheck,
   type MergeReadiness,
@@ -233,6 +234,173 @@ const FlagsLine = ({
   );
 };
 
+/** One repo's branches, edited in place; saved together, as both are needed. */
+const RepoRow = ({
+  repo,
+  setting,
+  onSave,
+  onRemove,
+}: {
+  /** Null for the row that adds a repo by name. */
+  repo: string | null;
+  setting: DeployRepo | undefined;
+  onSave: (repo: DeployRepo) => Promise<void>;
+  onRemove: (repo: string) => Promise<void>;
+}) => {
+  const [name, setName] = useState(repo ?? '');
+  const [baseBranch, setBaseBranch] = useState(setting?.baseBranch ?? '');
+  const [deployBranch, setDeployBranch] = useState(setting?.deployBranch ?? '');
+  const [saving, setSaving] = useState(false);
+  const changed =
+    baseBranch.trim() !== (setting?.baseBranch ?? '') ||
+    deployBranch.trim() !== (setting?.deployBranch ?? '');
+  const ready =
+    !!name.trim() && !!baseBranch.trim() && !!deployBranch.trim() && changed;
+  const save = () => {
+    if (!ready) return;
+    setSaving(true);
+    onSave({
+      repo: name.trim(),
+      baseBranch: baseBranch.trim(),
+      deployBranch: deployBranch.trim(),
+    })
+      .then(() => {
+        if (repo === null) {
+          setName('');
+          setBaseBranch('');
+          setDeployBranch('');
+        }
+      })
+      .catch(err =>
+        notify.error({
+          title: `Couldn't save ${name.trim()}`,
+          message: err instanceof Error ? err.message : String(err),
+        })
+      )
+      .finally(() => setSaving(false));
+  };
+  return (
+    <div className={styles.row} data-testid="deployments-repo">
+      <div className={styles.rowBody}>
+        {repo === null ? (
+          <Input
+            className={styles.repoInput}
+            placeholder="owner/name"
+            value={name}
+            onChange={setName}
+          />
+        ) : (
+          <div className={styles.rowTitle}>
+            {repo}
+            {setting ? null : (
+              <span className={styles.badge}> not set: can&apos;t ship</span>
+            )}
+          </div>
+        )}
+        <div className={styles.rowMeta}>
+          <Input
+            className={styles.repoInput}
+            placeholder="Merges into (base)"
+            value={baseBranch}
+            onChange={setBaseBranch}
+            onEnter={save}
+          />
+          <Input
+            className={styles.repoInput}
+            placeholder="Deploys from"
+            value={deployBranch}
+            onChange={setDeployBranch}
+            onEnter={save}
+          />
+          <Button
+            size="default"
+            disabled={!ready}
+            loading={saving}
+            onClick={save}
+          >
+            Save
+          </Button>
+          {repo !== null && setting ? (
+            <button
+              className={styles.link}
+              onClick={() => {
+                onRemove(repo).catch(err =>
+                  notify.error({
+                    title: `Couldn't remove ${repo}`,
+                    message: err instanceof Error ? err.message : String(err),
+                  })
+                );
+              }}
+            >
+              Remove
+            </button>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+/**
+ * Each repo's base branch (where its pull requests merge) and deploy branch
+ * (what prod deploys from). Lists the repos the screen knows of: those of
+ * its pull requests, the one prod runs, and those already set.
+ */
+const RepoBranches = ({
+  known,
+  settings,
+  onSave,
+  onRemove,
+}: {
+  known: string[];
+  settings: DeployRepo[] | null | undefined;
+  onSave: (repo: DeployRepo) => Promise<void>;
+  onRemove: (repo: string) => Promise<void>;
+}) => {
+  if (settings === undefined) return null;
+  if (settings === null) {
+    return (
+      <div className={styles.sectionHint} data-testid="deployments-repos">
+        This server can&apos;t keep repo branches yet; they come with its next
+        deploy.
+      </div>
+    );
+  }
+  const byRepo = new Map(settings.map(setting => [setting.repo, setting]));
+  const repos = [...new Set([...known, ...byRepo.keys()])].sort();
+  return (
+    <section className={styles.section} data-testid="deployments-repos">
+      <div className={styles.sectionTitle}>
+        Repos
+        <span className={styles.sectionCount}>{repos.length}</span>
+      </div>
+      <div className={styles.sectionHint}>
+        Where each repo&apos;s pull requests merge, and what prod deploys from.
+        A merge or deploy sent to Claude Code uses these; a repo without them
+        isn&apos;t shipped, and neither branch is ever deleted.
+      </div>
+      <div className={styles.rows}>
+        {repos.map(repo => (
+          <RepoRow
+            // Remounted when the saved setting changes, so the fields show it.
+            key={`${repo}:${byRepo.get(repo)?.baseBranch}:${byRepo.get(repo)?.deployBranch}`}
+            repo={repo}
+            setting={byRepo.get(repo)}
+            onSave={onSave}
+            onRemove={onRemove}
+          />
+        ))}
+        <RepoRow
+          repo={null}
+          setting={undefined}
+          onSave={onSave}
+          onRemove={onRemove}
+        />
+      </div>
+    </section>
+  );
+};
+
 /**
  * Features ready to go out, and the pull requests behind them.
  *
@@ -251,6 +419,14 @@ export const DeploymentsView = () => {
   const withAutomations = useLiveData(
     useService(FeatureFlagService).flags.enable_deploy_with_automations.$
   );
+  // Each repo's base and deploy branch, set under Repos, never guessed.
+  const repoBranches = useLiveData(
+    useService(FeatureFlagService).flags.enable_deploy_repo_branches.$
+  );
+  const deployRepos = useLiveData(deployments.deployRepos$);
+  useEffect(() => {
+    if (repoBranches) deployments.refreshDeployRepos().catch(() => {});
+  }, [deployments, repoBranches]);
   const agentsService = useService(AgentsService);
   const sessions = useService(AgentRunSessionService);
   const workbench = useService(WorkbenchService).workbench;
@@ -612,12 +788,16 @@ export const DeploymentsView = () => {
     ) => {
       if (!agent) return;
       try {
+        const repos = repoBranches
+          ? await deployments.shipBranches(taskRows, action, untracked)
+          : undefined;
         const target = await deployments.ship(
           agent,
           taskRows,
           action,
           { pulls: github.pulls, untracked },
-          rows[0]
+          rows[0],
+          repos
         );
         if (!target) return;
         setSent({ agentId: agent.id, target });
@@ -632,7 +812,7 @@ export const DeploymentsView = () => {
         });
       }
     },
-    [agent, deployments, github.pulls, rows]
+    [agent, deployments, github.pulls, repoBranches, rows]
   );
 
   /**
@@ -702,8 +882,7 @@ export const DeploymentsView = () => {
               : undefined;
             // Already being merged from its own button.
             if (pr && merging.has(pr.url)) return;
-            const readiness =
-              pr?.state === 'open' ? mergeReadiness(pr) : null;
+            const readiness = pr?.state === 'open' ? mergeReadiness(pr) : null;
             if (
               pr &&
               readiness &&
@@ -824,6 +1003,14 @@ export const DeploymentsView = () => {
         deploy={deployInfo}
         onOpen={() => workbench.open('/feature-flags')}
       />
+      {repoBranches ? (
+        <RepoBranches
+          known={[...repos, ...(deployInfo?.repo ? [deployInfo.repo] : [])]}
+          settings={deployRepos}
+          onSave={repo => deployments.setDeployRepo(repo)}
+          onRemove={repo => deployments.removeDeployRepo(repo)}
+        />
+      ) : null}
       {shippable ? (
         candidates.length > 0 && agent ? (
           <div className={styles.shipBar}>
@@ -895,9 +1082,7 @@ export const DeploymentsView = () => {
           {readyItems.length > 0 ? (
             <button
               className={styles.link}
-              disabled={
-                checking || busy || merging.size > 0 || github.loading
-              }
+              disabled={checking || busy || merging.size > 0 || github.loading}
               onClick={() => {
                 checkBranches().catch(() => {});
               }}

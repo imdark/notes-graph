@@ -179,6 +179,7 @@ model Workspace {
   registryDevices           RegistryDevice[]
   registryJobs              RegistryJob[]
   registryAgentBudget       RegistryAgentBudget?
+  registryDeployRepos       RegistryDeployRepo[]
   monitors                   Monitor[]
   monitoringAgent            MonitoringAgent?
   monitoringBaselines        MonitoringBaseline[]
@@ -1913,6 +1914,25 @@ model RegistryAgentBudget {
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@map("registry_agent_budgets")
+}
+
+/// A GitHub repo's branches, as the Deployments screen ships it: the one its
+/// pull requests merge into and the one prod deploys from (stage and main
+/// for a repo that releases from stage). They differ by repo, so they are set
+/// here, never guessed; shipping a repo without them is refused.
+model RegistryDeployRepo {
+  workspaceId  String   @map("workspace_id") @db.VarChar
+  /// owner/name, as in its pull request URLs.
+  repo         String   @db.VarChar
+  baseBranch   String   @map("base_branch") @db.VarChar
+  deployBranch String   @map("deploy_branch") @db.VarChar
+  updatedBy    String?  @map("updated_by") @db.VarChar
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@id([workspaceId, repo])
+  @@map("registry_deploy_repos")
 }
 
 /// A phone that wants a push when an agent run is waiting on its owner. The

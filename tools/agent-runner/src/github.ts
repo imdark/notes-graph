@@ -24,7 +24,12 @@ export type GitHubRequest =
   | { op: 'list'; repos: string[] }
   | { op: 'merge'; repo: string; number: number }
   | { op: 'check'; prs: PullRef[] }
-  | { op: 'delete'; prs: PullRef[] }
+  | {
+      op: 'delete';
+      prs: PullRef[];
+      /** Branches the repos' settings name, never deleted. */
+      keep: string[];
+    }
   | { op: 'runs'; repo: string };
 
 /** Runs `gh` with these arguments and returns its stdout; throws with stderr. */
@@ -103,8 +108,15 @@ export function parseGitHubRequest(job: Job): GitHubRequest {
         number: pullNumber(raw.number),
       };
     case 'check':
+      return { op: 'check', prs: pullRefs(raw.prs) };
     case 'delete':
-      return { op: raw.op, prs: pullRefs(raw.prs) };
+      return {
+        op: 'delete',
+        prs: pullRefs(raw.prs),
+        keep: Array.isArray(raw.keep)
+          ? raw.keep.filter((name: unknown) => typeof name === 'string')
+          : [],
+      };
     case 'runs':
       return { op: 'runs', repo: repoName(raw.repo) };
     default:
@@ -283,7 +295,8 @@ export async function answerGitHubRequest(
         if (
           found?.state === 'MERGED' &&
           found.branch &&
-          !KEPT_BRANCHES.has(found.branch)
+          !KEPT_BRANCHES.has(found.branch) &&
+          !request.keep.includes(found.branch)
         ) {
           ok = await gh([
             'api',
