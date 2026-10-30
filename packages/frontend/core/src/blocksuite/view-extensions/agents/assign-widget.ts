@@ -355,16 +355,11 @@ export class AgentAssignWidget extends WidgetComponent {
                 prefix: PlusIcon(),
                 select: () => this._createAndAssign(),
               }),
-              // The monitor editor is a desktop dialog.
-              ...(BUILD_CONFIG.isMobileEdition
-                ? []
-                : [
-                    menu.action({
-                      name: 'Monitor…',
-                      prefix: html`<span>📡</span>`,
-                      select: () => this._monitor(),
-                    }),
-                  ]),
+              menu.action({
+                name: 'Monitor…',
+                prefix: html`<span>📡</span>`,
+                select: () => this._monitor(),
+              }),
             ],
           }),
         ],

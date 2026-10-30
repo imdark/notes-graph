@@ -1,4 +1,5 @@
 import { AgentEditorDialog } from '@notesgraph/core/desktop/dialogs/agent-editor';
+import { MonitorEditorDialog } from '@notesgraph/core/desktop/dialogs/monitor-editor';
 import {
   type DialogComponentProps,
   type GLOBAL_DIALOG_SCHEMA,
@@ -37,6 +38,7 @@ const WORKSPACE_DIALOGS = {
   'date-selector': DateSelectorDialog,
   'agent-block-runs': AgentBlockRunsDialog,
   'agent-editor': AgentEditorDialog,
+  'monitor-editor': MonitorEditorDialog,
   setting: SettingDialog,
 } satisfies {
   [key in keyof WORKSPACE_DIALOG_SCHEMA]?: React.FC<

@@ -4,15 +4,18 @@ export { AgentsService, DEFAULT_AGENT_TOOLS } from './services/agents';
 export {
   type Automation,
   AUTOMATION_EVENTS,
+  AUTOMATION_RUNTIME_LABELS,
   type AutomationDetails,
   type AutomationDraft,
   type AutomationEvent,
   type AutomationRun,
   type AutomationRunStatus,
+  type AutomationRuntime,
   AutomationsService,
   type AutomationTemplate,
   type AutomationTrigger,
   type AutomationTriggerType,
+  BLANK_ACTIONS_CODE,
   BLANK_AUTOMATION_CODE,
   webhookUrl,
 } from './services/automations';
@@ -30,6 +33,7 @@ export { AgentContextService } from './services/context';
 export {
   type BranchCheck,
   canFixToMerge,
+  type DeployCiRun,
   deployableTasks,
   DeploymentsService,
   deployRunsFor,
@@ -50,6 +54,9 @@ export {
   SHIP_STAGES,
   type ShipAction,
   shipAgents,
+  type ShipReport,
+  shipReportText,
+  shipsWithAutomations,
   type ShipStage,
   shipTargets,
   type ShipTask,
@@ -290,6 +297,7 @@ export function configureAgentsModule(framework: Framework) {
       AgentRunSessionService,
       RemoteAgentRunnerService,
       WorkspaceService,
+      AutomationsService,
     ])
     .store(AgentsStore, [WorkspaceDBService])
     .store(AgentRunLogsStore)

@@ -6,10 +6,24 @@ function setStatus(msg, cls) {
   status.className = 'status' + (cls ? ' ' + cls : '');
 }
 
+// Longer than every step's own deadline in background.js; only reached if the
+// background worker itself stops answering.
+const CLIP_MS = 60_000;
+
 btn.addEventListener('click', () => {
   btn.disabled = true;
   setStatus('Clipping…');
+  let answered = false;
+  const timer = setTimeout(() => {
+    if (answered) return;
+    answered = true;
+    btn.disabled = false;
+    setStatus("Clipping didn't finish. Reload the page and try again.", 'err');
+  }, CLIP_MS);
   chrome.runtime.sendMessage({ type: 'clip-active-tab' }, res => {
+    if (answered) return;
+    answered = true;
+    clearTimeout(timer);
     btn.disabled = false;
     if (chrome.runtime.lastError) {
       setStatus(chrome.runtime.lastError.message, 'err');

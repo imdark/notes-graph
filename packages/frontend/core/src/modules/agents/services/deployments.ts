@@ -17,6 +17,11 @@ import type { DocsSearchService } from '../../docs-search';
 import type { WorkspaceService } from '../../workspace';
 import type { AgentRun } from '../stores/agent-runs';
 import type { Agent } from '../stores/agents';
+import type {
+  Automation,
+  AutomationRun,
+  AutomationsService,
+} from './automations';
 import { runTargetsBlock } from './block-runs';
 import type { AgentContext } from './context';
 import {
@@ -177,12 +182,7 @@ export function shownStage(
  * merged regardless, so fixing them with Claude Code is offered, not forced.
  */
 export type MergeReadiness =
-  | 'ready'
-  | 'unknown'
-  | 'conflicts'
-  | 'failing'
-  | 'pending'
-  | 'draft';
+  'ready' | 'unknown' | 'conflicts' | 'failing' | 'pending' | 'draft';
 
 export const mergeReadiness = (pr: PullRequest): MergeReadiness =>
   pr.draft
@@ -242,6 +242,128 @@ export const mergeCommand = (pr: Pick<PullRequest, 'repo' | 'number'>) =>
   `gh pr merge ${pr.number} -R ${shellQuote(pr.repo)} --merge`;
 
 /**
+ * The automations the screen merges and deploys with: wf actions YAML (see
+ * plugins/automations on the server) that wf on the ship agent's device
+ * runs, no model involved. The screen creates each the first time it needs
+ * it, keeps its code to what is here, and runs it by hand; their runs and
+ * logs are on the Automations page like any other's.
+ */
+export type ShipAutomationKind = 'merge' | 'deploy';
+
+export interface ShipAutomationSpec {
+  name: string;
+  code: string;
+  timeoutSeconds: number;
+}
+
+export const SHIP_AUTOMATIONS: Record<ShipAutomationKind, ShipAutomationSpec> =
+  {
+    merge: {
+      name: 'Deployments: merge a pull request',
+      timeoutSeconds: 5 * 60,
+      code: `# Merge one pull request on GitHub with a merge commit, as this repo does.
+# Run from the Deployments screen with input {repo: "owner/name", number}.
+actions:
+  - id: merge
+    type: custom_command
+    command: gh pr merge {input.number} -R {input.repo} --merge
+  - id: commit
+    type: custom_command
+    command: gh pr view {input.number} -R {input.repo} --json mergeCommit --jq .mergeCommit.oid
+`,
+    },
+    deploy: {
+      name: 'Deployments: deploy to production',
+      timeoutSeconds: 60 * 60,
+      code: `# Deploy the merged code to production: the cloud deploy wf has set up for
+# the project (wf deploy cloud-config) brings its checkout to the deploy
+# branch, runs the deploy command, then asks the verify URL.
+actions:
+  - id: deploy
+    type: cloud_deploy
+`,
+    },
+  };
+
+/** What {@link DeploymentsService.mergeAndDeploy} did. */
+export interface ShipReport {
+  /** The tasks that went into the deploy: merged before, or just now. */
+  merged: (ShipTask & ShipTaskDetails)[];
+  /** COMMITTED tasks whose pull request didn't merge, and why. */
+  leftOut: { task: ShipTask & ShipTaskDetails; why: string }[];
+  /** The deploy, or null when nothing was merged to deploy. */
+  deployed: { commit: string; verify: string | null } | null;
+}
+
+/** What a {@link ShipReport} comes to, to tell the person who asked. */
+export function shipReportText(report: ShipReport): {
+  ok: boolean;
+  title: string;
+  message: string;
+} {
+  const leftOut = report.leftOut.map(
+    ({ task, why }) =>
+      `"${task.title || task.text}" wasn't merged (${why.split('\n')[0]})`
+  );
+  const fix =
+    leftOut.length > 0
+      ? `${leftOut.join('; ')}. Fix & merge with Claude from the Deployments page.`
+      : '';
+  if (!report.deployed) {
+    return {
+      ok: false,
+      title: 'Nothing deployed',
+      message: fix || 'Nothing was merged to deploy.',
+    };
+  }
+  const { commit, verify } = report.deployed;
+  return {
+    ok: leftOut.length === 0,
+    title: `Deployed ${commit.slice(0, 7) || 'main'}`,
+    message: [
+      `${plural(report.merged.length, 'task')} now DEPLOYED, waiting to be checked live.`,
+      verify,
+      fix,
+    ]
+      .filter(Boolean)
+      .join(' '),
+  };
+}
+
+/** Whether the ship automations can run on the agent's device (wf, not the cloud runner). */
+export const shipsWithAutomations = (agent: Pick<Agent, 'deviceKey'>) =>
+  !!agent.deviceKey && agent.deviceKey !== CLOUD_DEVICE_KEY;
+
+/** What a ship automation's output says one of its steps printed or found. */
+export const stepResult = (
+  output: Record<string, unknown>,
+  step: string
+): Record<string, unknown> => {
+  const result = output[step];
+  return result && typeof result === 'object'
+    ? (result as Record<string, unknown>)
+    : {};
+};
+
+/** How long a merge may wait for the device before it is called off. */
+const MERGE_WAIT_MS = COMMAND_WAIT_MS;
+/** A deploy's own limit, and some for the device to pick it up. */
+const DEPLOY_WAIT_MS =
+  (SHIP_AUTOMATIONS.deploy.timeoutSeconds + 10 * 60) * 1000;
+
+/** The last line a run logged, to say what it is doing. */
+export const lastLogLine = (logs: string | undefined): string =>
+  (logs ?? '')
+    .split('\n')
+    .map(line => line.trim())
+    .filter(Boolean)
+    .pop() ?? '';
+
+/** The note a deploy leaves under each task it took out. */
+export const deployedNote = (commit: string, at: Date): string =>
+  `Deployed ${commit.slice(0, 7)} on ${at.toLocaleDateString()}.`;
+
+/**
  * What the screen asks of GitHub. A Mac runs it as the `gh` shell command
  * below; the cloud runner runs no shell from a job, so it gets the request
  * itself (agent id `github:<op>`, the request as JSON) and runs `gh` with
@@ -252,7 +374,51 @@ export type GitHubRequest =
   | { op: 'list'; repos: string[] }
   | { op: 'merge'; repo: string; number: number }
   | { op: 'check'; prs: Pick<PullRequest, 'repo' | 'number'>[] }
-  | { op: 'delete'; prs: Pick<PullRequest, 'repo' | 'number'>[] };
+  | { op: 'delete'; prs: Pick<PullRequest, 'repo' | 'number'>[] }
+  | { op: 'runs'; repo: string };
+
+/** The GitHub Actions workflow that deploys prod (.github/workflows). */
+export const DEPLOY_WORKFLOW = 'deploy-prod.yml';
+
+/** A run of the deploy workflow that has not ended, as GitHub Actions has it. */
+export interface DeployCiRun {
+  url: string;
+  status: 'queued' | 'in_progress';
+  /** Epoch ms. */
+  startedAt: number | null;
+}
+
+/**
+ * The shell command that lists the deploy workflow's runs that are queued or
+ * running, one JSON object a line.
+ */
+export function deployRunsCommand(repo: string): string {
+  const list = (status: string) =>
+    `gh run list -R ${shellQuote(repo)} --workflow ${DEPLOY_WORKFLOW} --status ${status} --limit 5 --json url,status,createdAt --jq '.[]'`;
+  return `${list('in_progress')} && ${list('queued')}`;
+}
+
+/** {@link deployRunsCommand}'s output, oldest run first. */
+export function parseDeployCiRuns(output: string): DeployCiRun[] {
+  const runs: DeployCiRun[] = [];
+  for (const line of output.split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed.startsWith('{')) continue;
+    try {
+      const raw = JSON.parse(trimmed);
+      if (typeof raw.url !== 'string') continue;
+      const at = Date.parse(raw.createdAt);
+      runs.push({
+        url: raw.url,
+        status: raw.status === 'queued' ? 'queued' : 'in_progress',
+        startedAt: Number.isFinite(at) ? at : null,
+      });
+    } catch {
+      continue;
+    }
+  }
+  return runs.sort((a, b) => (a.startedAt ?? 0) - (b.startedAt ?? 0));
+}
 
 /** Agent ids of {@link GitHubRequest} jobs start with this. */
 export const GITHUB_AGENT_PREFIX = 'github:';
@@ -693,7 +859,8 @@ export class DeploymentsService extends Service {
     private readonly docsService: DocsService,
     private readonly runSessions: AgentRunSessionService,
     private readonly remote: RemoteAgentRunnerService,
-    private readonly workspaceService: WorkspaceService
+    private readonly workspaceService: WorkspaceService,
+    private readonly automations: AutomationsService
   ) {
     super();
   }
@@ -724,6 +891,29 @@ export class DeploymentsService extends Service {
   readonly branchChecks$ = new LiveData<ReadonlyMap<string, BranchCheck>>(
     new Map()
   );
+
+  /**
+   * Deploys of prod that are queued or running in GitHub Actions. Empty until
+   * read; each links to its CI run.
+   */
+  readonly deployCiRuns$ = new LiveData<DeployCiRun[]>([]);
+
+  /** Ask GitHub, through the agent's device, which deploys are under way. */
+  async refreshDeployCiRuns(agent: Agent, repo?: string): Promise<void> {
+    const target = repo || this.deployInfo$.value?.repo;
+    if (!target) return;
+    try {
+      const output = await this.runCommand(
+        agent,
+        { op: 'runs', repo: target },
+        deployRunsCommand(target),
+        'List running deploys'
+      );
+      this.deployCiRuns$.setValue(parseDeployCiRuns(output));
+    } catch {
+      // The indicator is a hint; leave it as it was.
+    }
+  }
 
   async refreshDeployInfo(): Promise<void> {
     try {
@@ -836,22 +1026,129 @@ export class DeploymentsService extends Service {
   }
 
   /**
-   * Merge a pull request through wf on the agent's device, with no AI: for
-   * those GitHub says merge cleanly. Throws with what `gh` said when it
+   * The automation of `kind` on `deviceKey`, as {@link SHIP_AUTOMATIONS}
+   * has it: created the first time, its code and settings brought up to
+   * date, and its latest version deployed to the device.
+   */
+  private async shipAutomation(
+    kind: ShipAutomationKind,
+    deviceKey: string
+  ): Promise<Automation> {
+    const spec = SHIP_AUTOMATIONS[kind];
+    const draft = {
+      name: spec.name,
+      runtime: 'actions' as const,
+      triggers: [{ type: 'manual' as const }],
+      secrets: [],
+      timeoutSeconds: spec.timeoutSeconds,
+      maxRetries: 0,
+      enabled: true,
+    };
+    let automation = (await this.automations.revalidate()).find(
+      a => a.name === spec.name
+    );
+    if (!automation) {
+      automation = (await this.automations.create(draft, spec.code)).automation;
+    } else if (
+      automation.runtime !== 'actions' ||
+      automation.timeoutSeconds !== spec.timeoutSeconds ||
+      !automation.enabled
+    ) {
+      automation = (await this.automations.update(automation.id, draft))
+        .automation;
+    }
+    // The same code as the latest version keeps it; new code is a new one.
+    const version = await this.automations.saveCode(automation.id, spec.code);
+    const deployed = automation.deployments.find(d => d.target === deviceKey);
+    if (deployed?.versionId !== version.id) {
+      await this.automations.deploy(automation.id, deviceKey);
+    }
+    return automation;
+  }
+
+  /**
+   * Run the ship automation of `kind` on the agent's device and wait for it
+   * to end, calling `onUpdate` with each read of the run. Resolves with what
+   * it returned; throws with its error and last log lines when it fails. A
+   * run not over within `waitMs` is cancelled, so a device that is off
+   * doesn't merge or deploy whenever it comes back.
+   */
+  private async runShipAutomation(
+    kind: ShipAutomationKind,
+    agent: Agent,
+    input: unknown,
+    waitMs: number,
+    onUpdate?: (run: AutomationRun) => void
+  ): Promise<Record<string, unknown>> {
+    const deviceKey = agent.deviceKey;
+    if (!deviceKey || !shipsWithAutomations(agent)) {
+      throw new Error(
+        `${agent.name} isn't on a device with wf, which ${kind === 'merge' ? 'merges' : 'deploys'} from here`
+      );
+    }
+    const automation = await this.shipAutomation(kind, deviceKey);
+    let run = await this.automations.runNow(automation.id, input, deviceKey);
+    onUpdate?.(run);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), waitMs);
+    try {
+      run = await this.automations.waitForRun(automation.id, run.id, {
+        signal: controller.signal,
+        onUpdate,
+      });
+    } catch (err) {
+      if (!controller.signal.aborted) throw err;
+      if (run.jobId) {
+        await this.remote.cancel(this.workspaceId, run.jobId).catch(() => {});
+      }
+      throw new Error(
+        run.status === 'queued'
+          ? `${deviceKey} didn't pick it up in time. Is wf agent serve running there?`
+          : `It was still running on ${deviceKey} after ${Math.round(waitMs / 60_000)} minutes, so it was stopped`
+      );
+    } finally {
+      clearTimeout(timer);
+    }
+    if (run.status !== 'succeeded') {
+      const tail = (run.logs ?? '').trimEnd().split('\n').slice(-5).join('\n');
+      throw new Error(
+        `${run.error || `It ended ${run.status.replace('_', ' ')}`}${tail ? `\n${tail}` : ''}`
+      );
+    }
+    const output = run.output;
+    return output && typeof output === 'object'
+      ? (output as Record<string, unknown>)
+      : {};
+  }
+
+  /**
+   * Merge a pull request through wf on the agent's device (`gh`, or with
+   * `withAutomation` the merge automation; on the cloud runner, through its
+   * GitHub request), with no AI: for those GitHub says merge cleanly. Throws with what `gh` said when it
    * doesn't, which is the cue to hand it to Claude Code. The task it ships,
    * if any, goes to MERGED.
    */
   async merge(
     agent: Agent,
     pr: Pick<PullRequest, 'repo' | 'number' | 'url'>,
-    task?: Pick<ShipTask, 'docId' | 'blockId'>
+    task?: Pick<ShipTask, 'docId' | 'blockId'>,
+    { withAutomation = false }: { withAutomation?: boolean } = {}
   ): Promise<void> {
-    await this.runCommand(
-      agent,
-      { op: 'merge', repo: pr.repo, number: pr.number },
-      mergeCommand(pr),
-      `Merge ${pr.repo}#${pr.number}`
-    );
+    if (!withAutomation || !shipsWithAutomations(agent)) {
+      await this.runCommand(
+        agent,
+        { op: 'merge', repo: pr.repo, number: pr.number },
+        mergeCommand(pr),
+        `Merge ${pr.repo}#${pr.number}`
+      );
+    } else {
+      await this.runShipAutomation(
+        'merge',
+        agent,
+        { repo: pr.repo, number: pr.number },
+        MERGE_WAIT_MS
+      );
+    }
     this.pullRequests$.setValue({
       ...this.pullRequests$.value,
       pulls: this.pullRequests$.value.pulls.map(p =>
@@ -933,6 +1230,115 @@ export class DeploymentsService extends Service {
   /** Move a task to MERGED, as an agent that merged it would. */
   private markMerged(task: Pick<ShipTask, 'docId' | 'blockId'>) {
     return this.moveOn(task, 'MERGED');
+  }
+
+  /**
+   * Deploy what is on main to production with the deploy automation on the
+   * agent's device, calling `onUpdate` with each read of the run. When it
+   * succeeds, each of `tasks` still COMMITTED or MERGED in its note goes to
+   * DEPLOYED, with a note naming the commit; none is marked done, which
+   * waits for someone to check it live. A failed deploy changes no task.
+   * Resolves with the deployed commit.
+   */
+  async deploy(
+    agent: Agent,
+    tasks: Pick<ShipTask, 'docId' | 'blockId'>[],
+    onUpdate?: (run: AutomationRun) => void
+  ): Promise<{ commit: string; verify: string | null }> {
+    const output = await this.runShipAutomation(
+      'deploy',
+      agent,
+      {},
+      DEPLOY_WAIT_MS,
+      onUpdate
+    );
+    const result = stepResult(output, 'deploy');
+    const commit = String(result.commit ?? '');
+    const at = new Date();
+    for (const task of tasks) {
+      await this.markDeployed(task, commit, at).catch(() => false);
+    }
+    this.refreshDeployInfo().catch(() => {});
+    return {
+      commit,
+      verify: typeof result.verify === 'string' ? result.verify : null,
+    };
+  }
+
+  /**
+   * Merge and deploy `tasks` with the ship automations on the agent's
+   * device, no model involved: each COMMITTED task's pull request is merged
+   * first (one that won't merge cleanly, or has none named, is left out and
+   * reported, for Claude Code to fix), then main is deployed with what is
+   * merged. `onProgress` gets a line saying what is happening as it goes.
+   */
+  async mergeAndDeploy(
+    agent: Agent,
+    tasks: (ShipTask & ShipTaskDetails)[],
+    onProgress?: (line: string) => void
+  ): Promise<ShipReport> {
+    const merged: (ShipTask & ShipTaskDetails)[] = [];
+    const leftOut: { task: ShipTask & ShipTaskDetails; why: string }[] = [];
+    for (const task of shipTargets(tasks, 'deploy')) {
+      if (task.stage === 'merged') {
+        merged.push(task);
+        continue;
+      }
+      const repo = task.pullRequest ? repoOf(task.pullRequest) : null;
+      const number = task.pullRequest
+        ? pullRequestNumber(task.pullRequest)
+        : null;
+      if (!task.pullRequest || !repo || !number) {
+        leftOut.push({ task, why: 'no pull request named' });
+        continue;
+      }
+      onProgress?.(`Merging ${repo}#${number}…`);
+      try {
+        await this.merge(agent, { repo, number, url: task.pullRequest }, task, {
+          withAutomation: true,
+        });
+        merged.push({ ...task, stage: 'merged' });
+      } catch (err) {
+        leftOut.push({
+          task,
+          why: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+    if (merged.length === 0) return { merged, leftOut, deployed: null };
+    onProgress?.('Deploying…');
+    const deployed = await this.deploy(agent, merged, run => {
+      const line = lastLogLine(run.logs);
+      if (line) onProgress?.(line);
+    });
+    return { merged, leftOut, deployed };
+  }
+
+  /** Move a task that went out in a deploy to DEPLOYED, noting the commit. */
+  private async markDeployed(
+    task: Pick<ShipTask, 'docId' | 'blockId'>,
+    commit: string,
+    at: Date
+  ): Promise<boolean> {
+    const { doc, release } = this.docsService.open(task.docId);
+    try {
+      await doc.waitForSyncReady();
+      const store = doc.blockSuiteDoc;
+      const model = store.getBlock(task.blockId)?.model;
+      const stage = model ? readStage(model) : null;
+      if (!model || (stage !== 'committed' && stage !== 'merged')) return false;
+      if (!setTaskStatus(model, 'DEPLOYED')) return false;
+      if (commit) {
+        store.addBlock(
+          'notesgraph:paragraph' as never,
+          { text: new Text(deployedNote(commit, at)) },
+          model.id
+        );
+      }
+      return true;
+    } finally {
+      release();
+    }
   }
 
   /**

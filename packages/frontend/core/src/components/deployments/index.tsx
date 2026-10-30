@@ -5,6 +5,8 @@ import {
   type AgentTarget,
   agentTargetKey,
   canFixToMerge,
+  type Agent,
+  type DeployCiRun,
   type DeployInfo,
   DeploymentsService,
   flagStage,
@@ -18,6 +20,8 @@ import {
   repoOf,
   type ShipAction,
   shipAgents,
+  shipReportText,
+  shipsWithAutomations,
   type ShipStage,
   shipTargets,
   type ShipTask,
@@ -25,7 +29,10 @@ import {
   shownStage,
   stuckReason,
 } from '@notesgraph/core/modules/agents';
-import { NOTESGRAPH_FLAGS } from '@notesgraph/core/modules/feature-flag';
+import {
+  FeatureFlagService,
+  NOTESGRAPH_FLAGS,
+} from '@notesgraph/core/modules/feature-flag';
 import { WorkbenchService } from '@notesgraph/core/modules/workbench';
 import { useLiveData, useService } from '@notesgraph/infra';
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -66,12 +73,12 @@ const SECTIONS: { stage: ShipStage; title: string; hint: string }[] = [
   {
     stage: 'committed',
     title: 'Ready to merge',
-    hint: 'Pull requests open. wf merges them on GitHub itself; ones that conflict go to Claude Code to fix first.',
+    hint: 'Pull requests open. The merge automation merges them on GitHub with wf; ones that conflict go to Claude Code to fix first.',
   },
   {
     stage: 'merged',
     title: 'Ready to deploy',
-    hint: 'On main, not live yet',
+    hint: 'On main, not live yet. Deploy runs the deploy automation with wf, from the cloud deploy set up with wf deploy cloud-config.',
   },
   {
     stage: 'deployed',
@@ -137,6 +144,48 @@ const NotLiveBadge = ({
 };
 
 /** What prod runs, so a merge can be checked for being live. */
+/**
+ * Shown while a deploy of prod is queued or running in GitHub Actions; opens
+ * its CI run.
+ */
+export const DeployInProgress = ({ runs }: { runs: DeployCiRun[] }) => {
+  if (runs.length === 0) return null;
+  return (
+    <div className={styles.sectionHint} data-testid="deploy-in-progress">
+      {runs.map(run => (
+        <a
+          key={run.url}
+          href={run.url}
+          target="_blank"
+          rel="noreferrer"
+          className={styles.badge}
+        >
+          {run.status === 'queued' ? 'Deploy queued' : 'Deploy in progress'}
+          {run.startedAt
+            ? ` since ${new Date(run.startedAt).toLocaleTimeString()}`
+            : ''}{' '}
+          · open CI run
+        </a>
+      ))}
+    </div>
+  );
+};
+
+/** Poll GitHub for running deploys while `agent` can ask; null-safe. */
+export const useDeployCiRuns = (agent: Agent | undefined): DeployCiRun[] => {
+  const deployments = useService(DeploymentsService);
+  const runs = useLiveData(deployments.deployCiRuns$);
+  const repo = useLiveData(deployments.deployInfo$)?.repo;
+  useEffect(() => {
+    if (!agent || !repo) return;
+    const read = () => deployments.refreshDeployCiRuns(agent, repo);
+    read().catch(() => {});
+    const timer = setInterval(() => read().catch(() => {}), 30_000);
+    return () => clearInterval(timer);
+  }, [agent, deployments, repo]);
+  return runs;
+};
+
 const ProdLine = ({ deploy }: { deploy: DeployInfo | null | undefined }) => {
   if (deploy === undefined) return null;
   if (deploy === null) {
@@ -190,13 +239,18 @@ const FlagsLine = ({
  * Tasks marked COMMITTED (PR open), MERGED (on main) or DEPLOYED (live,
  * unchecked) come from the notes; what GitHub says of their pull requests —
  * and open ones no task names — comes from wf on the ship agent's device,
- * which runs `gh` there. Clean pull requests wf merges itself; ones that
- * conflict or fail go to Claude Code on that device to fix and merge, and a
- * deploy goes to it too. Shared by the desktop page and the phone's, which is
+ * which runs `gh` there. Clean pull requests the merge automation merges and
+ * the deploy automation deploys, both run by wf on that device; ones that
+ * conflict or fail go to Claude Code there to fix and merge. Shared by the
+ * desktop page and the phone's, which is
  * where it is most often used.
  */
 export const DeploymentsView = () => {
   const deployments = useService(DeploymentsService);
+  // Deploy with the merge and deploy automations instead of Claude Code.
+  const withAutomations = useLiveData(
+    useService(FeatureFlagService).flags.enable_deploy_with_automations.$
+  );
   const agentsService = useService(AgentsService);
   const sessions = useService(AgentRunSessionService);
   const workbench = useService(WorkbenchService).workbench;
@@ -296,6 +350,7 @@ export const DeploymentsView = () => {
     () => (reposKey ? reposKey.split(',') : []),
     [reposKey]
   );
+  const deployCiRuns = useDeployCiRuns(agent);
   const refresh = useCallback(() => {
     if (agent) deployments.refreshPullRequests(agent, repos).catch(() => {});
   }, [agent, deployments, repos]);
@@ -433,10 +488,17 @@ export const DeploymentsView = () => {
   // Pull requests wf is merging right now, by URL. Each is its own branch
   // into stage, so any number can merge at once; only the same one can't.
   const [merging, setMerging] = useState<Set<string>>(() => new Set());
+  // A merge-and-deploy through the automations: what it is doing now, or
+  // how it ended.
+  const [shipping, setShipping] = useState<{
+    running: boolean;
+    line: string;
+    error?: string;
+  } | null>(null);
   // A Merge or Deploy from the bar, which works through the list itself.
-  const [shipping, setShipping] = useState(false);
+  const [bar, setBar] = useState(false);
   const claudeBusy = !!session?.running;
-  const busy = shipping || claudeBusy;
+  const busy = bar || claudeBusy || !!shipping?.running;
 
   /** Merge through wf, no AI. Resolves to whether it merged. */
   const mergeOne = useCallback(
@@ -574,13 +636,60 @@ export const DeploymentsView = () => {
   );
 
   /**
+   * Merge the chosen tasks and deploy, with the merge and deploy automations
+   * on the agent's device. Ones that don't merge are left out of the deploy
+   * and said, for Claude Code to fix.
+   */
+  const deployWithAutomations = useCallback(async () => {
+    if (!agent) return;
+    setShipping({ running: true, line: 'Starting…' });
+    try {
+      const report = await deployments.mergeAndDeploy(
+        agent,
+        toDeploy.filter(row => {
+          // A draft isn't ready to go, whoever merges it.
+          const pr = row.pullRequest
+            ? pullsByUrl.get(row.pullRequest)
+            : undefined;
+          return !(pr?.state === 'open' && mergeReadiness(pr) === 'draft');
+        }),
+        line => setShipping({ running: true, line })
+      );
+      const { ok, title, message } = shipReportText(report);
+      setShipping({
+        running: false,
+        line: `${title}. ${message}`,
+        error: report.deployed ? undefined : message,
+      });
+      (ok ? notify.success : notify.error)({ title, message });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      setShipping({ running: false, line: '', error: message });
+      notify.error({ title: "The deploy didn't go out", message });
+    } finally {
+      setNotesChanged(n => n + 1);
+      refresh();
+    }
+  }, [agent, deployments, pullsByUrl, refresh, toDeploy]);
+
+  /**
    * Merge the chosen tasks' pull requests: wf merges each GitHub says is
-   * clean; the rest — and any that fail to — go to Claude Code. For a
-   * deploy, the deploy goes to Claude Code after, with whatever is merged.
+   * clean; the rest — and any that fail to — go to Claude Code. A deploy
+   * goes through the automations on a wf device; from the cloud runner,
+   * which has no deploy, to Claude Code.
    */
   const ship = useCallback(
     async (action: ShipAction) => {
-      setShipping(true);
+      if (
+        action === 'deploy' &&
+        agent &&
+        withAutomations &&
+        shipsWithAutomations(agent)
+      ) {
+        await deployWithAutomations();
+        return;
+      }
+      setBar(true);
       try {
         const helpNeeded: Row[] = [];
         const mergedNow = new Set<string>();
@@ -626,10 +735,21 @@ export const DeploymentsView = () => {
           )
         );
       } finally {
-        setShipping(false);
+        setBar(false);
       }
     },
-    [merging, mergeOne, pullsByUrl, refresh, sendToClaude, toDeploy, toMerge]
+    [
+      agent,
+      deployWithAutomations,
+      withAutomations,
+      merging,
+      mergeOne,
+      pullsByUrl,
+      refresh,
+      sendToClaude,
+      toDeploy,
+      toMerge,
+    ]
   );
 
   const openTask = useCallback(
@@ -698,6 +818,7 @@ export const DeploymentsView = () => {
 
   return (
     <div className={styles.content} data-testid="deployments-view">
+      <DeployInProgress runs={deployCiRuns} />
       <ProdLine deploy={deployInfo} />
       <FlagsLine
         deploy={deployInfo}
@@ -791,6 +912,16 @@ export const DeploymentsView = () => {
           {github.error ? (
             <span className={styles.runError}>{github.error}</span>
           ) : null}
+        </div>
+      ) : null}
+
+      {shipping ? (
+        <div className={styles.runStatus} data-testid="deployments-shipping">
+          {shipping.error ? (
+            <span className={styles.runError}>{shipping.error}</span>
+          ) : (
+            shipping.line
+          )}
         </div>
       ) : null}
 

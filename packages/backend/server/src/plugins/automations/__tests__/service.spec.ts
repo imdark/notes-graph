@@ -91,6 +91,37 @@ test('a run goes to the deployed device with its code and secret names', async t
   });
 });
 
+test('a shell automation is sent with shell on and a longer time limit', async t => {
+  const { service, queued } = setup();
+  await service.start(
+    automationRow({ runtime: 'shell', timeoutSeconds: 45 * 60 }),
+    { type: 'manual' }
+  );
+  t.like(queued[0][4], { shell: true, timeoutSeconds: 45 * 60 });
+});
+
+test('plain code is sent without shell, its time limit capped', async t => {
+  const { service, queued } = setup();
+  await service.start(
+    automationRow({ runtime: 'node', timeoutSeconds: 45 * 60 }),
+    { type: 'manual' }
+  );
+  t.like(queued[0][4], { shell: false, timeoutSeconds: 15 * 60 });
+});
+
+test('a wf actions automation is sent with its runtime and the longer limit', async t => {
+  const { service, queued } = setup();
+  await service.start(
+    automationRow({ runtime: 'actions', timeoutSeconds: 45 * 60 }),
+    { type: 'manual' }
+  );
+  t.like(queued[0][4], {
+    runtime: 'actions',
+    shell: true,
+    timeoutSeconds: 45 * 60,
+  });
+});
+
 test('nothing deployed: the run is refused', async t => {
   const { service } = setup({ deployments: [] });
   await t.throwsAsync(service.start(automationRow(), { type: 'manual' }), {

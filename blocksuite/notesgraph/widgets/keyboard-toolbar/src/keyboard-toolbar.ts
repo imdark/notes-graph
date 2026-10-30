@@ -386,6 +386,20 @@ export class NotesGraphKeyboardToolbar extends SignalWatcher(
       })
     );
 
+    // Typing moves the caret down (wrapped lines, new lines) without always
+    // changing the std selection, so follow the native caret as well.
+    let caretFrame = 0;
+    this.disposables.addFromEvent(document, 'selectionchange', () => {
+      if (caretFrame) return;
+      caretFrame = requestAnimationFrame(() => {
+        caretFrame = 0;
+        this._scrollCurrentBlockIntoView();
+      });
+    });
+    this.disposables.add(() => {
+      if (caretFrame) cancelAnimationFrame(caretFrame);
+    });
+
     this.disposables.add(
       effect(() => {
         // sometime the keyboard will auto show when user click into different paragraph in Android,

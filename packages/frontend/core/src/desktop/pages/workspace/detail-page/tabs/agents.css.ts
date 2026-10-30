@@ -310,7 +310,8 @@ export const logToggle = style({
 });
 
 export const logScroll = style({
-  height: '55vh',
+  height: '55dvh',
+  flexShrink: 0,
   // Both axes: lines never wrap, so a long one scrolls sideways.
   overflow: 'auto',
   borderRadius: 8,
