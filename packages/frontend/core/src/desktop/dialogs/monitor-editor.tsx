@@ -23,6 +23,7 @@ import {
 } from '@notesgraph/core/modules/agents';
 import type { DialogComponentProps } from '@notesgraph/core/modules/dialogs';
 import type { WORKSPACE_DIALOG_SCHEMA } from '@notesgraph/core/modules/dialogs/constant';
+import { FeatureFlagService } from '@notesgraph/core/modules/feature-flag';
 import { WorkspaceService } from '@notesgraph/core/modules/workspace';
 import { useLiveData, useService } from '@notesgraph/infra';
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -141,6 +142,9 @@ export const MonitorEditorDialog = ({
   const remoteRunner = useService(RemoteAgentRunnerService);
   const workspaceId = useService(WorkspaceService).workspace.id;
   const monitors = useLiveData(monitorsService.monitors$);
+  const runEnabled = useLiveData(
+    useService(FeatureFlagService).flags.enable_monitor_run_button.$
+  );
   const existing = useMemo(
     () => monitors.find(m => m.id === monitorId),
     [monitorId, monitors]
@@ -326,6 +330,53 @@ export const MonitorEditorDialog = ({
       setBusy(false);
     }
   }, [close, draft, existing, monitorsService]);
+
+  // A run started from here: the lastRunAt it started from, so the result
+  // shows once a newer reading lands.
+  const [runFrom, setRunFrom] = useState<number | null | undefined>(undefined);
+  const running =
+    runFrom !== undefined &&
+    (!existing || existing.pending || existing.lastRunAt === runFrom);
+
+  // A url check lands in seconds and a device job in minutes; look often
+  // until it does.
+  useEffect(() => {
+    if (!running) return;
+    const timer = window.setInterval(() => {
+      monitorsService.revalidate().catch(() => {});
+    }, 5000);
+    return () => window.clearInterval(timer);
+  }, [monitorsService, running]);
+
+  // Saves the edits first, so the run is of what's in the form.
+  const run = useCallback(async () => {
+    if (!existing) return;
+    setBusy(true);
+    try {
+      const saved = await monitorsService.update(existing.id, draft());
+      setRunFrom(saved.lastRunAt);
+      await monitorsService.runNow(existing.id);
+    } catch (err) {
+      setRunFrom(undefined);
+      notify.error({
+        title: "Couldn't run the monitor",
+        message: err instanceof Error ? err.message : String(err),
+      });
+    } finally {
+      setBusy(false);
+    }
+  }, [draft, existing, monitorsService]);
+
+  const runResult =
+    runFrom === undefined || !existing
+      ? null
+      : running
+        ? existing.kind === 'check' && existing.source === 'url'
+          ? 'Running…'
+          : 'Running on the device…'
+        : existing.lastError
+          ? `✗ ${existing.lastError}`
+          : `Got: ${existing.lastValue ?? 'nothing'}`;
 
   const remove = useCallback(async () => {
     if (!existing) return;
@@ -645,6 +696,17 @@ export const MonitorEditorDialog = ({
         <Scrollable.Scrollbar />
       </Scrollable.Root>
 
+      {runResult ? (
+        <div
+          className={styles.hint}
+          style={{ marginTop: 12 }}
+          role="status"
+          data-testid="monitor-run-result"
+        >
+          {runResult}
+        </div>
+      ) : null}
+
       <div
         style={{
           display: 'flex',
@@ -666,6 +728,16 @@ export const MonitorEditorDialog = ({
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           <Button onClick={() => close()}>Cancel</Button>
+          {existing && runEnabled ? (
+            <Button
+              onClick={() => void run()}
+              disabled={!canSave || running}
+              title="Saves your changes, then runs it once now"
+              data-testid="monitor-run"
+            >
+              {running ? 'Running…' : 'Run'}
+            </Button>
+          ) : null}
           <Button
             variant="primary"
             onClick={() => void save()}
