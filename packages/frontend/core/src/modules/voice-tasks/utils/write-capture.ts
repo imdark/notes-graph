@@ -1,4 +1,8 @@
-import { type BlockModel, type Store, Text } from '@blocksuite/notesgraph/store';
+import {
+  type BlockModel,
+  type Store,
+  Text,
+} from '@blocksuite/notesgraph/store';
 
 const isBullet = (block: BlockModel) =>
   block.flavour === 'notesgraph:list' &&
