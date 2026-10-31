@@ -23,6 +23,8 @@ export interface MonitorSpec {
   instructions?: string;
   model?: string;
   tools?: string[];
+  /** Skills the agent runs with in place of the defaults; unset keeps them. */
+  skills?: string[];
 }
 
 export interface MonitorAlerts {

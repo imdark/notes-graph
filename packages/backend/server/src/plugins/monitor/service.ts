@@ -55,6 +55,12 @@ export interface MonitorSpec {
   instructions?: string;
   model?: string;
   tools?: string[];
+  /**
+   * agent: skills assigned to the run (catalog names, or `note:<docId>` for
+   * a "Skill: <name>" note), in place of the model's defaults. None
+   * assigned keeps the defaults.
+   */
+  skills?: string[];
 }
 
 export interface MonitorAlerts {
@@ -152,6 +158,7 @@ export class MonitorService {
           model: spec.model ?? 'claude-code',
           instructions: agentInstructions(monitor, spec),
           tools: spec.tools ?? [],
+          skills: monitorSkills(spec),
           agentName: monitor.name,
         });
         return;
@@ -189,6 +196,7 @@ export class MonitorService {
       instructions: string;
       agentName: string;
       tools?: string[];
+      skills?: string[];
     }
   ) {
     if (!monitor.deviceKey) throw new Error('No device chosen to run this on');
@@ -492,6 +500,15 @@ export class MonitorService {
 /** An above/below condition compares a number, so the run must report one. */
 const isNumeric = (condition: Condition | null) =>
   condition?.type === 'above' || condition?.type === 'below';
+
+/** The skills assigned to an agent monitor, or undefined for none. */
+export function monitorSkills(spec: MonitorSpec): string[] | undefined {
+  if (!Array.isArray(spec.skills)) return undefined;
+  const skills = spec.skills.filter(
+    (skill): skill is string => typeof skill === 'string' && !!skill.trim()
+  );
+  return skills.length ? skills : undefined;
+}
 
 /**
  * What an agent monitor is told each run: its own instructions, to keep the
