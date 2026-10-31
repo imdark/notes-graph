@@ -159,8 +159,10 @@ export class CloudThrottlerGuard extends ThrottlerGuard {
 
     const throttler = this.getSpecifiedThrottler(context);
 
-    // if user is logged in, bypass non-protected handlers
-    if (!throttler && req.session?.user) {
+    // if user is logged in, bypass non-protected handlers. A personal access
+    // token counts: agent runners use one, and every run on a machine would
+    // otherwise share one IP's limit (a 429 there denies the agent's tool).
+    if (!throttler && (req.session?.user || req.token?.user)) {
       return true;
     }
 
