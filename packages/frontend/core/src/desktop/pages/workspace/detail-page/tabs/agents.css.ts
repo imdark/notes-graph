@@ -103,6 +103,14 @@ export const output = style({
   color: cssVarV2('text/primary'),
   whiteSpace: 'pre-wrap',
   margin: 0,
+  selectors: {
+    '&[data-clamped="true"]': {
+      display: '-webkit-box',
+      WebkitLineClamp: 6,
+      WebkitBoxOrient: 'vertical',
+      overflow: 'hidden',
+    },
+  },
 });
 
 export const error = style({
@@ -533,6 +541,11 @@ export const reviewSummary = style({
   WebkitBoxOrient: 'vertical',
   overflow: 'hidden',
 });
+
+export const outputMore = style([
+  linkButton,
+  { alignSelf: 'flex-start', marginTop: -4 },
+]);
 
 export const reviewMore = style([
   linkButton,
