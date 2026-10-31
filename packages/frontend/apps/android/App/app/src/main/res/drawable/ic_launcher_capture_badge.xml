@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Capture launcher: a mic badge at the logo's lower right, ringed in the
-     icon background, inside the 66dp circle launchers crop to. -->
+     icon background, inside the 66dp circle launchers crop to. API 23 fallback: one flat
+     colour from the middle of the logo gradient (drawable-v24 has the
+     gradient). -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
@@ -11,7 +13,7 @@
       android:fillColor="#14141C"/>
   <path
       android:pathData="M69,58a11,11 0,1 1,0 22a11,11 0,1 1,0 -22z"
-      android:fillColor="#FFB547"/>
+      android:fillColor="#5E9FF8"/>
   <path
       android:pathData="M69,62.5a3.2,3.2 0,0 1,3.2 3.2v2.8a3.2,3.2 0,0 1,-6.4 0v-2.8a3.2,3.2 0,0 1,3.2 -3.2z"
       android:fillColor="#14141C"/>
