@@ -14,13 +14,16 @@ import type { ExtensionType } from '@blocksuite/notesgraph/store';
 import { IconType } from '@notesgraph/component';
 import {
   type Agent,
+  type AgentRun,
   AgentRunSessionService,
+  AgentRunsStore,
   AgentsService,
   type AgentTarget,
   deviceState,
   FleetService,
   isOpenTask,
   isPlainBlock,
+  runsForModel,
 } from '@notesgraph/core/modules/agents';
 import { WorkspaceDialogService } from '@notesgraph/core/modules/dialogs';
 import { WorkbenchService } from '@notesgraph/core/modules/workbench';
@@ -124,6 +127,9 @@ export class AgentAssignWidget extends WidgetComponent {
     this._version++;
   };
 
+  /** Every run on this note, to tell whether one already worked on this block. */
+  private _docRuns: AgentRun[] = [];
+
   private get _target(): AgentTarget {
     return {
       kind: 'block',
@@ -137,6 +143,21 @@ export class AgentAssignWidget extends WidgetComponent {
     const framework = this.std.getOptional(AgentsFrameworkIdentifier);
     if (!framework) return;
     this._framework = framework;
+
+    try {
+      const runsSub = framework
+        .get(AgentRunsStore)
+        .watchRunsForDoc(this.std.store.id)
+        .subscribe(runs => {
+          // Most notes have no runs: don't re-render every block for nothing.
+          if (runs.length === 0 && this._docRuns.length === 0) return;
+          this._docRuns = runs;
+          this._bump();
+        });
+      this._disposables.add(() => runsSub.unsubscribe());
+    } catch {
+      // No workspace scope (e.g. a detached editor).
+    }
 
     const sessions = framework.get(AgentRunSessionService);
     this._disposables.add(sessions.sessions$.subscribe(this._bump));
@@ -189,6 +210,12 @@ export class AgentAssignWidget extends WidgetComponent {
       // caret is, which is what tapping into it does on a phone.
       if (!this._caretIn && !this._menuOpen) return false;
     } else if (!isOpenTask(this.model)) {
+      return false;
+    }
+    // A block an agent already worked on carries the runs chip at the line's
+    // end; that is where to look at or repeat the run, so the line shows only
+    // that one.
+    if (runsForModel(this._docRuns, this.std.store, this.model).length) {
       return false;
     }
     return !this._framework.get(AgentRunSessionService).isBusyOn(this._target);

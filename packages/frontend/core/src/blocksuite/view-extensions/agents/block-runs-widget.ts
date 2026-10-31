@@ -3,7 +3,7 @@ import {
   WidgetComponent,
   WidgetViewExtension,
 } from '@blocksuite/notesgraph/std';
-import type { BlockModel, ExtensionType } from '@blocksuite/notesgraph/store';
+import type { ExtensionType } from '@blocksuite/notesgraph/store';
 import type { FrameworkProvider } from '@notesgraph/infra';
 import { css, html, nothing, svg } from 'lit';
 import { state } from 'lit/decorators.js';
@@ -13,10 +13,9 @@ import {
   type AgentRun,
   AgentRunsStore,
   formatTrendValue,
-  hasAgentClaim,
   type Monitor,
   MonitorsService,
-  runsForBlock,
+  runsForModel,
   sparklinePath,
   type Trend,
 } from '../../../modules/agents';
@@ -328,21 +327,7 @@ export class BlockAgentRunsWidget extends WidgetComponent {
   }
 
   private get blockRuns(): AgentRun[] {
-    if (this.docRuns.length === 0) return [];
-    const ancestorIds: string[] = [];
-    let parent: BlockModel | null = this.std.store.getParent(this.model);
-    while (parent) {
-      ancestorIds.push(parent.id);
-      parent = this.std.store.getParent(parent);
-    }
-    // Read through the signal so a claim typed or synced in re-renders this.
-    const delta = this.model.text?.deltas$.value ?? [];
-    return runsForBlock(
-      this.docRuns,
-      this.model.id,
-      ancestorIds,
-      hasAgentClaim(delta)
-    );
+    return runsForModel(this.docRuns, this.std.store, this.model);
   }
 
   private readonly _open = (e: Event, runs: AgentRun[]) => {
