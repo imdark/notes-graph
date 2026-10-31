@@ -20,7 +20,13 @@ import { DocService } from '@notesgraph/core/modules/doc';
 import { WorkbenchService } from '@notesgraph/core/modules/workbench';
 import { WorkspaceService } from '@notesgraph/core/modules/workspace';
 import { useLiveData, useService } from '@notesgraph/infra';
-import { useCallback, useMemo, useState } from 'react';
+import {
+  useCallback,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 
 import { AgentQuestionCard } from './agent-question';
 import { AgentReviewCard } from './agent-review-card';
@@ -31,6 +37,45 @@ import { useRunActions } from './use-run-actions';
 
 /** Recent runs shown here; the Agents page has the rest. */
 const PANEL_RUNS = 8;
+
+/** A run's output, cut at six lines until Show more opens the rest. */
+const ClampedOutput = ({ text }: { text: string }) => {
+  const ref = useRef<HTMLParagraphElement>(null);
+  const [expanded, setExpanded] = useState(false);
+  const [clamped, setClamped] = useState(false);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el || expanded) return;
+    const measure = () => setClamped(el.scrollHeight > el.clientHeight + 1);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [text, expanded]);
+
+  return (
+    <>
+      <p
+        ref={ref}
+        className={styles.output}
+        data-clamped={!expanded}
+        data-testid="agent-output"
+      >
+        {text}
+      </p>
+      {clamped || expanded ? (
+        <button
+          className={styles.outputMore}
+          onClick={() => setExpanded(e => !e)}
+          aria-expanded={expanded}
+          data-testid="agent-output-more"
+        >
+          {expanded ? 'Show less' : 'Show more'}
+        </button>
+      ) : null}
+    </>
+  );
+};
 
 /** One run going, or finished and not yet dismissed. */
 export const SessionCard = ({
@@ -186,9 +231,7 @@ export const SessionCard = ({
           {session.error}
         </p>
       ) : session.output ? (
-        <p className={styles.output} data-testid="agent-output">
-          {session.output}
-        </p>
+        <ClampedOutput text={session.output} />
       ) : (
         <p className={styles.empty}>
           {!running
