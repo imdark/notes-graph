@@ -36,9 +36,12 @@ const errorMessages: Record<SpeechToTextError, string> = {
 export const CaptureView = ({
   autoListen = false,
   openNoteAt = 'active',
+  compact = false,
 }: {
   /** Start listening as soon as the view opens. */
   autoListen?: boolean;
+  /** A smaller mic, for while the on-screen keyboard takes up the screen. */
+  compact?: boolean;
   /** Where "Open note" opens it; the desktop capture window is too small. */
   openNoteAt?: 'active' | 'new-tab';
 }) => {
@@ -171,7 +174,11 @@ export const CaptureView = ({
   }, [docId, openNoteAt, save, stop, workbench]);
 
   return (
-    <div className={styles.root} data-testid="capture-view">
+    <div
+      className={styles.root}
+      data-compact={compact}
+      data-testid="capture-view"
+    >
       <button
         type="button"
         className={styles.mic}
