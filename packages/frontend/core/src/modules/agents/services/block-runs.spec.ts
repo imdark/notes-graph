@@ -1,7 +1,8 @@
+import type { BlockModel, Store } from '@blocksuite/notesgraph/store';
 import { describe, expect, test } from 'vitest';
 
 import type { AgentRun } from '../stores/agent-runs';
-import { hasAgentClaim, runsForBlock } from './block-runs';
+import { hasAgentClaim, runsForBlock, runsForModel } from './block-runs';
 
 const run = (id: string, target: Partial<AgentRun>): AgentRun => ({
   id,
@@ -35,6 +36,21 @@ describe('runsForBlock', () => {
     expect(runsForBlock(runs, 'b2', ['list'], true).map(r => r.id)).toEqual([
       'on-list',
     ]);
+  });
+});
+
+describe('runsForModel', () => {
+  const runs = [run('on-list', { blockId: 'list' })];
+  const list = { id: 'list' } as BlockModel;
+  const item = (text: string) =>
+    ({ id: 'b2', text: { deltas$: { value: [{ insert: text }] } } }) as never;
+  const store = {
+    getParent: (model: BlockModel) => (model.id === 'b2' ? list : null),
+  } as unknown as Store;
+
+  test('walks up to a run on the list above a claimed item', () => {
+    expect(runsForModel(runs, store, item('Fix it @claude'))).toHaveLength(1);
+    expect(runsForModel(runs, store, item('Fix it'))).toEqual([]);
   });
 });
 

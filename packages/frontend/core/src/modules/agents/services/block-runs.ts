@@ -1,3 +1,5 @@
+import type { BlockModel, Store } from '@blocksuite/notesgraph/store';
+
 import type { AgentRun } from '../stores/agent-runs';
 
 /** Whether a run was pointed at this block, alone or as part of a selection. */
@@ -38,4 +40,22 @@ export function runsForBlock(
       runTargetsBlock(run, blockId) ||
       (claimed && ancestorIds.some(id => runTargetsBlock(run, id)))
   );
+}
+
+/** The runs that worked on a block in the editor: its own and its claimed parents'. */
+export function runsForModel(
+  runs: AgentRun[],
+  store: Store,
+  model: BlockModel
+): AgentRun[] {
+  if (runs.length === 0) return [];
+  const ancestorIds: string[] = [];
+  let parent: BlockModel | null = store.getParent(model);
+  while (parent) {
+    ancestorIds.push(parent.id);
+    parent = store.getParent(parent);
+  }
+  // Read through the signal so a claim typed or synced in re-renders the caller.
+  const delta = model.text?.deltas$.value ?? [];
+  return runsForBlock(runs, model.id, ancestorIds, hasAgentClaim(delta));
 }

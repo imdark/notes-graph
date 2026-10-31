@@ -19,6 +19,7 @@ export {
 export {
   hasAgentClaim,
   runsForBlock,
+  runsForModel,
   runTargetsBlock,
 } from './services/block-runs';
 export {
