@@ -735,4 +735,31 @@ export class RegistryJobModel extends BaseModel {
       update: { monthlyUsd, updatedBy: userId },
     });
   }
+
+  /** Each repo's branches as the Deployments screen ships it, by name. */
+  async listDeployRepos(workspaceId: string) {
+    return this.db.registryDeployRepo.findMany({
+      where: { workspaceId },
+      orderBy: { repo: 'asc' },
+    });
+  }
+
+  async setDeployRepo(
+    workspaceId: string,
+    repo: string,
+    branches: { baseBranch: string; deployBranch: string },
+    userId: string
+  ): Promise<void> {
+    await this.db.registryDeployRepo.upsert({
+      where: { workspaceId_repo: { workspaceId, repo } },
+      create: { workspaceId, repo, ...branches, updatedBy: userId },
+      update: { ...branches, updatedBy: userId },
+    });
+  }
+
+  async removeDeployRepo(workspaceId: string, repo: string): Promise<void> {
+    await this.db.registryDeployRepo.deleteMany({
+      where: { workspaceId, repo },
+    });
+  }
 }

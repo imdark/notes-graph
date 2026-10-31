@@ -106,6 +106,9 @@ describe('Deployments requests on the cloud runner', () => {
           '{"state":"OPEN","headRefName":"wip"}',
         'pr view 9 -R a/b --json state,headRefName':
           '{"state":"MERGED","headRefName":"main"}',
+        // A repo's base branch, as its setting names it.
+        'pr view 10 -R a/b --json state,headRefName':
+          '{"state":"MERGED","headRefName":"stage"}',
       },
       calls
     );
@@ -116,12 +119,19 @@ describe('Deployments requests on the cloud runner', () => {
           { repo: 'a/b', number: 7 },
           { repo: 'a/b', number: 8 },
           { repo: 'a/b', number: 9 },
+          { repo: 'a/b', number: 10 },
         ],
+        keep: ['stage', 'main'],
       },
       gh,
       null
     );
-    expect(out.split('\n')).toEqual(['ok a/b#7', 'fail a/b#8', 'fail a/b#9']);
+    expect(out.split('\n')).toEqual([
+      'ok a/b#7',
+      'fail a/b#8',
+      'fail a/b#9',
+      'fail a/b#10',
+    ]);
     expect(calls.filter(args => args.includes('DELETE'))).toHaveLength(1);
   });
 

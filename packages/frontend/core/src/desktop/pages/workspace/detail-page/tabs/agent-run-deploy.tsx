@@ -60,6 +60,10 @@ export const AgentRunDeploy = ({
   const withAutomations = useLiveData(
     useService(FeatureFlagService).flags.enable_deploy_with_automations.$
   );
+  // Each repo's base and deploy branch, set under Repos, never guessed.
+  const repoBranches = useLiveData(
+    useService(FeatureFlagService).flags.enable_deploy_repo_branches.$
+  );
   const agentsService = useService(AgentsService);
   const runsStore = useService(AgentRunsStore);
   const now = useMinuteTick();
@@ -145,8 +149,13 @@ export const AgentRunDeploy = ({
         });
       return;
     }
-    deployments
-      .ship(agent, toDeploy, 'deploy')
+    (repoBranches
+      ? deployments.shipBranches(toDeploy, 'deploy')
+      : Promise.resolve(undefined)
+    )
+      .then(repos =>
+        deployments.ship(agent, toDeploy, 'deploy', {}, undefined, repos)
+      )
       .then(target => {
         if (!target) return;
         notify.success({
@@ -161,7 +170,7 @@ export const AgentRunDeploy = ({
         })
       )
       .finally(() => setSending(false));
-  }, [agent, deployments, toDeploy, withAutomations]);
+  }, [agent, deployments, repoBranches, toDeploy, withAutomations]);
 
   return (
     <div className={styles.changesScroll} data-testid="agent-run-deploy">

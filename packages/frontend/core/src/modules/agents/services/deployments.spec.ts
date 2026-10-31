@@ -12,6 +12,10 @@ import {
   deleteBranchCommand,
   deletesBranch,
   deployableTasks,
+  DeployRepoMissing,
+  deployReposFor,
+  keptBranches,
+  shipRepos,
   deployRunsFor,
   findPullRequest,
   flagStage,
@@ -265,6 +269,52 @@ describe('shipBrief', () => {
     expect(brief.text).toContain('https://github.com/o/r/pull/2');
     expect(brief.text).toContain('merge main into it');
   });
+
+  test("with the repos' branches it names them, never main", () => {
+    const url = 'https://github.com/o/r/pull/1';
+    const repos = [{ repo: 'o/r', baseBranch: 'stage', deployBranch: 'main' }];
+    const merge = shipBrief(
+      [task('a', 'committed', url)],
+      'merge',
+      { pulls: [pull({ url, number: 1, mergeable: 'CONFLICTING' })] },
+      repos
+    );
+    expect(merge.text).toContain(
+      '- o/r: pull requests merge into `stage`; prod deploys from `main`'
+    );
+    expect(merge.text).toContain('into its repo’s base branch');
+    expect(merge.text).toContain('on GitHub: conflicts with its repo’s base');
+    expect(merge.text).not.toContain('into main');
+    const deploy = shipBrief([task('b', 'merged', url)], 'deploy', {}, repos);
+    expect(deploy.text).toContain(
+      'Update to the latest commit of the repo’s deploy branch'
+    );
+  });
+});
+
+describe('repo branches', () => {
+  test("a ship's repos: its pull requests', untracked ones', and prod's", () => {
+    expect(
+      shipRepos(
+        [
+          task('a', 'committed', 'https://github.com/o/r/pull/1'),
+          task('b', 'committed'),
+          task('c', 'merged', 'https://github.com/o/r/pull/2'),
+        ],
+        [pull({ repo: 'x/y' })],
+        'o/prod'
+      )
+    ).toEqual(['o/prod', 'o/r', 'x/y']);
+  });
+
+  test('a repo without its branches is refused, never guessed', () => {
+    const set = { repo: 'o/r', baseBranch: 'stage', deployBranch: 'main' };
+    expect(deployReposFor(['o/r'], [set])).toEqual([set]);
+    expect(() => deployReposFor(['o/r', 'x/y'], [set])).toThrow(
+      DeployRepoMissing
+    );
+    expect(() => deployReposFor(['x/y'], [])).toThrow(/x\/y/);
+  });
 });
 
 const pull = (patch: Partial<PullRequest>): PullRequest => ({
@@ -511,6 +561,12 @@ describe('checking ready branches', () => {
     expect(deletesBranch({ ...merged, branchExists: false })).toBe(false);
     expect(deletesBranch({ ...merged, state: 'open' })).toBe(false);
     expect(deletesBranch({ ...merged, branch: 'main' })).toBe(false);
+    // Nor a branch a repo's setting names.
+    const keep = keptBranches([
+      { repo: 'imdark/notes-graph', baseBranch: 'stage', deployBranch: 'main' },
+    ]);
+    expect(deletesBranch({ ...merged, branch: 'stage' }, keep)).toBe(false);
+    expect(deletesBranch(merged, keep)).toBe(true);
     expect(deleteBranchCommand(merged)).toBe(
       "gh api -X DELETE 'repos/imdark/notes-graph/git/refs/heads/feat-x'"
     );

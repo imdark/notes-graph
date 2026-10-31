@@ -149,6 +149,7 @@ export {
   CLOUD_DEVICE_KEY,
   defaultSkillsFor,
   type DeployInfo,
+  type DeployRepo,
   deviceHarnessName,
   editorHarness,
   type EnqueueRemoteJob,

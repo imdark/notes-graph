@@ -517,6 +517,48 @@ export class RegistryController {
     };
   }
 
+  @Get('/workspaces/:workspaceId/deploy-repos')
+  async getDeployRepos(
+    @CurrentUser() user: CurrentUserType,
+    @Param('workspaceId') workspaceId: string
+  ) {
+    this.assertEnabled();
+    await this.ac.user(user.id).workspace(workspaceId).assert('Workspace.Read');
+    return { repos: await this.jobs.deployRepos(workspaceId) };
+  }
+
+  @Post('/workspaces/:workspaceId/deploy-repos')
+  async setDeployRepo(
+    @CurrentUser() user: CurrentUserType,
+    @Param('workspaceId') workspaceId: string,
+    @Body() body: Record<string, unknown>
+  ) {
+    this.assertEnabled();
+    await this.ac
+      .user(user.id)
+      .workspace(workspaceId)
+      .assert('Workspace.Settings.Update');
+    return {
+      repos: await this.jobs.setDeployRepo(workspaceId, user.id, body ?? {}),
+    };
+  }
+
+  @Post('/workspaces/:workspaceId/deploy-repos/remove')
+  async removeDeployRepo(
+    @CurrentUser() user: CurrentUserType,
+    @Param('workspaceId') workspaceId: string,
+    @Body() body: Record<string, unknown>
+  ) {
+    this.assertEnabled();
+    await this.ac
+      .user(user.id)
+      .workspace(workspaceId)
+      .assert('Workspace.Settings.Update');
+    return {
+      repos: await this.jobs.removeDeployRepo(workspaceId, body ?? {}),
+    };
+  }
+
   @Get('/workspaces/:workspaceId/agent-spend')
   async getAgentSpend(
     @CurrentUser() user: CurrentUserType,
