@@ -23,12 +23,24 @@ const lines = () =>
   store.getModelById(noteId)!.children.map(model => model.text?.toString());
 
 describe('writeCapture', () => {
-  test('writes one paragraph per non-blank line', () => {
+  test('writes one bullet per non-blank line', () => {
     writeCapture(store, 'Call the plumber\n\n  buy milk  \n');
 
     expect(lines()).toEqual(['Call the plumber', 'buy milk']);
+    for (const child of store.getModelById(noteId)!.children) {
+      expect(child.flavour).toBe('notesgraph:list');
+      expect((child.props as { type: string }).type).toBe('bulleted');
+    }
+  });
+
+  test("replaces the new note's empty paragraph with bullets", () => {
+    store.addBlock('notesgraph:paragraph', {}, noteId);
+
+    writeCapture(store, 'one');
+
+    expect(lines()).toEqual(['one']);
     expect(store.getModelById(noteId)!.children[0].flavour).toBe(
-      'notesgraph:paragraph'
+      'notesgraph:list'
     );
   });
 
