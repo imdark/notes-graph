@@ -18,6 +18,8 @@ import { RegistryService } from './service';
 import { RegistryJobShareController, RegistryJobShareService } from './share';
 import { SkillNoteService } from './skill-notes';
 import { JobTaskClaims } from './task-claims';
+import { TerminalGateway } from './terminal-gateway';
+import { TerminalSessionService } from './terminal-sessions';
 
 /**
  * Device registry: machines and folders registered as deployment and
@@ -39,6 +41,8 @@ import { JobTaskClaims } from './task-claims';
     AgentRules,
     SkillNoteService,
     JobGates,
+    TerminalSessionService,
+    TerminalGateway,
   ],
   controllers: [RegistryController, RegistryJobShareController],
   // Monitors queue device jobs and push alerts through these; automations

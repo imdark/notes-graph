@@ -19,6 +19,7 @@ import {
 import { useLiveData, useService } from '@notesgraph/infra';
 import { useCallback, useMemo, useState } from 'react';
 
+import { RemoteTerminal } from '../../../../components/remote-terminal';
 import { AgentQuestionCard } from '../detail-page/tabs/agent-question';
 import { AgentReviewCard } from '../detail-page/tabs/agent-review-card';
 import {
@@ -365,6 +366,22 @@ const AgentsPage = () => {
             <SpendByProject refreshKey={endedRuns} />
 
             <MonitorsSection now={now} />
+
+            <section className={styles.section} data-testid="agents-terminal">
+              <div className={styles.sectionTitle}>
+                {selectedAgent?.harness === 'remote'
+                  ? `Terminal on ${selectedAgent.deviceKey ?? 'its device'}`
+                  : 'Terminal'}
+              </div>
+              <RemoteTerminal
+                key={selectedAgent?.deviceKey ?? ''}
+                deviceKey={
+                  selectedAgent?.harness === 'remote'
+                    ? (selectedAgent.deviceKey ?? undefined)
+                    : undefined
+                }
+              />
+            </section>
 
             <section className={styles.section}>
               <div className={styles.sectionTitle}>

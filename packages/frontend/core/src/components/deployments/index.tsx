@@ -38,6 +38,7 @@ import { WorkbenchService } from '@notesgraph/core/modules/workbench';
 import { useLiveData, useService } from '@notesgraph/infra';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
+import { RemoteTerminal } from '../remote-terminal';
 import * as styles from './styles.css';
 
 type Row = ShipTask &
@@ -1392,6 +1393,15 @@ export const DeploymentsView = () => {
           </div>
         </section>
       ) : null}
+
+      <section className={styles.section} data-testid="deployments-terminal">
+        <div className={styles.sectionTitle}>Terminal</div>
+        <div className={styles.sectionHint}>
+          Open Claude Code or another harness on a connected machine, through
+          wf, with the workspace tools. Close the tab and it keeps running.
+        </div>
+        <RemoteTerminal />
+      </section>
     </div>
   );
 };
