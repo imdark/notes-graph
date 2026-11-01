@@ -293,7 +293,7 @@ export const RemoteTerminal = ({
       ) : (
         <div className={styles.note}>
           {devices.length === 0
-            ? 'No device is connected for terminals. On the machine, run `wf terminal serve`.'
+            ? 'No device is connected for terminals. On the machine, run `wf terminal install` (or `wf terminal serve` to try it once).'
             : 'Open a harness on a device, or pick a session above to carry on where you left off.'}
         </div>
       )}
