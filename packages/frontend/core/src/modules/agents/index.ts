@@ -32,6 +32,12 @@ export {
 } from './services/cloud-runner';
 export { AgentContextService } from './services/context';
 export {
+  TERMINAL_HARNESSES,
+  type TerminalConnection,
+  TerminalService,
+  type TerminalSessionInfo,
+} from './services/terminal';
+export {
   type BranchCheck,
   canFixToMerge,
   type DeployCiRun,
@@ -254,6 +260,7 @@ import { RemoteAgentRunnerService } from './services/remote-runner';
 import { ResearchToolsService } from './services/research-tools';
 import { AgentRunSessionService } from './services/run-session';
 import { AgentTaskClaimService } from './services/task-claim';
+import { TerminalService } from './services/terminal';
 import { AgentRunLogsStore } from './stores/agent-run-logs';
 import { AgentRunsStore } from './stores/agent-runs';
 import { AgentsStore } from './stores/agents';
@@ -271,6 +278,7 @@ export function configureAgentsModule(framework: Framework) {
     .service(MonitorsService, [WorkspaceServerService, WorkspaceService])
     .service(AutomationsService, [WorkspaceServerService, WorkspaceService])
     .service(FleetService, [WorkspaceServerService, WorkspaceService])
+    .service(TerminalService, [WorkspaceServerService, WorkspaceService])
     .service(AgentExecutorService, [
       AgentContextService,
       AgentRunsStore,
