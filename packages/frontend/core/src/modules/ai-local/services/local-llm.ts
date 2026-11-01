@@ -41,7 +41,9 @@ function normalizeMessages(messages: LocalChatMessage[]): LocalChatMessage[] {
 export class LocalLLMService extends Service {
   readonly status$ = new LiveData<LocalLLMStatus>({ state: 'idle' });
   private engine: MLCEngineInterface | null = null;
+  /** Model the current `engine` has actually finished loading. */
   private modelId: string | null = null;
+  private loadingModelId: string | null = null;
   private loadPromise: Promise<void> | null = null;
 
   get currentModel() {
@@ -50,10 +52,23 @@ export class LocalLLMService extends Service {
 
   async ensureLoaded(modelId: string = DEFAULT_LOCAL_MODEL): Promise<void> {
     if (this.engine && this.modelId === modelId) return;
-    if (this.loadPromise && this.modelId === modelId) return this.loadPromise;
-    this.modelId = modelId;
-    this.loadPromise = (async () => {
+    if (this.loadPromise && this.loadingModelId === modelId) {
+      return this.loadPromise;
+    }
+    // A load for a different model is in flight: let it settle first so two
+    // engines are never initialised at once.
+    const pending = this.loadPromise;
+    this.loadingModelId = modelId;
+    const run = (async () => {
       try {
+        if (pending) await pending.catch(() => {});
+        if (this.engine && this.modelId === modelId) return;
+        if (this.engine) {
+          const old = this.engine;
+          this.engine = null;
+          this.modelId = null;
+          await old.unload().catch(() => {});
+        }
         this.status$.next({ state: 'loading', progress: 0, text: 'Starting…' });
         // Ask the browser to keep the cached model weights — otherwise the
         // ~1 GB cache can be evicted between reloads, forcing a re-download.
@@ -63,7 +78,7 @@ export class LocalLLMService extends Service {
           /* not fatal — caching still works, just evictable */
         }
         const { CreateMLCEngine } = await import('@mlc-ai/web-llm');
-        this.engine = await CreateMLCEngine(modelId, {
+        const engine = await CreateMLCEngine(modelId, {
           initProgressCallback: (report: InitProgressReport) => {
             this.status$.next({
               state: 'loading',
@@ -72,6 +87,8 @@ export class LocalLLMService extends Service {
             });
           },
         });
+        this.engine = engine;
+        this.modelId = modelId;
         this.status$.next({ state: 'ready' });
       } catch (err) {
         this.engine = null;
@@ -80,10 +97,14 @@ export class LocalLLMService extends Service {
         this.status$.next({ state: 'error', error });
         throw err;
       } finally {
-        this.loadPromise = null;
+        if (this.loadPromise === run) {
+          this.loadPromise = null;
+          this.loadingModelId = null;
+        }
       }
     })();
-    return this.loadPromise;
+    this.loadPromise = run;
+    return run;
   }
 
   async *chatStream(
@@ -95,7 +116,8 @@ export class LocalLLMService extends Service {
     // loaded last.
     await this.ensureLoaded(options?.model ?? DEFAULT_LOCAL_MODEL);
     const engine = this.engine;
-    if (!engine) throw new Error('Local model is not loaded');
+    if (!engine || this.modelId !== (options?.model ?? DEFAULT_LOCAL_MODEL))
+      throw new Error('Local model is not loaded');
     const completion = await engine.chat.completions.create({
       messages: normalizeMessages(messages),
       stream: true,
@@ -121,6 +143,7 @@ export class LocalLLMService extends Service {
   }
 
   async unload(): Promise<void> {
+    if (this.loadPromise) await this.loadPromise.catch(() => {});
     if (this.engine) {
       await this.engine.unload();
       this.engine = null;
