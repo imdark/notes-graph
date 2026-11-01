@@ -8,6 +8,7 @@ import {
   requiredProperties,
   ShadowlessElement,
 } from '@blocksuite/std';
+import { INLINE_ROOT_ATTR } from '@blocksuite/std/inline';
 import { effect, type Signal, signal } from '@preact/signals-core';
 import { html } from 'lit';
 import { property } from 'lit/decorators.js';
@@ -210,13 +211,25 @@ export class NotesGraphKeyboardToolbar extends SignalWatcher(
         const keyboardOverlap = this.keyboard.visible$.peek()
           ? this._keyboardOverlap
           : 0;
+        // That estimate is too high wherever the keyboard height and the
+        // window's shrink disagree (a phone whose reported keyboard height
+        // doesn't match how far the window shrank), and on iOS, where the
+        // visual viewport already ends at the keyboard so subtracting the
+        // overlap counts the keyboard twice. Too high, and tapping a word in
+        // the lower part of the page scrolled it, though it was in plain
+        // view. The bar's own box errs the same way (too high, during a
+        // resize), so the lower of the two is the line.
+        const barRect = bar?.getBoundingClientRect();
         const y1 =
-          this.panelOpened || !bar || !viewport
+          this.panelOpened || !barRect || !viewport
             ? this.getBoundingClientRect().y
-            : viewport.offsetTop +
-              viewport.height -
-              keyboardOverlap -
-              bar.getBoundingClientRect().height;
+            : Math.max(
+                viewport.offsetTop +
+                  viewport.height -
+                  keyboardOverlap -
+                  barRect.height,
+                barRect.top
+              );
         const gap = 8;
 
         // Reveal the caret, not the whole block. Aligning the block's
@@ -224,14 +237,22 @@ export class NotesGraphKeyboardToolbar extends SignalWatcher(
         // wrapped paragraph, or a list item with nested children — whose
         // component contains them) jump the page so the tapped line ended
         // up far above the viewport.
-        const blockRect = block.getBoundingClientRect();
         const caretRect = getCaretRect(block);
-        const y2 = caretRect?.bottom ?? blockRect.bottom;
+        // Without a caret in the block (the native selection hasn't caught
+        // up with a tap yet), fall back to the block's own text, not the
+        // whole component: a list item's or toggle's component holds its
+        // children, and its bottom sent the page far from the tapped line.
+        const targetRect =
+          caretRect ??
+          (
+            block.querySelector(`[${INLINE_ROOT_ATTR}]`) ?? block
+          ).getBoundingClientRect();
+        const y2 = targetRect.bottom;
 
         if (y2 < y1 - gap) return;
 
         // Never scroll the target's top out of view.
-        const top = caretRect?.top ?? blockRect.top;
+        const top = targetRect.top;
         const delta = Math.min(y2 - y1 + gap, top - gap);
         if (delta <= 0) return;
 
