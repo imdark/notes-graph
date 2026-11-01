@@ -13,8 +13,13 @@ harness runs under `wf` on the machine, so it has the workspace's MCP tools.
   relays between viewers and devices and keeps 512 KB of recent output per
   session in memory. Both sides need `Workspace.Settings.Update`, since this
   is a shell on the machine.
-- **Device** (`wf terminal serve`): connects as a device with its PAT,
+- **Device** (`wf terminal serve`, in the wf repo's
+  `workflow/deploy/terminal_serve.py`): connects as a device with its PAT,
   starts each requested harness in a pty, streams output, applies input.
+  `wf terminal install` keeps it running as a service beside `wf agent`.
+  Claude starts with the project's Claude account and NotesGraph's MCP tools.
+  A plain shell is refused unless the device's `~/.wf/config.yaml` sets
+  `terminal.allow_shell: true`.
 
 Leaving the page only detaches. Reattaching replays the buffered output from
 the viewer's last offset. If the server restarts the buffer is lost; the
