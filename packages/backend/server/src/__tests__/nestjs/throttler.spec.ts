@@ -2,7 +2,7 @@ import { Controller, Get, HttpStatus, UseGuards } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
 import ava, { TestFn } from 'ava';
 import Sinon from 'sinon';
-import { type Response } from 'supertest';
+import supertest, { type Response } from 'supertest';
 
 import { AppModule } from '../../app.module';
 import { ConfigModule } from '../../base/config';
@@ -13,6 +13,7 @@ import {
   ThrottlerStorage,
 } from '../../base/throttler';
 import { Public } from '../../core/auth';
+import { Models } from '../../models';
 import { createTestingApp, TestingApp } from '../utils';
 
 const test = ava as TestFn<{
@@ -394,6 +395,22 @@ test('should use specified throttler for authenticated user', async t => {
 
   t.is(headers.limit, '20');
   t.is(headers.remaining, '19');
+});
+
+test('should not throttle unprotected routes for a personal access token', async t => {
+  const { app } = t.context;
+
+  const user = await app.createUser();
+  const { token } = await app.get(Models).accessToken.create({
+    userId: user.id,
+    name: 'agent runner',
+  });
+  const res = await supertest(app.getHttpServer())
+    .get('/nonthrottled/default')
+    .set('Authorization', `Bearer ${token}`)
+    .expect(200);
+
+  t.is(rateLimitHeaders(res).limit, undefined!);
 });
 
 test('should separate anonymous and authenticated user throttlers', async t => {
