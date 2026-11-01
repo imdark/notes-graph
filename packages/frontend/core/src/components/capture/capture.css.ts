@@ -11,6 +11,14 @@ export const root = style({
   height: '100%',
   margin: '0 auto',
   padding: '24px 16px',
+  selectors: {
+    // While the keyboard is up there is little height left, so the mic
+    // shrinks and the text box keeps most of it.
+    '&[data-compact="true"]': {
+      gap: 12,
+      padding: '12px 16px',
+    },
+  },
 });
 
 // Recording is a live state, so the ring keeps going for as long as it lasts.
@@ -41,6 +49,12 @@ export const mic = style({
     '&:focus-visible': {
       outline: `3px solid ${cssVarV2('layer/insideBorder/primaryBorder')}`,
       outlineOffset: 4,
+    },
+    [`${root}[data-compact="true"] &`]: {
+      width: 56,
+      height: 56,
+      marginTop: 0,
+      fontSize: 28,
     },
   },
 });
@@ -73,6 +87,9 @@ export const textarea = style({
   selectors: {
     '&:focus-visible': {
       borderColor: cssVarV2('layer/insideBorder/primaryBorder'),
+    },
+    [`${root}[data-compact="true"] &`]: {
+      minHeight: 72,
     },
   },
 });
