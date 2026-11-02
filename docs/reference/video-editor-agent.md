@@ -158,19 +158,33 @@ later run picks up where the last stopped, and so the phone can read it:
 
 ### 3.4 The plugin (`com.notesgraph.video-editor`)
 
-Permissions `ui, docs, workspace, net, agents`. Client:
+Permissions `ui, docs, workspace, storage, agents`. Plain ESM in
+`tools/plugin-template/video-editor/`, like the other bundled plugins. Client:
 
-- Command **Video editor: new project** → creates the project note from a
-  template (Footage, Brief, Edit log, Cuts, Deliverables).
-- Command **Video editor: install agent** → installs the "Video editor" agent
-  (template below) into the workspace if missing.
-- Sidebar panel (desktop): project list with last preview and status.
+- Command **Video editor: New project** → creates the project note with the
+  sections the agent reads and writes (Footage, Brief, Edit log, Cuts,
+  Deliverables).
+- Command **Video editor: Install the agent** → installs the "Video editor"
+  agent from the app's template if the workspace has none, on the device the
+  panel chose (or the one device there is).
+- Command **Video editor: Edit this video** → installs if needed, starts a run
+  on the current note; the questions and previews go to the phone.
+- Sidebar panel (desktop): device picker, the two buttons, the project notes
+  ("Video: …") each with Edit.
 
-`agents` is a **new SDK capability**: `ctx.agents.installTemplate(id)` and
-`ctx.agents.start(agentId, target)`, mapped in `context-factory.ts` to
-`AgentsService` / `AgentRunSessionService`. It is small, and it is the one
-thing a plugin genuinely cannot do today. Until it lands, the plugin's
-commands open the agent editor pre-filled instead.
+`agents` is a **new SDK capability**: `listTemplates`, `list`, `listDevices`,
+`installTemplate(id, {deviceKey, scope})` (idempotent) and
+`start(agentId, target)`, mapped in `context-factory.ts` to `AgentsService` /
+`AgentRunSessionService` through a workspace bridge like `setActiveDocs`. It is
+small, and it is the one thing a plugin genuinely cannot do otherwise.
+
+**Publishing.** The marketplace sidecar seeds every folder under
+`tools/plugin-template/` as a trusted first-party plugin on startup, and the
+prod deploy rebuilds that image when the folder changes. So the plugin ships
+with the normal release; the CLI publish path (no auth header, entry files
+only) is not used. A plugin installed on the web is installed on that device
+only (GlobalState), so the phone gets a Plugins page in its settings to
+install from the same marketplace.
 
 The template itself (`modules/agents/services/agent-templates.ts`):
 `VIDEO_EDITOR_TEMPLATE` with `kind: 'worker'`, `harness: 'remote'`,
@@ -201,12 +215,12 @@ Done when: start on the web from a project note whose Footage is a Mac
 folder, answer strategy and preview questions from the phone, `final.mp4`
 linked in the note.
 
-**Phase 2 — plugin in the store, footage from the phone.**
-SDK `agents` capability; plugin published to the marketplace sidecar
-(fix: CLI publish sends no auth, bundles only entry files); phone video
-picker and `READ_MEDIA_VIDEO` on Android, `.videos` on iOS; attachment
-blocks as footage; timeline widget; mobile "New video project" entry on the
-Agents page.
+**Phase 2 — plugin in the store (built 2026-11-02).**
+SDK `agents` capability; the plugin as a bundled first-party plugin, so the
+release publishes it; a Plugins page in the phone's settings. Deferred to
+2b: phone video picker and `READ_MEDIA_VIDEO` on Android, `.videos` on iOS;
+attachment blocks as footage; timeline widget; a "New video project" entry
+on the phone's Agents page.
 
 **Phase 3 — runs without the Mac.**
 ffmpeg + python in the agent-runner image; Runpod GPU device; EDL block so

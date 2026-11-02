@@ -11,6 +11,7 @@ import { AboutGroup } from './about';
 import { AppearanceGroup } from './appearance';
 import { ExperimentalFeatureSetting } from './experimental';
 import { OthersGroup } from './others';
+import { PluginsSetting } from './plugins';
 import { SecurityGroup } from './security';
 import * as styles from './style.css';
 import { UserSubscription } from './subscription';
@@ -32,6 +33,7 @@ const MobileSetting = () => {
       <SyncGroup />
       <SecurityGroup />
       <AboutGroup />
+      <PluginsSetting />
       <ExperimentalFeatureSetting />
       <OthersGroup />
     </div>
