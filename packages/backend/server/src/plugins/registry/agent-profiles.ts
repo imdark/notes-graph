@@ -562,6 +562,11 @@ print(f"saved {sys.argv[1]}: {len(ranges)} ranges, {total:.1f}s of picture")' {j
         `${V} cd {job_dir}/edit && if [ "$ARG_PREVIEW" = 1 ]; then out="\${ARG_OUTPUT:-{job_dir}/edit/preview.mp4}"; else out="\${ARG_OUTPUT:-{job_dir}/edit/final.mp4}"; fi; ` +
         '"$P" "$V/helpers/render.py" "${ARG_EDL:-{job_dir}/edit/edl.json}" -o "$out" ' +
         '$([ "$ARG_PREVIEW" = 1 ] && echo --preview) $([ "$ARG_SUBTITLES" = 1 ] && echo --build-subtitles) && ' +
+        // render.py keeps 1080p even for a preview; a long one would pass
+        // the 100 MB upload cap, so a big preview is sent on at 720p.
+        'if [ "$ARG_PREVIEW" = 1 ] && [ "$(stat -f %z "$out" 2>/dev/null || stat -c %s "$out")" -gt 41943040 ]; then ' +
+        'small="${out%.*}.720p.mp4"; ffmpeg -y -v error -i "$out" -vf scale=-2:720 -c:v libx264 -preset veryfast -crf 27 -c:a copy -movflags +faststart "$small" && ' +
+        'echo "preview over 40 MB; upload the 720p copy:" && out="$small"; fi && ' +
         'echo && echo "rendered $out" && ffprobe -v error -show_entries format=duration,size -of default=nw=1 "$out"',
       params: {
         preview: { description: '1 for a fast 720p preview.' },
