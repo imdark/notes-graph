@@ -2,6 +2,7 @@ import { MicrophoneIcon } from '@blocksuite/icons/rc';
 import type { Store } from '@blocksuite/notesgraph/store';
 import { Button } from '@notesgraph/component';
 import { DocsService } from '@notesgraph/core/modules/doc';
+import { FeatureFlagService } from '@notesgraph/core/modules/feature-flag';
 import {
   appendDictation,
   type SpeechToTextError,
@@ -10,7 +11,7 @@ import {
   writeCapture,
 } from '@notesgraph/core/modules/voice-tasks';
 import { WorkbenchService } from '@notesgraph/core/modules/workbench';
-import { useService } from '@notesgraph/infra';
+import { useLiveData, useService } from '@notesgraph/infra';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import * as styles from './capture.css';
@@ -50,6 +51,9 @@ export const CaptureView = ({
   const voice = useService(VoiceTasksService);
   const docsService = useService(DocsService);
   const workbench = useService(WorkbenchService).workbench;
+  const handOffEnabled = useLiveData(
+    useService(FeatureFlagService).flags.enable_capture_hand_off.$
+  );
 
   const [text, setText] = useState('');
   const [partial, setPartial] = useState('');
@@ -240,14 +244,16 @@ export const CaptureView = ({
         <span className={styles.status} data-testid="capture-status">
           {status}
         </span>
-        <Button
-          disabled={!docId}
-          aria-expanded={handingOff}
-          onClick={() => setHandingOff(open => !open)}
-          data-testid="capture-hand-off-toggle"
-        >
-          Hand to agent
-        </Button>
+        {handOffEnabled ? (
+          <Button
+            disabled={!docId}
+            aria-expanded={handingOff}
+            onClick={() => setHandingOff(open => !open)}
+            data-testid="capture-hand-off-toggle"
+          >
+            Hand to agent
+          </Button>
+        ) : null}
         <Button disabled={!docId} onClick={openNote}>
           Open note
         </Button>
@@ -255,7 +261,7 @@ export const CaptureView = ({
           New capture
         </Button>
       </div>
-      {handingOff && docId ? (
+      {handOffEnabled && handingOff && docId ? (
         <CaptureHandOff
           docId={docId}
           onBeforeHandOff={flush}
