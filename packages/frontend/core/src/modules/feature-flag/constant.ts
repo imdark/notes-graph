@@ -392,7 +392,7 @@ export const NOTESGRAPH_FLAGS = {
     defaultState: true,
   },
   enable_monitor_view: {
-    commit: '',
+    commit: 'cab0a86b11a5d0ffcf92f62905dc410f8952f5f4',
     category: 'notesgraph',
     displayName: 'Monitor view',
     description:
