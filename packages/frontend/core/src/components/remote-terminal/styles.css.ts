@@ -67,6 +67,62 @@ export const screen = style({
   selectors: {
     '&:focus': { boxShadow: `0 0 0 2px ${cssVarV2('button/primary')}` },
   },
+  '@media': {
+    // A phone: more columns, and room left for the keyboard.
+    '(pointer: coarse)': {
+      height: 'min(480px, 50vh)',
+      fontSize: 10,
+      lineHeight: '13px',
+      padding: 6,
+    },
+  },
+});
+
+export const touch = style({
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 6,
+});
+
+export const keys = style({
+  display: 'flex',
+  gap: 6,
+  overflowX: 'auto',
+});
+
+export const key = style({
+  flexShrink: 0,
+  minWidth: 40,
+  height: 34,
+  padding: '0 10px',
+  borderRadius: 8,
+  fontSize: 13,
+  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
+  color: cssVarV2('text/primary'),
+  background: cssVarV2('layer/background/secondary'),
+  border: `1px solid ${cssVarV2('layer/insideBorder/border')}`,
+  selectors: {
+    '&:disabled': { opacity: 0.5 },
+  },
+});
+
+export const compose = style({
+  display: 'flex',
+  alignItems: 'flex-end',
+  gap: 6,
+});
+
+export const input = style({
+  flex: 1,
+  minHeight: 36,
+  maxHeight: 120,
+  padding: '8px 10px',
+  borderRadius: 8,
+  fontSize: 15,
+  resize: 'vertical',
+  color: cssVarV2('text/primary'),
+  background: cssVarV2('layer/background/primary'),
+  border: `1px solid ${cssVarV2('layer/insideBorder/border')}`,
 });
 
 export const measure = style({

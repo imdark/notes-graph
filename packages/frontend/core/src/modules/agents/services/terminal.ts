@@ -25,6 +25,20 @@ export interface TerminalSessionInfo {
   length: number;
 }
 
+/**
+ * Where the terminal socket gets a token to sign in with. The web app needs
+ * none (its cookie goes along); the phone app has no cookie for the server,
+ * so it hands over the token it signs its other requests with.
+ */
+let readSocketToken: ((endpoint: string) => Promise<string | null>) | null =
+  null;
+
+export function configureTerminalSocketAuth(
+  read: (endpoint: string) => Promise<string | null>
+) {
+  readSocketToken = read;
+}
+
 interface Ack<T> {
   data?: T;
   error?: { message: string };
@@ -181,9 +195,17 @@ export class TerminalService extends Service {
     if (this.socket) return this.socket;
     const server = this.workspaceServerService.server;
     if (!server) throw new Error('This workspace has no server to connect to.');
-    this.socket = io(server.baseUrl, {
+    const endpoint = server.baseUrl;
+    this.socket = io(endpoint, {
       withCredentials: true,
       transports: ['websocket', 'polling'],
+      // Read on every (re)connect, so a refreshed token is picked up.
+      auth: cb => {
+        if (!readSocketToken) return cb({});
+        readSocketToken(endpoint)
+          .then(token => cb(token ? { token, tokenType: 'jwt' } : {}))
+          .catch(() => cb({}));
+      },
     });
     return this.socket;
   }
