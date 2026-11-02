@@ -4,6 +4,7 @@ import { FetchService, type WorkspaceServerService } from '../../cloud';
 import type { FetchInit } from '../../cloud/services/fetch';
 import type { WorkspaceService } from '../../workspace';
 import { monitorTrend, type Trend } from './monitor-trend';
+import type { RemoteJob } from './remote-runner';
 
 /**
  * Monitors: the server watches something on a schedule and keeps a block up
@@ -223,6 +224,16 @@ export class MonitorsService extends Service {
       `/${id}/readings`
     );
     return readings;
+  }
+
+  /**
+   * The device jobs it ran, newest first: a command check's or an agent's.
+   * A url check runs on the server and has none. Without their transcripts;
+   * read one with RemoteAgentRunnerService.
+   */
+  async runs(id: string): Promise<RemoteJob[]> {
+    const { runs } = await this.json<{ runs: RemoteJob[] }>(`/${id}/runs`);
+    return runs;
   }
 
   /** Trends by monitor, kept until its next reading lands. */

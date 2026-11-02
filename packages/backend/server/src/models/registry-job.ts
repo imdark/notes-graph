@@ -155,12 +155,18 @@ export class RegistryJobModel extends BaseModel {
 
   async list(
     workspaceId: string,
-    filter: { deviceKey?: string; status?: string; limit?: number } = {}
+    filter: {
+      deviceKey?: string;
+      status?: string;
+      agentId?: string;
+      limit?: number;
+    } = {}
   ): Promise<RegistryJob[]> {
     return this.db.registryJob.findMany({
       where: {
         workspaceId,
         ...(filter.deviceKey ? { deviceKey: filter.deviceKey } : {}),
+        ...(filter.agentId ? { agentId: filter.agentId } : {}),
         ...(filter.status ? { status: filter.status } : {}),
       },
       orderBy: { createdAt: 'desc' },

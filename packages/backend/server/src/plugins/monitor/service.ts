@@ -206,7 +206,7 @@ export class MonitorService {
       monitor.deviceKey,
       {
         ...body,
-        agentId: `monitor:${monitor.id}`,
+        agentId: monitorAgentId(monitor.id),
         title: monitor.name,
         targetKind: 'block',
         docId: monitor.docId,
@@ -496,6 +496,9 @@ export class MonitorService {
     return monitor;
   }
 }
+
+/** The agent id a monitor's device jobs run as, so its runs can be found. */
+export const monitorAgentId = (monitorId: string) => `monitor:${monitorId}`;
 
 /** An above/below condition compares a number, so the run must report one. */
 const isNumeric = (condition: Condition | null) =>
