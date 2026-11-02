@@ -85,6 +85,17 @@ export interface Question {
   answeredAt: number | null;
 }
 
+/** A file the run sent back; `url` is relative to the server. */
+export interface Artifact {
+  id: string;
+  key: string;
+  name: string;
+  mime: string;
+  size: number;
+  url: string;
+  createdAt: number;
+}
+
 /** An instruction the person sent the job while it ran. */
 export interface Steer {
   id: string;
@@ -236,6 +247,8 @@ export class NotesGraphApi {
       text: string;
       detail?: string | null;
       options?: string[];
+      /** Keys of this job's artifacts to show with the question. */
+      attachments?: string[];
     }
   ): Promise<Question> {
     const { question: asked } = await this.request<{ question: Question }>(
@@ -244,6 +257,43 @@ export class NotesGraphApi {
       question
     );
     return asked;
+  }
+
+  /**
+   * Send a file the run produced (a preview, a render) back to NotesGraph.
+   * The body is the bytes themselves; the server caps the size (100 MB).
+   */
+  async uploadArtifact(
+    workspaceId: string,
+    jobId: string,
+    name: string,
+    bytes: Uint8Array
+  ): Promise<Artifact> {
+    const path = `${this.base(workspaceId)}/jobs/${jobId}/artifacts?name=${encodeURIComponent(name)}`;
+    let response: Response;
+    try {
+      response = await this.fetchImpl(`${this.url}${path}`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${this.token}`,
+          'Content-Type': 'application/octet-stream',
+        },
+        body: bytes,
+      });
+    } catch (err) {
+      throw new NotesGraphError(
+        `NotesGraph unreachable at ${this.url}: ${err}`
+      );
+    }
+    const text = await response.text();
+    if (!response.ok) {
+      throw new NotesGraphError(
+        `POST ${path} failed: ${response.status} ${text.slice(0, 300)}`,
+        response.status
+      );
+    }
+    const { artifact } = JSON.parse(text) as { artifact: Artifact };
+    return artifact;
   }
 
   /** Take the instructions sent to the job since the last take; each comes once. */

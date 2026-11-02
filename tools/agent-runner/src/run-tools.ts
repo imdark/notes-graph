@@ -3,6 +3,9 @@
  * it, and putting a tool call to them for permission. The cloud twin of wf's
  * agent_mcp.py, in-process instead of a stdio MCP server.
  */
+import fs from 'node:fs/promises';
+import { basename } from 'node:path';
+
 import {
   type CanUseTool,
   createSdkMcpServer,
@@ -20,6 +23,8 @@ import {
 
 /** Matches the server's cap on a question's detail (registry jobs.ts MAX_DETAIL). */
 const MAX_DETAIL = 200_000;
+/** Matches the server's cap on one artifact (registry jobs.ts MAX_ARTIFACT_BYTES). */
+const MAX_ARTIFACT_BYTES = 100 * 1_048_576;
 
 export class JobCancelled extends Error {}
 
@@ -46,7 +51,11 @@ export async function ask(
   ctx: RunContext,
   kind: 'question' | 'permission',
   text: string,
-  extra: { detail?: string | null; options?: string[] } = {}
+  extra: {
+    detail?: string | null;
+    options?: string[];
+    attachments?: string[];
+  } = {}
 ): Promise<Question> {
   const question = await ctx.api.ask(ctx.workspaceId, ctx.jobId, {
     kind,
@@ -172,17 +181,81 @@ export function runServer(ctx: RunContext) {
             .describe(
               'Optional short choices, e.g. ["Yes, open the PR", "No, stop here"]. At most 10.'
             ),
+          attachments: z
+            .array(z.string())
+            .optional()
+            .describe(
+              'Keys of files you sent with upload_artifact to show with the ' +
+                'question (a preview video, a filmstrip). At most 6.'
+            ),
         },
-        async ({ question, options }) => {
+        async ({ question, options, attachments }) => {
           const asked = question.trim();
           if (!asked) return text('question is required', true);
           try {
             const answer = await ask(ctx, 'question', asked, {
               options: (options ?? []).map(o => o.trim()).filter(Boolean),
+              ...(attachments?.length
+                ? {
+                    attachments: attachments.map(a => a.trim()).filter(Boolean),
+                  }
+                : {}),
             });
             return await withSteers(ctx, answer.answer ?? '');
           } catch (err) {
             return stopOr(err);
+          }
+        }
+      ),
+      tool(
+        'upload_artifact',
+        'Send a file this run produced to NotesGraph: a preview video, a ' +
+          'filmstrip PNG, a final render, a subtitle file. It is listed on ' +
+          'the run and can be shown with a question: pass the returned key in ' +
+          'ask_user\'s attachments, with options like ["Approve", "Revise", ' +
+          '"Try another take"], so the person sees the preview where they ' +
+          'answer. Files are capped at 100 MB; render previews at 720p.',
+        {
+          path: z
+            .string()
+            .describe('Absolute path of the file on this machine.'),
+          name: z
+            .string()
+            .optional()
+            .describe('The name to show; defaults to the file name.'),
+        },
+        async ({ path, name }) => {
+          let bytes: Uint8Array;
+          try {
+            const stat = await fs.stat(path);
+            if (!stat.isFile()) return text(`${path} is not a file`, true);
+            if (stat.size > MAX_ARTIFACT_BYTES) {
+              return text(
+                `${path} is ${Math.round(stat.size / 1_048_576)} MB; the cap is 100 MB. ` +
+                  'Render a shorter or lower-resolution preview (render.py --preview) and send that.',
+                true
+              );
+            }
+            bytes = await fs.readFile(path);
+          } catch (err) {
+            return text(`Could not read ${path}: ${err}`, true);
+          }
+          try {
+            const artifact = await ctx.api.uploadArtifact(
+              ctx.workspaceId,
+              ctx.jobId,
+              name?.trim() || basename(path),
+              bytes
+            );
+            return await withSteers(
+              ctx,
+              `Uploaded ${artifact.name} (${Math.round(artifact.size / 1024)} KB, ${artifact.mime}).\n` +
+                `key: ${artifact.key}\nurl: ${artifact.url}\n` +
+                'Pass the key in ask_user attachments to show it with a question.'
+            );
+          } catch (err) {
+            if (err instanceof JobCancelled) return stopOr(err);
+            return text(`Upload failed: ${err}`, true);
           }
         }
       ),

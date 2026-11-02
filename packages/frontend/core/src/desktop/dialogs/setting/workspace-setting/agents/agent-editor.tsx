@@ -35,6 +35,7 @@ import {
   RESEARCH_MODEL,
   savedPlacement,
   type SkillNote,
+  VIDEO_EDITOR_MODEL,
   WORKFLOW_MODEL,
 } from '@notesgraph/core/modules/agents';
 import {
@@ -112,6 +113,11 @@ const REMOTE_HARNESSES = [
     id: RESEARCH_MODEL,
     name: 'Research (OmniSeek)',
     category: 'Claude Code + OmniSeek: deep, cross-lingual, cited',
+  },
+  {
+    id: VIDEO_EDITOR_MODEL,
+    name: 'Video editor (video-use)',
+    category: 'Claude Code + ffmpeg: transcribe, cut, preview on your phone',
   },
 ];
 
@@ -697,28 +703,36 @@ export const AgentEditor = ({
                         ? 'Claude Code with OmniSeek on the server: searches across ' +
                           'languages, reads papers and PDFs, follows citations, and ' +
                           'answers with sources.'
-                        : harness === 'remote'
-                          ? model === CLAUDE_CODE_MODEL
-                            ? 'Runs the claude CLI on the device with your notes as tools. ' +
-                              'When it needs a fact or a permission it asks you here, then ' +
-                              'saves the answer to your notes so it does not ask again.'
-                            : model === WORKFLOW_MODEL
-                              ? 'The same Claude Code, started like `wf start` + `wf ai`: ' +
-                                'a ticket in the device’s task backend, its own branch and ' +
-                                'worktree, and the project’s Claude account and skills.'
-                              : model === RESEARCH_MODEL
-                                ? 'Claude Code with OmniSeek on the device: searches across ' +
-                                  'languages, reads papers and PDFs, follows citations, and ' +
-                                  'answers with sources. Needs OmniSeek running on that device.'
-                                : "Default runs the device's configured AI provider."
-                          : harness === 'research'
-                            ? 'The server’s model researches with OmniSeek: searches across ' +
-                              'languages, reads pages and papers, follows citations, and ' +
-                              'answers with sources.'
-                            : harness === 'cloud'
-                              ? 'Claude Code, Workflow and Research run on the server’s own ' +
-                                'runner; any other choice is the server copilot’s model.'
-                              : 'A different on-device model is downloaded the first time it runs.'}
+                        : onCloud && model === VIDEO_EDITOR_MODEL
+                          ? '⚠ The server’s runner has no ffmpeg or GPU. Pick a Mac ' +
+                            'under Remote device for video edits.'
+                          : harness === 'remote'
+                            ? model === CLAUDE_CODE_MODEL
+                              ? 'Runs the claude CLI on the device with your notes as tools. ' +
+                                'When it needs a fact or a permission it asks you here, then ' +
+                                'saves the answer to your notes so it does not ask again.'
+                              : model === WORKFLOW_MODEL
+                                ? 'The same Claude Code, started like `wf start` + `wf ai`: ' +
+                                  'a ticket in the device’s task backend, its own branch and ' +
+                                  'worktree, and the project’s Claude account and skills.'
+                                : model === RESEARCH_MODEL
+                                  ? 'Claude Code with OmniSeek on the device: searches across ' +
+                                    'languages, reads papers and PDFs, follows citations, and ' +
+                                    'answers with sources. Needs OmniSeek running on that device.'
+                                  : model === VIDEO_EDITOR_MODEL
+                                    ? 'Claude Code with the video-use skill on the device: it ' +
+                                      'transcribes the footage, proposes a cut, and sends each ' +
+                                      'preview to you here to approve or revise. Needs ffmpeg ' +
+                                      'and Python on that device; the run sets up the rest.'
+                                    : "Default runs the device's configured AI provider."
+                            : harness === 'research'
+                              ? 'The server’s model researches with OmniSeek: searches across ' +
+                                'languages, reads pages and papers, follows citations, and ' +
+                                'answers with sources.'
+                              : harness === 'cloud'
+                                ? 'Claude Code, Workflow and Research run on the server’s own ' +
+                                  'runner; any other choice is the server copilot’s model.'
+                                : 'A different on-device model is downloaded the first time it runs.'}
               </span>
             </div>
 

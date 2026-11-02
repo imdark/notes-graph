@@ -1,9 +1,23 @@
+import { randomBytes } from 'node:crypto';
+
 import { Injectable, Logger, Optional } from '@nestjs/common';
-import type { Prisma, RegistryJob, RegistryJobQuestion } from '@prisma/client';
+import type {
+  Prisma,
+  RegistryJob,
+  RegistryJobArtifact,
+  RegistryJobQuestion,
+} from '@prisma/client';
 
 // See the note in service.ts: a plain HttpException is reported as a 500 by
 // the global filter, so bad input has to be a UserFriendlyError.
-import { ActionForbidden, BadRequest, EventBus, NotFound } from '../../base';
+import {
+  ActionForbidden,
+  BadRequest,
+  EventBus,
+  NotFound,
+  OneMB,
+} from '../../base';
+import { WorkspaceBlobStorage } from '../../core/storage';
 import { Models } from '../../models';
 import {
   JOB_TERMINAL,
@@ -109,6 +123,8 @@ export interface JobDto {
   questions?: QuestionDto[];
   /** What the person sent the run while it worked. Single-job reads only. */
   steers?: SteerDto[];
+  /** Files the run sent back (previews, renders). Single-job reads only. */
+  artifacts?: ArtifactDto[];
   /**
    * What the run changed (notes, file edits, git diff and commits), as its
    * runner recorded it; null before it ended or from an older runner.
@@ -137,10 +153,43 @@ export interface QuestionDto {
   detail: string | null;
   /** For a question: choices offered; empty means free text only. */
   options: string[];
+  /**
+   * Blob keys of the job's artifacts shown with the question: a preview the
+   * person approves or sends back. Fetched at
+   * `/api/workspaces/:workspaceId/blobs/:key`.
+   */
+  attachments: string[];
   answer: string | null;
   allowed: boolean | null;
   createdAt: number;
   answeredAt: number | null;
+}
+
+/** A file the run sent back (see RegistryJobArtifact). */
+export interface ArtifactDto {
+  id: string;
+  key: string;
+  name: string;
+  mime: string;
+  size: number;
+  /** Where to fetch it, relative to the server. */
+  url: string;
+  createdAt: number;
+}
+
+export const artifactUrl = (workspaceId: string, key: string) =>
+  `/api/workspaces/${workspaceId}/blobs/${encodeURIComponent(key)}`;
+
+export function toArtifactDto(artifact: RegistryJobArtifact): ArtifactDto {
+  return {
+    id: artifact.id,
+    key: artifact.key,
+    name: artifact.name,
+    mime: artifact.mime,
+    size: artifact.size,
+    url: artifactUrl(artifact.workspaceId, artifact.key),
+    createdAt: artifact.createdAt.getTime() / 1000,
+  };
 }
 
 export function toQuestionDto(question: RegistryJobQuestion): QuestionDto {
@@ -150,6 +199,7 @@ export function toQuestionDto(question: RegistryJobQuestion): QuestionDto {
     text: question.text,
     detail: question.detail,
     options: question.options ?? [],
+    attachments: question.attachments ?? [],
     answer: question.answer,
     allowed: question.allowed,
     createdAt: question.createdAt.getTime() / 1000,
@@ -180,6 +230,7 @@ export interface JobDtoOptions {
   /** Include the transcript, starting at this absolute offset (0 = all kept). */
   logFrom?: number;
   questions?: RegistryJobQuestion[];
+  artifacts?: RegistryJobArtifact[];
 }
 
 export function toJobDto(
@@ -258,6 +309,62 @@ function sliceLog(job: RegistryJob, from: number) {
 
 /** Most a run's recorded changes may take, as JSON; runners cap below it. */
 export const MAX_CHANGES_BYTES = 200_000;
+
+/**
+ * Most one artifact may weigh: the raw body parser's own limit (server.ts),
+ * and enough for a 720p preview of a few minutes. A final render that is
+ * bigger stays on the device and the run says where.
+ */
+export const MAX_ARTIFACT_BYTES = 100 * OneMB;
+/** Previews a run may send; iterating past this is a run that won't converge. */
+export const MAX_ARTIFACTS_PER_JOB = 40;
+/** Files shown with one question. */
+const MAX_ATTACHMENTS = 6;
+
+/** A file name safe for a blob key: one segment, plain characters, short. */
+export function safeArtifactName(name: unknown): string {
+  const base = String(name ?? '')
+    .split(/[\\/]/)
+    .pop()!
+    .normalize('NFKD')
+    .replace(/[^\w.-]+/g, '-')
+    .replace(/^[-.]+|[-.]+$/g, '')
+    .slice(0, 80);
+  return base || 'artifact';
+}
+
+const MIME_BY_EXT: Record<string, string> = {
+  mp4: 'video/mp4',
+  m4v: 'video/mp4',
+  mov: 'video/quicktime',
+  webm: 'video/webm',
+  png: 'image/png',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  gif: 'image/gif',
+  webp: 'image/webp',
+  srt: 'text/plain',
+  json: 'application/json',
+  md: 'text/markdown',
+  txt: 'text/plain',
+};
+
+export function mimeFromName(name: string): string | undefined {
+  const ext = name.split('.').pop()?.toLowerCase();
+  return ext ? MIME_BY_EXT[ext] : undefined;
+}
+
+/** A question's attachments: trimmed keys, de-duplicated, capped. */
+function parseAttachments(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  for (const item of value) {
+    const key = String(item ?? '').trim();
+    if (key && !key.includes('/')) seen.add(key);
+    if (seen.size >= MAX_ATTACHMENTS) break;
+  }
+  return [...seen];
+}
 
 const jsonBytes = (value: unknown) =>
   Buffer.byteLength(JSON.stringify(value), 'utf8');
@@ -484,8 +591,17 @@ export class RegistryJobService {
     @Optional() private readonly rules?: AgentRules,
     @Optional() private readonly skillNotes?: SkillNoteService,
     @Optional() private readonly memory?: AgentMemoryService,
-    @Optional() private readonly gates?: JobGates
+    @Optional() private readonly gates?: JobGates,
+    @Optional() private readonly blobStorage?: WorkspaceBlobStorage
   ) {}
+
+  /** Where a run's files go; absent only in tests built without storage. */
+  private get blobs(): WorkspaceBlobStorage {
+    if (!this.blobStorage) {
+      throw new BadRequest('This server keeps no files for agent runs');
+    }
+    return this.blobStorage;
+  }
 
   /**
    * An admin-only device (the prod host, whose runner has a shell there) runs
@@ -737,7 +853,71 @@ export class RegistryJobService {
       logFrom === undefined
         ? undefined
         : await this.models.registryJob.listQuestions(id);
-    return toJobDto(job, { logFrom, questions });
+    const artifacts =
+      logFrom === undefined
+        ? undefined
+        : await this.models.registryJob.listArtifacts(id);
+    return toJobDto(job, { logFrom, questions, artifacts });
+  }
+
+  /**
+   * A running job sends a file back: a preview to approve, a filmstrip, the
+   * final render. The bytes go to the workspace's blob storage under a key of
+   * their own (one path segment, as the blob route wants), the row to the job.
+   */
+  async addArtifact(
+    workspaceId: string,
+    jobId: string,
+    name: string,
+    bytes: Buffer
+  ): Promise<ArtifactDto> {
+    const job = await this.runningJob(workspaceId, jobId);
+    if (job.status !== 'running') {
+      throw new BadRequest(`Job '${jobId}' is ${job.status}, not running`);
+    }
+    if (bytes.length === 0) {
+      throw new BadRequest('The file is empty');
+    }
+    if (bytes.length > MAX_ARTIFACT_BYTES) {
+      throw new BadRequest(
+        `The file is ${Math.round(bytes.length / OneMB)} MB; artifacts are capped at ${MAX_ARTIFACT_BYTES / OneMB} MB. Send a shorter or lower-resolution preview.`
+      );
+    }
+    const count = await this.models.registryJob.countArtifacts(jobId);
+    if (count >= MAX_ARTIFACTS_PER_JOB) {
+      throw new BadRequest(
+        `This run already sent ${count} files; at most ${MAX_ARTIFACTS_PER_JOB} per run.`
+      );
+    }
+    const safeName = safeArtifactName(name);
+    const key = `agent-${jobId.slice(0, 8)}-${randomBytes(5).toString('hex')}-${safeName}`;
+    await this.blobs.put(workspaceId, key, bytes);
+    const stored = await this.blobs.get(workspaceId, key);
+    const mime =
+      stored.metadata?.contentType ??
+      mimeFromName(safeName) ??
+      'application/octet-stream';
+    const artifact = await this.models.registryJob.addArtifact({
+      jobId,
+      workspaceId,
+      key,
+      name: safeName,
+      mime,
+      size: bytes.length,
+    });
+    this.logger.log(
+      `job ${jobId} sent artifact ${safeName} (${Math.round(bytes.length / 1024)} KB)`
+    );
+    return toArtifactDto(artifact);
+  }
+
+  async listArtifacts(
+    workspaceId: string,
+    jobId: string
+  ): Promise<ArtifactDto[]> {
+    await this.runningJob(workspaceId, jobId);
+    const artifacts = await this.models.registryJob.listArtifacts(jobId);
+    return artifacts.map(toArtifactDto);
   }
 
   /**
@@ -1111,11 +1291,19 @@ export class RegistryJobService {
       kind === 'permission' &&
       !refused &&
       (ownTool || (job.allowAllTools && !alwaysAsks(text, detail)));
+    // Only this job's own files can be shown with its question: a key the
+    // job did not upload is dropped, so a run can't surface another's.
+    const requested =
+      kind === 'question' ? parseAttachments(body.attachments) : [];
+    const attachments = requested.length
+      ? await this.models.registryJob.ownArtifactKeys(jobId, requested)
+      : [];
     const question = await this.models.registryJob.ask(jobId, {
       kind,
       text: text.slice(0, MAX_QUESTION),
       detail,
       options: kind === 'question' ? parseOptions(body.options) : [],
+      attachments,
       ...(allowAll ? { allowedBy: job.createdBy } : {}),
       ...(refused ? { refused } : {}),
     });

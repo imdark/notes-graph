@@ -342,6 +342,7 @@ function questionService(job: any, question?: any, open: any[] = []) {
         kept.push(except);
       },
       listQuestions: async () => open,
+      listArtifacts: async () => [],
       ask: async (jobId: string, input: any) => (
         asked.push(input),
         {
@@ -792,7 +793,9 @@ test('only a server admin can run work on an admin-only device', async t => {
   const device = { ...agentTarget, name: 'prod host', adminOnly: true };
   const { service, created } = makeService({ device, admins: ['admin-1'] });
   await t.throwsAsync(
-    service.enqueue(workspaceId, 'member-1', 'laptop', { instructions: 'df -h' }),
+    service.enqueue(workspaceId, 'member-1', 'laptop', {
+      instructions: 'df -h',
+    }),
     { message: /Only a server admin can run agents on 'prod host'/ }
   );
   await t.throwsAsync(
@@ -1175,6 +1178,7 @@ function lostRunnerService(job: any) {
     registryJob: {
       get: async () => row,
       listQuestions: async () => [],
+      listArtifacts: async () => [],
       noteLeaseLapsed: async (
         _id: string,
         lease: Date,
@@ -1246,6 +1250,7 @@ function unclaimedService(job: any, device: any) {
     registryJob: {
       get: async () => row,
       listQuestions: async () => [],
+      listArtifacts: async () => [],
       noteUnclaimed: async (_id: string, marker: string, note: string) => {
         if (row.log.includes(marker)) return false;
         notes.push(note);
