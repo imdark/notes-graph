@@ -382,6 +382,15 @@ export const NOTESGRAPH_FLAGS = {
     configurable: true,
     defaultState: false,
   },
+  enable_capture_hand_off: {
+    commit: '56aead484842c04f1ce49cc39745ab83f0807f72',
+    category: 'notesgraph',
+    displayName: 'Hand a capture to agents',
+    description:
+      'A "Hand to agent" button on the capture page: starts runs on the captured note with the agents you pick.',
+    configurable: true,
+    defaultState: true,
+  },
   enable_deploy_with_automations: {
     commit: 'efc80e3e44f72bbab0cdaf255426f159dbeb8354',
     category: 'notesgraph',

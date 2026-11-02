@@ -2,6 +2,7 @@ import { MicrophoneIcon } from '@blocksuite/icons/rc';
 import type { Store } from '@blocksuite/notesgraph/store';
 import { Button } from '@notesgraph/component';
 import { DocsService } from '@notesgraph/core/modules/doc';
+import { FeatureFlagService } from '@notesgraph/core/modules/feature-flag';
 import {
   appendDictation,
   type SpeechToTextError,
@@ -10,10 +11,11 @@ import {
   writeCapture,
 } from '@notesgraph/core/modules/voice-tasks';
 import { WorkbenchService } from '@notesgraph/core/modules/workbench';
-import { useService } from '@notesgraph/infra';
+import { useLiveData, useService } from '@notesgraph/infra';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import * as styles from './capture.css';
+import { CaptureHandOff } from './hand-off';
 
 /** How long typing has to pause before the note is rewritten. */
 const SAVE_DELAY_MS = 400;
@@ -28,7 +30,8 @@ const errorMessages: Record<SpeechToTextError, string> = {
  * Capture mode: a big mic and a text box for getting an idea down fast. The
  * first word typed or said creates an untitled note with no parent, so it
  * lands in the Inbox, and the note follows the text from then on. Nothing is
- * created for a capture that stays empty.
+ * created for a capture that stays empty. "Hand to agent" starts runs on the
+ * note with the agents picked from a list.
  *
  * Opened by the "NotesGraph Capture" launcher on Android and the capture
  * window on desktop.
@@ -48,12 +51,18 @@ export const CaptureView = ({
   const voice = useService(VoiceTasksService);
   const docsService = useService(DocsService);
   const workbench = useService(WorkbenchService).workbench;
+  const handOffEnabled = useLiveData(
+    useService(FeatureFlagService).flags.enable_capture_hand_off.$
+  );
 
   const [text, setText] = useState('');
   const [partial, setPartial] = useState('');
   const [listening, setListening] = useState(false);
   const [error, setError] = useState<SpeechToTextError | null>(null);
   const [docId, setDocId] = useState<string | null>(null);
+  const [handingOff, setHandingOff] = useState(false);
+  /** Names of the agents this capture was last handed to. */
+  const [handedTo, setHandedTo] = useState<string[]>([]);
 
   const sessionRef = useRef<SpeechToTextSession | null>(null);
   // Bumped per session and when the capture is left, so late callbacks can't
@@ -163,6 +172,8 @@ export const CaptureView = ({
     setText('');
     setPartial('');
     setDocId(null);
+    setHandingOff(false);
+    setHandedTo([]);
     textareaRef.current?.focus();
   }, [finishCapture]);
 
@@ -172,6 +183,22 @@ export const CaptureView = ({
     save();
     workbench.openDoc(docId, { at: openNoteAt });
   }, [docId, openNoteAt, save, stop, workbench]);
+
+  const flush = useCallback(() => {
+    stop();
+    save();
+  }, [save, stop]);
+
+  const handedOff = useCallback((agents: { name: string }[]) => {
+    setHandingOff(false);
+    setHandedTo(agents.map(agent => agent.name));
+  }, []);
+
+  const status = handedTo.length
+    ? `Handed to ${handedTo.join(', ')}. Follow it in Agents.`
+    : docId
+      ? 'Saving to your Inbox as you go.'
+      : 'A note is saved to your Inbox once you start.';
 
   return (
     <div
@@ -215,10 +242,18 @@ export const CaptureView = ({
       </div>
       <div className={styles.footer}>
         <span className={styles.status} data-testid="capture-status">
-          {docId
-            ? 'Saving to your Inbox as you go.'
-            : 'A note is saved to your Inbox once you start.'}
+          {status}
         </span>
+        {handOffEnabled ? (
+          <Button
+            disabled={!docId}
+            aria-expanded={handingOff}
+            onClick={() => setHandingOff(open => !open)}
+            data-testid="capture-hand-off-toggle"
+          >
+            Hand to agent
+          </Button>
+        ) : null}
         <Button disabled={!docId} onClick={openNote}>
           Open note
         </Button>
@@ -226,6 +261,14 @@ export const CaptureView = ({
           New capture
         </Button>
       </div>
+      {handOffEnabled && handingOff && docId ? (
+        <CaptureHandOff
+          docId={docId}
+          onBeforeHandOff={flush}
+          onHandedOff={handedOff}
+          onCancel={() => setHandingOff(false)}
+        />
+      ) : null}
     </div>
   );
 };

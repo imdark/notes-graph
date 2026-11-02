@@ -116,3 +116,69 @@ export const status = style({
   fontSize: 13,
   color: cssVarV2('text/secondary'),
 });
+
+export const handOff = style({
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 10,
+  width: '100%',
+  padding: 12,
+  borderRadius: 12,
+  border: `1px solid ${cssVarV2('layer/insideBorder/border')}`,
+  background: cssVarV2('layer/background/primary'),
+});
+
+export const handOffLabel = style({
+  fontSize: 14,
+  fontWeight: 600,
+  color: cssVarV2('text/primary'),
+});
+
+export const handOffHint = style({
+  fontSize: 14,
+  color: cssVarV2('text/secondary'),
+});
+
+// Scrolls rather than pushing the buttons off a phone screen.
+export const handOffList = style({
+  display: 'flex',
+  flexDirection: 'column',
+  maxHeight: 220,
+  overflowY: 'auto',
+});
+
+// A whole row is the tap target, at least 44px tall on a phone.
+export const handOffAgent = style({
+  display: 'flex',
+  alignItems: 'center',
+  gap: 10,
+  minHeight: 44,
+  padding: '0 4px',
+  borderRadius: 8,
+  cursor: 'pointer',
+  fontSize: 15,
+  color: cssVarV2('text/primary'),
+  selectors: {
+    '&:hover': {
+      background: cssVarV2('layer/background/hoverOverlay'),
+    },
+  },
+});
+
+export const handOffIcon = style({
+  display: 'flex',
+  fontSize: 18,
+  flexShrink: 0,
+});
+
+export const handOffName = style({
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap',
+});
+
+export const handOffActions = style({
+  display: 'flex',
+  justifyContent: 'flex-end',
+  gap: 8,
+});
