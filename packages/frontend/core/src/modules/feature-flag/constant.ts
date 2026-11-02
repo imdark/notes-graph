@@ -383,7 +383,7 @@ export const NOTESGRAPH_FLAGS = {
     defaultState: false,
   },
   enable_capture_hand_off: {
-    commit: '',
+    commit: '56aead484842c04f1ce49cc39745ab83f0807f72',
     category: 'notesgraph',
     displayName: 'Hand a capture to agents',
     description:
