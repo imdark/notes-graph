@@ -17,6 +17,7 @@
     "react": "^19.2.1"
   },
   "devDependencies": {
-    "react": "^19.2.1"
+    "react": "^19.2.1",
+    "vitest": "^4.1.8"
   }
 }

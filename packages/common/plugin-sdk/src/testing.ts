@@ -29,6 +29,10 @@ import type {
   ImporterSpec,
   NotifySpec,
   PanelSpec,
+  PluginAgent,
+  PluginAgentDevice,
+  PluginAgentTarget,
+  PluginAgentTemplate,
   PluginContext,
   PluginDefinition,
   PluginDoc,
@@ -55,6 +59,12 @@ export interface HarnessOptions {
   backend?: Record<string, (payload?: unknown) => unknown>;
   /** Seeds `ctx.docs`. */
   docs?: PluginDoc[];
+  /** Seeds `ctx.agents`: the templates on offer, agents already there, devices. */
+  agents?: {
+    templates?: PluginAgentTemplate[];
+    agents?: PluginAgent[];
+    devices?: PluginAgentDevice[];
+  };
 }
 
 export interface RecordedFetch {
@@ -79,6 +89,10 @@ export interface PluginHarness {
   readonly notifications: NotifySpec[];
   /** Every `net.fetch` call, in order. */
   readonly requests: RecordedFetch[];
+  /** Agents the plugin installed with `agents.installTemplate`, in order. */
+  readonly installedAgents: PluginAgent[];
+  /** Every `agents.start` call, in order. */
+  readonly startedRuns: { agentId: string; target: PluginAgentTarget }[];
 
   /** Run a registered command by id. Throws if there is no such command. */
   runCommand(id: string): Promise<void>;
@@ -126,6 +140,16 @@ export function createPluginHarness(options: HarnessOptions): PluginHarness {
   const hooks = new Map<PluginEvent, Set<(payload: unknown) => void>>();
   const subscriptions: Disposable[] = [];
   const docs = [...seedDocs];
+  const templates: PluginAgentTemplate[] = [
+    ...(options.agents?.templates ?? []),
+  ];
+  const agents: PluginAgent[] = [...(options.agents?.agents ?? [])];
+  const devices: PluginAgentDevice[] = [...(options.agents?.devices ?? [])];
+  const installedAgents: PluginAgent[] = [];
+  const startedRuns: { agentId: string; target: PluginAgentTarget }[] = [];
+  // Which template each installed agent came from, so a second install of
+  // the same template hands back the same agent, as the host does.
+  const installedBy = new Map<string, PluginAgent>();
 
   // The host throws on an ungranted capability; matching that here is the
   // point — a permission a plugin forgot to declare should fail in a test
@@ -319,6 +343,51 @@ export function createPluginHarness(options: HarnessOptions): PluginHarness {
       available: false,
       platform,
     },
+    agents: {
+      listTemplates: async () => {
+        req('agents');
+        return [...templates];
+      },
+      list: async () => {
+        req('agents');
+        return [...agents];
+      },
+      listDevices: async () => {
+        req('agents');
+        return [...devices];
+      },
+      installTemplate: async (templateId, installOptions) => {
+        req('agents');
+        const already = installedBy.get(templateId);
+        if (already) return already;
+        const template = templates.find(t => t.id === templateId);
+        if (!template) {
+          throw new Error(
+            `[plugin-harness] no agent template '${templateId}' (have: ${templates
+              .map(t => t.id)
+              .join(', ')})`
+          );
+        }
+        const agent: PluginAgent = {
+          id: `agent-${agents.length + 1}`,
+          name: template.label,
+          model: templateId === 'video-editor' ? 'video-editor' : undefined,
+          deviceKey: installOptions?.deviceKey,
+          enabled: true,
+        };
+        agents.push(agent);
+        installedAgents.push(agent);
+        installedBy.set(templateId, agent);
+        return agent;
+      },
+      start: async (agentId, target) => {
+        req('agents');
+        if (!agents.some(a => a.id === agentId)) {
+          throw new Error(`[plugin-harness] no agent '${agentId}'`);
+        }
+        startedRuns.push({ agentId, target });
+      },
+    },
     subscriptions,
   };
 
@@ -334,6 +403,8 @@ export function createPluginHarness(options: HarnessOptions): PluginHarness {
     importers,
     notifications,
     requests,
+    installedAgents,
+    startedRuns,
 
     async activate(plugin) {
       await plugin.activate(context);

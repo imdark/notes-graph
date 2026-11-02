@@ -238,6 +238,62 @@ export interface NativeApi {
   openExternal?(url: string): Promise<void>;
 }
 
+// --- Agents ----------------------------------------------------------------
+
+/** One of the app's built-in agent templates (the editor's "New from template"). */
+export interface PluginAgentTemplate {
+  id: string;
+  label: string;
+}
+
+export interface PluginAgent {
+  id: string;
+  name: string;
+  /** The harness a remote agent runs as (e.g. 'video-editor'); unset for the default. */
+  model?: string;
+  /** The device a remote agent runs on. */
+  deviceKey?: string;
+  enabled: boolean;
+}
+
+/** A device registered to take agent runs. */
+export interface PluginAgentDevice {
+  key: string;
+  name: string;
+}
+
+export type PluginAgentTarget =
+  | { kind: 'doc'; docId: string }
+  | { kind: 'block'; docId: string; blockId: string };
+
+/**
+ * Put the app's own agents to work: install one from a built-in template and
+ * start it on a note. A plugin cannot define agents, profiles, skills or
+ * tools; those are the app's and the server's.
+ */
+export interface AgentsApi {
+  /** The app's built-in agent templates (the agent editor's "New from template"). */
+  listTemplates(): Promise<PluginAgentTemplate[]>;
+  /** Agents in the current workspace, personal and shared. */
+  list(): Promise<PluginAgent[]>;
+  /** Devices runs can be sent to (remote agents), by key. */
+  listDevices(): Promise<PluginAgentDevice[]>;
+  /**
+   * Create an agent from a template, or return the one already made from it
+   * (matched by template name + model). `deviceKey` sets where a remote agent
+   * runs; `scope` defaults to 'personal'.
+   */
+  installTemplate(
+    templateId: string,
+    options?: { deviceKey?: string; scope?: 'personal' | 'workspace' }
+  ): Promise<PluginAgent>;
+  /**
+   * Start a run of an agent on a doc or block; resolves once queued (not when
+   * the run ends). Throws if there is no such agent.
+   */
+  start(agentId: string, target: PluginAgentTarget): Promise<void>;
+}
+
 export interface PluginContext {
   readonly id: string;
   readonly manifest: PluginManifest;
@@ -254,6 +310,7 @@ export interface PluginContext {
   readonly backend: BackendApi;
   readonly net: NetApi;
   readonly native: NativeApi;
+  readonly agents: AgentsApi;
   /** Disposables registered here are torn down automatically on deactivate. */
   readonly subscriptions: Disposable[];
 }
