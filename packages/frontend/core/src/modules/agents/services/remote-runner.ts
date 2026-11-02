@@ -29,6 +29,10 @@ export const AGENT_SKILLS: { name: string; desc: string }[] = [
   },
   { name: 'antislop-code', desc: 'Code comment hygiene' },
   { name: 'omniseek-investigate', desc: 'Deep multi-source research method' },
+  {
+    name: 'video-use',
+    desc: 'Edit video by conversation: transcribe, cut, grade, captions',
+  },
 ];
 
 /**
@@ -52,7 +56,9 @@ export const isSkillNoteTitle = (title: string | undefined | null) =>
 export const defaultSkillsFor = (model: string | undefined): string[] =>
   model === RESEARCH_MODEL
     ? ['omniseek-investigate']
-    : AGENT_SKILLS.map(s => s.name).filter(n => n.startsWith('antislop'));
+    : model === VIDEO_EDITOR_MODEL
+      ? ['video-use']
+      : AGENT_SKILLS.map(s => s.name).filter(n => n.startsWith('antislop'));
 
 /**
  * The model a remote agent names to run as Claude Code on the device, with
@@ -76,6 +82,15 @@ export const WORKFLOW_MODEL = 'workflow';
 export const RESEARCH_MODEL = 'research';
 
 /**
+ * Claude Code with the video-use skill (github.com/browser-use/video-use)
+ * on a device that has ffmpeg and the footage: it transcribes, proposes a
+ * cut, renders previews and iterates. Previews come back to the phone as
+ * attachments on its questions (`RemoteQuestion.attachments`); the server's
+ * `video-editor` profile supplies the helpers as automation tools.
+ */
+export const VIDEO_EDITOR_MODEL = 'video-editor';
+
+/**
  * The device key of the server's own runner (tools/agent-runner): Claude
  * Code, Workflow and Research agents run there with no Mac on.
  */
@@ -93,7 +108,8 @@ export const COMMAND_MODEL = 'command';
 export const isDeviceClaudeModel = (model: string | undefined) =>
   model === CLAUDE_CODE_MODEL ||
   model === WORKFLOW_MODEL ||
-  model === RESEARCH_MODEL;
+  model === RESEARCH_MODEL ||
+  model === VIDEO_EDITOR_MODEL;
 
 /**
  * Where an agent set up in the editor is saved. Claude Code (or Workflow,
@@ -142,7 +158,9 @@ export const deviceHarnessName = (model: string | undefined) =>
       ? 'Workflow'
       : model === CLAUDE_CODE_MODEL
         ? 'Claude Code'
-        : null;
+        : model === VIDEO_EDITOR_MODEL
+          ? 'Video editor'
+          : null;
 
 /** Something a running job asked the person who started it. */
 export interface RemoteQuestion {
@@ -154,11 +172,45 @@ export interface RemoteQuestion {
   detail: string | null;
   /** For a question: choices to pick from. Absent from older servers. */
   options?: string[];
+  /**
+   * Workspace blob keys of files the run attached to the question (a video
+   * preview to approve, a filmstrip). Resolve with
+   * `RemoteAgentRunnerService.blobUrl`. Absent from older servers.
+   */
+  attachments?: string[];
   answer: string | null;
   allowed: boolean | null;
   createdAt: number;
   answeredAt: number | null;
 }
+
+/** A file a run uploaded to the workspace (registry jobs `artifacts`). */
+export interface RemoteArtifact {
+  id: string;
+  /** Workspace blob key; see `RemoteAgentRunnerService.blobUrl`. */
+  key: string;
+  name: string;
+  mime: string;
+  size: number;
+  /** Server-relative URL the blob is served at. */
+  url: string;
+  createdAt: number;
+}
+
+/** What kind of media an attachment or artifact is, by its file extension. */
+export const attachmentKind = (
+  keyOrName: string
+): 'video' | 'image' | 'file' => {
+  const ext = /\.([a-z0-9]+)$/i.exec(keyOrName)?.[1]?.toLowerCase();
+  if (!ext) return 'file';
+  if (['mp4', 'webm', 'mov', 'm4v'].includes(ext)) return 'video';
+  if (['png', 'jpg', 'jpeg', 'webp', 'gif'].includes(ext)) return 'image';
+  return 'file';
+};
+
+/** The file name at the end of a blob key or URL. */
+export const attachmentName = (keyOrUrl: string) =>
+  decodeURIComponent(keyOrUrl.split('/').pop() ?? keyOrUrl);
 
 /** A run's public read-only link (see the server's registry/share.ts). */
 export interface RunShare {
@@ -233,6 +285,11 @@ export interface RemoteJob {
   questions?: RemoteQuestion[];
   /** What the starter sent the run while it worked. Single-job reads only. */
   steers?: RemoteSteer[];
+  /**
+   * Files the run uploaded (previews, renders). Single-job reads only;
+   * absent from older servers.
+   */
+  artifacts?: RemoteArtifact[];
   /**
    * What the run changed, recorded by its runner as it ended; null when it
    * recorded nothing (an older runner). Single-job reads only.
@@ -395,6 +452,19 @@ export class RemoteAgentRunnerService extends Service {
 
   private base(workspaceId: string) {
     return `/api/registry/workspaces/${encodeURIComponent(workspaceId)}`;
+  }
+
+  /**
+   * Where a workspace blob (a question attachment, an artifact) is served,
+   * as an absolute URL on the workspace's server: a relative one would
+   * resolve against the app's own origin in Electron and on the phone.
+   * Null for a local workspace.
+   */
+  blobUrl(workspaceId: string, key: string): string | null {
+    const server = this.workspaceServerService.server;
+    if (!server) return null;
+    const path = `/api/workspaces/${encodeURIComponent(workspaceId)}/blobs/${encodeURIComponent(key)}`;
+    return new URL(path, server.baseUrl).toString();
   }
 
   private async json<T>(url: string, init?: RequestInit): Promise<T> {

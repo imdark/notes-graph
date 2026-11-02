@@ -3,6 +3,7 @@ import { Transactional } from '@nestjs-cls/transactional';
 import {
   Prisma,
   type RegistryJob,
+  type RegistryJobArtifact,
   type RegistryJobQuestion,
 } from '@prisma/client';
 
@@ -529,6 +530,8 @@ export class RegistryJobModel extends BaseModel {
       text: string;
       detail?: string | null;
       options?: string[];
+      /** Blob keys of the job's artifacts to show with it. */
+      attachments?: string[];
       allowedBy?: string | null;
       /** Refused on the spot, with this as the answer the runner sees. */
       refused?: string;
@@ -542,6 +545,7 @@ export class RegistryJobModel extends BaseModel {
         text: input.text,
         detail: input.detail ?? null,
         options: input.options ?? [],
+        attachments: input.attachments ?? [],
         ...(allowed
           ? {
               allowed: true,
@@ -598,6 +602,40 @@ export class RegistryJobModel extends BaseModel {
       where: { jobId },
       orderBy: { createdAt: 'asc' },
     });
+  }
+
+  /** Record a file the run sent back; the bytes are already in blob storage. */
+  async addArtifact(input: {
+    jobId: string;
+    workspaceId: string;
+    key: string;
+    name: string;
+    mime: string;
+    size: number;
+  }): Promise<RegistryJobArtifact> {
+    return this.db.registryJobArtifact.create({ data: input });
+  }
+
+  async listArtifacts(jobId: string): Promise<RegistryJobArtifact[]> {
+    return this.db.registryJobArtifact.findMany({
+      where: { jobId },
+      orderBy: { createdAt: 'asc' },
+    });
+  }
+
+  /** Of `keys`, those that are this job's artifacts, in the order given. */
+  async ownArtifactKeys(jobId: string, keys: string[]): Promise<string[]> {
+    if (keys.length === 0) return [];
+    const rows = await this.db.registryJobArtifact.findMany({
+      where: { jobId, key: { in: keys } },
+      select: { key: true },
+    });
+    const own = new Set(rows.map(row => row.key));
+    return keys.filter(key => own.has(key));
+  }
+
+  async countArtifacts(jobId: string): Promise<number> {
+    return this.db.registryJobArtifact.count({ where: { jobId } });
   }
 
   /**

@@ -779,6 +779,47 @@ export class RegistryController {
     return { question: await this.jobs.ask(workspaceId, jobId, body ?? {}) };
   }
 
+  /**
+   * A running job sends a file back (a preview to approve, a render). The
+   * body is the file itself, `application/octet-stream`, up to the raw
+   * parser's limit; the name comes in the query. Workspace.Read, like ask.
+   */
+  @Post('/workspaces/:workspaceId/jobs/:jobId/artifacts')
+  async addArtifact(
+    @CurrentUser() user: CurrentUserType,
+    @Param('workspaceId') workspaceId: string,
+    @Param('jobId') jobId: string,
+    @Query('name') name: string | undefined,
+    @Body() body: unknown
+  ) {
+    this.assertEnabled();
+    await this.ac.user(user.id).workspace(workspaceId).assert('Workspace.Read');
+    if (!Buffer.isBuffer(body)) {
+      throw new BadRequest(
+        'Send the file as the request body with Content-Type: application/octet-stream'
+      );
+    }
+    return {
+      artifact: await this.jobs.addArtifact(
+        workspaceId,
+        jobId,
+        name ?? 'artifact',
+        body
+      ),
+    };
+  }
+
+  @Get('/workspaces/:workspaceId/jobs/:jobId/artifacts')
+  async listArtifacts(
+    @CurrentUser() user: CurrentUserType,
+    @Param('workspaceId') workspaceId: string,
+    @Param('jobId') jobId: string
+  ) {
+    this.assertEnabled();
+    await this.ac.user(user.id).workspace(workspaceId).assert('Workspace.Read');
+    return { artifacts: await this.jobs.listArtifacts(workspaceId, jobId) };
+  }
+
   @Get('/workspaces/:workspaceId/jobs/:jobId/questions/:questionId')
   async getQuestion(
     @CurrentUser() user: CurrentUserType,

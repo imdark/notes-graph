@@ -7,6 +7,7 @@ import {
   deviceHarnessName,
   isAskRun,
   openQuestions,
+  type RemoteArtifact,
   RemoteAgentRunnerService,
   type RemoteQuestion,
   type RemoteSteer,
@@ -54,6 +55,8 @@ interface RunLogState {
    * nothing, undefined for a run that doesn't report changes.
    */
   changes: RunChanges | null | undefined;
+  /** Files a remote run uploaded (previews, renders). */
+  artifacts: RemoteArtifact[];
 }
 
 const EMPTY: RunLogState = {
@@ -66,6 +69,7 @@ const EMPTY: RunLogState = {
   loading: true,
   result: null,
   changes: undefined,
+  artifacts: [],
 };
 
 /**
@@ -131,6 +135,7 @@ const useRunLog = (run: AgentRun | undefined): RunLogState => {
             result: job.result,
             // Recorded only as the run ends, so it comes with the last poll.
             changes: job.changes ?? prev.changes ?? null,
+            artifacts: job.artifacts ?? prev.artifacts,
           }));
         }
       })().catch(err => {
@@ -164,6 +169,7 @@ const useRunLog = (run: AgentRun | undefined): RunLogState => {
             loading: false,
             result: null,
             changes: undefined,
+            artifacts: [],
           });
         })
         .catch(() => {
@@ -197,6 +203,7 @@ const useRunLog = (run: AgentRun | undefined): RunLogState => {
       loading: false,
       result: null,
       changes: undefined,
+      artifacts: [],
     };
   }
   return state;
@@ -262,7 +269,22 @@ const ASK_ROW_TABS = [...TABS, { value: ASK_TAB, label: 'Ask' }];
  * What a run was set up with: the blocks it read, where it ran and on what.
  * Runs recorded before these were kept have only some of it.
  */
-const RunDetails = ({ run }: { run: AgentRun }) => {
+const formatBytes = (bytes: number) =>
+  bytes >= 1024 * 1024 * 1024
+    ? `${(bytes / 1024 ** 3).toFixed(1)} GB`
+    : bytes >= 1024 * 1024
+      ? `${(bytes / 1024 ** 2).toFixed(1)} MB`
+      : `${Math.max(1, Math.round(bytes / 1024))} KB`;
+
+const RunDetails = ({
+  run,
+  artifacts,
+}: {
+  run: AgentRun;
+  artifacts: RemoteArtifact[];
+}) => {
+  const remoteRunner = useService(RemoteAgentRunnerService);
+  const workspaceService = useService(WorkspaceService);
   // Older rows have no harness; a device job id still says it went remote.
   const harness = run.harness ?? (run.remoteJobId ? 'remote' : undefined);
   const rows: [string, string | undefined][] = [
@@ -297,6 +319,32 @@ const RunDetails = ({ run }: { run: AgentRun }) => {
           </Fragment>
         ))}
       </dl>
+      {artifacts.length > 0 ? (
+        <>
+          <span className={styles.hint}>Artifacts</span>
+          <ul className={styles.runArtifacts} data-testid="agent-run-artifacts">
+            {artifacts.map(artifact => (
+              <li key={artifact.id}>
+                <a
+                  href={
+                    remoteRunner.blobUrl(
+                      workspaceService.workspace.id,
+                      artifact.key
+                    ) ?? artifact.url
+                  }
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  {artifact.name}
+                </a>{' '}
+                <span className={styles.hint}>
+                  {formatBytes(artifact.size)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </>
+      ) : null}
       {run.input ? (
         <>
           <span className={styles.hint}>What it was given to read</span>
@@ -349,6 +397,7 @@ export const AgentRunLogDialog = ({
     loading,
     result,
     changes,
+    artifacts,
   } = useRunLog(run ?? undefined);
   // For a chat about a run, that run: the chat goes on with its context.
   const parentRunId = run?.parentRunId;
@@ -502,7 +551,7 @@ export const AgentRunLogDialog = ({
         {/* Only a device run lives on the server, so only it can be shared. */}
         {run?.remoteJobId ? <AgentRunShare jobId={run.remoteJobId} /> : null}
         {run && tab === DETAILS_TAB ? (
-          <RunDetails run={run} />
+          <RunDetails run={run} artifacts={artifacts} />
         ) : run && askRow && ended && tab === ASK_TAB ? (
           parent ? (
             <AgentRunChat key={run.id} run={parent} resumeAskId={run.id} />

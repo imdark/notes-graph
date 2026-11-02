@@ -1,5 +1,7 @@
 import { Button } from '@notesgraph/component';
 import {
+  attachmentKind,
+  attachmentName,
   RemoteAgentRunnerService,
   type RemoteQuestion,
 } from '@notesgraph/core/modules/agents';
@@ -68,6 +70,17 @@ export const AgentQuestionCard = ({
   );
   const options = isPermission ? [] : (question.options ?? []);
   const canSendAnswer = text.trim().length > 0 && state === 'idle';
+  // Files the run attached: a preview to approve, a filmstrip of a cut.
+  const attachments = useMemo(
+    () =>
+      (question.attachments ?? []).flatMap(key => {
+        const url = remoteRunner.blobUrl(workspaceService.workspace.id, key);
+        return url
+          ? [{ key, url, kind: attachmentKind(key), name: attachmentName(key) }]
+          : [];
+      }),
+    [question.attachments, remoteRunner, workspaceService]
+  );
 
   const onKeyDown = useCallback(
     (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -86,6 +99,52 @@ export const AgentQuestionCard = ({
         {isPermission ? 'Wants permission' : 'Asks you'}
       </span>
       <p className={styles.questionText}>{question.text}</p>
+      {attachments.length > 0 ? (
+        <div
+          className={styles.questionAttachments}
+          data-testid="agent-question-attachments"
+        >
+          {attachments.map(attachment =>
+            attachment.kind === 'video' ? (
+              <video
+                key={attachment.key}
+                className={styles.questionMedia}
+                src={attachment.url}
+                controls
+                playsInline
+                preload="metadata"
+                data-testid="agent-question-video"
+              />
+            ) : attachment.kind === 'image' ? (
+              <a
+                key={attachment.key}
+                href={attachment.url}
+                target="_blank"
+                rel="noreferrer"
+              >
+                <img
+                  className={styles.questionMedia}
+                  src={attachment.url}
+                  alt={attachment.name}
+                  loading="lazy"
+                  data-testid="agent-question-image"
+                />
+              </a>
+            ) : (
+              <a
+                key={attachment.key}
+                className={styles.questionFile}
+                href={attachment.url}
+                target="_blank"
+                rel="noreferrer"
+                data-testid="agent-question-file"
+              >
+                {attachment.name}
+              </a>
+            )
+          )}
+        </div>
+      ) : null}
       {editPreview ? (
         <EditDiffView preview={editPreview} />
       ) : toolInput ? (

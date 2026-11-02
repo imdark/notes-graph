@@ -8,7 +8,10 @@ import { Framework } from '@notesgraph/infra';
 import { describe, expect, test } from 'vitest';
 
 import {
+  attachmentKind,
+  attachmentName,
   CLOUD_DEVICE_KEY,
+  defaultSkillsFor,
   deviceHarnessName,
   editorHarness,
   isDeviceClaudeModel,
@@ -17,6 +20,7 @@ import {
   type RemoteJob,
   RESEARCH_MODEL,
   savedPlacement,
+  VIDEO_EDITOR_MODEL,
   waitingSteers,
 } from './remote-runner';
 
@@ -27,6 +31,30 @@ describe('device harnesses', () => {
     expect(deviceHarnessName('claude-code')).toBe('Claude Code');
     expect(deviceHarnessName('workflow')).toBe('Workflow');
     expect(deviceHarnessName('Llama-3.2-1B-Instruct-q4f16_1-MLC')).toBeNull();
+  });
+
+  test('the video editor is Claude Code on the device with its own skill', () => {
+    expect(isDeviceClaudeModel(VIDEO_EDITOR_MODEL)).toBe(true);
+    expect(deviceHarnessName(VIDEO_EDITOR_MODEL)).toBe('Video editor');
+    expect(defaultSkillsFor(VIDEO_EDITOR_MODEL)).toEqual(['video-use']);
+    // Picked under Cloud it would be saved as the server's runner, like the others.
+    expect(savedPlacement('cloud', VIDEO_EDITOR_MODEL, undefined)).toEqual({
+      harness: 'remote',
+      model: VIDEO_EDITOR_MODEL,
+      deviceKey: CLOUD_DEVICE_KEY,
+    });
+  });
+});
+
+describe('question attachments', () => {
+  test('media kind follows the file extension', () => {
+    expect(attachmentKind('agent-artifacts/abc/preview.mp4')).toBe('video');
+    expect(attachmentKind('cut-3.PNG')).toBe('image');
+    expect(attachmentKind('edl.json')).toBe('file');
+    expect(attachmentKind('noext')).toBe('file');
+    expect(attachmentName('agent-artifacts/abc/preview%20v2.mp4')).toBe(
+      'preview v2.mp4'
+    );
   });
 });
 

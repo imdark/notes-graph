@@ -264,6 +264,17 @@ export const runDetailValue = style({
   wordBreak: 'break-word',
 });
 
+/** Files a run uploaded, listed under Details. */
+export const runArtifacts = style({
+  margin: 0,
+  paddingLeft: 18,
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 4,
+  fontSize: cssVar('fontXs'),
+  wordBreak: 'break-all',
+});
+
 export const runDetailInput = style({
   ...selectableText,
   margin: 0,
@@ -569,6 +580,32 @@ export const questionOptions = style({
   display: 'flex',
   flexWrap: 'wrap',
   gap: 8,
+});
+
+/** Files a run attached to its question: previews stacked, full width. */
+export const questionAttachments = style({
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 8,
+  width: '100%',
+  minWidth: 0,
+});
+
+/** A preview video or image: never wider than the card, never taller than most of the screen. */
+export const questionMedia = style({
+  display: 'block',
+  width: '100%',
+  maxWidth: '100%',
+  maxHeight: '60vh',
+  objectFit: 'contain',
+  borderRadius: 6,
+  background: cssVarV2('layer/background/secondary'),
+});
+
+export const questionFile = style({
+  fontSize: cssVar('fontXs'),
+  color: cssVarV2('text/link'),
+  wordBreak: 'break-all',
 });
 
 export const forkPanel = style({

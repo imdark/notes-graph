@@ -5,6 +5,7 @@ import { Module } from '@nestjs/common';
 import { AuthModule } from '../../core/auth';
 import { DocStorageModule } from '../../core/doc';
 import { PermissionModule } from '../../core/permission';
+import { StorageModule } from '../../core/storage';
 import { WorkspaceModule } from '../../core/workspaces';
 import { AgentMemoryService } from './agent-memory';
 import { AgentRules } from './agent-rules';
@@ -28,7 +29,13 @@ import { TerminalSessionService } from './terminal-sessions';
  * monitoring agent learns from what they report.
  */
 @Module({
-  imports: [AuthModule, DocStorageModule, PermissionModule, WorkspaceModule],
+  imports: [
+    AuthModule,
+    DocStorageModule,
+    PermissionModule,
+    StorageModule,
+    WorkspaceModule,
+  ],
   providers: [
     RegistryService,
     RegistryJobService,

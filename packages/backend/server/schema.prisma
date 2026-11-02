@@ -1844,10 +1844,34 @@ model RegistryJob {
   workspace Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   questions RegistryJobQuestion[]
   share     RegistryJobShare?
+  artifacts RegistryJobArtifact[]
 
   @@index([workspaceId, deviceKey, status])
   @@index([workspaceId, status, createdAt])
   @@map("registry_jobs")
+}
+
+/// A file a running agent produced and sent back: a preview video, a
+/// filmstrip, a final render. The bytes live in the workspace's blob storage
+/// under `key`; this row is what the run log lists and what a question may
+/// attach, so the person sees the preview where they answer.
+model RegistryJobArtifact {
+  id          String   @id @default(uuid()) @db.VarChar
+  jobId       String   @map("job_id") @db.VarChar
+  workspaceId String   @map("workspace_id") @db.VarChar
+  /// Blob key in the workspace's storage (no slashes: the blob route takes one segment).
+  key         String   @db.VarChar
+  /// The file name the runner gave it, for display and download.
+  name        String   @db.VarChar
+  mime        String   @db.VarChar
+  size        Int
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  job RegistryJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, key])
+  @@index([jobId, createdAt])
+  @@map("registry_job_artifacts")
 }
 
 /// Something a running agent asked the person who started it: a question it
@@ -1863,6 +1887,8 @@ model RegistryJobQuestion {
   detail     String?   @db.Text
   /// For a question: choices to pick from; the person may still type their own.
   options    String[]  @default([]) @db.Text
+  /// Blob keys of this job's artifacts shown with the question (a preview to approve).
+  attachments String[] @default([]) @db.VarChar
   answer     String?   @db.Text
   allowed    Boolean?
   answeredBy String?   @map("answered_by") @db.VarChar

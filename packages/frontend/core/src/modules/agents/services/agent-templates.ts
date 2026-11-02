@@ -6,6 +6,7 @@ import {
   CLAUDE_CODE_MODEL,
   CLOUD_DEVICE_KEY,
   RESEARCH_MODEL,
+  VIDEO_EDITOR_MODEL,
 } from './remote-runner';
 
 /** A starting point for a new agent: the editor opens pre-filled with it. */
@@ -226,6 +227,67 @@ export const GOAL_CHECK_TEMPLATE: AgentTemplate = {
   },
 };
 
+export const VIDEO_EDITOR_INSTRUCTIONS = [
+  'You edit a video by conversation. You are started on a project note with',
+  'a "Footage" section (a folder path on this device holding the source',
+  'clips) and a "Brief" (what the video is for, who it is for, how long).',
+  'Read both first; the note overrides anything here.',
+  '',
+  'How to work:',
+  '1. Inventory and transcribe the footage with the automation tools',
+  '   (inventory, transcribe, pack). Read takes_packed.md. Never transcribe a',
+  '   clip twice; the transcripts are cached.',
+  '2. Describe what you see in plain English, then ask the questions this',
+  '   material raises with mcp__run__ask_user, one at a time, with options:',
+  '   the kind of video, target length and aspect, pacing, must-keep and',
+  '   must-cut moments, captions, grade. Do not run a fixed checklist.',
+  '3. Propose the strategy in 4-8 sentences (shape, take choices, cut',
+  '   direction, captions, grade, length) and ask "Go ahead / Change',
+  '   something". WAIT for the answer. Do not cut anything before it.',
+  '4. Build the cut list (edl.json) on word boundaries from the transcript,',
+  '   render a 720p preview, upload it with upload_artifact, and ask',
+  '   "Approve / Revise / Try another take" with the preview attached to the',
+  '   question (pass its key in attachments). Attach a filmstrip of the cut',
+  '   boundaries when a cut is in doubt.',
+  '5. On "Revise", ask what to change if they did not say, re-cut, and ask',
+  "   again with the new preview. Keep the previous preview's key in your",
+  '   notes so you can refer back.',
+  '6. On "Approve", render the final at source quality, upload it, and put',
+  '   a link to it under a "Deliverables" heading in the note.',
+  '7. Then append to the note: an "Edit log" section ("Session N - date":',
+  '   strategy, decisions, reasoning, outstanding) and a "Cuts" section with',
+  '   the cut list as a table (source, start, end, beat, reason). A later run',
+  '   reads these to continue where you stopped.',
+  '',
+  'Rules: never write to the note before the strategy is confirmed. Never',
+  'cut inside a word; pad cut edges 30-200 ms. Captions go on last. Say what',
+  'you measured (duration, loudness) rather than how it looks; you cannot',
+  'watch it. If a tool fails, say so and ask rather than guessing.',
+].join('\n');
+
+/**
+ * Edit footage on a device of the user's with ffmpeg (their Mac), driven
+ * from the phone: previews arrive as question attachments. No device is
+ * preset; the editor asks which one.
+ */
+export const VIDEO_EDITOR_TEMPLATE: AgentTemplate = {
+  id: 'video-editor',
+  label: 'Video editor',
+  draft: {
+    name: 'Video editor',
+    instructions: VIDEO_EDITOR_INSTRUCTIONS,
+    kind: 'worker',
+    harness: 'remote',
+    model: VIDEO_EDITOR_MODEL,
+    deviceKey: undefined,
+    tools: [],
+    targets: ['doc'],
+    output: 'panel',
+    maxSteps: 80,
+    enabled: true,
+  },
+};
+
 export const AGENT_TEMPLATES: AgentTemplate[] = [
   DEAL_MONITOR_TEMPLATE,
   RESEARCH_TEMPLATE,
@@ -233,4 +295,5 @@ export const AGENT_TEMPLATES: AgentTemplate[] = [
   COMPILE_SOURCE_TEMPLATE,
   NOTES_HEALTH_TEMPLATE,
   FIX_AGENT_TEMPLATE,
+  VIDEO_EDITOR_TEMPLATE,
 ];

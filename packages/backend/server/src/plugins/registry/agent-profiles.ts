@@ -124,6 +124,7 @@ const CLAUDE_CODE_ALLOWED_TOOLS = [
   'mcp__notesgraph',
   'mcp__run__ask_user',
   'mcp__run__set_title',
+  'mcp__run__upload_artifact',
   'WebSearch',
   'WebFetch',
   'Read',
@@ -191,8 +192,25 @@ const ANTISLOP: AgentSkill[] = [
   url: `https://raw.githubusercontent.com/miqdadbadjuber/anti-slop/${ANTISLOP_RELEASE}/skills/${name}/SKILL.md`,
 }));
 
+/**
+ * video-use (MIT), browser-use's conversation-driven video editor: a skill
+ * plus ffmpeg/PIL helpers. Pinned: a SKILL.md is instructions the agent
+ * obeys. The helpers come from the same commit, cloned by the video-editor
+ * profile's setup step (VIDEO_USE_REPO / VIDEO_USE_REF below).
+ */
+const VIDEO_USE_REPO = 'https://github.com/browser-use/video-use';
+const VIDEO_USE_REF = '43cfc566833548093455c9d4a46bd69913b7e552';
+const VIDEO_USE: AgentSkill = {
+  name: 'video-use',
+  url: `https://raw.githubusercontent.com/browser-use/video-use/${VIDEO_USE_REF}/SKILL.md`,
+};
+
 /** Every skill an agent can be given, by name; what the agent editor offers. */
-export const SKILL_CATALOG: AgentSkill[] = [...ANTISLOP, OMNISEEK_INVESTIGATE];
+export const SKILL_CATALOG: AgentSkill[] = [
+  ...ANTISLOP,
+  OMNISEEK_INVESTIGATE,
+  VIDEO_USE,
+];
 
 /** A question waits for a person, who may be at dinner. */
 const TOOL_TIMEOUT_MS = 24 * 60 * 60 * 1000;
@@ -346,6 +364,254 @@ const RESEARCH_AUTOMATION: Automation = {
   teardown: [],
 };
 
+// The skill is read from SKILL.md; this is what differs when it runs as a
+// NotesGraph agent instead of in a terminal: where things are, how the
+// conversation happens (questions with a preview attached), and what to
+// leave in the note. The hard rules are restated because they are the ones
+// whose breach is silent in the output.
+const VIDEO_EDITOR_SYSTEM_PROMPT = `\
+This is a video editing run. Follow the /video-use skill; its helpers are at
+$VIDEO_USE/helpers (python at $VIDEO_USE/.venv/bin/python), but call them
+through the run's own tools (mcp__automation__*) rather than the shell:
+link_footage, inventory, transcribe, timeline_view, save_edl, render, grade,
+media_info. Everything you make goes under this run's directory in edit/
+(transcripts/, takes_packed.md, edl.json, verify/, preview.mp4, final.mp4).
+
+The note you were started from is the project: its Footage section names a
+folder on this machine (pass it to link_footage), its Brief says what the
+video is for, and its Edit log and Cuts sections hold earlier sessions.
+Read them first and continue from them; never re-transcribe (transcripts
+are cached per source).
+
+How the conversation works here: the person is on their phone, not at a
+terminal. Ask with mcp__run__ask_user, one short question at a time, with
+options when the answer is one of a few. Show, don't describe: upload every
+preview and filmstrip with mcp__run__upload_artifact and pass its key in the
+question's attachments, with options like ["Approve", "Revise", "Try another
+take"]. Transcription needs no API key on this machine (transcribe uses the
+local models).
+
+Hard rules, non-negotiable:
+- Propose the strategy in plain English and WAIT for confirmation before
+  any cut. Do not write to the note before that either.
+- Never cut inside a word; snap to transcript word boundaries and pad each
+  edge 30-200 ms. Prefer silences of 400 ms or more.
+- Per-segment extract then lossless concat; 30 ms audio fades at every
+  boundary; overlays PTS-shifted; subtitles applied last. render does this
+  when given a correct EDL: sources must be absolute paths under the footage
+  folder, times in seconds.
+- Before showing a preview, check it yourself: timeline_view on the rendered
+  file at each cut (plus or minus 1.5 s), media_info for duration and
+  loudness. Fix and re-render up to three times, then say what is left.
+- Previews at 720p (render with preview=1) and under 100 MB. Only the final
+  render is full resolution; if it is over 100 MB, leave it on the machine
+  and give its path.
+- Everything you write stays in this run's directory and the project note.
+
+When the person approves: render the final, upload it, and link it under
+the project note with mcp__notesgraph (update_document). Then append to the
+note's Edit log a "## Session N — <date>" section with the strategy, the
+take choices and why, and what is left, and replace the Cuts section with
+the EDL as a table (source, start, end, beat, reason) followed by the
+edl.json in a code block. Finish with one line: what was delivered and where.
+`;
+
+const VIDEO_USE_DIR = '{cache}/video-use';
+// The helpers run with the skill's own venv; every tool starts from here.
+const V = `V="${VIDEO_USE_DIR}"; P="$V/.venv/bin/python"; export VIDEO_USE="$V";`;
+
+/**
+ * Footage comes from a folder on the device; outputs go under the job
+ * directory. The skill repo and its Python environment are kept in {cache}
+ * between jobs: cloning and the models are minutes, so they happen once. A
+ * checkout the device already has (~/code/video-use) is used in place of a
+ * clone, so a branch under test there is what runs.
+ */
+const VIDEO_AUTOMATION: Automation = {
+  setup: [
+    {
+      name: 'ffmpeg',
+      run:
+        'command -v ffmpeg >/dev/null && command -v ffprobe >/dev/null && ffmpeg -version | head -1 || ' +
+        '{ echo "ffmpeg is not installed on this device (brew install ffmpeg / apt-get install ffmpeg)"; exit 1; }',
+      timeout: 30,
+    },
+    {
+      name: 'video-use',
+      run:
+        `d="${VIDEO_USE_DIR}"; if [ ! -e "$d" ]; then mkdir -p "$(dirname "$d")"; ` +
+        'if [ -f "$HOME/code/video-use/helpers/render.py" ]; then ln -s "$HOME/code/video-use" "$d"; ' +
+        `else git clone -q ${VIDEO_USE_REPO} "$d" && git -C "$d" checkout -q ${VIDEO_USE_REF}; fi; fi && ` +
+        'cd "$d" && if [ ! -x .venv/bin/python ]; then ' +
+        '(command -v uv >/dev/null && uv venv -q --python 3.12 .venv) || python3 -m venv .venv; fi && ' +
+        "(.venv/bin/python -c 'import librosa, PIL, numpy, requests' 2>/dev/null || " +
+        '(command -v uv >/dev/null && uv pip install -q --python .venv/bin/python -e . || .venv/bin/pip install -q -e .)) && ' +
+        // The key-free transcriber's models; an upstream checkout without the
+        // `local` extra falls back to transcribe.py (ElevenLabs key).
+        "(.venv/bin/python -c 'import crisperwhisper, pyannote.audio' 2>/dev/null || " +
+        "(command -v uv >/dev/null && uv pip install -q --python .venv/bin/python -e '.[local]' 'transformers<5' || " +
+        ".venv/bin/pip install -q -e '.[local]' 'transformers<5') || echo \"note: local transcription models not installed; transcribe needs ELEVENLABS_API_KEY\") && " +
+        'mkdir -p {job_dir}/edit && echo "video-use ready at $d"',
+      timeout: 1800,
+    },
+  ],
+  tools: [
+    {
+      name: 'link_footage',
+      description:
+        "Point this run at the footage: the folder on this machine named in the note's Footage " +
+        'section. Links it as footage/ in the run directory and lists each clip with duration, ' +
+        'resolution, frame rate and audio tracks. Call it first.',
+      run:
+        '[ -d "$ARG_PATH" ] || { echo "not a folder on this machine: $ARG_PATH"; exit 1; }; ' +
+        'rm -f {job_dir}/footage && ln -s "$ARG_PATH" {job_dir}/footage && mkdir -p {job_dir}/edit && ' +
+        'n=0; for f in {job_dir}/footage/*; do case "$f" in *.mp4|*.MP4|*.mov|*.MOV|*.mkv|*.MKV|*.m4v|*.webm) ' +
+        'n=$((n+1)); echo "== $(basename "$f") ($(readlink -f "$f"))"; ' +
+        'ffprobe -v error -show_entries format=duration:stream=codec_type,width,height,r_frame_rate,channels -of default=nw=1 "$f" | tr "\\n" " "; echo;; esac; done; ' +
+        '[ "$n" -gt 0 ] || { echo "no video files (.mp4/.mov/.mkv/.m4v/.webm) in $ARG_PATH"; exit 1; }; echo "$n clips"',
+      params: {
+        path: {
+          description: 'Absolute path of the folder holding the source clips.',
+          required: true,
+        },
+      },
+      timeout: 120,
+    },
+    {
+      name: 'inventory',
+      description:
+        'ffprobe every clip in footage/: duration, streams, resolution, frame rate.',
+      run:
+        'for f in {job_dir}/footage/*; do case "$f" in *.mp4|*.MP4|*.mov|*.MOV|*.mkv|*.MKV|*.m4v|*.webm) ' +
+        'echo "== $(basename "$f")"; ffprobe -v error -show_entries format=duration,size:stream=codec_type,codec_name,width,height,r_frame_rate,channels,sample_rate -of default=nw=1 "$f";; esac; done',
+      timeout: 120,
+    },
+    {
+      name: 'transcribe',
+      description:
+        'Transcribe every clip in footage/ (verbatim, word timestamps, fillers kept, speakers) ' +
+        'into edit/transcripts/ and pack them into edit/takes_packed.md, which is printed. ' +
+        'Cached per clip: calling it again is free. Minutes for the first run (models load).',
+      run:
+        `${V} "$P" "$V/helpers/transcribe_local.py" {job_dir}/footage --edit-dir {job_dir}/edit ` +
+        '${ARG_NUM_SPEAKERS:+--num-speakers "$ARG_NUM_SPEAKERS"} ${ARG_LANGUAGE:+--language "$ARG_LANGUAGE"} 2>&1 | ' +
+        "grep -v -E 'it/s|%\\||\\[transformers\\]|UNEXPECTED|deprecated|generation|attention mask|logits processor|^Key|^---|^Notes|^- UNEX|^$' ; " +
+        '"$P" "$V/helpers/pack_transcripts.py" --edit-dir {job_dir}/edit && echo && cat {job_dir}/edit/takes_packed.md',
+      params: {
+        num_speakers: {
+          description: 'How many people speak, if known (helps diarization).',
+        },
+        language: { description: 'ISO language code, default en.' },
+      },
+      timeout: 3600,
+    },
+    {
+      name: 'timeline_view',
+      description:
+        'Filmstrip plus waveform PNG of a time range: of a source clip (name in footage/) or of ' +
+        'a rendered file (absolute path), with words and silences from the transcript. Returns ' +
+        'the PNG path; Read it to look. Use at decision points and on the rendered preview at ' +
+        'each cut, not in a loop over everything.',
+      run:
+        `${V} case "$ARG_SOURCE" in /*) src="$ARG_SOURCE";; *) src="{job_dir}/footage/$ARG_SOURCE";; esac; ` +
+        'stem="$(basename "${src%.*}")"; t="{job_dir}/edit/transcripts/$stem.json"; mkdir -p {job_dir}/edit/verify; ' +
+        'out="{job_dir}/edit/verify/${stem}_${ARG_START}_${ARG_END}.png"; ' +
+        '"$P" "$V/helpers/timeline_view.py" "$src" "$ARG_START" "$ARG_END" -o "$out" $([ -f "$t" ] && echo --transcript "$t") && echo "$out"',
+      params: {
+        source: {
+          description:
+            'Clip file name in footage/, or an absolute path to a rendered file.',
+          required: true,
+        },
+        start: { description: 'Start, seconds.', required: true },
+        end: { description: 'End, seconds.', required: true },
+      },
+      timeout: 300,
+    },
+    {
+      name: 'save_edl',
+      description:
+        'Save the cut list as edit/edl.json (see the EDL format in the skill: version, sources ' +
+        'as absolute paths, ranges with source/start/end/beat/quote/reason, grade, overlays, ' +
+        'subtitles, total_duration_s). Validates the JSON and reports the ranges and total.',
+      run: `${V} "$P" -c 'import json, os, sys
+d = json.loads(os.environ["ARG_JSON"])
+ranges = d.get("ranges", [])
+assert isinstance(ranges, list) and ranges, "ranges must be a non-empty list"
+for r in ranges:
+    assert float(r["end"]) > float(r["start"]), f"range ends before it starts: {r}"
+    assert r["source"] in d.get("sources", {}), f"range names a source not in sources: {r['source']}"
+for name, path in d.get("sources", {}).items():
+    assert os.path.isabs(path) and os.path.exists(path), f"source {name} is not an existing absolute path: {path}"
+open(sys.argv[1], "w").write(json.dumps(d, indent=2))
+total = sum(float(r["end"]) - float(r["start"]) for r in ranges)
+print(f"saved {sys.argv[1]}: {len(ranges)} ranges, {total:.1f}s of picture")' {job_dir}/edit/edl.json`,
+      params: {
+        json: { description: 'The EDL as a JSON string.', required: true },
+      },
+      timeout: 60,
+    },
+    {
+      name: 'render',
+      description:
+        "Render edit/edl.json with the skill's render.py: per-segment extract with grade and " +
+        'fades, lossless concat, overlays, subtitles last. preview=1 renders 720p fast (always ' +
+        'for anything shown to the person); subtitles=1 builds master.srt from the transcripts ' +
+        'and burns it. Output defaults to edit/preview.mp4 (preview) or edit/final.mp4.',
+      run:
+        `${V} cd {job_dir}/edit && if [ "$ARG_PREVIEW" = 1 ]; then out="\${ARG_OUTPUT:-{job_dir}/edit/preview.mp4}"; else out="\${ARG_OUTPUT:-{job_dir}/edit/final.mp4}"; fi; ` +
+        '"$P" "$V/helpers/render.py" "${ARG_EDL:-{job_dir}/edit/edl.json}" -o "$out" ' +
+        '$([ "$ARG_PREVIEW" = 1 ] && echo --preview) $([ "$ARG_SUBTITLES" = 1 ] && echo --build-subtitles) && ' +
+        // render.py keeps 1080p even for a preview; a long one would pass
+        // the 100 MB upload cap, so a big preview is sent on at 720p.
+        'if [ "$ARG_PREVIEW" = 1 ] && [ "$(stat -f %z "$out" 2>/dev/null || stat -c %s "$out")" -gt 41943040 ]; then ' +
+        'small="${out%.*}.720p.mp4"; ffmpeg -y -v error -i "$out" -vf scale=-2:720 -c:v libx264 -preset veryfast -crf 27 -c:a copy -movflags +faststart "$small" && ' +
+        'echo "preview over 40 MB; upload the 720p copy:" && out="$small"; fi && ' +
+        'echo && echo "rendered $out" && ffprobe -v error -show_entries format=duration,size -of default=nw=1 "$out"',
+      params: {
+        preview: { description: '1 for a fast 720p preview.' },
+        subtitles: { description: '1 to build and burn subtitles.' },
+        edl: { description: 'EDL path; default edit/edl.json.' },
+        output: {
+          description:
+            'Output path; default edit/preview.mp4 or edit/final.mp4.',
+        },
+      },
+      timeout: 3600,
+    },
+    {
+      name: 'grade',
+      description:
+        "Color-grade one file with the skill's grade.py: a preset (warm_cinematic, neutral_punch, " +
+        "none), auto analysis when no preset, or a raw ffmpeg filter. Normally the EDL's grade " +
+        'field does this per segment; use this to try a look on one clip first.',
+      run: `${V} "$P" "$V/helpers/grade.py" "$ARG_INPUT" -o "$ARG_OUTPUT" \${ARG_PRESET:+--preset "$ARG_PRESET"} \${ARG_FILTER:+--filter "$ARG_FILTER"}`,
+      params: {
+        input: { description: 'Absolute input path.', required: true },
+        output: { description: 'Absolute output path.', required: true },
+        preset: { description: 'Preset name.' },
+        filter: { description: 'Raw ffmpeg filter string.' },
+      },
+      timeout: 1800,
+    },
+    {
+      name: 'media_info',
+      description:
+        'Duration, size, streams and measured loudness (EBU R128 integrated, true peak) of a ' +
+        'rendered file. Use it on every preview before showing it: you cannot listen, so report ' +
+        'the numbers.',
+      run:
+        'ffprobe -v error -show_entries format=duration,size:stream=codec_type,codec_name,width,height,r_frame_rate,channels -of default=nw=1 "$ARG_PATH" && ' +
+        'ffmpeg -hide_banner -nostats -i "$ARG_PATH" -af ebur128=peak=true -f null - 2>&1 | tail -12',
+      params: {
+        path: { description: 'Absolute path of the file.', required: true },
+      },
+      timeout: 600,
+    },
+  ],
+  teardown: [],
+};
+
 const CLAUDE_CODE: AgentProfile = {
   systemPrompt: `${CLAUDE_CODE_SYSTEM_PROMPT}\n${ANTISLOP_SYSTEM_PROMPT}`,
   allowedTools: CLAUDE_CODE_ALLOWED_TOOLS,
@@ -370,6 +636,18 @@ const PROFILES: Record<string, AgentProfile> = {
     toolTimeoutMs: TOOL_TIMEOUT_MS,
     automation: RESEARCH_AUTOMATION,
     skills: [OMNISEEK_INVESTIGATE],
+  },
+  // Claude Code with the video-use skill and its helpers as tools, on a
+  // device with ffmpeg; previews come back as question attachments.
+  'video-editor': {
+    systemPrompt: `${CLAUDE_CODE_SYSTEM_PROMPT}\n${VIDEO_EDITOR_SYSTEM_PROMPT}`,
+    allowedTools: CLAUDE_CODE_ALLOWED_TOOLS,
+    mcpServers: ['notesgraph', 'run'],
+    // Footage and renders live under the job, never in a repo.
+    workdir: 'job',
+    toolTimeoutMs: TOOL_TIMEOUT_MS,
+    automation: VIDEO_AUTOMATION,
+    skills: [VIDEO_USE],
   },
 };
 

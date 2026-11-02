@@ -152,6 +152,8 @@ export {
 export {
   AGENT_SKILLS,
   type AgentBudget,
+  attachmentKind,
+  attachmentName,
   CLAUDE_CODE_MODEL,
   CLOUD_DEVICE_KEY,
   defaultSkillsFor,
@@ -164,6 +166,7 @@ export {
   isSkillNoteTitle,
   openQuestions,
   RemoteAgentRunnerService,
+  type RemoteArtifact,
   type RemoteJob,
   type RemoteJobUpdate,
   type RemoteQuestion,
@@ -174,6 +177,7 @@ export {
   type SharedRun,
   type SkillNote,
   type SpentRun,
+  VIDEO_EDITOR_MODEL,
   waitingSteers,
   WORKFLOW_MODEL,
 } from './services/remote-runner';
