@@ -78,50 +78,147 @@ const TerminalScreenView = ({
 
   const rows = connection.screen.spans();
   return (
-    <div
-      ref={ref}
-      className={styles.screen}
-      tabIndex={0}
-      role="textbox"
-      aria-label={`Terminal: ${sessionLabel(session)}`}
-      aria-multiline="true"
-      onKeyDown={onKeyDown}
-      onPaste={onPaste}
-      onScroll={e => {
-        const el = e.currentTarget;
-        stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 24;
-      }}
-      data-testid="remote-terminal-screen"
-    >
-      <span ref={measure} className={styles.measure} aria-hidden>
-        MMMMMMMMMM
-      </span>
-      {session.status === 'starting' ? (
-        <span className={styles.note}>
-          Waiting for {session.deviceKey} to start{' '}
-          {harnessName(session.harness)}…
+    <>
+      <div
+        ref={ref}
+        className={styles.screen}
+        tabIndex={0}
+        role="textbox"
+        aria-label={`Terminal: ${sessionLabel(session)}`}
+        aria-multiline="true"
+        onKeyDown={onKeyDown}
+        onPaste={onPaste}
+        onScroll={e => {
+          const el = e.currentTarget;
+          stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 24;
+        }}
+        data-testid="remote-terminal-screen"
+      >
+        <span ref={measure} className={styles.measure} aria-hidden>
+          MMMMMMMMMM
         </span>
+        {session.status === 'starting' ? (
+          <span className={styles.note}>
+            Waiting for {session.deviceKey} to start{' '}
+            {harnessName(session.harness)}…
+          </span>
+        ) : null}
+        {rows.map((spans, y) => (
+          <div key={y}>
+            {spans.map((span, i) => (
+              <span
+                key={i}
+                style={{
+                  color: span.inverse ? span.bg : span.fg,
+                  background: span.inverse ? (span.fg ?? '#d6dbe3') : span.bg,
+                  fontWeight: span.bold ? 700 : undefined,
+                  opacity: span.dim ? 0.65 : undefined,
+                  fontStyle: span.italic ? 'italic' : undefined,
+                  textDecoration: span.underline ? 'underline' : undefined,
+                }}
+              >
+                {span.text}
+              </span>
+            ))}
+            {spans.length === 0 ? ' ' : null}
+          </div>
+        ))}
+      </div>
+      {BUILD_CONFIG.isMobileEdition ? (
+        <TouchInput
+          disabled={session.status === 'exited'}
+          send={data => connection.send(data)}
+        />
       ) : null}
-      {rows.map((spans, y) => (
-        <div key={y}>
-          {spans.map((span, i) => (
-            <span
-              key={i}
-              style={{
-                color: span.inverse ? span.bg : span.fg,
-                background: span.inverse ? (span.fg ?? '#d6dbe3') : span.bg,
-                fontWeight: span.bold ? 700 : undefined,
-                opacity: span.dim ? 0.65 : undefined,
-                fontStyle: span.italic ? 'italic' : undefined,
-                textDecoration: span.underline ? 'underline' : undefined,
-              }}
-            >
-              {span.text}
-            </span>
-          ))}
-          {spans.length === 0 ? ' ' : null}
-        </div>
-      ))}
+    </>
+  );
+};
+
+/** Keys a phone keyboard doesn't have, sent as the terminal sees them. */
+const TOUCH_KEYS: { label: string; data: string }[] = [
+  { label: 'Esc', data: '\x1b' },
+  { label: 'Tab', data: '\t' },
+  { label: '⇧Tab', data: '\x1b[Z' },
+  { label: '↑', data: '\x1b[A' },
+  { label: '↓', data: '\x1b[B' },
+  { label: '←', data: '\x1b[D' },
+  { label: '→', data: '\x1b[C' },
+  { label: '⌫', data: '\x7f' },
+  { label: '⏎', data: '\r' },
+  { label: 'Ctrl-C', data: '\x03' },
+];
+
+// The harness reads a burst of text and a return together as a paste, so
+// the return goes on its own a moment later and submits.
+const SUBMIT_DELAY_MS = 120;
+
+/**
+ * Typing on a phone: a phone keyboard sends no usable key events to the
+ * screen, so text is written here (autocorrect and voice typing work) and
+ * goes to the harness on Send, with the keys it lacks in a row above.
+ */
+const TouchInput = ({
+  disabled,
+  send,
+}: {
+  disabled: boolean;
+  send: (data: string) => void;
+}) => {
+  const [text, setText] = useState('');
+  const submit = () => {
+    if (disabled) return;
+    if (text) {
+      send(text.includes('\n') ? `\x1b[200~${text}\x1b[201~` : text);
+      setTimeout(() => send('\r'), SUBMIT_DELAY_MS);
+    } else {
+      send('\r');
+    }
+    setText('');
+  };
+  return (
+    <div className={styles.touch}>
+      <div className={styles.keys}>
+        {TOUCH_KEYS.map(key => (
+          <button
+            key={key.label}
+            type="button"
+            className={styles.key}
+            disabled={disabled}
+            // Keep the text field focused, so the keyboard stays up.
+            onPointerDown={e => e.preventDefault()}
+            onClick={() => send(key.data)}
+          >
+            {key.label}
+          </button>
+        ))}
+      </div>
+      <div className={styles.compose}>
+        <textarea
+          className={styles.input}
+          rows={1}
+          value={text}
+          disabled={disabled}
+          placeholder="Message the harness"
+          aria-label="Terminal input"
+          enterKeyHint="send"
+          onChange={e => setText(e.target.value)}
+          onKeyDown={e => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault();
+              submit();
+            }
+          }}
+          data-testid="remote-terminal-input"
+        />
+        <Button
+          variant="primary"
+          disabled={disabled}
+          onPointerDown={e => e.preventDefault()}
+          onClick={submit}
+        >
+          Send
+        </Button>
+      </div>
     </div>
   );
 };
