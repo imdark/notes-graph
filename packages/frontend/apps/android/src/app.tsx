@@ -17,6 +17,7 @@ import { configureMobileModules } from '@notesgraph/core/mobile/modules';
 import { VirtualKeyboardProvider } from '@notesgraph/core/mobile/modules/virtual-keyboard';
 import { router } from '@notesgraph/core/mobile/router';
 import { configureCommonModules } from '@notesgraph/core/modules';
+import { configureTerminalSocketAuth } from '@notesgraph/core/modules/agents';
 import { AIButtonProvider } from '@notesgraph/core/modules/ai-button';
 import { AppLockProvider } from '@notesgraph/core/modules/app-lock';
 import {
@@ -77,6 +78,9 @@ import { nativeSpeechToText } from './speech-to-text-glue';
 
 const storeManagerClient = createStoreManagerClient();
 setTelemetryTransport(storeManagerClient.telemetry);
+// No cookie reaches the server from here: sign the terminal socket in with
+// the token, as the sync socket does.
+configureTerminalSocketAuth(readEndpointToken);
 window.addEventListener('beforeunload', () => {
   storeManagerClient.dispose();
 });

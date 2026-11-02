@@ -32,6 +32,7 @@ export {
 } from './services/cloud-runner';
 export { AgentContextService } from './services/context';
 export {
+  configureTerminalSocketAuth,
   TERMINAL_HARNESSES,
   type TerminalConnection,
   TerminalService,
