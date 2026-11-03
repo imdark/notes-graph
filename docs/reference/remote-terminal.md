@@ -36,7 +36,11 @@ Viewer → server: `terminal:list {workspaceId, deviceKey?}`,
 `terminal:resize {…, cols, rows}`, `terminal:close`.
 
 Server → viewer: `terminal:output {sessionId, data, offset}`,
-`terminal:status {session}`, `terminal:exit {sessionId, code}`.
+`terminal:status {session}`, `terminal:exit {sessionId, code}`, and, to
+every socket that has sent `terminal:list`, `terminal:sessions
+{workspaceId, sessions, devices}` whenever a session opens, starts, ends or
+is removed, or a device connects or leaves. A viewer applies output by
+`offset`, skipping what it already has, and attaches again on a gap.
 
 Device → server: `terminal:device:attach {workspaceId, deviceKey}` (returns
 `{pending, live}`), `terminal:device:started {workspaceId, sessionId}`,

@@ -998,6 +998,14 @@ export const DeploymentsView = () => {
 
   return (
     <div className={styles.content} data-testid="deployments-view">
+      <section className={styles.section} data-testid="deployments-terminal">
+        <div className={styles.sectionTitle}>Terminal</div>
+        <div className={styles.sectionHint}>
+          Open Claude Code or another harness on a connected machine, through
+          wf, with the workspace tools. Close the tab and it keeps running.
+        </div>
+        <RemoteTerminal />
+      </section>
       <DeployInProgress runs={deployCiRuns} />
       <ProdLine deploy={deployInfo} />
       <FlagsLine
@@ -1393,15 +1401,6 @@ export const DeploymentsView = () => {
           </div>
         </section>
       ) : null}
-
-      <section className={styles.section} data-testid="deployments-terminal">
-        <div className={styles.sectionTitle}>Terminal</div>
-        <div className={styles.sectionHint}>
-          Open Claude Code or another harness on a connected machine, through
-          wf, with the workspace tools. Close the tab and it keeps running.
-        </div>
-        <RemoteTerminal />
-      </section>
     </div>
   );
 };

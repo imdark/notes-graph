@@ -26,6 +26,8 @@ const viewerRoom = (workspaceId: string, sessionId: string) =>
   `terminal:view:${workspaceId}:${sessionId}`;
 const deviceRoom = (workspaceId: string, deviceKey: string) =>
   `terminal:device:${workspaceId}:${deviceKey}`;
+/** Viewers that listed the workspace's sessions, told when they change. */
+const watchRoom = (workspaceId: string) => `terminal:watch:${workspaceId}`;
 
 interface SessionRef {
   workspaceId: string;
@@ -46,6 +48,9 @@ interface SessionRef {
  * so viewers need workspace settings access, the same bar as editing the
  * fleet; devices need the same, since a token that can attach as a device
  * can read every keystroke sent to it.
+ *
+ * A viewer that lists sessions is sent `terminal:sessions` with the new list
+ * whenever a session or device comes or goes, so it never has to poll.
  */
 @WebSocketGateway()
 @UseInterceptors(ClsInterceptor)
@@ -59,8 +64,25 @@ export class TerminalGateway implements OnGatewayDisconnect {
     private readonly config: Config
   ) {}
 
-  handleDisconnect() {
+  handleDisconnect(client: Socket) {
     // Rooms are left with the socket; sessions deliberately outlive it.
+    const device = client.data?.terminalDevice as
+      | { workspaceId: string; deviceKey: string }
+      | undefined;
+    if (device) this.announce(device.workspaceId);
+  }
+
+  /** Send watching viewers the workspace's sessions and online devices. */
+  private announce(workspaceId: string) {
+    this.onlineDevices(workspaceId)
+      .then(devices =>
+        this.server.to(watchRoom(workspaceId)).emit('terminal:sessions', {
+          workspaceId,
+          sessions: this.sessions.list(workspaceId),
+          devices,
+        })
+      )
+      .catch(() => {});
   }
 
   private async assertAllowed(user: CurrentUser, workspaceId: unknown) {
@@ -87,9 +109,11 @@ export class TerminalGateway implements OnGatewayDisconnect {
   @SubscribeMessage('terminal:list')
   async list(
     @CurrentUser() user: CurrentUser,
+    @ConnectedSocket() client: Socket,
     @MessageBody() body: { workspaceId: string; deviceKey?: string }
   ) {
     await this.assertAllowed(user, body?.workspaceId);
+    await client.join(watchRoom(body.workspaceId));
     return {
       data: {
         sessions: this.sessions.list(body.workspaceId, body.deviceKey),
@@ -126,6 +150,7 @@ export class TerminalGateway implements OnGatewayDisconnect {
     this.server
       .to(deviceRoom(session.workspaceId, session.deviceKey))
       .emit('terminal:spawn', session);
+    this.announce(session.workspaceId);
     return { data: { session } };
   }
 
@@ -223,6 +248,7 @@ export class TerminalGateway implements OnGatewayDisconnect {
           .emit('terminal:exit', { sessionId: session.id, code: null });
       }
     }
+    this.announce(session.workspaceId);
     return { data: { ok: true } };
   }
 
@@ -245,6 +271,7 @@ export class TerminalGateway implements OnGatewayDisconnect {
       workspaceId: body.workspaceId,
       deviceKey: body.deviceKey,
     };
+    this.announce(body.workspaceId);
     return {
       data: {
         pending: this.sessions.pending(body.workspaceId, body.deviceKey),
@@ -267,6 +294,8 @@ export class TerminalGateway implements OnGatewayDisconnect {
     const session = this.session(body);
     const before = session.length;
     this.sessions.append(session.workspaceId, session.id, body.data);
+    // The first output also marks it running.
+    if (session.status === 'starting') this.announce(session.workspaceId);
     this.server
       .to(viewerRoom(session.workspaceId, session.id))
       .emit('terminal:output', {
@@ -291,6 +320,7 @@ export class TerminalGateway implements OnGatewayDisconnect {
       this.server
         .to(viewerRoom(session.workspaceId, session.id))
         .emit('terminal:status', { session });
+      this.announce(session.workspaceId);
     }
     return { data: { ok: true } };
   }
@@ -313,6 +343,7 @@ export class TerminalGateway implements OnGatewayDisconnect {
           sessionId: session.id,
           code: session.exitCode,
         });
+      this.announce(session.workspaceId);
     }
     return { data: { ok: true } };
   }
@@ -330,7 +361,8 @@ export class TerminalGateway implements OnGatewayDisconnect {
       ...new Set(
         sockets.flatMap(s => {
           const d = s.data.terminalDevice as
-            { workspaceId: string; deviceKey: string } | undefined;
+            | { workspaceId: string; deviceKey: string }
+            | undefined;
           return d?.workspaceId === workspaceId ? [d.deviceKey] : [];
         })
       ),

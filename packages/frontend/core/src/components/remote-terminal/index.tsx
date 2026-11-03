@@ -244,23 +244,45 @@ export const RemoteTerminal = ({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  const show = useCallback(
+    (res: { sessions: TerminalSessionInfo[]; devices: string[] }) => {
+      const devices = fixedDevice
+        ? res.devices.filter(key => key === fixedDevice)
+        : res.devices;
+      setDevices(devices);
+      setSessions(
+        fixedDevice
+          ? res.sessions.filter(s => s.deviceKey === fixedDevice)
+          : res.sessions
+      );
+      setDevice(current => current || devices[0] || '');
+    },
+    [fixedDevice]
+  );
+
   const refresh = useCallback(async () => {
     try {
-      const res = await terminals.list(fixedDevice);
-      setDevices(res.devices);
-      setSessions(res.sessions);
-      setDevice(current => current || res.devices[0] || '');
+      show(await terminals.list(fixedDevice));
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
-  }, [terminals, fixedDevice]);
+  }, [terminals, fixedDevice, show]);
 
+  // Listing once subscribes: the server pushes every change after that.
   useEffect(() => {
+    if (!terminals.hasServer) return;
+    let stop = () => {};
+    try {
+      stop = terminals.watch(show, () => {
+        refresh().catch(() => {});
+      });
+    } catch {
+      // No workspace open yet: the list below reports it.
+    }
     refresh().catch(() => {});
-    const timer = setInterval(() => refresh().catch(() => {}), 10_000);
-    return () => clearInterval(timer);
-  }, [refresh]);
+    return stop;
+  }, [terminals, refresh, show]);
 
   // Leaving the view detaches; the session stays on the device.
   useEffect(() => () => connection?.detach(), [connection]);

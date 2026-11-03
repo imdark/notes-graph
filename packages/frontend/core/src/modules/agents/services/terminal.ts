@@ -57,6 +57,8 @@ export class TerminalConnection {
   readonly tick$ = new LiveData(0);
   readonly connected$ = new LiveData(false);
   private received = 0;
+  private syncing: Promise<void> | null = null;
+  private syncAgain = false;
   private listeners: (() => void)[] = [];
 
   constructor(
@@ -73,9 +75,9 @@ export class TerminalConnection {
       'terminal:output',
       (m: { sessionId: string; data: string; offset: number }) => {
         if (m.sessionId !== session.id) return;
-        // A gap means output was missed in a reconnect: fetch it again.
-        if (m.offset !== this.received) return void this.sync();
-        this.take(m.data);
+        // A gap means output was missed (a reconnect, or output that came
+        // in while catching up): fetch it again.
+        if (!this.take(m.offset, m.data)) this.sync().catch(() => {});
       }
     );
     on('terminal:status', (m: { session: TerminalSessionInfo }) => {
@@ -97,14 +99,42 @@ export class TerminalConnection {
     this.connected$.setValue(socket.connected);
   }
 
-  private take(data: string) {
-    this.received += data.length;
-    this.screen.write(data);
+  /**
+   * Show output that starts at `offset` in the session. What is already on
+   * screen is skipped, so a frame that overlaps a catch-up is not written
+   * twice. Returns false when there is a gap before it.
+   */
+  private take(offset: number, data: string): boolean {
+    if (offset > this.received) return false;
+    const fresh = data.slice(this.received - offset);
+    if (!fresh) return true;
+    this.received += fresh.length;
+    this.screen.write(fresh);
     this.tick$.setValue(this.tick$.value + 1);
+    return true;
   }
 
-  /** Join the session and catch up on what was printed meanwhile. */
-  async sync() {
+  /**
+   * Join the session and catch up on what was printed meanwhile. One
+   * catch-up runs at a time; asking during one runs another after it.
+   */
+  sync(): Promise<void> {
+    if (this.syncing) {
+      this.syncAgain = true;
+      return this.syncing;
+    }
+    this.syncing = (async () => {
+      do {
+        this.syncAgain = false;
+        await this.catchUp();
+      } while (this.syncAgain);
+    })().finally(() => {
+      this.syncing = null;
+    });
+    return this.syncing;
+  }
+
+  private async catchUp() {
     const res = await emit<{
       session: TerminalSessionInfo;
       data: string;
@@ -120,7 +150,7 @@ export class TerminalConnection {
       this.screen.reset();
       this.received = res.from;
     }
-    this.take(res.data);
+    this.take(res.from, res.data);
   }
 
   send(data: string) {
@@ -217,6 +247,35 @@ export class TerminalService extends Service {
       'terminal:list',
       { workspaceId: this.workspaceId, deviceKey }
     );
+  }
+
+  /**
+   * Hear about the workspace's sessions and devices as they change: the
+   * server sends the new list to every socket that has listed them. A
+   * reconnect lands in a new room, so `onReconnect` should list again.
+   */
+  watch(
+    onChange: (res: {
+      sessions: TerminalSessionInfo[];
+      devices: string[];
+    }) => void,
+    onReconnect: () => void
+  ): () => void {
+    const socket = this.getSocket();
+    const workspaceId = this.workspaceId;
+    const changed = (m: {
+      workspaceId: string;
+      sessions: TerminalSessionInfo[];
+      devices: string[];
+    }) => {
+      if (m.workspaceId === workspaceId) onChange(m);
+    };
+    socket.on('terminal:sessions', changed);
+    socket.io.on('reconnect', onReconnect);
+    return () => {
+      socket.off('terminal:sessions', changed);
+      socket.io.off('reconnect', onReconnect);
+    };
   }
 
   async open(input: {
