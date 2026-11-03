@@ -169,12 +169,13 @@ async function loadSession() {
 }
 
 function renderChrome() {
-  const links = [['#/', 'Browse']];
+  // Becoming a developer is offered to everyone; signed out, its page asks
+  // them to sign in first.
+  const links = [
+    ['#/', 'Browse'],
+    ['#/developer', state.developer ? 'Developer' : 'Become a developer'],
+  ];
   if (state.user) {
-    links.push([
-      '#/developer',
-      state.developer ? 'Developer' : 'Become a developer',
-    ]);
     if (state.developer) {
       links.push(['#/publish', 'Publish'], ['#/mine', 'My plugins']);
     }
