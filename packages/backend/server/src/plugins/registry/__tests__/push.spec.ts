@@ -83,3 +83,16 @@ test('a health check that passed sends nothing; one that failed still does', t =
     pushesWhenFinished({ ...job, agentId: 'chat:agent-1', status: 'error' })
   );
 });
+
+test("an automation's job that finished sends nothing; one that failed still does", t => {
+  // A prestart hook's result is its JSON output, e.g. {"awake": {...}}.
+  const job = {
+    createdBy: 'u1',
+    status: 'done',
+    agentId: 'automation-1',
+    kind: 'automation',
+  };
+  t.false(pushesWhenFinished(job));
+  t.true(pushesWhenFinished({ ...job, status: 'error' }));
+  t.true(pushesWhenFinished({ ...job, kind: 'agent' }));
+});
