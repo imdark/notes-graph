@@ -22,12 +22,18 @@ const TOAST_MS = 20_000;
 
 const endedAt = (run: AgentRun) => run.startedAt + (run.durationMs ?? 0);
 
+/**
+ * What a run is called in its notifications: the name the agent gave it once
+ * it knew the task, else the agent's own.
+ */
+const runName = (run: AgentRun) => run.title || run.agentName;
+
 /** A system notification, for when the app isn't the window in front. */
 function notifySystem(run: AgentRun, onClick: () => void) {
   if (typeof Notification === 'undefined' || document.hasFocus()) return;
   const show = () => {
-    const note = new Notification(`${run.agentName} is done — review it`, {
-      body: run.summary ?? run.title ?? '',
+    const note = new Notification(`${runName(run)} is done — review it`, {
+      body: run.summary ?? '',
       tag: `agent-review-${run.id}`,
     });
     note.onclick = () => {
@@ -75,15 +81,11 @@ export function useAgentReviewNotification() {
         const text = (run.summary ?? '').trim();
         notify.success(
           {
-            title: `${run.agentName} is done — review it`,
-            message: [
-              run.title,
+            title: `${runName(run)} is done — review it`,
+            message:
               text.length > PREVIEW_CHARS
                 ? `${text.slice(0, PREVIEW_CHARS - 1)}…`
                 : text,
-            ]
-              .filter(Boolean)
-              .join('\n'),
             actions: [
               {
                 key: 'approve',

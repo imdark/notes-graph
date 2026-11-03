@@ -43,6 +43,8 @@ const MAX_FAN_OUT = 20;
 /** A run that has ended for good, for the reader to confirm or undo. */
 export interface AgentRunFinished {
   sessionId: string;
+  /** The run record, for the name the agent gave it; null if none was made. */
+  runId: string | null;
   agentName: string;
   targetLabel: string;
   /** The note the run was on; the Agents panel lives on that note's page. */
@@ -512,6 +514,7 @@ export class AgentRunSessionService extends Service {
     const key = runKey(agent.id, target);
     this.finished$.next({
       sessionId,
+      runId: session.runId,
       agentName: agent.name,
       targetLabel: session.targetLabel,
       docId: target.docId,
