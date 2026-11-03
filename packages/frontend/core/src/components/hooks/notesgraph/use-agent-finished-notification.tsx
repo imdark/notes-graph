@@ -1,5 +1,8 @@
 import { notify } from '@notesgraph/component';
-import { AgentRunSessionService } from '@notesgraph/core/modules/agents';
+import {
+  AgentRunSessionService,
+  AgentRunsStore,
+} from '@notesgraph/core/modules/agents';
 import { WorkbenchService } from '@notesgraph/core/modules/workbench';
 import { useService } from '@notesgraph/infra';
 import { useEffect } from 'react';
@@ -15,6 +18,7 @@ const PREVIEW_CHARS = 280;
  */
 export function useAgentFinishedNotification(active: boolean) {
   const sessions = useService(AgentRunSessionService);
+  const runsStore = useService(AgentRunsStore);
   const workbench = useService(WorkbenchService).workbench;
 
   useEffect(() => {
@@ -22,6 +26,11 @@ export function useAgentFinishedNotification(active: boolean) {
     const subscription = sessions.finished$.subscribe(done => {
       if (!done.failed) return;
       const text = done.output.trim();
+      // The name the agent gave the run says which task this was; the
+      // agent's own name is the same on every run it does.
+      const name =
+        (done.runId && runsStore.watchRun(done.runId).value?.title) ||
+        done.agentName;
       // The Agents tab is registered by a note's page, so from any other view
       // there is nothing to switch to; open the note the run was on first.
       const open = () => {
@@ -31,9 +40,7 @@ export function useAgentFinishedNotification(active: boolean) {
       };
       const show = done.failed ? notify.error : notify.success;
       show({
-        title: done.failed
-          ? `${done.agentName} hit an error`
-          : `${done.agentName} finished`,
+        title: done.failed ? `${name} hit an error` : `${name} finished`,
         message: [
           done.targetLabel,
           text.length > PREVIEW_CHARS
@@ -72,5 +79,5 @@ export function useAgentFinishedNotification(active: boolean) {
       });
     });
     return () => subscription.unsubscribe();
-  }, [active, sessions, workbench]);
+  }, [active, runsStore, sessions, workbench]);
 }
