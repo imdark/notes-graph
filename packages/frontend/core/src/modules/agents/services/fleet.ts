@@ -125,6 +125,39 @@ export function fleetSummary(
   return counts;
 }
 
+/**
+ * Keys of the devices monitoring reports down. A folder is down with the
+ * machine it is on, since the machine is what gets checked.
+ */
+export function downDeviceKeys(
+  devices: Pick<RegistryDevice, 'key' | 'parentKey' | 'state' | 'checkedAt'>[],
+  nowSeconds: number
+): Set<string> {
+  const offline = new Set(
+    devices
+      .filter(device => deviceState(device, nowSeconds) === 'offline')
+      .map(device => device.key)
+  );
+  const down = new Set(offline);
+  for (const device of devices) {
+    if (device.parentKey && offline.has(device.parentKey)) down.add(device.key);
+  }
+  return down;
+}
+
+/**
+ * The agents with those that run on a down device moved to the end. Each
+ * part keeps its order.
+ */
+export function downLast<T extends { deviceKey?: string }>(
+  agents: T[],
+  down: Set<string>
+): T[] {
+  if (down.size === 0) return agents;
+  const isDown = (agent: T) => !!agent.deviceKey && down.has(agent.deviceKey);
+  return [...agents.filter(agent => !isDown(agent)), ...agents.filter(isDown)];
+}
+
 // ── monitoring agent ────────────────────────────────────────────────────
 // It learns what's normal on each machine from its health checks, flags
 // what's new, and escalates what matters (plugins/registry/monitoring-agent
@@ -271,6 +304,52 @@ export class FleetService extends Service {
   private timer: ReturnType<typeof setInterval> | null = null;
   private checkTimer: ReturnType<typeof setInterval> | null = null;
   private watchers = 0;
+  private loading: Promise<void> | null = null;
+  /** When the list was last asked for (ms), answered or not. */
+  private askedAt = 0;
+
+  /**
+   * For a reader that doesn't keep the list fresh with watch(): fetches it if
+   * nothing has yet, resolving once it has an answer or failed to get one. A
+   * list older than the refresh interval is fetched again in the background,
+   * and resolves at once with what is there.
+   */
+  ensureLoaded(): Promise<void> {
+    const stale = Date.now() - this.askedAt > REFRESH_MS;
+    if (stale && !this.loading && !this.timer) {
+      this.askedAt = Date.now();
+      this.loading = this.revalidate()
+        .then(
+          () => {},
+          () => {}
+        )
+        .finally(() => {
+          this.loading = null;
+        });
+    }
+    if (this.loaded$.value) return Promise.resolve();
+    return this.loading ?? Promise.resolve();
+  }
+
+  /** The agents as they are now, those on a down device last. */
+  downLastNow<T extends { deviceKey?: string }>(agents: T[]): T[] {
+    return downLast(
+      agents,
+      downDeviceKeys(this.devices$.value, Date.now() / 1000)
+    );
+  }
+
+  /** The agents, kept with those on a down device last. */
+  downLast$<T extends { deviceKey?: string }>(
+    agents$: LiveData<T[]>
+  ): LiveData<T[]> {
+    return LiveData.computed(get =>
+      downLast(
+        get(agents$),
+        downDeviceKeys(get(this.devices$), Date.now() / 1000)
+      )
+    );
+  }
 
   /** Keep the list fresh while something shows it; returns the stop. */
   watch(): () => void {

@@ -4,9 +4,10 @@ import {
   AgentIcon,
   AgentRunSessionService,
   AgentsService,
+  useAgentsDownLast,
 } from '@notesgraph/core/modules/agents';
 import { WorkbenchService } from '@notesgraph/core/modules/workbench';
-import { useLiveData, useService } from '@notesgraph/infra';
+import { useService } from '@notesgraph/infra';
 import { useCallback, useMemo, useState } from 'react';
 
 import * as styles from './capture.css';
@@ -44,7 +45,9 @@ export const CaptureHandOff = ({
   const agentsService = useService(AgentsService);
   const sessions = useService(AgentRunSessionService);
   const workbench = useService(WorkbenchService).workbench;
-  const agents = useLiveData(agentsService.agentsFor$('doc'));
+  const agents = useAgentsDownLast(
+    useMemo(() => agentsService.agentsFor$('doc'), [agentsService])
+  );
 
   const [picked, setPicked] = useState<string[]>(readLastPicked);
   const pickedAgents = useMemo(
