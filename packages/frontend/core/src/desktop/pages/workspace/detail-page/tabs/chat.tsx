@@ -122,19 +122,27 @@ export const EditorChatPanel = ({
   const workspaceId = doc?.workspace.id;
   const aiBackendService = useService(AiBackendService);
   const backend = useLiveData(aiBackendService.backend$);
-  const chatDevice = useLiveData(
+  const chatOnDeviceEnabled = useLiveData(
+    useService(FeatureFlagService).flags.enable_page_chat_on_device.$
+  );
+  const savedChatDevice = useLiveData(
     useMemo(
       () => aiBackendService.chatDevice$(workspaceId ?? ''),
       [aiBackendService, workspaceId]
     )
   );
+  // With the flag off a device picked before is kept, but not used.
+  const chatDevice = chatOnDeviceEnabled ? savedChatDevice : null;
   const executor = useService(AgentExecutorService);
   const remoteRunner = useService(RemoteAgentRunnerService);
   // The devices that take agent work, offered as who answers the chat. Only
   // listed once there is a workspace on a server to ask.
   const [devices, setDevices] = useState<{ key: string; name: string }[]>([]);
   useEffect(() => {
-    if (!workspaceId) return;
+    if (!workspaceId || !chatOnDeviceEnabled) {
+      setDevices([]);
+      return;
+    }
     let live = true;
     remoteRunner
       .agentTargets(workspaceId)
@@ -146,7 +154,7 @@ export const EditorChatPanel = ({
     return () => {
       live = false;
     };
-  }, [remoteRunner, workspaceId]);
+  }, [chatOnDeviceEnabled, remoteRunner, workspaceId]);
   const localLLMService = useService(LocalLLMService);
   const docEmbedder = useService(DocEmbedder);
   const localVisionService = useService(LocalVisionService);
