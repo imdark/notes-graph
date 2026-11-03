@@ -123,4 +123,35 @@ describe('LocalCopilotClient chat beside a note', () => {
     const history = sent[1].filter(m => m.role === 'user');
     expect(history[0].content).toBe('summarise this page');
   });
+
+  test("a client with tools is told the open note's id", async () => {
+    const { llm, sent } = recordingLlm();
+    const device = new LocalCopilotClient(
+      llm,
+      undefined,
+      undefined,
+      async () => ({ title: 'Robots', markdown: 'x'.repeat(10_000) }),
+      {
+        systemPrompt: () => 'device prompt',
+        maxDocChars: 30_000,
+        withDocId: true,
+      }
+    );
+    const sessionId = await device.createSession({
+      promptName: 'Chat With NotesGraph AI',
+    } as never);
+    await device.createMessage({
+      sessionId,
+      content: 'file these under Research',
+      params: { currentDocId: 'doc-9' },
+    } as never);
+    await finished(device.chatTextStream({ sessionId } as never));
+
+    expect(sent[0][0]).toEqual({ role: 'system', content: 'device prompt' });
+    const turn = sent[0].at(-1)!;
+    expect(turn.content).toContain('"Robots" (doc id doc-9)');
+    // Past the local model's cut, short of the device's.
+    expect(turn.content).toContain('x'.repeat(10_000));
+    expect(turn.content).not.toContain('the rest of the note is cut');
+  });
 });

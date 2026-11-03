@@ -25,7 +25,11 @@ export {
   GoBoardOcrService,
   type GoBoardOcrStatus,
 } from './services/go-board-ocr';
-export { createLocalAIRequestService } from './services/local-copilot-client';
+export {
+  type ChatStreamer,
+  createChatAIRequestService,
+  createLocalAIRequestService,
+} from './services/local-copilot-client';
 export {
   EMBEDDING_DIM,
   EMBEDDING_MODEL,

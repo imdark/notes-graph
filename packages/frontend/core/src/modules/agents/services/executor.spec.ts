@@ -218,6 +218,46 @@ describe('AgentExecutorService device runs', () => {
     });
   });
 
+  test('a page chat turn is a Claude Code job on the chosen device that may change things', async () => {
+    const enqueued: any[] = [];
+    const { executor } = setup(
+      [],
+      {},
+      {
+        remoteRunner: {
+          enqueue: async (_ws: string, input: any) => {
+            enqueued.push(input);
+            return job({ id: 'j9', status: 'queued' });
+          },
+          agentTargets: async () => [],
+          watch: async function* () {
+            yield {
+              job: job({ id: 'j9', status: 'done', result: 'Filed 3 notes.' }),
+              logDelta: '',
+            };
+          },
+        },
+      }
+    );
+    const reply: string[] = [];
+    for await (const text of executor.pageChatOn('laptop')(
+      [{ role: 'user', content: 'group my robot notes into a folder' }],
+      new AbortController().signal
+    )) {
+      reply.push(text);
+    }
+    expect(reply).toEqual(['Filed 3 notes.']);
+    expect(enqueued[0]).toMatchObject({
+      deviceKey: 'laptop',
+      agentId: 'chat:page-chat',
+      model: 'claude-code',
+      maxSteps: 40,
+    });
+    expect(enqueued[0].context).toContain('group my robot notes');
+    expect(enqueued[0].instructions).toContain('link_document');
+    expect(enqueued[0].instructions).not.toContain('Only answer');
+  });
+
   test('an agent with no cap or level leaves both off the job', async () => {
     const enqueued: any[] = [];
     const { executor } = setup(

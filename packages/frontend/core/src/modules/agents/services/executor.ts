@@ -160,6 +160,32 @@ const FORK_ON_DEVICE_INSTRUCTIONS = [
   'anything, or carry on the run — it is waiting and the user replies to it.',
 ].join('\n');
 
+/**
+ * For the chat panel beside a page, answered on a device: unlike the chats
+ * about a run, this one is there to do things, with the device's shell and
+ * NotesGraph's tools.
+ */
+const PAGE_CHAT_ON_DEVICE_INSTRUCTIONS = [
+  'You are the chat beside the page the user has open in NotesGraph. The',
+  'conversation below is the chat so far; reply to the last user message.',
+  '',
+  'Do what they ask, not only answer. Find, read, create, edit and move notes',
+  'with the NotesGraph tools (mcp__notesgraph__*). Notes are grouped into',
+  'folders by linking: a folder is a note, and link_document(parentDocId,',
+  'childDocId) puts a note under it; make the folder note first if it does',
+  'not exist. Run shell commands with Bash when they ask for one or it is the',
+  'easiest way.',
+  '',
+  'End with a short reply for the chat: what you found or changed, naming the',
+  'notes. Ask before deleting anything.',
+].join('\n');
+
+/** A page chat turn may find, then change, many notes. */
+const PAGE_CHAT_ON_DEVICE_STEPS = 40;
+
+/** Who a page chat's device jobs run as (after the chat prefix). */
+const PAGE_CHAT_AGENT_ID = 'page-chat';
+
 /** Marks a device job that is a turn of a side chat, not a run (see push.ts). */
 export const CHAT_AGENT_PREFIX = 'chat:';
 
@@ -419,6 +445,23 @@ export class AgentExecutorService extends Service implements AgentExecutor {
   }
 
   /**
+   * The chat beside a page, answered by Claude Code on a device: each turn
+   * is a job given the conversation so far, which may run commands and
+   * change notes. Its permission prompts reach the user as any run's do.
+   */
+  pageChatOn(deviceKey: string): ChatModel {
+    return this.chatOnDevice({
+      deviceKey,
+      agentId: PAGE_CHAT_AGENT_ID,
+      agentName: 'Page chat',
+      model: 'claude-code',
+      maxCostUsd: undefined,
+      instructions: PAGE_CHAT_ON_DEVICE_INSTRUCTIONS,
+      maxSteps: PAGE_CHAT_ON_DEVICE_STEPS,
+    });
+  }
+
+  /**
    * A fork of a device or cloud run that is waiting on the reader: a chat on
    * the device the run is on, as the agent it runs as, so it needs no model
    * on the server. Each turn is a short job given the conversation so far
@@ -451,6 +494,7 @@ export class AgentExecutorService extends Service implements AgentExecutor {
     model: string | undefined;
     maxCostUsd: number | undefined;
     instructions: string;
+    maxSteps?: number;
     onWaiting?: (note: string | null) => void;
   }): ChatModel {
     const workspaceId = this.workspaceId;
@@ -472,7 +516,7 @@ export class AgentExecutorService extends Service implements AgentExecutor {
         title: `Question for ${asker.agentName}`,
         model: asker.model,
         tools: [],
-        maxSteps: CHAT_ON_DEVICE_STEPS,
+        maxSteps: asker.maxSteps ?? CHAT_ON_DEVICE_STEPS,
         maxCostUsd: asker.maxCostUsd,
       });
       // Closed before the answer came: the turn would otherwise still run,
