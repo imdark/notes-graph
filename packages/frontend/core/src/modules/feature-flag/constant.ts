@@ -392,7 +392,7 @@ export const NOTESGRAPH_FLAGS = {
     defaultState: true,
   },
   enable_page_chat_on_device: {
-    commit: '',
+    commit: '6714aaa4c3b90be3faa6774a6e17f8782eec81e2',
     category: 'notesgraph',
     displayName: 'Page chat on a device',
     description:
