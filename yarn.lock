@@ -11116,6 +11116,7 @@ __metadata:
   dependencies:
     "@notesgraph-tools/cli": "workspace:*"
     "@notesgraph/plugin-sdk": "workspace:*"
+    vitest: "npm:^4.1.8"
   languageName: unknown
   linkType: soft
 
