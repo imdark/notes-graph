@@ -243,6 +243,7 @@ export {
   DEFAULT_MAX_STEPS,
 } from './stores/agents';
 export { AgentIcon, agentIconData } from './views/agent-icon';
+export { useAgentsDownLast } from './views/use-agents-down-last';
 
 import { type Framework } from '@notesgraph/infra';
 

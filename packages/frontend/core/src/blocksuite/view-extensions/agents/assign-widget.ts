@@ -19,7 +19,6 @@ import {
   AgentRunsStore,
   AgentsService,
   type AgentTarget,
-  deviceState,
   FleetService,
   isOpenTask,
   isPlainBlock,
@@ -61,6 +60,9 @@ const GAP_PX = 2;
 
 /** Least room kept between the end of the line's text and the button. */
 const END_GAP_PX = 8;
+
+/** Longest the menu waits for the machines' health before opening. */
+const FLEET_WAIT_MS = 800;
 
 /**
  * A small button at the end of a to-do line that no agent is on yet,
@@ -338,32 +340,42 @@ export class AgentAssignWidget extends WidgetComponent {
     e.preventDefault();
     e.stopPropagation();
     const framework = this._framework;
-    if (!framework) return;
-
-    const fleet = framework.get(FleetService);
-    const stopWatching = fleet.watch();
-    const nowSeconds = Date.now() / 1000;
-    const offline = new Set(
-      fleet.devices$.value
-        .filter(device => deviceState(device, nowSeconds) === 'offline')
-        .map(device => device.key)
-    );
-    // Agents on a machine whose monitoring reports it down go last. The sort
-    // is stable, so each half keeps its order.
-    const agents = [...framework.get(AgentsService).agentsFor$('block').value]
-      .map(agent => ({
-        agent,
-        down: !!agent.deviceKey && offline.has(agent.deviceKey),
-      }))
-      .sort((a, b) => Number(a.down) - Number(b.down))
-      .map(({ agent }) => agent);
+    if (!framework || this._menuOpen) return;
+    const anchor = e.currentTarget as HTMLElement;
     this._menuOpen = true;
-    popMenu(popupTargetFromElement(e.currentTarget as HTMLElement), {
+
+    // Agents on a machine monitoring reports down go last. Nothing may have
+    // fetched the machines yet this session; wait a moment for them, but
+    // open unsorted rather than keep the menu waiting on a slow server.
+    const fleet = framework.get(FleetService);
+    Promise.race([
+      fleet.ensureLoaded(),
+      new Promise(resolve => setTimeout(resolve, FLEET_WAIT_MS)),
+    ])
+      .then(() => {
+        if (!anchor.isConnected) {
+          this._menuOpen = false;
+          return;
+        }
+        this._popMenu(
+          anchor,
+          fleet.downLastNow(
+            framework.get(AgentsService).agentsFor$('block').value
+          )
+        );
+      })
+      .catch(err => {
+        this._menuOpen = false;
+        console.error(err);
+      });
+  };
+
+  private _popMenu(anchor: HTMLElement, agents: Agent[]) {
+    popMenu(popupTargetFromElement(anchor), {
       options: {
         title: { text: 'Assign to agent' },
         onClose: () => {
           this._menuOpen = false;
-          stopWatching();
         },
         items: [
           menu.group({
@@ -392,7 +404,7 @@ export class AgentAssignWidget extends WidgetComponent {
         ],
       },
     });
-  };
+  }
 
   private _assign(agent: Agent) {
     const framework = this._framework;
