@@ -36,6 +36,11 @@ ENV PORT=8099 \
 # still lists them on first boot.
 ENV PLUGIN_SEED_DIR=/app/tools/plugin-template
 
+# The marketplace website (served at / and /site/*), and the app to ask who a
+# signed-in caller is (identity.ts): the server's compose service name.
+ENV PLUGIN_SITE_DIR=/app/tools/notesgraph-plugin-server/site \
+    NOTESGRAPH_URL=http://notesgraph:3010
+
 VOLUME ["/data"]
 EXPOSE 8099
 CMD ["node", "/app/plugin-server.mjs"]
