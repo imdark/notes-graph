@@ -22,6 +22,7 @@ import { ImportTemplateDialog } from './import-template';
 import { ImportWorkspaceDialog } from './import-workspace';
 import { LinkVisibilityConfirmDialog } from './link-visibility-confirm';
 import { MonitorEditorDialog } from './monitor-editor';
+import { MonitorViewDialog } from './monitor-view';
 import { ProjectMembersDialog } from './project-members';
 import { BlockScheduleDialog } from './selectors/block-schedule';
 import { CollectionSelectorDialog } from './selectors/collection';
@@ -60,6 +61,7 @@ const WORKSPACE_DIALOGS = {
   'agent-block-runs': AgentBlockRunsDialog,
   'agent-editor': AgentEditorDialog,
   'monitor-editor': MonitorEditorDialog,
+  'monitor-view': MonitorViewDialog,
   setting: SettingDialog,
   import: ImportDialog,
   'project-members': ProjectMembersDialog,

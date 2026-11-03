@@ -114,6 +114,11 @@ export {
   parseLogLines,
 } from './services/log-lines';
 export {
+  monitorChatMessages,
+  monitorSetup,
+  readingLines,
+} from './services/monitor-chat';
+export {
   formatTrendValue,
   monitorTrend,
   readingNumber,

@@ -97,6 +97,11 @@ export type WORKSPACE_DIALOG_SCHEMA = {
     /** Edit this monitor instead of making a new one. */
     monitorId?: string;
   }) => void;
+  /**
+   * A monitor's view, from its block chip: its setup, run logs, readings
+   * chart, and a chat to ask about the results.
+   */
+  'monitor-view': (props: { monitorId: string }) => void;
   /** The agent runs that worked on a block, from its runs chip. */
   'agent-block-runs': (props: {
     runIds: string[];
