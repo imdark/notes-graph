@@ -90,14 +90,19 @@ export function runOutcome(
  * Deployments screen asking GitHub (the screen shows the answer), not a turn
  * of a side chat asked on a device (the chat shows the answer), and not a
  * health check that passed: those run on a schedule, and only a failure is
- * news. A failed one still pushes.
+ * news. A failed one still pushes. The same goes for an automation's job,
+ * such as a prestart hook that keeps the Mac awake: its result is the code's
+ * JSON output, not something to read on a phone, and the agent run it goes
+ * with sends its own push.
  */
 export function pushesWhenFinished(job: {
   createdBy: string | null;
   status: string;
   agentId: string;
+  kind?: string;
 }): boolean {
   if (!job.createdBy || job.status === 'cancelled') return false;
+  if (job.kind === 'automation' && job.status === 'done') return false;
   if (job.agentId.startsWith('monitor:')) return false;
   if (job.agentId.startsWith('github:')) return false;
   if (job.agentId.startsWith('chat:')) return false;
