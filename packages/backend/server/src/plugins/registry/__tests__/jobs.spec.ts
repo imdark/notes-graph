@@ -935,6 +935,13 @@ test('a claimed job carries how to run it, the same for every runner', async t =
     ['mirror', 'worktree']
   );
   t.is(code?.profile?.automation.cwd, '{job_dir}/repo');
+  // Jobs share the mirror, so its git steps take turns where flock exists.
+  for (const step of [
+    ...(code?.profile?.automation.setup ?? []),
+    ...(code?.profile?.automation.teardown ?? []),
+  ]) {
+    t.regex(step.run, /flock -w \d+ 9 .*9>\{cache\}\/git\.lock/);
+  }
   t.deepEqual(
     code?.profile?.automation.tools.map(tool => tool.name),
     ['install_deps', 'run_tests', 'typecheck']
