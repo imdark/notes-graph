@@ -37,6 +37,27 @@ export const title = style({
   alignItems: 'center',
 });
 
+// Who answers: the server's or the local model, or a device's Claude Code.
+export const answerer = style({
+  flexShrink: 1,
+  minWidth: 0,
+  maxWidth: 180,
+  fontSize: 12,
+  color: 'var(--notesgraph-text-secondary-color)',
+  background: 'transparent',
+  border: `0.5px solid ${cssVarV2('layer/insideBorder/border')}`,
+  borderRadius: 4,
+  padding: '2px 4px',
+  cursor: 'pointer',
+  textOverflow: 'ellipsis',
+  selectors: {
+    '&:focus-visible': {
+      outline: `2px solid ${cssVarV2('layer/insideBorder/primaryBorder')}`,
+      outlineOffset: 1,
+    },
+  },
+});
+
 export const playground = style({
   cursor: 'pointer',
   padding: '2px',

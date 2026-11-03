@@ -27,6 +27,10 @@ import { NotificationServiceImpl } from '@notesgraph/core/blocksuite/view-extens
 import { useAIChatConfig } from '@notesgraph/core/components/hooks/notesgraph/use-ai-chat-config';
 import { useAISpecs } from '@notesgraph/core/components/hooks/notesgraph/use-ai-specs';
 import { useAISubscribe } from '@notesgraph/core/components/hooks/notesgraph/use-ai-subscribe';
+import {
+  AgentExecutorService,
+  RemoteAgentRunnerService,
+} from '@notesgraph/core/modules/agents';
 import { storeMarkdown } from '@notesgraph/core/modules/agents/services/context';
 import {
   AIDraftService,
@@ -35,6 +39,7 @@ import {
 import { AIModelService } from '@notesgraph/core/modules/ai-button/services/models';
 import {
   AiBackendService,
+  createChatAIRequestService,
   createLocalAIRequestService,
   DocEmbedder,
   LocalLLMService,
@@ -117,34 +122,85 @@ export const EditorChatPanel = ({
   const workspaceId = doc?.workspace.id;
   const aiBackendService = useService(AiBackendService);
   const backend = useLiveData(aiBackendService.backend$);
+  const chatDevice = useLiveData(
+    useMemo(
+      () => aiBackendService.chatDevice$(workspaceId ?? ''),
+      [aiBackendService, workspaceId]
+    )
+  );
+  const executor = useService(AgentExecutorService);
+  const remoteRunner = useService(RemoteAgentRunnerService);
+  // The devices that take agent work, offered as who answers the chat. Only
+  // listed once there is a workspace on a server to ask.
+  const [devices, setDevices] = useState<{ key: string; name: string }[]>([]);
+  useEffect(() => {
+    if (!workspaceId) return;
+    let live = true;
+    remoteRunner
+      .agentTargets(workspaceId)
+      .then(list => {
+        if (live) setDevices(list);
+      })
+      // A local workspace or an unreachable server: no devices to offer.
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [remoteRunner, workspaceId]);
   const localLLMService = useService(LocalLLMService);
   const docEmbedder = useService(DocEmbedder);
   const localVisionService = useService(LocalVisionService);
+  // The note this panel sits beside, for a model that otherwise sees only
+  // its id.
+  const readCurrentDoc = useCallback(
+    async (docId: string) =>
+      doc && doc.id === docId
+        ? {
+            title: doc.meta?.title ?? '',
+            markdown: await storeMarkdown(doc),
+          }
+        : null,
+    [doc]
+  );
   const requestService = useMemo(
     () =>
-      backend === 'local'
-        ? createLocalAIRequestService(
-            localLLMService,
-            docEmbedder,
-            localVisionService,
-            // The note this panel sits beside, for the on-device model,
-            // which otherwise saw only its id.
-            async docId =>
-              doc && doc.id === docId
-                ? {
-                    title: doc.meta?.title ?? '',
-                    markdown: await storeMarkdown(doc),
-                  }
-                : null
+      chatDevice
+        ? // A device's Claude Code: it can run commands and find, edit and
+          // file notes, which the server's model can't.
+          createChatAIRequestService(
+            {
+              chatStream: (messages, options) =>
+                executor.pageChatOn(chatDevice)(
+                  messages,
+                  options?.signal ?? new AbortController().signal
+                ),
+            },
+            readCurrentDoc,
+            {
+              systemPrompt: () =>
+                "The user's chat beside a page in NotesGraph, their notes app.",
+              // Claude Code reads the rest itself if it needs it.
+              maxDocChars: 30_000,
+              withDocId: true,
+            }
           )
-        : createAIRequestService(
-            graphqlService.gql,
-            eventSourceService.eventSource,
-            nbstoreService.realtime
-          ),
+        : backend === 'local'
+          ? createLocalAIRequestService(
+              localLLMService,
+              docEmbedder,
+              localVisionService,
+              readCurrentDoc
+            )
+          : createAIRequestService(
+              graphqlService.gql,
+              eventSourceService.eventSource,
+              nbstoreService.realtime
+            ),
     [
       backend,
-      doc,
+      chatDevice,
+      executor,
+      readCurrentDoc,
       localLLMService,
       docEmbedder,
       localVisionService,
@@ -512,6 +568,34 @@ export const EditorChatPanel = ({
                 t['com.notesgraph.ai.chat-panel.title']()
               )}
             </div>
+            {devices.length || chatDevice ? (
+              <select
+                className={styles.answerer}
+                aria-label="Who answers this chat"
+                title="A device's Claude Code can run commands and find, edit and file notes into folders. Permission prompts come as notifications."
+                value={chatDevice ?? ''}
+                onChange={e =>
+                  workspaceId &&
+                  aiBackendService.setChatDevice(
+                    workspaceId,
+                    e.target.value || null
+                  )
+                }
+                data-testid="chat-panel-answerer"
+              >
+                <option value="">
+                  {backend === 'local' ? 'On-device AI' : 'NotesGraph AI'}
+                </option>
+                {chatDevice && !devices.some(d => d.key === chatDevice) ? (
+                  <option value={chatDevice}>{chatDevice} (unavailable)</option>
+                ) : null}
+                {devices.map(device => (
+                  <option key={device.key} value={device.key}>
+                    Claude Code on {device.name || device.key}
+                  </option>
+                ))}
+              </select>
+            ) : null}
             {playgroundVisible ? (
               <div className={styles.playground} onClick={openPlayground}>
                 <CenterPeekIcon />
