@@ -4,8 +4,9 @@ import { style } from '@vanilla-extract/css';
 export const container = style({
   display: 'flex',
   flexDirection: 'column',
-  height: '100dvh',
-  overflow: 'hidden',
+  // Grows with the calendar events instead of clipping at the viewport, so
+  // the document scrolls (the note page scrolls the document the same way).
+  minHeight: '100dvh',
   backgroundColor: cssVarV2('layer/background/primary'),
 });
 
