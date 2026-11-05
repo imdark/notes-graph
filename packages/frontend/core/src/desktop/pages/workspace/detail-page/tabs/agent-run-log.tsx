@@ -513,6 +513,7 @@ export const AgentRunLogDialog = ({
       open={!!runId}
       onOpenChange={open => !open && onClose()}
       width={720}
+      headerClassName={styles.logDialogHeader}
       // The dialog is capped at the viewport height; without this the
       // content past the cap (the log's bottom, the buttons) is clipped
       // and can't be reached on a phone.
