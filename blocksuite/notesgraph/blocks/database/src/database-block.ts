@@ -752,10 +752,15 @@ export class DatabaseBlockComponent extends CaptionedBlockComponent<DatabaseBloc
   override renderBlock() {
     // Collapsed like a toggle block: show only a chevron + the title, and skip
     // rendering the data view entirely (tools, view bar and rows all hidden).
+    // The whole header row expands it, not just the chevron.
     if (this.isCollapsed) {
       return html`
         <div contenteditable="false" class="${this.collapsedContentClass}">
-          <div class="${dbCollapsedHeaderStyles}">
+          <div
+            class="${dbCollapsedHeaderStyles}"
+            data-testid="database-collapsed-header"
+            @click=${this.toggleCollapsed}
+          >
             ${this.renderCollapseToggle()}
             <span class="${dbCollapsedTitleStyles}"
               >${this.model.props.title.toString() || 'Untitled'}</span
