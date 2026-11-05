@@ -12,6 +12,7 @@ export function MobileNotificationCenter() {
       className={sonner}
       visibleToasts={1}
       position="top-center"
+      swipeDirections={['top', 'left']}
       style={{
         width: '100%',
         top: 'calc(env(safe-area-inset-top) + 16px)',
