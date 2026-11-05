@@ -239,6 +239,38 @@ export class PageClipboard extends ReadOnlyClipboard {
     return true;
   }
 
+  /**
+   * A single pasted URL on a text block links itself, as it does in a list or
+   * checkbox (rich-text's own paste). Mobile webviews can fire the paste on the
+   * page instead, where it would otherwise land as plain text.
+   */
+  private _pasteUrlAsLink(clipboardData: DataTransfer | null): boolean {
+    const url = clipboardData?.getData('text/plain')?.trim();
+    if (!url || !/^https?:\/\/\S+$/i.test(url) || !isValidUrl(url)) {
+      return false;
+    }
+    const parseDocUrl = this.std.getOptional(ParseDocUrlProvider);
+    if (parseDocUrl?.parseDocUrl(url)) {
+      return false;
+    }
+    const textSelection = this.std.selection.find(TextSelection);
+    if (!textSelection || (textSelection.to && !textSelection.isCollapsed())) {
+      return false;
+    }
+    const model = this.std.store.getBlock(textSelection.from.blockId)?.model;
+    if (!model?.text || !matchModels(model, [ParagraphBlockModel])) {
+      return false;
+    }
+    const { index, length } = textSelection.from;
+    this.std.store.captureSync();
+    if (length > 0) {
+      model.text.format(index, length, { link: url });
+    } else {
+      model.text.insert(url, index, { link: url });
+    }
+    return true;
+  }
+
   onPagePaste: UIEventHandler = ctx => {
     const e = ctx.get('clipboardState').raw;
     e.preventDefault();
@@ -250,6 +282,10 @@ export class PageClipboard extends ReadOnlyClipboard {
     }
 
     if (this._pasteUrlsAsBookmarks(e.clipboardData)) {
+      return;
+    }
+
+    if (this._pasteUrlAsLink(e.clipboardData)) {
       return;
     }
 
