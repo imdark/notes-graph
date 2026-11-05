@@ -224,6 +224,17 @@ export const runActions = style({
   '@media': { '(hover: none)': { opacity: 1 } },
 });
 
+/**
+ * The run log dialog's title is the run's title, often a whole task line.
+ * The modal's close button sits absolutely in the top-right corner, so
+ * leave room for it and wrap long words instead of running under it.
+ */
+export const logDialogHeader = style({
+  fontSize: cssVar('fontBase'),
+  paddingRight: 32,
+  overflowWrap: 'anywhere',
+});
+
 export const logDialogBody = style({
   display: 'flex',
   flexDirection: 'column',
