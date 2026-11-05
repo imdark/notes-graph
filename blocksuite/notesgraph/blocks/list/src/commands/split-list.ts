@@ -3,7 +3,7 @@ import { focusTextModel } from '@blocksuite/notesgraph-rich-text';
 import {
   getNextContinuousNumberedLists,
   matchModels,
-  orgStampAwareSplitIndex,
+  splitTextKeepingOrgMeta,
 } from '@blocksuite/notesgraph-shared/utils';
 import type { Command, EditorHost } from '@blocksuite/std';
 
@@ -115,17 +115,10 @@ export const splitListCommand: Command<{
 
   let newListId: string | null = null;
 
-  // Keep trailing org planning stamps (CLOSED/STARTED chips) on this item: if
-  // the caret is past the item's real text, split at the true end so the badge
-  // stays here and the new sibling starts blank, instead of dragging the badge
-  // down onto the new block.
-  const splitIndex = orgStampAwareSplitIndex(
-    model.props.text.toDelta(),
-    inlineIndex
-  );
-
+  // Trailing task metadata (STARTED/CLOSED stamps, the @agent claim) stays on
+  // this item; only the text after the caret moves to the new one.
   if (model.children.length > 0 && !model.props.collapsed) {
-    const afterText = model.props.text.split(splitIndex);
+    const afterText = splitTextKeepingOrgMeta(model.props.text, inlineIndex);
     if (inlineIndex === 0) {
       /**
        * case 3: list has children (list not collapsed), split the list at the start of line
@@ -233,7 +226,7 @@ export const splitListCommand: Command<{
      * - |a
      * - bbb
      */
-    const afterText = model.props.text.split(splitIndex);
+    const afterText = splitTextKeepingOrgMeta(model.props.text, inlineIndex);
     newListId = doc.addBlock(
       'notesgraph:list',
       {

@@ -12,6 +12,8 @@
  * - `CREATED`   — creation time (custom log keyword, inactive)
  */
 
+import { Text } from '@blocksuite/store';
+
 export const ORG_PLANNING_KEYWORDS = [
   'SCHEDULED',
   'DEADLINE',
@@ -280,42 +282,83 @@ export function applyOrgStatusTimestamps(
   }
 }
 
+type SplitDelta = { insert?: unknown; attributes?: Record<string, unknown> }[];
+
 /**
- * Trailing org planning stamps (the CLOSED/STARTED/… chips) annotate the whole
- * list item, so a split must keep them on the original block. Given the delta
- * of a line and the caret's split index, returns the index to actually split
- * at: when the caret sits at or past the item's real text — i.e. only
- * whitespace and org-stamp chips follow — it returns the line's true end, so
- * the stamps stay put and the new block starts blank. Otherwise the caret
- * index is returned unchanged (a genuine mid-text split still divides the line).
+ * Line metadata: the status chip, the planning stamps and the `@agent` claim.
+ * They describe the whole task, not the words next to them.
  */
-export function orgStampAwareSplitIndex(
-  delta: { insert?: unknown; attributes?: Record<string, unknown> }[],
-  inlineIndex: number
-): number {
+const isOrgMeta = (attributes: Record<string, unknown> | undefined) =>
+  typeof attributes?.orgTimestamp === 'string' ||
+  typeof attributes?.orgStatus === 'string' ||
+  typeof attributes?.orgMention === 'string';
+
+/**
+ * Where to split a task line on Enter so its trailing metadata (STARTED/CLOSED
+ * stamps, the `@agent` claim that brings the run badge) stays on the original
+ * line. The new line gets `[index, keepFrom)`; everything from `keepFrom` on
+ * stays behind.
+ *
+ * - Caret at or past the real text (only spaces and metadata follow): split at
+ *   the true end, so the new line starts blank.
+ * - Caret inside the text: the rest of the text moves down, the metadata stays.
+ * - Caret before the text (line start, or just after the status chip): a plain
+ *   split, so the whole task moves down under a blank line, as Enter at the
+ *   start of a line usually does.
+ */
+export function orgStampAwareSplit(
+  delta: SplitDelta,
+  index: number,
+  length = 0
+): { index: number; keepFrom: number } {
   let offset = 0;
-  let logicalEnd = 0; // index just past the last non-stamp, non-space character
-  let lastStampEnd = 0; // index just past the last org-stamp chip
+  let contentStart = -1; // index of the first real character
+  let logicalEnd = 0; // index just past the last real (non-meta, non-space) character
+  let lastMetaEnd = 0; // index just past the last metadata character
   for (const op of delta) {
     const insert = typeof op.insert === 'string' ? op.insert : '';
-    const isStamp =
-      typeof op.attributes?.orgTimestamp === 'string' ||
-      typeof op.attributes?.orgStatus === 'string';
-    if (isStamp) {
-      lastStampEnd = offset + insert.length;
+    if (isOrgMeta(op.attributes)) {
+      lastMetaEnd = offset + insert.length;
     } else {
       for (let i = 0; i < insert.length; i++) {
-        if (insert[i] !== ' ') logicalEnd = offset + i + 1;
+        if (insert[i] === ' ') continue;
+        if (contentStart < 0) contentStart = offset + i;
+        logicalEnd = offset + i + 1;
       }
     }
     offset += insert.length;
   }
-  // Only redirect the split when the caret is past all real content AND a stamp
-  // trails it — otherwise leave normal splitting untouched.
-  if (inlineIndex >= logicalEnd && lastStampEnd > logicalEnd) {
-    return offset;
+  const plain = { index, keepFrom: offset };
+  if (lastMetaEnd <= logicalEnd) return plain;
+  if (index >= logicalEnd) {
+    return length === 0 ? { index: offset, keepFrom: offset } : plain;
   }
-  return inlineIndex;
+  if (index <= contentStart || index + length > logicalEnd) return plain;
+  return { index, keepFrom: logicalEnd };
+}
+
+/**
+ * `text.split(index, length)` for Enter on a task line: returns the new line's
+ * text and leaves the trailing metadata on `text` (see {@link orgStampAwareSplit}).
+ */
+export function splitTextKeepingOrgMeta(
+  text: Text,
+  index: number,
+  length = 0
+): Text {
+  const split = orgStampAwareSplit(text.toDelta(), index, length);
+  if (split.keepFrom >= text.length) return text.split(split.index, length);
+  const moved = text.sliceToDelta(split.index + length, split.keepFrom);
+  const kept = text.sliceToDelta(split.keepFrom);
+  text.delete(split.index, text.length - split.index);
+  text.applyDelta([{ retain: split.index }, ...kept]);
+  return new Text(
+    moved.flatMap(op =>
+      typeof op.insert === 'string'
+        ? [{ insert: op.insert, attributes: op.attributes }]
+        : []
+    )
+  );
 }
 
 /**
