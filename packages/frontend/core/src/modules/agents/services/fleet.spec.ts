@@ -11,6 +11,8 @@ import {
   agentReadiness,
   deviceChecks,
   deviceState,
+  downDeviceKeys,
+  downLast,
   FleetService,
   fleetSummary,
   type MonitoringDecision,
@@ -142,6 +144,43 @@ describe('fleet helpers', () => {
   });
 });
 
+describe('agents on down machines', () => {
+  const nowSeconds = Date.now() / 1000;
+  const devices = [
+    device({ key: 'up', checkedAt: nowSeconds }),
+    device({ key: 'down', state: 'offline', checkedAt: nowSeconds }),
+    device({ key: 'down/repo', parentKey: 'down', checkedAt: nowSeconds }),
+    device({ key: 'up/repo', parentKey: 'up', checkedAt: nowSeconds }),
+    // Too old to trust: not known to be down.
+    device({ key: 'stale', state: 'offline', checkedAt: 1 }),
+  ];
+
+  test('a folder is down with its machine', () => {
+    expect([...downDeviceKeys(devices, nowSeconds)].sort()).toEqual([
+      'down',
+      'down/repo',
+    ]);
+  });
+
+  test('moves agents on a down device last, keeping each part in order', () => {
+    const agents = [
+      { id: 'a', deviceKey: 'down' },
+      { id: 'b' },
+      { id: 'c', deviceKey: 'down/repo' },
+      { id: 'd', deviceKey: 'up' },
+      { id: 'e', deviceKey: 'stale' },
+    ];
+    const down = downDeviceKeys(devices, nowSeconds);
+    expect(downLast(agents, down).map(a => a.id)).toEqual([
+      'b',
+      'd',
+      'e',
+      'a',
+      'c',
+    ]);
+  });
+});
+
 describe('monitoring agent helpers', () => {
   test('a machine is known once it has had the warm-up checks', () => {
     expect(
@@ -164,6 +203,47 @@ describe('monitoring agent helpers', () => {
 });
 
 describe('FleetService', () => {
+  test('sorts agents by the machines it fetched once, without watching', async () => {
+    const { service, calls } = setup(() => ({
+      body: {
+        devices: [
+          device({
+            key: 'down',
+            state: 'offline',
+            checkedAt: Date.now() / 1000,
+          }),
+        ],
+      },
+    }));
+    const agents = [{ id: 'a', deviceKey: 'down' }, { id: 'b' }];
+    expect(service.downLastNow(agents).map(a => a.id)).toEqual(['a', 'b']);
+    await Promise.all([service.ensureLoaded(), service.ensureLoaded()]);
+    await service.ensureLoaded();
+    expect(calls.filter(c => c.path.endsWith('/devices'))).toHaveLength(1);
+    expect(service.downLastNow(agents).map(a => a.id)).toEqual(['b', 'a']);
+  });
+
+  test('a list older than the refresh interval is fetched again', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW * 1000);
+    const { service, calls } = setup(() => ({ body: { devices: [] } }));
+    const devicesCalls = () =>
+      calls.filter(c => c.path.endsWith('/devices')).length;
+    await service.ensureLoaded();
+    vi.setSystemTime(NOW * 1000 + 10_000);
+    await service.ensureLoaded();
+    expect(devicesCalls()).toBe(1);
+    vi.setSystemTime(NOW * 1000 + 31_000);
+    await service.ensureLoaded();
+    await vi.waitFor(() => expect(devicesCalls()).toBe(2));
+  });
+
+  test('ensureLoaded settles when the server has no registry', async () => {
+    const { service } = setup(() => ({ status: 404, body: 'nope' }));
+    await service.ensureLoaded();
+    expect(service.loaded$.value).toBe(true);
+  });
+
   test('lists the workspace’s devices', async () => {
     const { service, calls } = setup(() => ({
       body: { devices: [device({})] },

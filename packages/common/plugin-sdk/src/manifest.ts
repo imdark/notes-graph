@@ -18,6 +18,12 @@ export const capabilitySchema = z.enum([
   'backend',
   'net',
   'native',
+  /**
+   * Install agents from the app's built-in templates and start runs of them.
+   * Nothing else about agents: a plugin cannot define a profile, a skill or a
+   * tool, only put a template to work.
+   */
+  'agents',
 ]);
 export type Capability = z.infer<typeof capabilitySchema>;
 

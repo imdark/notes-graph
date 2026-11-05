@@ -8,3 +8,8 @@ plugins
 # points plugins at them. Without this they fall under `*.js` above and the
 # import map 404s in any built app.
 !plugin-runtime/*.js
+
+# The offline-shell service worker is source too. Ignored, prod served the
+# app's HTML at /sw.js, so browsers that had installed it could never update
+# it and kept its caches for good.
+!sw.js

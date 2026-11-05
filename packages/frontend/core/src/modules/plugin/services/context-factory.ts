@@ -11,6 +11,7 @@ import type {
   PluginManifest,
 } from '@notesgraph/plugin-sdk';
 import type {
+  AgentsApi,
   BackendApi,
   CommandsApi,
   DocModesApi,
@@ -19,6 +20,7 @@ import type {
   HooksApi,
   NativeApi,
   NetApi,
+  PluginAgent,
   PluginBlock,
   PluginContext,
   PluginDoc,
@@ -28,6 +30,13 @@ import type {
   WorkspaceApi,
 } from '@notesgraph/plugin-sdk/client';
 
+import type {
+  Agent,
+  AgentRunSessionService,
+  AgentsService,
+  AgentTarget,
+} from '../../agents';
+import { AGENT_TEMPLATES, savedPlacement } from '../../agents';
 import { DesktopApiService } from '../../desktop-api';
 import type { DocRecord, DocsService } from '../../doc';
 import {
@@ -41,6 +50,27 @@ import { getPluginMarketplaceBaseUrl } from '../marketplace';
 import type { PluginContributionRegistry } from './contribution-registry';
 
 type EventHandler = (payload: unknown) => void;
+
+/**
+ * The active workspace's agent services, handed to the (root-scoped) factory
+ * by the workspace bridge so the `agents` capability acts on the workspace
+ * the user is in. `devices` lists the registry's agent targets.
+ */
+export interface PluginAgentsBridge {
+  agents: AgentsService;
+  runs: AgentRunSessionService;
+  devices: () => Promise<{ key: string; name: string }[]>;
+}
+
+function toPluginAgent(agent: Agent): PluginAgent {
+  return {
+    id: agent.id,
+    name: agent.name,
+    model: agent.model,
+    deviceKey: agent.deviceKey,
+    enabled: agent.enabled,
+  };
+}
 
 function currentPlatform(): Platform {
   if (BUILD_CONFIG.isElectron) return 'desktop';
@@ -136,6 +166,20 @@ export class PluginContextFactory extends Service {
       throw new Error(`[plugin:${pluginId}] no active workspace`);
     }
     return this.activeDocs;
+  }
+
+  // The active workspace's agent services, like activeDocs.
+  private activeAgents: PluginAgentsBridge | null = null;
+
+  setActiveAgents(bridge: PluginAgentsBridge | null) {
+    this.activeAgents = bridge;
+  }
+
+  private requireAgents(pluginId: string): PluginAgentsBridge {
+    if (!this.activeAgents) {
+      throw new Error(`[plugin:${pluginId}] no active workspace`);
+    }
+    return this.activeAgents;
   }
 
   // Docs whose store we've already confirmed ready this session, so repeated
@@ -468,6 +512,69 @@ export class PluginContextFactory extends Service {
       },
     };
 
+    const agents: AgentsApi = {
+      listTemplates: () => {
+        req('agents');
+        return Promise.resolve(
+          AGENT_TEMPLATES.map(({ id, label }) => ({ id, label }))
+        );
+      },
+      list: () => {
+        req('agents');
+        const bridge = this.requireAgents(pluginId);
+        return Promise.resolve(
+          bridge.agents.agents$.value.map(agent => toPluginAgent(agent))
+        );
+      },
+      listDevices: async () => {
+        req('agents');
+        const bridge = this.requireAgents(pluginId);
+        const devices = await bridge.devices();
+        return devices.map(({ key, name }) => ({ key, name }));
+      },
+      installTemplate: (templateId, options) => {
+        req('agents');
+        const bridge = this.requireAgents(pluginId);
+        const template = AGENT_TEMPLATES.find(t => t.id === templateId);
+        if (!template) {
+          throw new Error(
+            `[plugin:${pluginId}] no agent template '${templateId}'`
+          );
+        }
+        const draft = template.draft;
+        // Already installed from this template: same name and harness.
+        const existing = bridge.agents.agents$.value.find(
+          agent => agent.name === draft.name && agent.model === draft.model
+        );
+        if (existing) return Promise.resolve(toPluginAgent(existing));
+        // Saved the way the editor saves it: a device-only model picked under
+        // "Cloud" lands on the server's runner, a remote agent keeps its device.
+        const deviceKey = options?.deviceKey ?? draft.deviceKey;
+        const created = bridge.agents.create(options?.scope ?? 'personal', {
+          ...draft,
+          ...savedPlacement(draft.harness, draft.model, deviceKey),
+        });
+        return Promise.resolve(toPluginAgent(created));
+      },
+      start: (agentId, target) => {
+        req('agents');
+        const bridge = this.requireAgents(pluginId);
+        const agent = bridge.agents.agents$.value.find(a => a.id === agentId);
+        if (!agent) {
+          throw new Error(`[plugin:${pluginId}] no agent '${agentId}'`);
+        }
+        const agentTarget: AgentTarget =
+          target.kind === 'block'
+            ? { kind: 'block', docId: target.docId, blockId: target.blockId }
+            : { kind: 'doc', docId: target.docId };
+        // Resolves when the run ends; the plugin only wants it queued.
+        bridge.runs.start(agent, agentTarget).catch(err => {
+          console.error(`[plugin:${pluginId}] agent run failed`, err);
+        });
+        return Promise.resolve();
+      },
+    };
+
     const native: NativeApi =
       desktopApi && platform === 'desktop'
         ? {
@@ -530,6 +637,7 @@ export class PluginContextFactory extends Service {
       backend,
       net,
       native,
+      agents,
       subscriptions,
     };
 

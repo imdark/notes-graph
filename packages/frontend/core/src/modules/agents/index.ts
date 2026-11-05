@@ -114,6 +114,11 @@ export {
   parseLogLines,
 } from './services/log-lines';
 export {
+  monitorChatMessages,
+  monitorSetup,
+  readingLines,
+} from './services/monitor-chat';
+export {
   formatTrendValue,
   monitorTrend,
   readingNumber,
@@ -238,6 +243,7 @@ export {
   DEFAULT_MAX_STEPS,
 } from './stores/agents';
 export { AgentIcon, agentIconData } from './views/agent-icon';
+export { useAgentsDownLast } from './views/use-agents-down-last';
 
 import { type Framework } from '@notesgraph/infra';
 

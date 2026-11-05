@@ -218,6 +218,18 @@ const TOOL_TIMEOUT_MS = 24 * 60 * 60 * 1000;
 const MIRROR = '{cache}/repo.git';
 
 /**
+ * `command` with {cache}'s git lock held, waiting up to `waitSeconds` for it.
+ * Jobs share the mirror and the workflow checkout, and git writing to one
+ * from two jobs at once fails: a job's worktree step on 2026-11-02 hit
+ * "fatal: Could not write new index file" as two others tore theirs down.
+ * Without flock (macOS has none) the command runs unlocked, as before.
+ */
+const withGitLock = (command: string, waitSeconds: number) =>
+  'if command -v flock >/dev/null 2>&1; then ' +
+  `(flock -w ${waitSeconds} 9 || exit 1; ${command}) 9>{cache}/git.lock; ` +
+  `else ${command}; fi`;
+
+/**
  * A code task works in its own worktree of the repo on a fresh branch, the
  * way wf gives a claude-code job a worktree of the runner's checkout. One
  * blobless mirror is kept in {cache} and fetched first, so a job costs a
@@ -228,18 +240,22 @@ const CODE_AUTOMATION: Automation = {
   setup: [
     {
       name: 'mirror',
-      run:
+      run: withGitLock(
         `git --git-dir ${MIRROR} fetch --prune origin 2>/dev/null || ` +
-        `(rm -rf ${MIRROR} && git clone --bare --filter=blob:none {repo} ${MIRROR} && ` +
-        `git --git-dir ${MIRROR} config remote.origin.fetch '+refs/heads/*:refs/remotes/origin/*' && ` +
-        `git --git-dir ${MIRROR} fetch origin)`,
+          `(rm -rf ${MIRROR} && git clone --bare --filter=blob:none {repo} ${MIRROR} && ` +
+          `git --git-dir ${MIRROR} config remote.origin.fetch '+refs/heads/*:refs/remotes/origin/*' && ` +
+          `git --git-dir ${MIRROR} fetch origin)`,
+        900
+      ),
       timeout: 1800,
     },
     {
       name: 'worktree',
-      run:
+      run: withGitLock(
         `git --git-dir ${MIRROR} worktree prune && ` +
-        `git --git-dir ${MIRROR} worktree add -B {branch} {job_dir}/repo origin/{base_branch}`,
+          `git --git-dir ${MIRROR} worktree add -B {branch} {job_dir}/repo origin/{base_branch}`,
+        480
+      ),
     },
   ],
   tools: [
@@ -283,7 +299,10 @@ const CODE_AUTOMATION: Automation = {
   teardown: [
     {
       name: 'worktree',
-      run: `git --git-dir ${MIRROR} worktree remove --force {job_dir}/repo`,
+      run: withGitLock(
+        `git --git-dir ${MIRROR} worktree remove --force {job_dir}/repo`,
+        480
+      ),
       optional: true,
     },
   ],
@@ -305,11 +324,13 @@ const WORKFLOW_AUTOMATION: Automation = {
   setup: [
     {
       name: 'checkout',
-      run:
+      run: withGitLock(
         `(test -d ${CHECKOUT}/.git || git clone --filter=blob:none {repo} ${CHECKOUT}) && ` +
-        `git -C ${CHECKOUT} fetch --prune origin && ` +
-        `git -C ${CHECKOUT} checkout -q --detach origin/{base_branch} && ` +
-        `git -C ${CHECKOUT} branch -f {base_branch} origin/{base_branch}`,
+          `git -C ${CHECKOUT} fetch --prune origin && ` +
+          `git -C ${CHECKOUT} checkout -q --detach origin/{base_branch} && ` +
+          `git -C ${CHECKOUT} branch -f {base_branch} origin/{base_branch}`,
+        900
+      ),
       timeout: 1800,
     },
     {
@@ -326,9 +347,12 @@ const WORKFLOW_AUTOMATION: Automation = {
     },
     {
       name: 'task',
-      run:
+      // It adds the task's worktree to the shared checkout.
+      run: withGitLock(
         `wf agent prepare-task --job-dir {job_dir} --repo ${CHECKOUT} ` +
-        '--prompt-file {prompt_file} --out {job_dir}/automation.json',
+          '--prompt-file {prompt_file} --out {job_dir}/automation.json',
+        240
+      ),
       timeout: 300,
     },
   ],
@@ -336,7 +360,10 @@ const WORKFLOW_AUTOMATION: Automation = {
   teardown: [
     {
       name: 'worktree',
-      run: `git -C ${CHECKOUT} worktree remove --force "$AGENT_CWD"`,
+      run: withGitLock(
+        `git -C ${CHECKOUT} worktree remove --force "$AGENT_CWD"`,
+        480
+      ),
       optional: true,
     },
   ],

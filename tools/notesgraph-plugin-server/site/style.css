@@ -1,0 +1,758 @@
+/* The landing page's (landing/index.html) neon-noir look: violet-black
+   street, cyan and pink neon, Orbitron / Chakra Petch / VT323. The fonts
+   are the landing's own, served from site/fonts/. */
+
+@font-face {
+  font-family: 'Chakra Petch';
+  font-weight: 300;
+  font-display: swap;
+  src: url(fonts/chakra-petch-300.woff2) format('woff2');
+}
+@font-face {
+  font-family: 'Chakra Petch';
+  font-weight: 400;
+  font-display: swap;
+  src: url(fonts/chakra-petch-400.woff2) format('woff2');
+}
+@font-face {
+  font-family: 'Chakra Petch';
+  font-weight: 600;
+  font-display: swap;
+  src: url(fonts/chakra-petch-600.woff2) format('woff2');
+}
+@font-face {
+  font-family: 'Orbitron';
+  font-weight: 600;
+  font-display: swap;
+  src: url(fonts/orbitron-600.woff2) format('woff2');
+}
+@font-face {
+  font-family: 'Orbitron';
+  font-weight: 900;
+  font-display: swap;
+  src: url(fonts/orbitron-900.woff2) format('woff2');
+}
+@font-face {
+  font-family: 'VT323';
+  font-weight: 400;
+  font-display: swap;
+  src: url(fonts/vt323-400.woff2) format('woff2');
+}
+
+:root {
+  color-scheme: dark;
+  --void: #0b0714;
+  --void-deep: #070410;
+  --panel: #120b20;
+  --panel-edge: #2a1b45;
+  --ink: #e6e9f5;
+  --dim: #9b93b8;
+  --faint: #5d5580;
+  --neon-pink: #ff2d78;
+  --neon-cyan: #00e5ff;
+  --neon-cyan-dim: rgba(0, 229, 255, 0.55);
+  --amber: #ffb94a;
+  --green: #58ff9b;
+  --display: 'Orbitron', sans-serif;
+  --body: 'Chakra Petch', sans-serif;
+  --crt: 'VT323', monospace;
+  /* The landing's cut-corner button. */
+  --cut: polygon(
+    8px 0,
+    100% 0,
+    100% calc(100% - 8px),
+    calc(100% - 8px) 100%,
+    0 100%,
+    0 8px
+  );
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  background: var(--void);
+  color: var(--ink);
+  font-family: var(--body);
+  font-weight: 300;
+  font-size: 15px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background:
+    radial-gradient(
+      90% 50% at 50% 0%,
+      rgba(110, 30, 160, 0.28) 0%,
+      transparent 70%
+    ),
+    var(--void);
+}
+
+/* CRT scanlines and vignette, as on the landing page. */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  pointer-events: none;
+  background:
+    repeating-linear-gradient(
+      180deg,
+      rgba(0, 0, 0, 0.14) 0 1px,
+      transparent 1px 3px
+    ),
+    radial-gradient(120% 100% at 50% 50%, transparent 60%, rgba(4, 2, 10, 0.5) 100%);
+}
+
+a {
+  color: var(--neon-cyan);
+  text-underline-offset: 3px;
+}
+
+a:hover {
+  text-shadow: 0 0 8px var(--neon-cyan-dim);
+}
+
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: 2px solid var(--neon-cyan);
+  outline-offset: 2px;
+}
+
+b,
+strong {
+  font-weight: 600;
+}
+
+code,
+.mono {
+  font-family: var(--crt);
+  font-size: 1.12em;
+  letter-spacing: 0.02em;
+  color: #9ff5d0;
+}
+
+/* ————— header ————— */
+
+.top {
+  display: flex;
+  align-items: center;
+  gap: 1.6rem;
+  padding: 0.9rem 1rem;
+  border-bottom: 1px solid var(--panel-edge);
+  background: rgba(7, 4, 16, 0.88);
+  backdrop-filter: blur(8px);
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  flex-wrap: wrap;
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  color: var(--ink);
+  text-decoration: none;
+  font-family: var(--display);
+  font-weight: 900;
+  font-size: 0.9rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.brand:hover {
+  text-shadow: none;
+}
+
+.brand b {
+  color: var(--neon-pink);
+  font-weight: 900;
+  text-shadow: 0 0 8px rgba(255, 45, 120, 0.8);
+}
+
+.brand-logo {
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  display: block;
+}
+
+.nav {
+  display: flex;
+  gap: 1.4rem;
+  flex-wrap: wrap;
+  font-family: var(--crt);
+  font-size: 1.1rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.nav a {
+  color: var(--dim);
+  text-decoration: none;
+  padding: 2px 0;
+  border-bottom: 1px solid transparent;
+  transition:
+    color 120ms,
+    text-shadow 120ms;
+}
+
+.nav a:hover {
+  color: var(--neon-cyan);
+  text-shadow: 0 0 8px var(--neon-cyan-dim);
+}
+
+.nav a.active {
+  color: var(--neon-cyan);
+  border-bottom-color: var(--neon-cyan);
+  text-shadow: 0 0 8px var(--neon-cyan-dim);
+}
+
+.who {
+  margin-left: auto;
+  color: var(--faint);
+  font-family: var(--crt);
+  font-size: 1.05rem;
+  letter-spacing: 0.06em;
+}
+
+.who b,
+.who strong {
+  color: var(--neon-cyan);
+  font-weight: 400;
+}
+
+.app {
+  width: 100%;
+  max-width: 72rem;
+  margin: 0 auto;
+  padding: 2.4rem 1rem 4rem;
+  flex: 1;
+}
+
+.foot {
+  width: 100%;
+  max-width: 72rem;
+  margin: 0 auto;
+  padding: 1rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 2.6rem;
+  color: var(--faint);
+  font-family: var(--crt);
+  font-size: 1rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border-top: 1px solid var(--panel-edge);
+}
+
+/* ————— type ————— */
+
+h1 {
+  font-family: var(--display);
+  font-weight: 900;
+  font-size: clamp(1.5rem, 4vw, 2.3rem);
+  line-height: 1.15;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  margin: 0 0 0.5rem;
+  background: linear-gradient(
+    180deg,
+    #ffffff 0%,
+    #cfe2ff 38%,
+    #5d6f94 50%,
+    #eef6ff 56%,
+    #91a5cc 100%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.65))
+    drop-shadow(0 0 18px rgba(120, 160, 255, 0.25));
+}
+
+h2 {
+  font-family: var(--display);
+  font-weight: 600;
+  font-size: 1.05rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--neon-cyan);
+  text-shadow: 0 0 12px var(--neon-cyan-dim);
+  margin: 2rem 0 0.7rem;
+}
+
+h3 {
+  font-family: var(--body);
+  font-weight: 600;
+  font-size: 1.05rem;
+  margin: 1.2rem 0 0.4rem;
+}
+
+p {
+  margin: 0.4rem 0;
+}
+
+.muted {
+  color: var(--dim);
+}
+
+.lead {
+  color: var(--dim);
+  font-size: 1.02rem;
+  max-width: 44rem;
+  margin-bottom: 1.6rem;
+}
+
+/* ————— panels and cards: the landing's neon signs ————— */
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--panel-edge);
+  padding: 1.3rem 1.4rem;
+}
+
+.panel + .panel {
+  margin-top: 1rem;
+}
+
+.panel > h2:first-child,
+.panel > h3:first-child {
+  margin-top: 0;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1rem;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  background: var(--panel);
+  border: 1px solid var(--panel-edge);
+  padding: 1.2rem 1.3rem 1.3rem;
+  color: inherit;
+  text-decoration: none;
+  min-width: 0;
+  transition:
+    box-shadow 200ms,
+    border-color 200ms;
+}
+
+.card:hover {
+  border-color: var(--neon-cyan);
+  text-shadow: none;
+  box-shadow:
+    0 0 24px rgba(0, 229, 255, 0.18),
+    inset 0 0 24px rgba(0, 229, 255, 0.05);
+}
+
+.card .title {
+  font-family: var(--display);
+  font-weight: 600;
+  font-size: 0.95rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink);
+  display: flex;
+  justify-content: space-between;
+  gap: 0.6rem;
+  align-items: baseline;
+}
+
+.card:hover .title {
+  color: var(--neon-cyan);
+  text-shadow: 0 0 10px var(--neon-cyan-dim);
+}
+
+.card .desc {
+  color: var(--dim);
+  font-size: 0.93rem;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.version {
+  font-family: var(--crt);
+  font-size: 1rem;
+  font-weight: 400;
+  letter-spacing: 0.04em;
+  text-transform: none;
+  color: var(--faint);
+  white-space: nowrap;
+}
+
+/* ————— chips and statuses ————— */
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.chip {
+  font-family: var(--crt);
+  font-size: 0.98rem;
+  letter-spacing: 0.04em;
+  padding: 0 0.5rem;
+  border: 1px solid var(--panel-edge);
+  color: var(--dim);
+  cursor: help;
+}
+
+.chip.warn {
+  border-color: rgba(255, 185, 74, 0.5);
+  color: var(--amber);
+}
+
+.status {
+  font-family: var(--crt);
+  font-size: 1rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 0 0.5rem;
+  border: 1px solid currentColor;
+}
+
+.status.approved {
+  color: var(--green);
+  text-shadow: 0 0 8px rgba(88, 255, 155, 0.5);
+}
+
+.status.pending {
+  color: var(--amber);
+}
+
+.status.rejected {
+  color: var(--neon-pink);
+  text-shadow: 0 0 8px rgba(255, 45, 120, 0.5);
+}
+
+/* ————— forms ————— */
+
+.toolbar {
+  display: flex;
+  gap: 0.8rem;
+  align-items: center;
+  margin: 0 0 1.4rem;
+  flex-wrap: wrap;
+}
+
+input[type='search'],
+input[type='text'],
+textarea,
+select {
+  font: inherit;
+  font-weight: 400;
+  color: var(--ink);
+  background: var(--void-deep);
+  border: 1px solid var(--panel-edge);
+  border-radius: 0;
+  padding: 0.6rem 0.8rem;
+  min-width: 0;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--faint);
+}
+
+input[type='search']:focus,
+input[type='text']:focus,
+textarea:focus,
+select:focus {
+  border-color: var(--neon-cyan);
+  box-shadow: 0 0 12px rgba(0, 229, 255, 0.18);
+}
+
+input[type='search'] {
+  flex: 1 1 240px;
+}
+
+textarea {
+  width: 100%;
+  resize: vertical;
+  font-family: var(--crt);
+  font-size: 1.08rem;
+  color: #9ff5d0;
+}
+
+/* The landing's buttons: ghost cyan, and a cut-corner neon-pink primary. */
+button,
+.button {
+  font-family: var(--display);
+  font-weight: 600;
+  font-size: 0.7rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--neon-cyan);
+  background: transparent;
+  border: 1px solid var(--neon-cyan);
+  border-radius: 0;
+  box-shadow: inset 0 0 12px rgba(0, 229, 255, 0.12);
+  padding: 0.75rem 1.2rem;
+  cursor: pointer;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  transition:
+    background 140ms,
+    box-shadow 140ms;
+}
+
+button:hover,
+.button:hover {
+  background: rgba(0, 229, 255, 0.08);
+  text-shadow: none;
+  box-shadow:
+    inset 0 0 18px rgba(0, 229, 255, 0.2),
+    0 0 14px rgba(0, 229, 255, 0.3);
+}
+
+button.primary,
+.button.primary {
+  background: var(--neon-pink);
+  color: #16020b;
+  border-color: transparent;
+  clip-path: var(--cut);
+  box-shadow: 0 0 22px rgba(255, 45, 120, 0.55);
+}
+
+button.primary:hover,
+.button.primary:hover {
+  background: #ff5c96;
+  box-shadow: 0 0 32px rgba(255, 45, 120, 0.8);
+}
+
+button.danger {
+  color: var(--neon-pink);
+  border-color: var(--neon-pink);
+  box-shadow: inset 0 0 12px rgba(255, 45, 120, 0.12);
+}
+
+button.danger:hover {
+  background: rgba(255, 45, 120, 0.1);
+  box-shadow:
+    inset 0 0 18px rgba(255, 45, 120, 0.2),
+    0 0 14px rgba(255, 45, 120, 0.3);
+}
+
+button:disabled {
+  opacity: 0.4;
+  cursor: default;
+  box-shadow: none;
+}
+
+.row {
+  display: flex;
+  gap: 0.8rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  margin: 0.8rem 0;
+}
+
+.field label {
+  font-family: var(--crt);
+  font-size: 1.02rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+
+/* ————— notes: the landing's status strip ————— */
+
+.note {
+  padding: 0.7rem 0.9rem;
+  border-left: 2px solid var(--neon-cyan);
+  background: rgba(0, 229, 255, 0.06);
+  margin: 0.8rem 0;
+}
+
+.note.warn {
+  border-left-color: var(--amber);
+  background: rgba(255, 185, 74, 0.07);
+  color: var(--amber);
+}
+
+.note.error {
+  border-left-color: var(--neon-pink);
+  background: rgba(255, 45, 120, 0.08);
+  color: #ff8fb4;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* ————— key/value and tables ————— */
+
+.kv {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.3rem 1.2rem;
+  margin: 0.6rem 0;
+}
+
+.kv dt {
+  font-family: var(--crt);
+  font-size: 1.02rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+.kv dd {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.93rem;
+}
+
+th,
+td {
+  text-align: left;
+  padding: 0.55rem 0.4rem;
+  border-bottom: 1px solid var(--panel-edge);
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+
+th {
+  font-family: var(--crt);
+  font-weight: 400;
+  font-size: 1rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+tr:hover td {
+  background: rgba(0, 229, 255, 0.03);
+}
+
+/* ————— upload ————— */
+
+.drop {
+  border: 1px dashed var(--neon-cyan-dim);
+  padding: 2rem 1rem;
+  text-align: center;
+  color: var(--dim);
+  background: var(--void-deep);
+  box-shadow: inset 0 0 40px rgba(0, 229, 255, 0.04);
+}
+
+.drop.over {
+  border-color: var(--neon-cyan);
+  border-style: solid;
+  background: rgba(0, 229, 255, 0.07);
+  box-shadow:
+    inset 0 0 40px rgba(0, 229, 255, 0.12),
+    0 0 18px rgba(0, 229, 255, 0.25);
+}
+
+.drop input {
+  display: none;
+}
+
+/* A file list reads like the landing's terminal. */
+.files {
+  font-family: var(--crt);
+  font-size: 1.05rem;
+  color: #9ff5d0;
+  max-height: 220px;
+  overflow: auto;
+  background: #05030c;
+  border: 1px solid var(--panel-edge);
+  padding: 0.6rem 0.8rem;
+}
+
+.files div {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.8rem;
+}
+
+/* ————— numbered steps ————— */
+
+.steps {
+  counter-reset: step;
+  padding: 0;
+  margin: 0.8rem 0;
+  list-style: none;
+}
+
+.steps li {
+  position: relative;
+  padding-left: 2.4rem;
+  margin: 0.8rem 0;
+}
+
+.steps li::before {
+  counter-increment: step;
+  content: counter(step, decimal-leading-zero);
+  position: absolute;
+  left: 0;
+  top: -0.1rem;
+  font-family: var(--crt);
+  font-size: 1.25rem;
+  color: var(--neon-pink);
+  text-shadow: 0 0 8px rgba(255, 45, 120, 0.6);
+}
+
+.perm-list dt {
+  font-weight: 600;
+  margin-top: 0.6rem;
+}
+
+.perm-list dd {
+  margin: 0;
+  color: var(--dim);
+}
+
+@media (max-width: 640px) {
+  .who {
+    margin-left: 0;
+    width: 100%;
+  }
+
+  .kv {
+    grid-template-columns: 1fr;
+  }
+
+  .kv dt {
+    margin-top: 0.4rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+  }
+}

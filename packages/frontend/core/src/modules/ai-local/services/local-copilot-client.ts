@@ -52,6 +52,27 @@ export type ReadCurrentDoc = (
   docId: string
 ) => Promise<{ title: string; markdown: string } | null>;
 
+/** Whatever answers the chat: the local model, or a device's Claude Code. */
+export interface ChatStreamer {
+  chatStream(
+    messages: LocalChatMessage[],
+    options?: { signal?: AbortSignal }
+  ): AsyncIterable<string>;
+}
+
+/** How a client other than the local model differs from it. */
+export interface ChatClientOptions {
+  /** The system message a session opens with, by the prompt asked for. */
+  systemPrompt?: (promptName: string | null | undefined) => string;
+  /** Most of the open note a turn carries. */
+  maxDocChars?: number;
+  /**
+   * Name the open note's id too, for a model with tools to read or change it
+   * by; a small model without them talked about the id instead.
+   */
+  withDocId?: boolean;
+}
+
 /**
  * Most of the open note a turn carries: the default model (Llama 3.2 1B) has
  * a few thousand tokens for the note, the history and its answer together.
@@ -65,7 +86,8 @@ export const MAX_CURRENT_DOC_CHARS = 6000;
  */
 export function withCurrentDoc(
   messages: LocalChatMessage[],
-  doc: { title: string; markdown: string }
+  doc: { title: string; markdown: string; id?: string },
+  maxChars = MAX_CURRENT_DOC_CHARS
 ): LocalChatMessage[] {
   let lastUserIdx = -1;
   for (let i = messages.length - 1; i >= 0; i--) {
@@ -77,14 +99,15 @@ export function withCurrentDoc(
   if (lastUserIdx < 0) return messages;
   const markdown = doc.markdown.trim();
   const body =
-    markdown.length > MAX_CURRENT_DOC_CHARS
-      ? `${markdown.slice(0, MAX_CURRENT_DOC_CHARS)}\n\n[the rest of the note is cut]`
+    markdown.length > maxChars
+      ? `${markdown.slice(0, maxChars)}\n\n[the rest of the note is cut]`
       : markdown;
   const augmented = [...messages];
   augmented[lastUserIdx] = {
     ...augmented[lastUserIdx],
     content:
-      `I am looking at my note "${doc.title.trim() || 'Untitled'}". ` +
+      `I am looking at my note "${doc.title.trim() || 'Untitled'}"` +
+      (doc.id ? ` (doc id ${doc.id}). ` : '. ') +
       `"This", "it" or "the page" mean this note:\n\n${body}\n\n---\n\n` +
       augmented[lastUserIdx].content,
   };
@@ -108,13 +131,15 @@ class LocalChatEventSource extends EventTarget {
   private readonly abort = new AbortController();
 
   constructor(
-    private readonly llm: LocalLLMService,
+    private readonly llm: ChatStreamer,
     private readonly messages: LocalChatMessage[],
     private readonly docEmbedder?: DocEmbedder,
     private readonly currentDoc?: () => Promise<{
       title: string;
       markdown: string;
-    } | null>
+      id?: string;
+    } | null>,
+    private readonly maxDocChars?: number
   ) {
     super();
     this.run().catch(() => {
@@ -130,7 +155,7 @@ class LocalChatEventSource extends EventTarget {
       // small model mixed other notes' excerpts into answers about the page.
       const doc = await this.currentDoc?.().catch(() => null);
       const messages = doc
-        ? withCurrentDoc(this.messages, doc)
+        ? withCurrentDoc(this.messages, doc, this.maxDocChars)
         : this.docEmbedder
           ? await augmentWithContext(this.docEmbedder, this.messages)
           : this.messages;
@@ -147,7 +172,7 @@ class LocalChatEventSource extends EventTarget {
     } catch (err) {
       const data = JSON.stringify({
         status: 500,
-        message: err instanceof Error ? err.message : 'Local AI error',
+        message: err instanceof Error ? err.message : 'AI error',
       });
       this.dispatchEvent(new MessageEvent('error', { data }));
     } finally {
@@ -177,10 +202,11 @@ export class LocalCopilotClient extends CopilotClient {
   private readonly currentDocs = new Map<string, string>();
 
   constructor(
-    private readonly llm: LocalLLMService,
+    private readonly llm: ChatStreamer,
     private readonly docEmbedder?: DocEmbedder,
     private readonly vision?: LocalVisionService,
-    private readonly readCurrentDoc?: ReadCurrentDoc
+    private readonly readCurrentDoc?: ReadCurrentDoc,
+    private readonly options: ChatClientOptions = {}
   ) {
     super(
       (() =>
@@ -200,7 +226,10 @@ export class LocalCopilotClient extends CopilotClient {
     const id = nanoid();
     const promptName = (options as { promptName?: string | null }).promptName;
     this.sessions.set(id, [
-      { role: 'system', content: systemPromptFor(promptName) },
+      {
+        role: 'system',
+        content: (this.options.systemPrompt ?? systemPromptFor)(promptName),
+      },
     ]);
     return id;
   }
@@ -280,7 +309,13 @@ export class LocalCopilotClient extends CopilotClient {
       this.llm,
       messages,
       this.docEmbedder,
-      docId && read ? () => read(docId) : undefined
+      docId && read
+        ? async () => {
+            const doc = await read(docId);
+            return doc && this.options.withDocId ? { ...doc, id: docId } : doc;
+          }
+        : undefined,
+      this.options.maxDocChars
     ) as unknown as EventSource;
   }
 
@@ -452,5 +487,20 @@ export function createLocalAIRequestService(
 ) {
   return new AIRequestService(
     new LocalCopilotClient(llm, docEmbedder, vision, readCurrentDoc)
+  );
+}
+
+/**
+ * Build an {@link AIRequestService} whose chat is answered by `chat`, a
+ * device's Claude Code, which reads and changes notes with its own tools.
+ * Sessions are kept in memory, as for the local model.
+ */
+export function createChatAIRequestService(
+  chat: ChatStreamer,
+  readCurrentDoc: ReadCurrentDoc | undefined,
+  options: ChatClientOptions
+) {
+  return new AIRequestService(
+    new LocalCopilotClient(chat, undefined, undefined, readCurrentDoc, options)
   );
 }

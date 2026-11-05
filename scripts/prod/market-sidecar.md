@@ -11,20 +11,60 @@ record of them; both were backed up in place before editing
 
 ## What is public and what is not
 
-| route                                       | exposure  |
-| ------------------------------------------- | --------- |
-| `GET /plugins`, `GET /plugins/:id`          | public    |
-| `GET /download/:id/:version/*`              | public    |
-| `GET /pubkey`, `GET /health`                | public    |
-| `POST /publish`                             | signed in |
-| `POST /admin/:id/:version/approve\|reject`  | signed in |
-| `POST /p/:id/:fn` (runs plugin server code) | signed in |
+| route                                                 | exposure                 |
+| ----------------------------------------------------- | ------------------------ |
+| `GET /` and `GET /site/*` (the marketplace website)   | public                   |
+| `GET /plugins`, `GET /plugins/:id`                    | public                   |
+| `GET /download/:id/:version/*`                        | public                   |
+| `GET /pubkey`, `GET /health`                          | public                   |
+| `GET /me`, `GET /me/plugins`, `GET /admin/pending`    | public route, asks who   |
+| `POST /developers` (sign up as a developer / rotate)  | signed in                |
+| `POST /publish` (developer-signed submission)         | signed in + developer    |
+| `POST /admin/:id/:version/approve\|reject`            | signed in + **admin**    |
+| `POST /p/:id/:fn` (runs plugin server code)           | signed in                |
 
-The sidecar has no authentication of its own — every route is open to anyone
-who can reach the port, and submissions are auto-signed with the registry's
-key. So it gets **no published port**, and Caddy draws the line above. If the
-sidecar is ever reachable directly, anyone can publish a signed plugin into
-every user's marketplace.
+The sidecar has no session of its own, so it gets **no published port**, and
+Caddy draws the line above: a write must carry a valid app session. Since
+2026-11-02 the sidecar also asks the app *who* the caller is (`identity.ts`:
+the request's own Cookie / Authorization forwarded to `/graphql`
+`currentUser { id name email features }`, `Admin` in `features` makes a
+reviewer). That is what `/me`, developer sign-up, ownership and the review
+queue key on; an anonymous read of those answers "nobody" without calling
+the app. If the sidecar is ever reachable directly, anyone can forge a
+Cookie header… and get exactly what that cookie is worth, since the app
+decides. The old risk stands: direct reach means publishing without Caddy's
+check, so keep the port unpublished.
+
+## Developers and signatures
+
+Anyone can browse; publishing needs a developer account. On the website
+(`https://app.notesgraph.com/market/`, pages `#/developer`, `#/publish`,
+`#/mine`, `#/review`):
+
+1. A signed-in user becomes a developer by generating an **Ed25519 key in
+   their browser** (WebCrypto) and registering the public key
+   (`POST /developers {name, publicKey}`; raw 32 bytes, base64). They download
+   the private key as `notesgraph-developer-key.json`; the server never sees
+   it and cannot recover it. Rotating registers a new key; the old one stays
+   on record so versions signed with it still verify.
+2. A submission is a zip or folder. The browser computes the canonical digest
+   (`src/signing.ts` and `site/signing.js`, the same bytes):
+   `sha256(JSON.stringify(manifest) + for each path sorted: path + "\n" + hex(sha256(bytes)) + "\n")`,
+   signs it with the private key, and posts `{manifest, files, keyId,
+   signature}` to `/publish`. Text files travel as strings, anything else as
+   `{base64}`; 20 MB cap.
+3. The server verifies the signature against the key on record for the
+   calling user, refuses an id first published by someone else, refuses a
+   version that already exists, countersigns with the registry key as before,
+   and stores the entry `pending` (prod has `AUTO_APPROVE=false`).
+4. An admin reviews at `#/review` (`GET /admin/pending`, then approve or
+   reject with a reason the developer sees under `#/mine`). Approved versions
+   are what `GET /plugins` lists and the apps install.
+
+Developer records live in `developers.json` under the data volume, beside
+`registry.json`. Back them up together: a developer whose record is lost
+cannot publish a new version of their plugin until they re-register, and the
+id stays theirs only through that record.
 
 Reads are public so the desktop and Android apps can load plugin code at all —
 see the last section.
@@ -73,7 +113,12 @@ so `/market/plugins` returned the SPA and `/market/publish` 404'd. The nested
       # carries a valid session (cookie, JWT or PAT), 401 when it does not.
       # /api/auth/session is NOT usable for this — it is public and answers
       # 200 with an empty user when signed out.
-      @market_write path /market/publish /market/admin/* /market/p/*
+      # The sidecar then asks the app *who* it is (identity.ts) for the
+      # developer and admin routes.
+      @market_write {
+        path /market/publish /market/admin/* /market/p/* /market/developers /market/me/*
+        not method GET HEAD OPTIONS
+      }
       forward_auth @market_write notesgraph:3010 {
         uri /api/auth/check
         copy_headers Cookie Authorization
@@ -81,7 +126,13 @@ so `/market/plugins` returned the SPA and `/market/publish` 404'd. The nested
 
       # Belt and braces: refuse any other mutating method outright, so a new
       # write route can never fall through to the public branch unnoticed.
-      @market_other_write not method GET HEAD OPTIONS
+      # (The first version of this block matched *every* non-GET here, which
+      # also caught an authenticated POST /market/publish after forward_auth
+      # let it through: a write route must be excluded from it.)
+      @market_other_write {
+        not path /market/publish /market/admin/* /market/p/* /market/developers /market/me/*
+        not method GET HEAD OPTIONS
+      }
       respond @market_other_write "method not allowed" 405
 
       # The sidecar knows nothing about the /market prefix.
@@ -90,6 +141,9 @@ so `/market/plugins` returned the SPA and `/market/publish` 404'd. The nested
     }
   }
 ```
+
+Applied on the box 2026-11-02 (the `@market_write` / `@market_other_write`
+blocks above replaced the one-line matchers).
 
 `forward_auth` only _authenticates_ the write; it falls through to the proxy at
 the bottom of the route, which is what actually forwards it.

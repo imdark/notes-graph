@@ -7,6 +7,9 @@ export type AiBackend = 'cloud' | 'local';
 
 const AI_BACKEND_KEY = 'ai-local:backend';
 
+/** The device whose Claude Code answers a workspace's page chat. */
+const chatDeviceKey = (workspaceId: string) => `ai-chat:device:${workspaceId}`;
+
 /**
  * Holds the user's choice of AI backend (cloud copilot vs. on-device local
  * models). Persisted in {@link GlobalState}; read by the AI provider wiring to
@@ -28,5 +31,21 @@ export class AiBackendService extends Service {
 
   setBackend(backend: AiBackend) {
     this.globalState.set(AI_BACKEND_KEY, backend);
+  }
+
+  /**
+   * The device whose Claude Code answers the page chat in a workspace, so the
+   * chat can run commands and change notes; null for the backend above.
+   */
+  chatDevice$(workspaceId: string) {
+    return LiveData.from(
+      this.globalState.watch<string>(chatDeviceKey(workspaceId)),
+      null
+    ).map(v => v ?? null);
+  }
+
+  setChatDevice(workspaceId: string, deviceKey: string | null) {
+    if (deviceKey) this.globalState.set(chatDeviceKey(workspaceId), deviceKey);
+    else this.globalState.del(chatDeviceKey(workspaceId));
   }
 }

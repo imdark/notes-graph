@@ -14,8 +14,10 @@ import type { CurrentUser as CurrentUserType } from '../../core/auth';
 import { CurrentUser } from '../../core/auth';
 import { PermissionAccess } from '../../core/permission';
 import { Models } from '../../models';
+import { toJobDto } from '../registry/jobs';
 import {
   type MonitorAlerts,
+  monitorAgentId,
   MonitorService,
   type MonitorSpec,
 } from './service';
@@ -228,6 +230,25 @@ export class MonitorController {
     await this.monitors.getOwned(workspaceId, user.id, id);
     const readings = await this.models.monitor.listReadings(id, 100);
     return { readings: readings.map(toReadingDto) };
+  }
+
+  /**
+   * The device jobs it ran (a command check's or an agent's), newest first,
+   * for the monitor view's log. A url check runs on the server and has none.
+   * Each job's transcript is read on its own, from the jobs API.
+   */
+  @Get('/:id/runs')
+  async runs(
+    @CurrentUser() user: CurrentUserType,
+    @Param('workspaceId') workspaceId: string,
+    @Param('id') id: string
+  ) {
+    const monitor = await this.monitors.getOwned(workspaceId, user.id, id);
+    const jobs = await this.models.registryJob.list(workspaceId, {
+      agentId: monitorAgentId(monitor.id),
+      limit: 30,
+    });
+    return { runs: jobs.map(job => toJobDto(job)) };
   }
 
   /** Fetch and extract once, writing nothing: the editor's "Test now". */

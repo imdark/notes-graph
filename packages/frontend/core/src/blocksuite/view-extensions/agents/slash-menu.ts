@@ -10,6 +10,7 @@ import {
   AgentRunSessionService,
   AgentsService,
   type AgentTarget,
+  FleetService,
 } from '@notesgraph/core/modules/agents';
 import { WorkspaceDialogService } from '@notesgraph/core/modules/dialogs';
 import { WorkbenchService } from '@notesgraph/core/modules/workbench';
@@ -42,7 +43,14 @@ export function AgentsSlashMenuConfigExtension(framework: FrameworkProvider) {
     items: (ctx: SlashMenuContext): SlashMenuItem[] => {
       let agents: Agent[] = [];
       try {
-        agents = framework.get(AgentsService).agentsFor$('block').value;
+        // Agents on a machine monitoring reports down go last. The menu is
+        // built at once, so it sorts by what is loaded; the first `/` of a
+        // session starts the fetch the next one sorts by.
+        const fleet = framework.get(FleetService);
+        fleet.ensureLoaded().catch(() => {});
+        agents = fleet.downLastNow(
+          framework.get(AgentsService).agentsFor$('block').value
+        );
       } catch {
         // No workspace scope (e.g. a detached editor) — offer nothing rather
         // than breaking the whole slash menu.

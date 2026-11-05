@@ -1,0 +1,26 @@
+{
+  "id": "com.notesgraph.video-editor",
+  "name": "Video Editor",
+  "version": "0.1.0",
+  "description": "Edit videos by conversation: a project note, the Video editor agent on your Mac, previews answered from your phone.",
+  "author": "NotesGraph",
+  "platforms": ["web", "desktop", "mobile"],
+  "permissions": ["ui", "docs", "workspace", "storage", "agents"],
+  "entry": { "client": "index.js" },
+  "contributes": {
+    "commands": [
+      {
+        "id": "video-editor:new-project",
+        "title": "Video editor: New project"
+      },
+      {
+        "id": "video-editor:install-agent",
+        "title": "Video editor: Install the agent"
+      },
+      {
+        "id": "video-editor:edit-current",
+        "title": "Video editor: Edit this video"
+      }
+    ]
+  }
+}

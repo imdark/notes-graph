@@ -20,6 +20,7 @@ import {
   type Trend,
 } from '../../../modules/agents';
 import { WorkspaceDialogService } from '../../../modules/dialogs';
+import { FeatureFlagService } from '../../../modules/feature-flag';
 import { AgentsFrameworkIdentifier } from './framework';
 import { lineTextRects } from './line-text-rects';
 
@@ -277,7 +278,15 @@ export class BlockAgentRunsWidget extends WidgetComponent {
   private readonly _openMonitor = (e: Event, monitor: Monitor) => {
     e.preventDefault();
     e.stopPropagation();
-    this._framework?.get(WorkspaceDialogService).open('monitor-editor', {
+    const framework = this._framework;
+    if (!framework) return;
+    if (framework.get(FeatureFlagService).flags.enable_monitor_view.value) {
+      framework
+        .get(WorkspaceDialogService)
+        .open('monitor-view', { monitorId: monitor.id });
+      return;
+    }
+    framework.get(WorkspaceDialogService).open('monitor-editor', {
       docId: monitor.docId,
       blockId: monitor.blockId,
       monitorId: monitor.id,

@@ -400,6 +400,24 @@ export const NOTESGRAPH_FLAGS = {
     configurable: true,
     defaultState: true,
   },
+  enable_page_chat_on_device: {
+    commit: '6714aaa4c3b90be3faa6774a6e17f8782eec81e2',
+    category: 'notesgraph',
+    displayName: 'Page chat on a device',
+    description:
+      "Lets a device's Claude Code answer the chat beside a page: it can run commands and find, edit and file notes into folders.",
+    configurable: true,
+    defaultState: true,
+  },
+  enable_monitor_view: {
+    commit: 'cab0a86b11a5d0ffcf92f62905dc410f8952f5f4',
+    category: 'notesgraph',
+    displayName: 'Monitor view',
+    description:
+      "A block's monitor chip opens the monitor's view: its setup, run logs, a chart of its readings, and a chat to ask about the results.",
+    configurable: true,
+    defaultState: true,
+  },
   enable_deploy_with_automations: {
     commit: 'efc80e3e44f72bbab0cdaf255426f159dbeb8354',
     category: 'notesgraph',

@@ -11103,6 +11103,7 @@ __metadata:
   resolution: "@notesgraph/plugin-sdk@workspace:packages/common/plugin-sdk"
   dependencies:
     react: "npm:^19.2.1"
+    vitest: "npm:^4.1.8"
     zod: "npm:^3.25.76"
   peerDependencies:
     react: ^19.2.1
@@ -11115,6 +11116,7 @@ __metadata:
   dependencies:
     "@notesgraph-tools/cli": "workspace:*"
     "@notesgraph/plugin-sdk": "workspace:*"
+    vitest: "npm:^4.1.8"
   languageName: unknown
   linkType: soft
 

@@ -14,19 +14,14 @@ import {
   compileBrief,
   compileSourceOf,
   findCompileAgent,
+  useAgentsDownLast,
 } from '@notesgraph/core/modules/agents';
 import { WorkspaceDialogService } from '@notesgraph/core/modules/dialogs';
 import { DocService } from '@notesgraph/core/modules/doc';
 import { WorkbenchService } from '@notesgraph/core/modules/workbench';
 import { WorkspaceService } from '@notesgraph/core/modules/workspace';
 import { useLiveData, useService } from '@notesgraph/infra';
-import {
-  useCallback,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-} from 'react';
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
 
 import { AgentQuestionCard } from './agent-question';
 import { AgentReviewCard } from './agent-review-card';
@@ -350,7 +345,9 @@ export const EditorAgentsPanel = () => {
   const doc = useService(DocService).doc;
   const now = useMinuteTick();
 
-  const docAgents = useLiveData(agentsService.agentsFor$('doc'));
+  const docAgents = useAgentsDownLast(
+    useMemo(() => agentsService.agentsFor$('doc'), [agentsService])
+  );
   const allAgents = useLiveData(agentsService.agents$);
   const sessions = useLiveData(sessionService.sessions$);
   const queue = useLiveData(sessionService.queue$);

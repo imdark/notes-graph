@@ -15,6 +15,7 @@ import {
   agentTargetKey,
   AgentTaskClaimService,
   RemoteAgentRunnerService,
+  useAgentsDownLast,
 } from '@notesgraph/core/modules/agents';
 import type { DialogComponentProps } from '@notesgraph/core/modules/dialogs';
 import type { WORKSPACE_DIALOG_SCHEMA } from '@notesgraph/core/modules/dialogs/constant';
@@ -111,7 +112,7 @@ export const AgentBlockRunsDialog = ({
   const [logRunId, setLogRunId] = useState<string | null>(null);
   const { reassign, target, canReassign } = useReassign(runs);
   const targetKind = target?.kind ?? 'block';
-  const agents = useLiveData(
+  const agents = useAgentsDownLast(
     useMemo(
       () => agentsService.agentsFor$(targetKind),
       [agentsService, targetKind]
