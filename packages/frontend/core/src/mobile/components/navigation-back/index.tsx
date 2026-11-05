@@ -5,7 +5,7 @@ import {
   useIsInsideModal,
 } from '@notesgraph/component';
 import { useService } from '@notesgraph/infra';
-import { useCallback, useEffect, useMemo } from 'react';
+import { type MouseEvent, useCallback, useEffect, useMemo } from 'react';
 
 import { NavigationGestureService } from '../../modules/navigation-gesture';
 
@@ -30,6 +30,13 @@ export const NavigationBackButton = ({
     backAction ? backAction() : history.back();
   }, [backAction]);
 
+  // Keep the editor focused on press. Otherwise the press blurs it, the
+  // virtual keyboard collapses and the header shifts before the click lands,
+  // so the first taps are swallowed.
+  const keepEditorFocus = useCallback((e: MouseEvent) => {
+    e.preventDefault();
+  }, []);
+
   useEffect(() => {
     if (isInsideModal) return;
 
@@ -49,6 +56,7 @@ export const NavigationBackButton = ({
     <IconButton
       size={24}
       style={style}
+      onMouseDown={keepEditorFocus}
       onClick={handleRouteBack}
       icon={icon ?? (isInsideModal ? <CloseIcon /> : <ArrowLeftSmallIcon />)}
       data-testid="page-header-back"
