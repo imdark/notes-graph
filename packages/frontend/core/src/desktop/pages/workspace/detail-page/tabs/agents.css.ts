@@ -874,21 +874,24 @@ export const chatWorking = style({
 export const chatWorkingDots = style({
   display: 'inline-flex',
   gap: 3,
-  selectors: {
-    '& > span': {
-      width: 6,
-      height: 6,
-      borderRadius: '50%',
-      background: cssVarV2('icon/activated'),
-      animation: `${workingPulse} 1.2s ease-in-out infinite`,
-    },
-    '& > span:nth-child(2)': { animationDelay: '0.15s' },
-    '& > span:nth-child(3)': { animationDelay: '0.3s' },
-  },
+});
+
+globalStyle(`${chatWorkingDots} > span`, {
+  width: 6,
+  height: 6,
+  borderRadius: '50%',
+  background: cssVarV2('icon/activated'),
+  animation: `${workingPulse} 1.2s ease-in-out infinite`,
+});
+globalStyle(`${chatWorkingDots} > span:nth-child(2)`, {
+  animationDelay: '0.15s',
+});
+globalStyle(`${chatWorkingDots} > span:nth-child(3)`, {
+  animationDelay: '0.3s',
+});
+globalStyle(`${chatWorkingDots} > span`, {
   '@media': {
-    '(prefers-reduced-motion: reduce)': {
-      selectors: { '& > span': { animation: 'none' } },
-    },
+    '(prefers-reduced-motion: reduce)': { animation: 'none' },
   },
 });
 
