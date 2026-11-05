@@ -15,8 +15,8 @@ import {
 } from '@notesgraph/core/modules/agents';
 import { WorkspaceService } from '@notesgraph/core/modules/workspace';
 import { useLiveData, useService } from '@notesgraph/infra';
-import {
 import clsx from 'clsx';
+import {
   Fragment,
   useCallback,
   useEffect,
