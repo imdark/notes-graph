@@ -392,7 +392,7 @@ export const NOTESGRAPH_FLAGS = {
     defaultState: true,
   },
   enable_add_row_pill: {
-    commit: '',
+    commit: '859df954157f254bc185d6eca6c7b3bc9a64ef1f',
     category: 'notesgraph',
     displayName: 'Add-row pill',
     description:
