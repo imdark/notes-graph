@@ -16,6 +16,7 @@ import {
 import { WorkspaceService } from '@notesgraph/core/modules/workspace';
 import { useLiveData, useService } from '@notesgraph/infra';
 import {
+import clsx from 'clsx';
   Fragment,
   useCallback,
   useEffect,
@@ -508,18 +509,28 @@ export const AgentRunLogDialog = ({
         .join(' · ')
     : '';
 
+  // On a phone the Ask tab is a full-screen chat that keeps its composer
+  // above the keyboard.
+  const flatChat =
+    BUILD_CONFIG.isMobileEdition && !!run && ended && tab === ASK_TAB;
+
   return (
     <Modal
       open={!!runId}
       onOpenChange={open => !open && onClose()}
       width={720}
+      fullScreen={flatChat}
       headerClassName={styles.logDialogHeader}
       // The dialog is capped at the viewport height; without this the
       // content past the cap (the log's bottom, the buttons) is clipped
       // and can't be reached on a phone.
-      contentOptions={{
-        style: { overflowY: 'auto', overscrollBehavior: 'contain' },
-      }}
+      contentOptions={
+        flatChat
+          ? { className: styles.flatChatDialog }
+          : {
+              style: { overflowY: 'auto', overscrollBehavior: 'contain' },
+            }
+      }
       title={
         run
           ? `${run.title || run.agentName} · ${statusLabel[run.status]}`
@@ -527,7 +538,9 @@ export const AgentRunLogDialog = ({
       }
       description={meta}
     >
-      <div className={styles.logDialogBody}>
+      <div
+        className={clsx(styles.logDialogBody, flatChat && styles.flatChatBody)}
+      >
         {deployRunId ? (
           <button
             className={styles.linkButton}
@@ -555,7 +568,12 @@ export const AgentRunLogDialog = ({
           <RunDetails run={run} artifacts={artifacts} />
         ) : run && askRow && ended && tab === ASK_TAB ? (
           parent ? (
-            <AgentRunChat key={run.id} run={parent} resumeAskId={run.id} />
+            <AgentRunChat
+              key={run.id}
+              run={parent}
+              resumeAskId={run.id}
+              fill={flatChat}
+            />
           ) : (
             <p className={styles.empty} data-testid="agent-run-chat-orphan">
               The run this chat was about has been deleted, so it can&apos;t go
@@ -581,6 +599,7 @@ export const AgentRunLogDialog = ({
             key={run.id}
             run={run}
             output={session?.runId === run.id ? session.output : undefined}
+            fill={flatChat}
           />
         ) : (
           <div className={styles.logDialogBody} data-testid="agent-run-log">

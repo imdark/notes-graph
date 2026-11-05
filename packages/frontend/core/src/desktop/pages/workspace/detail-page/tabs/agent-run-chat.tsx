@@ -28,6 +28,7 @@ export const AgentRunChat = ({
   output,
   resumeAskId,
   onClose,
+  fill,
 }: {
   run: AgentRun;
   /** The run's full answer when the caller has it; the row keeps a summary. */
@@ -35,6 +36,8 @@ export const AgentRunChat = ({
   /** The chat to go on with; the run's newest one when not given. */
   resumeAskId?: string;
   onClose?: () => void;
+  /** Fill the dialog instead of sitting in a box; see AgentSideChat. */
+  fill?: boolean;
 }) => {
   const logsStore = useService(AgentRunLogsStore);
   const runsStore = useService(AgentRunsStore);
@@ -141,6 +144,7 @@ export const AgentRunChat = ({
       openModel={openModel}
       record={record}
       onClose={onClose}
+      fill={fill}
       testId="agent-run-chat"
     />
   );
