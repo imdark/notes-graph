@@ -1,6 +1,13 @@
 import { cssVar } from '@toeverything/theme';
 import { cssVarV2 } from '@toeverything/theme/v2';
-import { keyframes, style } from '@vanilla-extract/css';
+import {
+  fallbackVar,
+  globalStyle,
+  keyframes,
+  style,
+} from '@vanilla-extract/css';
+
+import { globalVars } from '../../../../../mobile/styles/variables.css';
 
 /**
  * Text a person may want to copy: a run's log, answer, details and errors.
@@ -812,4 +819,85 @@ export const chatChipRemove = style({
   color: cssVarV2('icon/secondary'),
   fontSize: 14,
   cursor: 'pointer',
+});
+
+/**
+ * The Ask tab on a phone: a flat, full-screen chat. The dialog is the
+ * viewport, so the keyboard's height is taken off its bottom (the Android
+ * WebView doesn't resize for it) and the composer rides above the keyboard.
+ */
+export const flatChatDialog = style({
+  display: 'flex',
+  flexDirection: 'column',
+  overflow: 'hidden',
+  padding: '12px 12px 0',
+  paddingBottom: `calc(${fallbackVar(globalVars.appKeyboardHeight, '0px')} + env(safe-area-inset-bottom, 0px))`,
+});
+
+export const flatChatBody = style({
+  flex: 1,
+  minHeight: 0,
+});
+
+export const chatFill = style({
+  flex: 1,
+  minHeight: 0,
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 8,
+});
+
+export const chatFillMessages = style({
+  flex: 1,
+  minHeight: 0,
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 12,
+  overflowY: 'auto',
+  overscrollBehavior: 'contain',
+  padding: '4px 0',
+});
+
+const workingPulse = keyframes({
+  '0%, 80%, 100%': { opacity: 0.25, transform: 'scale(0.8)' },
+  '40%': { opacity: 1, transform: 'scale(1)' },
+});
+
+export const chatWorking = style({
+  display: 'flex',
+  alignItems: 'center',
+  gap: 8,
+  fontSize: cssVar('fontXs'),
+  color: cssVarV2('text/secondary'),
+});
+
+export const chatWorkingDots = style({
+  display: 'inline-flex',
+  gap: 3,
+  selectors: {
+    '& > span': {
+      width: 6,
+      height: 6,
+      borderRadius: '50%',
+      background: cssVarV2('icon/activated'),
+      animation: `${workingPulse} 1.2s ease-in-out infinite`,
+    },
+    '& > span:nth-child(2)': { animationDelay: '0.15s' },
+    '& > span:nth-child(3)': { animationDelay: '0.3s' },
+  },
+  '@media': {
+    '(prefers-reduced-motion: reduce)': {
+      selectors: { '& > span': { animation: 'none' } },
+    },
+  },
+});
+
+globalStyle(`${chatComposer}[data-fill="true"]`, {
+  flexShrink: 0,
+  marginBottom: 8,
+});
+
+globalStyle(`${chatComposer}[data-fill="true"] textarea`, {
+  // 16px stops iOS zooming the page when the box is focused.
+  fontSize: 16,
 });

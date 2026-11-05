@@ -159,6 +159,7 @@ export const AgentSideChat = ({
   record,
   waiting,
   onClose,
+  fill,
   testId,
 }: {
   title: string;
@@ -174,6 +175,11 @@ export const AgentSideChat = ({
   /** Why the reply hasn't started, shown under it while it is awaited. */
   waiting?: string | null;
   onClose?: () => void;
+  /**
+   * Fill the space it is given instead of sitting in a bordered box: the
+   * transcript scrolls and the composer stays at the bottom, as on a phone.
+   */
+  fill?: boolean;
   testId: string;
 }) => {
   const cloudRunner = useService(CloudAgentRunnerService);
@@ -216,6 +222,12 @@ export const AgentSideChat = ({
   useEffect(() => {
     listEnd.current?.scrollIntoView({ block: 'nearest' });
   }, [turns]);
+  // The keyboard takes a moment to open and shrink the chat; once it has,
+  // bring the latest message back into view above the composer.
+  const onInputFocus = useCallback(() => {
+    if (!fill) return;
+    setTimeout(() => listEnd.current?.scrollIntoView({ block: 'end' }), 300);
+  }, [fill]);
 
   useEffect(() => {
     const kept = recordRef.current;
@@ -387,23 +399,30 @@ export const AgentSideChat = ({
 
   return (
     <ReplyOptions.Provider value={replyOptions}>
-      <div className={styles.forkPanel} data-testid={testId}>
-        <div className={styles.forkHead}>
-          <span className={styles.questionLabel}>{title}</span>
-          {onClose ? (
-            <button
-              className={styles.linkButton}
-              onClick={onClose}
-              data-testid={`${testId}-close`}
-            >
-              Close
-            </button>
-          ) : null}
-        </div>
-        <span className={styles.hint}>{hint}</span>
+      <div
+        className={fill ? styles.chatFill : styles.forkPanel}
+        data-testid={testId}
+      >
+        {fill ? null : (
+          <div className={styles.forkHead}>
+            <span className={styles.questionLabel}>{title}</span>
+            {onClose ? (
+              <button
+                className={styles.linkButton}
+                onClick={onClose}
+                data-testid={`${testId}-close`}
+              >
+                Close
+              </button>
+            ) : null}
+          </div>
+        )}
+        {fill && turns.length > 0 ? null : (
+          <span className={styles.hint}>{hint}</span>
+        )}
 
         {turns.length > 0 ? (
-          <div className={styles.forkMessages}>
+          <div className={fill ? styles.chatFillMessages : styles.forkMessages}>
             {turns.map((turn, i) =>
               turn.role === 'user' ? (
                 <div key={i} className={styles.forkReply}>
@@ -421,12 +440,26 @@ export const AgentSideChat = ({
                     </div>
                   ) : null}
                 </div>
-              ) : (
+              ) : fill && !turn.content ? null : (
                 <div key={i} className={styles.forkReply}>
                   {renderReply(turn.content, busy && i === turns.length - 1)}
                 </div>
               )
             )}
+            {fill && busy ? (
+              <div
+                className={styles.chatWorking}
+                role="status"
+                data-testid={`${testId}-working`}
+              >
+                <span className={styles.chatWorkingDots} aria-hidden>
+                  <span />
+                  <span />
+                  <span />
+                </span>
+                Working on your answer
+              </div>
+            ) : null}
             {busy && waiting ? (
               <span className={styles.hint} data-testid={`${testId}-waiting`}>
                 {waiting}
@@ -438,6 +471,7 @@ export const AgentSideChat = ({
 
         <div
           className={styles.chatComposer}
+          data-fill={fill}
           data-dragging={dragging}
           onDragOver={onDragOver}
           onDragLeave={() => setDragging(false)}
@@ -470,8 +504,9 @@ export const AgentSideChat = ({
             onPaste={onPaste}
             placeholder={placeholder}
             rows={2}
+            onFocus={onInputFocus}
             disabled={busy}
-            autoFocus
+            autoFocus={!fill}
             data-testid={`${testId}-input`}
           />
           <div className={styles.chatComposerActions}>
