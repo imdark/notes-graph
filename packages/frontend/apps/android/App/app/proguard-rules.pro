@@ -73,3 +73,7 @@
 -keepattributes SourceFile,LineNumberTable
 # Keep custom exceptions.
 -keep public class * extends java.lang.Exception
+
+# sherpa-onnx's native code reads its config objects' fields and builds its
+# result objects through JNI, by name.
+-keep class com.k2fsa.sherpa.onnx.** { *; }

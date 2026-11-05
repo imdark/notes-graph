@@ -117,6 +117,31 @@ export const status = style({
   color: cssVarV2('text/secondary'),
 });
 
+// Secondary to capturing: a quiet row below it, not a banner over the mic.
+export const model = style({
+  display: 'flex',
+  alignItems: 'center',
+  gap: 12,
+  width: '100%',
+  flexWrap: 'wrap',
+  paddingTop: 12,
+  borderTop: `1px solid ${cssVarV2('layer/insideBorder/border')}`,
+});
+
+export const modelText = style({
+  flex: 1,
+  minWidth: 200,
+  fontSize: 13,
+  lineHeight: '20px',
+  color: cssVarV2('text/secondary'),
+});
+
+export const modelProgress = style({
+  width: '100%',
+  height: 6,
+  accentColor: cssVarV2('button/primary'),
+});
+
 export const handOff = style({
   display: 'flex',
   flexDirection: 'column',

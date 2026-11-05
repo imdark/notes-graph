@@ -32,6 +32,15 @@ export class VoiceTasksService extends Service {
     return !!this.provider;
   }
 
+  /** The downloadable on-device recognizer, where this platform has one. */
+  get onDeviceModel() {
+    return this.provider?.onDeviceModel ?? null;
+  }
+
+  get lang() {
+    return typeof navigator === 'undefined' ? 'en-US' : navigator.language;
+  }
+
   open(request: VoiceTasksRequest) {
     this.request$.next(request);
   }
@@ -46,8 +55,6 @@ export class VoiceTasksService extends Service {
       handlers.onEnd('unavailable');
       return { stop: async () => {} };
     }
-    return provider.start(handlers, {
-      lang: typeof navigator === 'undefined' ? 'en-US' : navigator.language,
-    });
+    return provider.start(handlers, { lang: this.lang });
   }
 }

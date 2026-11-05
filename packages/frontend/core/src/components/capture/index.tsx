@@ -5,6 +5,7 @@ import { DocsService } from '@notesgraph/core/modules/doc';
 import { FeatureFlagService } from '@notesgraph/core/modules/feature-flag';
 import {
   appendDictation,
+  cleanDictation,
   type SpeechToTextError,
   type SpeechToTextSession,
   VoiceTasksService,
@@ -16,6 +17,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import * as styles from './capture.css';
 import { CaptureHandOff } from './hand-off';
+import { OnDeviceModelOffer } from './on-device-model';
+import { useDictationVocabulary } from './use-dictation-vocabulary';
 
 /** How long typing has to pause before the note is rewritten. */
 const SAVE_DELAY_MS = 400;
@@ -75,6 +78,7 @@ export const CaptureView = ({
     release: () => void;
   } | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const vocabularyRef = useDictationVocabulary();
 
   const stop = useCallback(() => {
     const session = sessionRef.current;
@@ -90,13 +94,17 @@ export const CaptureView = ({
     setListening(true);
     voice
       .listen({
+        // Fillers dropped and the workspace's own spellings kept, in the
+        // live text too, so what is shown is what gets saved.
         onPartial: value => {
-          if (current()) setPartial(value);
+          if (current())
+            setPartial(cleanDictation(value, vocabularyRef.current));
         },
         onSegment: segment => {
           if (!current()) return;
           setPartial('');
-          setText(prev => appendDictation(prev, segment));
+          const words = cleanDictation(segment, vocabularyRef.current);
+          setText(prev => appendDictation(prev, words));
         },
         onEnd: endError => {
           if (!current()) return;
@@ -116,7 +124,7 @@ export const CaptureView = ({
         setListening(false);
         setError('failed');
       });
-  }, [voice]);
+  }, [voice, vocabularyRef]);
 
   // Write what is on screen, the sentence still being said included, so
   // nothing is lost if the app is closed mid-sentence.
@@ -261,6 +269,7 @@ export const CaptureView = ({
           New capture
         </Button>
       </div>
+      {compact ? null : <OnDeviceModelOffer />}
       {handOffEnabled && handingOff && docId ? (
         <CaptureHandOff
           docId={docId}

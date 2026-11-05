@@ -1,8 +1,10 @@
 import { CloseIcon, MicrophoneIcon } from '@blocksuite/icons/rc';
 import { Button, IconButton, Modal, toast } from '@notesgraph/component';
+import { useDictationVocabulary } from '@notesgraph/core/components/capture/use-dictation-vocabulary';
 import { EditorService } from '@notesgraph/core/modules/editor';
 import {
   appendDictation,
+  cleanDictation,
   insertTasks,
   type SpeechToTextError,
   type SpeechToTextSession,
@@ -38,6 +40,7 @@ export const VoiceTasksSheet = () => {
   // Bumped per session, so a stopped session's late callbacks (the last
   // utterance arrives after stop) can't touch the sheet once it's moved on.
   const generationRef = useRef(0);
+  const vocabularyRef = useDictationVocabulary();
 
   const stop = useCallback(() => {
     const session = sessionRef.current;
@@ -54,12 +57,15 @@ export const VoiceTasksSheet = () => {
     voiceTasks
       .listen({
         onPartial: partial => {
-          if (current()) setPartial(partial);
+          if (current()) {
+            setPartial(cleanDictation(partial, vocabularyRef.current));
+          }
         },
         onSegment: segment => {
           if (!current()) return;
           setPartial('');
-          setText(prev => appendDictation(prev, segment));
+          const words = cleanDictation(segment, vocabularyRef.current);
+          setText(prev => appendDictation(prev, words));
         },
         onEnd: endError => {
           if (!current()) return;
@@ -79,7 +85,7 @@ export const VoiceTasksSheet = () => {
         setListening(false);
         setError('failed');
       });
-  }, [voiceTasks]);
+  }, [voiceTasks, vocabularyRef]);
 
   // Opening the sheet is the request to listen; closing it ends listening.
   useEffect(() => {
