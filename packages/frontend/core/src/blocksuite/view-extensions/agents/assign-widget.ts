@@ -10,6 +10,7 @@ import {
   WidgetComponent,
   WidgetViewExtension,
 } from '@blocksuite/notesgraph/std';
+import { focusTextModel } from '@blocksuite/notesgraph/rich-text';
 import type { ExtensionType } from '@blocksuite/notesgraph/store';
 import { IconType } from '@notesgraph/component';
 import {
@@ -26,12 +27,14 @@ import {
   runsForModel,
 } from '@notesgraph/core/modules/agents';
 import { WorkspaceDialogService } from '@notesgraph/core/modules/dialogs';
+import { FeatureFlagService } from '@notesgraph/core/modules/feature-flag';
 import { WorkbenchService } from '@notesgraph/core/modules/workbench';
 import type { FrameworkProvider } from '@notesgraph/infra';
 import { css, html, nothing } from 'lit';
 import { state } from 'lit/decorators.js';
 import { literal, unsafeStatic } from 'lit/static-html.js';
 
+import { addRowAfter } from './add-row';
 import { AgentsFrameworkIdentifier } from './framework';
 import { lineTextRects } from './line-text-rects';
 
@@ -65,7 +68,8 @@ const END_GAP_PX = 8;
 /**
  * A small button at the end of a to-do line that no agent is on yet,
  * offering to hand the task to one: pick an existing agent, or make a new one
- * and hand it to that.
+ * and hand it to that. A plain + pill sits just before it and adds an empty
+ * row of the same kind right after the line, at the line's level.
  *
  * Shown while the line is hovered or the caret is in it — on a phone, tapping
  * into the line is what brings it up. Once a run is asked for, the task goes
@@ -79,6 +83,10 @@ export class AgentAssignWidget extends WidgetComponent {
       top: 0;
       left: 0;
       z-index: 1;
+    }
+    .ng-agent-pills {
+      display: inline-flex;
+      gap: 4px;
     }
     .ng-agent-assign {
       display: inline-flex;
@@ -119,6 +127,10 @@ export class AgentAssignWidget extends WidgetComponent {
   @state()
   private accessor _menuOpen = false;
 
+  /** The enable_add_row_pill flag. */
+  @state()
+  private accessor _addRowOn = false;
+
   /** Bumped when something the open-task check reads changes. */
   @state()
   private accessor _version = 0;
@@ -157,6 +169,17 @@ export class AgentAssignWidget extends WidgetComponent {
       this._disposables.add(() => runsSub.unsubscribe());
     } catch {
       // No workspace scope (e.g. a detached editor).
+    }
+
+    try {
+      const flag = framework.get(FeatureFlagService).flags.enable_add_row_pill.$;
+      this._addRowOn = !!flag.value;
+      const flagSub = flag.subscribe(on => {
+        this._addRowOn = !!on;
+      });
+      this._disposables.add(() => flagSub.unsubscribe());
+    } catch {
+      // No feature flags in this scope: keep the pill off.
     }
 
     const sessions = framework.get(AgentRunSessionService);
@@ -289,8 +312,7 @@ export class AgentAssignWidget extends WidgetComponent {
    * the next line down, so the button never covers text on either line.
    */
   private _place() {
-    const button =
-      this.renderRoot.querySelector<HTMLElement>('.ng-agent-assign');
+    const button = this.renderRoot.querySelector<HTMLElement>('.ng-agent-pills');
     // Every block's widget re-renders on each streamed run event; a hidden
     // one must not force a layout to find that out.
     if (!button) {
@@ -426,20 +448,44 @@ export class AgentAssignWidget extends WidgetComponent {
     });
   }
 
+  private readonly _addRow = (e: MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (this.store.readonly) return;
+    const id = addRowAfter(this.store, this.model);
+    if (!id) return;
+    const text = this.store.getBlock(id)?.model.text;
+    focusTextModel(this.std, id, text?.length ?? 0);
+  };
+
   override render() {
     // Read so a status, run or text change re-renders.
     void this._version;
     if (!this._shouldShow()) return nothing;
-    return html`<span
-      class="ng-agent-assign"
-      role="button"
-      contenteditable="false"
-      title="Assign to an agent"
-      data-testid="agent-assign-button"
-      ?data-open=${this._menuOpen}
-      @pointerdown=${(e: PointerEvent) => e.preventDefault()}
-      @click=${this._openMenu}
-      >${AiIcon()}${PlusIcon()}</span
+    const keepCaret = (e: PointerEvent) => e.preventDefault();
+    const addRow = this._addRowOn
+      ? html`<span
+          class="ng-agent-assign"
+          role="button"
+          title="Add a row after this one"
+          aria-label="Add a row after this one"
+          data-testid="add-row-button"
+          @pointerdown=${keepCaret}
+          @click=${this._addRow}
+          >${PlusIcon()}</span
+        >`
+      : nothing;
+    return html`<span class="ng-agent-pills" contenteditable="false"
+      >${addRow}<span
+        class="ng-agent-assign"
+        role="button"
+        title="Assign to an agent"
+        data-testid="agent-assign-button"
+        ?data-open=${this._menuOpen}
+        @pointerdown=${keepCaret}
+        @click=${this._openMenu}
+        >${AiIcon()}${PlusIcon()}</span
+      ></span
     >`;
   }
 }
