@@ -391,6 +391,15 @@ export const NOTESGRAPH_FLAGS = {
     configurable: true,
     defaultState: true,
   },
+  enable_add_row_pill: {
+    commit: '859df954157f254bc185d6eca6c7b3bc9a64ef1f',
+    category: 'notesgraph',
+    displayName: 'Add-row pill',
+    description:
+      'A + pill just before the assign-to-agent pill on a line: adds an empty row of the same kind right after it, at the same level.',
+    configurable: true,
+    defaultState: true,
+  },
   enable_page_chat_on_device: {
     commit: '6714aaa4c3b90be3faa6774a6e17f8782eec81e2',
     category: 'notesgraph',
