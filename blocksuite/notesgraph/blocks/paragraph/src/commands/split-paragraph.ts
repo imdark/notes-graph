@@ -5,7 +5,7 @@ import {
 } from '@blocksuite/notesgraph-rich-text';
 import {
   matchModels,
-  orgStampAwareSplitIndex,
+  splitTextKeepingOrgMeta,
 } from '@blocksuite/notesgraph-shared/utils';
 import { type Command, TextSelection } from '@blocksuite/std';
 
@@ -42,17 +42,15 @@ export const splitParagraphCommand: Command<
   // In this case, we should not split the block.
   if (model.props.text.yText.length < splitIndex + splitLength) return;
 
-  // Keep a trailing org planning stamp (CLOSED/STARTED chip) on this block when
-  // pressing Enter at the end: with a collapsed caret past the real text, split
-  // at the true end so the badge stays put and the new block starts blank.
-  const effectiveIndex =
-    splitLength === 0
-      ? orgStampAwareSplitIndex(model.props.text.toDelta(), splitIndex)
-      : splitIndex;
-
+  // Trailing task metadata (STARTED/CLOSED stamps, the @agent claim) stays on
+  // this block; only the text after the caret moves down.
   if (model.children.length > 0 && splitIndex > 0) {
     store.captureSync();
-    const right = model.props.text.split(effectiveIndex, splitLength);
+    const right = splitTextKeepingOrgMeta(
+      model.props.text,
+      splitIndex,
+      splitLength
+    );
     const id = store.addBlock(
       model.flavour,
       {
@@ -71,7 +69,11 @@ export const splitParagraphCommand: Command<
   const index = parent.children.indexOf(model);
   if (index < 0) return;
   store.captureSync();
-  const right = model.props.text.split(effectiveIndex, splitLength);
+  const right = splitTextKeepingOrgMeta(
+    model.props.text,
+    splitIndex,
+    splitLength
+  );
   const id = store.addBlock(
     model.flavour,
     {
