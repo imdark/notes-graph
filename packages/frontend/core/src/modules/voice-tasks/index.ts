@@ -4,6 +4,8 @@ import { SpeechToTextProvider } from './providers/speech-to-text';
 import { VoiceTasksService } from './services/voice-tasks';
 
 export {
+  type OnDeviceModelStatus,
+  type OnDeviceSpeechModel,
   type SpeechToTextError,
   type SpeechToTextHandlers,
   SpeechToTextProvider,
@@ -13,6 +15,11 @@ export {
   type VoiceTasksRequest,
   VoiceTasksService,
 } from './services/voice-tasks';
+export {
+  buildVocabulary,
+  cleanDictation,
+  type VocabularyTerm,
+} from './utils/clean-dictation';
 export { insertTasks } from './utils/insert-tasks';
 export { appendDictation, splitDictatedTasks } from './utils/split-tasks';
 export { writeCapture } from './utils/write-capture';

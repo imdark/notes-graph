@@ -37,6 +37,7 @@ import app.notesgraph.pro.plugin.HashCashPlugin
 import app.notesgraph.pro.plugin.NbStorePlugin
 import app.notesgraph.pro.plugin.NoteWidgetPlugin
 import app.notesgraph.pro.plugin.PreviewPlugin
+import app.notesgraph.pro.plugin.LocalSpeechToTextPlugin
 import app.notesgraph.pro.plugin.SpeechToTextPlugin
 import app.notesgraph.pro.push.NotificationTarget
 import app.notesgraph.pro.widget.NoteWidgetWorker
@@ -79,6 +80,7 @@ class MainActivity : BridgeActivity(), AIButtonPlugin.Callback, NotesGraphThemeP
                 AppLockPlugin::class.java,
                 AuthPlugin::class.java,
                 HashCashPlugin::class.java,
+                LocalSpeechToTextPlugin::class.java,
                 NbStorePlugin::class.java,
                 NoteWidgetPlugin::class.java,
                 PreviewPlugin::class.java,

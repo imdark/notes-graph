@@ -70,8 +70,41 @@ android {
             // stale pre-rebrand artifact can linger in build/rustJniLibs,
             // which the cargo plugin hands to packaging wholesale (44MB)
             excludes += ['**/libaffine_mobile_native.so']
+            // sherpa-onnx's C and C++ APIs; its JNI library (all the Kotlin
+            // API loads) needs only ONNX Runtime.
+            excludes += ['**/libsherpa-onnx-c-api.so', '**/libsherpa-onnx-cxx-api.so']
         }
     }
+}
+
+/**
+ * sherpa-onnx (speech recognition on ONNX Runtime) ships its Android AAR only
+ * as a GitHub release asset; JitPack's build of it fails. Fetched once into
+ * the Gradle cache dir and checked against the release's hash.
+ */
+def sherpaOnnxAar() {
+    def version = '2.0.1'
+    def sha256 = 'a8d09d1d32f3eb8520482c6d3d43fae674681c5b050385967c70a3c2c9bf0ee7'
+    def aar = new File(gradle.gradleUserHomeDir, "caches/notesgraph/sherpa-onnx-${version}.aar")
+    def digest = { File f ->
+        def md = java.security.MessageDigest.getInstance('SHA-256')
+        f.eachByte(1 << 16) { buf, n -> md.update(buf, 0, n) }
+        md.digest().encodeHex().toString()
+    }
+    if (aar.exists() && digest(aar) == sha256) return aar
+    if (gradle.startParameter.offline) {
+        throw new GradleException("sherpa-onnx ${version} isn't cached at ${aar}; build online once")
+    }
+    aar.parentFile.mkdirs()
+    def part = new File(aar.path + '.part')
+    new URL("https://github.com/k2-fsa/sherpa-onnx/releases/download/v${version}/sherpa-onnx-${version}.aar")
+        .withInputStream { input -> part.withOutputStream { it << input } }
+    if (digest(part) != sha256) {
+        part.delete()
+        throw new GradleException("sherpa-onnx ${version} download doesn't match its hash")
+    }
+    part.renameTo(aar)
+    return aar
 }
 
 repositories {
@@ -119,6 +152,8 @@ dependencies {
     // Background push-sync worker (BackgroundSyncWorker). Version may need to
     // track the project's other AndroidX versions on the device build.
     implementation "androidx.work:work-runtime-ktx:2.9.1"
+    // On-device dictation for capture (plugin/LocalSpeechToTextPlugin).
+    implementation files(sherpaOnnxAar())
     // The note widget's scrolling lines (widget/NoteWidgetProvider), down to minSdk 23.
     implementation "androidx.core:core-remoteviews:1.1.0"
     implementation libs.androidx.navigation.fragment

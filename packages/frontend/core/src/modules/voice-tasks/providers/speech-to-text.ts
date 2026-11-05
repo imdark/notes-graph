@@ -21,6 +21,27 @@ export interface SpeechToTextSession {
   stop(): Promise<void>;
 }
 
+export interface OnDeviceModelStatus {
+  state: 'missing' | 'downloading' | 'ready';
+  /** Bytes on the device so far, and in all. */
+  downloaded: number;
+  total: number;
+}
+
+/**
+ * A recognizer that runs on the device once its model is downloaded. Until
+ * then the provider falls back to the platform's recognizer.
+ */
+export interface OnDeviceSpeechModel {
+  status(): Promise<OnDeviceModelStatus>;
+  /** Resolves once the model is in place; a cut-off download picks up again. */
+  download(
+    onProgress: (progress: { downloaded: number; total: number }) => void
+  ): Promise<void>;
+  /** Whether it can listen in this language at all. */
+  supportsLanguage(lang: string): boolean;
+}
+
 /**
  * Continuous dictation from a native recognizer. The Android WebView has no
  * Web Speech recognition, so the app provides this; elsewhere the browser's
@@ -32,6 +53,8 @@ export interface SpeechToTextProvider {
     handlers: SpeechToTextHandlers,
     options: { lang: string }
   ): Promise<SpeechToTextSession>;
+  /** Present where a better, on-device recognizer can be downloaded. */
+  onDeviceModel?: OnDeviceSpeechModel;
 }
 
 export const SpeechToTextProvider = createIdentifier<SpeechToTextProvider>(
