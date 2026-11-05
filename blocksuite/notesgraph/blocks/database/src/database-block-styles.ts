@@ -114,6 +114,7 @@ export const dbCollapsedHeaderStyles = css({
   alignItems: 'center',
   gap: '8px',
   padding: '2px 0',
+  cursor: 'pointer',
 });
 
 export const dbCollapsedTitleStyles = css({
