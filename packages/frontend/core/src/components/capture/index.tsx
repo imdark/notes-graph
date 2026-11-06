@@ -3,6 +3,7 @@ import type { Store } from '@blocksuite/notesgraph/store';
 import { Button } from '@notesgraph/component';
 import { DocsService } from '@notesgraph/core/modules/doc';
 import { FeatureFlagService } from '@notesgraph/core/modules/feature-flag';
+import { JournalService } from '@notesgraph/core/modules/journal';
 import {
   appendDictation,
   cleanDictation,
@@ -53,6 +54,7 @@ export const CaptureView = ({
 }) => {
   const voice = useService(VoiceTasksService);
   const docsService = useService(DocsService);
+  const journalService = useService(JournalService);
   const workbench = useService(WorkbenchService).workbench;
   const handOffEnabled = useLiveData(
     useService(FeatureFlagService).flags.enable_capture_hand_off.$
@@ -141,12 +143,13 @@ export const CaptureView = ({
         const { doc, release } = docsService.open(record.id);
         noteRef.current = { id: record.id, store: doc.blockSuiteDoc, release };
         setDocId(record.id);
+        journalService.addToTodayJournal(record.id).catch(console.error);
       }
       writeCapture(noteRef.current.store, value);
     } catch (err) {
       console.error('capture: failed to save', err);
     }
-  }, [docsService]);
+  }, [docsService, journalService]);
 
   useEffect(() => {
     if (!content.trim() && !noteRef.current) return;
