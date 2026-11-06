@@ -22,6 +22,8 @@ import { getText, tryParseArrayField } from './utils';
 
 const JS_INDEX_REVISION = 1;
 const NODE_BATCH_SIZE = 50;
+/** Ids per batched field read when aggregating over every hit. */
+const AGGREGATE_BATCH_SIZE = 200;
 /** Most stored fields kept read; past it the oldest go first. */
 const FIELD_CACHE_SIZE = 50_000;
 
@@ -43,16 +45,70 @@ export class SqliteIndexerStorage extends IndexerStorageBase {
    */
   private readonly fields = new Map<string, Map<string, string | null>>();
   private cachedFields = 0;
-  /** Bumped by every write, so a read that overlapped one isn't kept. */
-  private writes = 0;
+  /**
+   * Ids written while a read was in flight, one set per read. A read that
+   * overlapped a write to its own document is not kept; a write to another
+   * document doesn't throw the read away. (A global "any write" guard made
+   * every batched read during a cold start useless: the indexer was writing
+   * the whole time.)
+   */
+  private readonly inFlightReads = new Set<Set<string>>();
 
   private readonly read: ReadField = async (table, field, id) => {
     const byId = this.fields.get(id);
     const key = `${table}:${field}`;
     if (byId?.has(key)) return byId.get(key);
-    const writes = this.writes;
-    const text = (await this.connection.apis.ftsGetDocument(key, id)) ?? null;
-    if (writes !== this.writes) return text;
+    const dirty = new Set<string>();
+    this.inFlightReads.add(dirty);
+    let text: string | null;
+    try {
+      text = (await this.connection.apis.ftsGetDocument(key, id)) ?? null;
+    } finally {
+      this.inFlightReads.delete(dirty);
+    }
+    if (!dirty.has(id)) this.remember(id, key, text);
+    return text;
+  };
+
+  /** Set once the native side has no batched read; per-id from then on. */
+  private batchReadsUnsupported = false;
+
+  /**
+   * Read one stored field for many ids in a single native call and fill the
+   * cache, so the per-node reads that follow are hits. A cold start answers
+   * the notes tree's link query and the indexer's doc listing this way:
+   * thousands of hits × fields, each its own round trip before.
+   */
+  private readonly readMany = async (
+    table: string,
+    field: string,
+    ids: string[]
+  ) => {
+    if (this.batchReadsUnsupported) return;
+    const key = `${table}:${field}`;
+    const missing = ids.filter(id => !this.fields.get(id)?.has(key));
+    if (missing.length === 0) return;
+    const dirty = new Set<string>();
+    this.inFlightReads.add(dirty);
+    let texts: (string | null)[];
+    try {
+      const batch = this.connection.apis.ftsGetDocuments;
+      if (!batch) throw new Error('no batched read');
+      texts = await batch(key, missing);
+    } catch {
+      // Desktop's napi binding and older mobile builds have no batched read;
+      // the per-id path still works, just one round trip at a time.
+      this.batchReadsUnsupported = true;
+      return;
+    } finally {
+      this.inFlightReads.delete(dirty);
+    }
+    missing.forEach((id, i) => {
+      if (!dirty.has(id)) this.remember(id, key, texts[i] ?? null);
+    });
+  };
+
+  private remember(id: string, key: string, text: string | null) {
     if (this.cachedFields >= FIELD_CACHE_SIZE) this.dropOldest();
     let entry = this.fields.get(id);
     if (!entry) {
@@ -61,11 +117,10 @@ export class SqliteIndexerStorage extends IndexerStorageBase {
     }
     if (!entry.has(key)) this.cachedFields++;
     entry.set(key, text);
-    return text;
-  };
+  }
 
   private forget(id: string) {
-    this.writes++;
+    for (const dirty of this.inFlightReads) dirty.add(id);
     const entry = this.fields.get(id);
     if (!entry) return;
     this.cachedFields -= entry.size;
@@ -109,6 +164,13 @@ export class SqliteIndexerStorage extends IndexerStorageBase {
     const nodes = [];
     for (let i = 0; i < pagedIds.length; i += NODE_BATCH_SIZE) {
       const batch = pagedIds.slice(i, i + NODE_BATCH_SIZE);
+      if (options?.fields) {
+        await Promise.all(
+          options.fields.map(field =>
+            this.readMany(table, field as string, batch)
+          )
+        );
+      }
       nodes.push(
         ...(await Promise.all(
           batch.map(id =>
@@ -148,6 +210,16 @@ export class SqliteIndexerStorage extends IndexerStorageBase {
   ): Promise<AggregateResult<T, O>> {
     const match = await queryRaw(this.connection, table, query);
     const ids = match.toArray();
+
+    // The aggregated field of every hit, batched (see readMany). Chunked so
+    // one native message stays a reasonable size for a few thousand hits.
+    for (let i = 0; i < ids.length; i += AGGREGATE_BATCH_SIZE) {
+      await this.readMany(
+        table,
+        field as string,
+        ids.slice(i, i + AGGREGATE_BATCH_SIZE)
+      );
+    }
 
     const buckets: any[] = [];
 

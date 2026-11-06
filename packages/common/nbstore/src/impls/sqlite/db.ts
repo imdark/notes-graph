@@ -117,6 +117,17 @@ export interface NativeDBApis {
     indexName: string,
     docId: string
   ) => Promise<string | null>;
+  /**
+   * Batched `ftsGetDocument`: one native round trip for many ids, results in
+   * the same order (null for a missing doc). Optional: a native side without
+   * it (desktop napi, older mobile builds) makes callers fall back to per-id
+   * reads.
+   */
+  ftsGetDocuments?: (
+    id: string,
+    indexName: string,
+    docIds: string[]
+  ) => Promise<(string | null)[]>;
   ftsGetMatches: (
     id: string,
     indexName: string,
@@ -129,10 +140,12 @@ export interface NativeDBApis {
 
 type NativeDBApisWrapper = NativeDBApis extends infer APIs
   ? {
-      [K in keyof APIs]: APIs[K] extends (...args: any[]) => any
-        ? Parameters<APIs[K]> extends [string, ...infer Rest]
-          ? (...args: Rest) => ReturnType<APIs[K]>
-          : (...args: Parameters<APIs[K]>) => ReturnType<APIs[K]>
+      [K in keyof APIs]: NonNullable<APIs[K]> extends infer F
+        ? F extends (...args: any[]) => any
+          ? Parameters<F> extends [string, ...infer Rest]
+            ? (...args: Rest) => ReturnType<F>
+            : (...args: Parameters<F>) => ReturnType<F>
+          : never
         : never;
     }
   : never;
@@ -177,6 +190,11 @@ export class NativeDBConnection extends AutoReconnectConnection<void> {
           const v = originalApis[key];
 
           return async (...args: any[]) => {
+            if (!v) {
+              // Optional apis (see ftsGetDocuments) reject instead of
+              // crashing, so callers can fall back.
+              throw new Error(`native api ${String(key)} is not available`);
+            }
             return v.call(
               originalApis,
               id,

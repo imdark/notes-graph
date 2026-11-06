@@ -181,6 +181,11 @@ export interface NbStorePlugin {
     indexName: string;
     docId: string;
   }) => Promise<{ text: string | null }>;
+  ftsGetDocuments: (options: {
+    id: string;
+    indexName: string;
+    docIds: string[];
+  }) => Promise<{ texts: (string | null)[] }>;
   ftsGetMatches: (options: {
     id: string;
     indexName: string;

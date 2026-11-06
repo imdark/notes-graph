@@ -6,6 +6,7 @@ import { afterEach, expect, test, vi } from 'vitest';
 import { Doc as YDoc, encodeStateAsUpdate } from 'yjs';
 
 import { DummyConnection } from '../connection';
+import { DummyDocStorage } from '../storage/dummy/doc';
 import {
   IndexedDBBlobStorage,
   IndexedDBBlobSyncStorage,
@@ -860,4 +861,79 @@ test('indexer completion waits for the current job to finish', async () => {
   } finally {
     sync.stop();
   }
+});
+
+test('doc sync peer reads clocks in bulk and never pulls from a remote that reported no clocks', async () => {
+  const local = new IndexedDBDocStorage({
+    id: 'ws-bulk',
+    flavour: 'local-bulk',
+    type: 'workspace',
+  });
+  const syncMetadata = new IndexedDBDocSyncStorage({
+    id: 'ws-bulk',
+    flavour: 'local-bulk',
+    type: 'workspace',
+  });
+  // Read-only and empty, like the legacy "v1" slot resolves to on mobile.
+  const remote = new DummyDocStorage();
+  const peer = new DocSyncPeer('bulk-remote', local, syncMetadata, remote);
+  const abort = new AbortController();
+
+  local.connection.connect();
+  syncMetadata.connection.connect();
+  await local.connection.waitForConnected();
+  await syncMetadata.connection.waitForConnected();
+
+  for (const docId of ['doc-a', 'doc-b', 'doc-c']) {
+    const doc = new YDoc();
+    doc.getMap('test').set('id', docId);
+    await local.pushDocUpdate({ docId, bin: encodeStateAsUpdate(doc) });
+  }
+
+  const getDoc = vi.spyOn(local, 'getDoc');
+  const perDocPushed = vi.spyOn(syncMetadata, 'getPeerPushedClock');
+  const perDocPulled = vi.spyOn(syncMetadata, 'getPeerPulledRemoteClock');
+  const perDocLocal = vi.spyOn(local, 'getDocTimestamp');
+  const bulkPushed = vi.spyOn(syncMetadata, 'getPeerPushedClocks');
+  const bulkPulled = vi.spyOn(syncMetadata, 'getPeerPulledRemoteClocks');
+
+  try {
+    void peer.mainLoop(abort.signal);
+
+    await vi.waitFor(() => {
+      let state: { synced: boolean; total: number } | undefined;
+      const dispose = peer.peerState$.subscribe(next => {
+        state = next;
+      });
+      dispose.unsubscribe();
+      expect(state).toMatchObject({ synced: true, total: 3 });
+    });
+
+    // The remote knows no docs, so there is nothing to pull: the local docs
+    // must not be read (that is two native round trips each on mobile).
+    expect(getDoc).not.toHaveBeenCalled();
+    // Every clock the connect jobs needed came from one bulk read per table.
+    expect(bulkPushed).toHaveBeenCalledTimes(1);
+    expect(bulkPulled).toHaveBeenCalledTimes(1);
+    expect(perDocPushed).not.toHaveBeenCalled();
+    expect(perDocPulled).not.toHaveBeenCalled();
+    expect(perDocLocal).not.toHaveBeenCalled();
+  } finally {
+    abort.abort();
+    local.connection.disconnect();
+    syncMetadata.connection.disconnect();
+  }
+});
+
+test('doc sync skips a remote slot that has no doc storage', () => {
+  const local = new SpaceStorage({
+    doc: new IndexedDBDocStorage({
+      id: 'ws-skip',
+      flavour: 'local-skip',
+      type: 'workspace',
+    }),
+  });
+  // Only an empty slot: the legacy "v1" remote on a platform without one.
+  const sync = new Sync({ local, remotes: { v1: new SpaceStorage({}) } });
+  expect(sync.doc.peerCount).toBe(0);
 });
