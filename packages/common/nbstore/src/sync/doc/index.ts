@@ -43,13 +43,21 @@ export interface DocSync {
 }
 
 export class DocSyncImpl implements DocSync {
-  private readonly peers: DocSyncPeer[] = Object.entries(
-    this.storages.remotes
-  ).map(
-    ([peerId, remote]) =>
-      new DocSyncPeer(peerId, this.storages.local, this.sync, remote)
-  );
+  private readonly peers: DocSyncPeer[] = Object.entries(this.storages.remotes)
+    // A remote slot with no doc storage (the legacy "v1" slot on mobile)
+    // resolves to a DummyDocStorage. Syncing against it costs a connect job,
+    // and on mobile three native round trips, per doc for nothing.
+    .filter(([, remote]) => !(remote instanceof DummyDocStorage))
+    .map(
+      ([peerId, remote]) =>
+        new DocSyncPeer(peerId, this.storages.local, this.sync, remote)
+    );
   private abort: AbortController | null = null;
+
+  /** How many remotes are actually synced (dummy slots are left out). */
+  get peerCount() {
+    return this.peers.length;
+  }
 
   private readonly _state$ = combineLatest(
     this.peers.map(peer => peer.peerState$)

@@ -7,6 +7,7 @@ import com.getcapacitor.PluginCall
 import com.getcapacitor.PluginMethod
 import com.getcapacitor.annotation.CapacitorPlugin
 import kotlinx.coroutines.Dispatchers
+import org.json.JSONObject
 import timber.log.Timber
 import app.notesgraph.pro.NotesGraphApp
 import app.notesgraph.pro.sync.BackgroundSyncWorker
@@ -691,6 +692,28 @@ class NbStorePlugin : Plugin() {
         call.resolve(JSObject().put("text", text))
       } catch (e: Exception) {
         call.reject("Failed to get fts document: ${e.message}", null, e)
+      }
+    }
+  }
+
+  // Batched ftsGetDocument: the web side reads thousands of stored fields
+  // when it lists docs or the notes tree's links, and each bridge crossing
+  // costs main-thread time on the page. One crossing per batch instead.
+  @PluginMethod
+  fun ftsGetDocuments(call: PluginCall) {
+    launch(Dispatchers.IO) {
+      try {
+        val id = call.getStringEnsure("id")
+        val indexName = call.getStringEnsure("indexName")
+        val docIds = call.getListEnsure<String>("docIds")
+        val texts = JSArray()
+        for (docId in docIds) {
+          val text = docStoragePool.ftsGetDocument(id, indexName, docId)
+          texts.put(text ?: JSONObject.NULL)
+        }
+        call.resolve(JSObject().put("texts", texts))
+      } catch (e: Exception) {
+        call.reject("Failed to get fts documents: ${e.message}", null, e)
       }
     }
   }

@@ -3,7 +3,7 @@ import { nanoid } from 'nanoid';
 import { Observable, ReplaySubject, share, Subject } from 'rxjs';
 import { diffUpdate, encodeStateVectorFromUpdate, mergeUpdates } from 'yjs';
 
-import type { DocStorage, DocSyncStorage } from '../../storage';
+import type { DocClocks, DocStorage, DocSyncStorage } from '../../storage';
 import { AsyncPriorityQueue } from '../../utils/async-priority-queue';
 import { ClockMap } from '../../utils/clock';
 import { isEmptyUpdate } from '../../utils/is-empty-update';
@@ -155,6 +155,34 @@ export class DocSyncPeer {
    */
   private readonly uniqueId = `sync:${this.peerId}:${nanoid()}`;
   private readonly prioritySettings = new Map<string, number>();
+  /**
+   * Clocks read in bulk when a sync pass starts, consumed by each doc's
+   * connect job. On mobile every per-doc read is a native round trip through
+   * the page thread; three per doc on a cold start was a large share of the
+   * main-thread load while the app came up. Docs that connect later (added
+   * after the pass started) still read individually.
+   */
+  private startupClocks: {
+    local: DocClocks;
+    pushed: DocClocks;
+    pulled: DocClocks;
+  } | null = null;
+
+  private takeStartupClocks(docId: string) {
+    const clocks = this.startupClocks;
+    if (!clocks) {
+      return null;
+    }
+    const taken = {
+      local: clocks.local[docId] ?? null,
+      pushed: clocks.pushed[docId] ?? null,
+      pulled: clocks.pulled[docId] ?? null,
+    };
+    delete clocks.local[docId];
+    delete clocks.pushed[docId];
+    delete clocks.pulled[docId];
+    return taken;
+  }
 
   constructor(
     readonly peerId: string,
@@ -261,10 +289,16 @@ export class DocSyncPeer {
 
   private readonly jobs = createJobErrorCatcher({
     connect: async (docId: string, signal?: AbortSignal) => {
-      const pushedClock =
-        (await this.syncMetadata.getPeerPushedClock(this.peerId, docId))
-          ?.timestamp ?? null;
-      const clock = await this.local.getDocTimestamp(docId);
+      const startup = this.takeStartupClocks(docId);
+      const pushedClock = startup
+        ? startup.pushed
+        : ((await this.syncMetadata.getPeerPushedClock(this.peerId, docId))
+            ?.timestamp ?? null);
+      const clock = startup
+        ? startup.local
+          ? { docId, timestamp: startup.local }
+          : null
+        : await this.local.getDocTimestamp(docId);
 
       throwIfAborted(signal);
       if (
@@ -276,12 +310,20 @@ export class DocSyncPeer {
         await this.jobs.pullAndPush(docId, signal);
       } else {
         // no need to push
-        const pulled =
-          (await this.syncMetadata.getPeerPulledRemoteClock(this.peerId, docId))
-            ?.timestamp ?? null;
+        const pulled = startup
+          ? startup.pulled
+          : ((
+              await this.syncMetadata.getPeerPulledRemoteClock(
+                this.peerId,
+                docId
+              )
+            )?.timestamp ?? null);
         const remoteClock = this.status.remoteClocks.get(docId);
+        // The clock map answers epoch zero for a doc the remote never
+        // reported. That is not a clock to pull up to: treating it as one
+        // re-pulled every local doc from an empty remote on every start.
         if (
-          remoteClock &&
+          remoteClock.getTime() > 0 &&
           (pulled === null || pulled.getTime() < remoteClock.getTime())
         ) {
           await this.jobs.pull(docId, signal);
@@ -716,8 +758,19 @@ export class DocSyncPeer {
         })
       );
 
-      // add all docs from local
-      const localDocs = Object.keys(await this.local.getDocTimestamps());
+      // add all docs from local, loading the clocks their connect jobs need
+      // in bulk (one round trip per table instead of three per doc)
+      const localClocks = await this.local.getDocTimestamps();
+      const [pushedClocks, pulledClocks] = await Promise.all([
+        this.syncMetadata.getPeerPushedClocks(this.peerId),
+        this.syncMetadata.getPeerPulledRemoteClocks(this.peerId),
+      ]);
+      this.startupClocks = {
+        local: { ...localClocks },
+        pushed: { ...pushedClocks },
+        pulled: { ...pulledClocks },
+      };
+      const localDocs = Object.keys(localClocks);
       throwIfAborted(signal);
       for (const docId of localDocs) {
         this.actions.addDoc(docId);

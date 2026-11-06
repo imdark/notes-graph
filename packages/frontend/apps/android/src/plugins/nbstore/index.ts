@@ -407,6 +407,18 @@ export const NbStoreNativeDBApis: NativeDBApis = {
     });
     return result.text;
   },
+  ftsGetDocuments: async function (
+    id: string,
+    indexName: string,
+    docIds: string[]
+  ): Promise<(string | null)[]> {
+    const result = await NbStore.ftsGetDocuments({
+      id,
+      indexName,
+      docIds,
+    });
+    return result.texts;
+  },
   ftsGetMatches: async function (
     id: string,
     indexName: string,
