@@ -94,6 +94,21 @@ const icons = { rc: rcIcons, lit: litIcons } as {
   lit: Record<keyof typeof litIcons, any>;
 };
 
+/**
+ * A stable cache key for an options object: only defined, primitive fields
+ * matter, in a fixed order, so `{reference: true}` and `{reference: true,
+ * mode: undefined}` share one entry.
+ */
+function optionsKey(options: object | undefined) {
+  if (!options) return '';
+  const parts: string[] = [];
+  for (const key of Object.keys(options).sort()) {
+    const value = (options as Record<string, unknown>)[key];
+    if (value !== undefined) parts.push(`${key}=${String(value)}`);
+  }
+  return parts.join('&');
+}
+
 export class DocDisplayMetaService extends Service {
   constructor(
     private readonly journalService: JournalService,
@@ -103,6 +118,16 @@ export class DocDisplayMetaService extends Service {
   ) {
     super();
   }
+
+  // `icon$` / `title$` are called on every render of every doc row, card and
+  // header. A fresh computed LiveData per call forced useLiveData to drop and
+  // rebuild the whole dependency chain (doc record, journal date, explorer
+  // icon, language) on each render, which saturated the main thread while a
+  // few hundred tree rows re-rendered through sync. Caching per (doc, options)
+  // returns one instance, so React keeps its subscription and all consumers
+  // of the same doc share one computation.
+  private readonly iconCache = new Map<string, LiveData<any>>();
+  private readonly titleCache = new Map<string, LiveData<string>>();
 
   getJournalIcon(
     journalDate: string | Dayjs,
@@ -133,6 +158,18 @@ export class DocDisplayMetaService extends Service {
   }
 
   icon$<T extends IconType = 'rc'>(
+    docId: string,
+    options?: DocDisplayIconOptions<T>
+  ) {
+    const cacheKey = `${docId}\0${optionsKey(options)}`;
+    const cached$ = this.iconCache.get(cacheKey);
+    if (cached$) return cached$;
+    const icon$ = this.createIcon$(docId, options);
+    this.iconCache.set(cacheKey, icon$);
+    return icon$;
+  }
+
+  private createIcon$<T extends IconType = 'rc'>(
     docId: string,
     options?: DocDisplayIconOptions<T>
   ) {
@@ -196,6 +233,15 @@ export class DocDisplayMetaService extends Service {
   }
 
   title$(docId: string, options?: DocDisplayTitleOptions) {
+    const cacheKey = `${docId}\0${optionsKey(options)}`;
+    const cached$ = this.titleCache.get(cacheKey);
+    if (cached$) return cached$;
+    const title$ = this.createTitle$(docId, options);
+    this.titleCache.set(cacheKey, title$);
+    return title$;
+  }
+
+  private createTitle$(docId: string, options?: DocDisplayTitleOptions) {
     return LiveData.computed(get => {
       const lng = get(this.i18nService.i18n.currentLanguageKey$);
       const doc = get(this.docsService.list.doc$(docId));

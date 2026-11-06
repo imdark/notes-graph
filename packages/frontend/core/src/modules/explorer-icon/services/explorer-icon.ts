@@ -22,7 +22,18 @@ export class ExplorerIconService extends Service {
     return this.store.setIcon(options);
   }
 
+  private readonly iconCache = new Map<
+    string,
+    LiveData<{ id: string; icon: IconData } | null>
+  >();
+
   icon$(type: ExplorerType, id: string) {
-    return LiveData.from(this.store.watchIcon(type, id), null);
+    const key = `${type}:${id}`;
+    let icon$ = this.iconCache.get(key);
+    if (!icon$) {
+      icon$ = LiveData.from(this.store.watchIcon(type, id), null);
+      this.iconCache.set(key, icon$);
+    }
+    return icon$;
   }
 }

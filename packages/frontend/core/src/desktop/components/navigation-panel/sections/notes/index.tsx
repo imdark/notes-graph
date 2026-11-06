@@ -363,15 +363,19 @@ export const NavigationPanelNotes = () => {
       addRoot(id);
     }
 
+    // Read each title once. `titleOf` is a cold LiveData read (it subscribes,
+    // takes the value and unsubscribes), so reading it inside the comparator
+    // cost thousands of subscriptions per recompute on a few hundred roots.
+    const titles = new Map<string, string>();
+    for (const id of inboxRoots) titles.set(id, titleOf(id));
+    for (const id of journalRoots) titles.set(id, titleOf(id));
+    const title = (id: string) => titles.get(id) ?? '';
+
     return {
-      orphanIds: inboxRoots.sort((a, b) =>
-        titleOf(a).localeCompare(titleOf(b))
-      ),
+      orphanIds: inboxRoots.sort((a, b) => title(a).localeCompare(title(b))),
       // Most-recent day first — journal titles are `YYYY-MM-DD`, so a reverse
       // lexical sort is chronological.
-      journalIds: journalRoots.sort((a, b) =>
-        titleOf(b).localeCompare(titleOf(a))
-      ),
+      journalIds: journalRoots.sort((a, b) => title(b).localeCompare(title(a))),
       parentOf,
     };
   }, [

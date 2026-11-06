@@ -29,6 +29,7 @@ import {
 } from '@notesgraph/infra';
 import { track } from '@notesgraph/track';
 import {
+  memo,
   type ReactNode,
   useCallback,
   useContext,
@@ -48,7 +49,7 @@ import { HasChildrenContext } from './has-children-context';
 import { useNavigationPanelDocNodeOperations } from './operations';
 import * as styles from './styles.css';
 
-export const NavigationPanelDocNode = ({
+const NavigationPanelDocNodeImpl = ({
   docId,
   onDrop,
   location,
@@ -435,3 +436,10 @@ export const NavigationPanelDocNode = ({
     </NavigationPanelTreeNode>
   );
 };
+
+// Memoized: the notes tree mounts hundreds of these under one parent whose
+// own inputs (link edges, doc list) change often while sync lands. Without
+// memo every parent render re-rendered every row; with it a row only renders
+// when its own props or subscribed LiveDatas change.
+export const NavigationPanelDocNode = memo(NavigationPanelDocNodeImpl);
+NavigationPanelDocNode.displayName = 'NavigationPanelDocNode';

@@ -23,8 +23,20 @@ export class JournalService extends Service {
   allJournalDates$ = this.store.allJournalDates$;
   allJournalDocIds$ = this.store.allJournalDocIds$;
 
+  // Cached per doc: this is read on every render of every doc row and title,
+  // and a fresh LiveData per call made each render re-subscribe the chain.
+  private readonly journalDateCache = new Map<
+    string,
+    LiveData<string | undefined>
+  >();
+
   journalDate$(docId: string) {
-    return LiveData.from(this.store.watchDocJournalDate(docId), undefined);
+    let date$ = this.journalDateCache.get(docId);
+    if (!date$) {
+      date$ = LiveData.from(this.store.watchDocJournalDate(docId), undefined);
+      this.journalDateCache.set(docId, date$);
+    }
+    return date$;
   }
   journalToday$(docId: string) {
     return LiveData.computed(get => {

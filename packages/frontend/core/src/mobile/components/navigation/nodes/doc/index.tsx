@@ -17,7 +17,7 @@ import {
   useService,
   useServices,
 } from '@notesgraph/infra';
-import { useCallback, useLayoutEffect, useMemo, useState } from 'react';
+import { memo, useCallback, useLayoutEffect, useMemo, useState } from 'react';
 
 import { AddItemPlaceholder } from '../../layouts/add-item-placeholder';
 import { NavigationPanelTreeNode } from '../../tree/node';
@@ -27,7 +27,7 @@ import {
 } from './operations';
 import * as styles from './styles.css';
 
-export const NavigationPanelDocNode = ({
+const NavigationPanelDocNodeImpl = ({
   docId,
   isLinked,
   operations: additionalOperations,
@@ -199,3 +199,8 @@ export const NavigationPanelDocNode = ({
     </NavigationPanelTreeNode>
   );
 };
+
+// Memoized for the same reason as the desktop node: a parent list re-render
+// must not re-render every row.
+export const NavigationPanelDocNode = memo(NavigationPanelDocNodeImpl);
+NavigationPanelDocNode.displayName = 'NavigationPanelDocNode';
