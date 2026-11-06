@@ -10,6 +10,7 @@ import {
   WidgetComponent,
   WidgetViewExtension,
 } from '@blocksuite/notesgraph/std';
+import { EnterIcon } from '@blocksuite/notesgraph/components/icons';
 import { focusTextModel } from '@blocksuite/notesgraph/rich-text';
 import type { ExtensionType } from '@blocksuite/notesgraph/store';
 import { IconType } from '@notesgraph/component';
@@ -484,7 +485,7 @@ export class AgentAssignWidget extends WidgetComponent {
           data-testid="add-row-button"
           @pointerdown=${keepCaret}
           @click=${this._addRow}
-          >${PlusIcon()}</span
+          >${EnterIcon}${PlusIcon()}</span
         >`
       : nothing;
     return html`<span class="ng-agent-pills" contenteditable="false"
