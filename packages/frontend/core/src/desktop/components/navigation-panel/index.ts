@@ -3,6 +3,10 @@ export { NavigationPanelCollections } from './sections/collections';
 export { NavigationPanelFavorites } from './sections/favorites';
 export { NavigationPanelMigrationFavorites } from './sections/migration-favorites';
 export { NavigationPanelNotes } from './sections/notes';
+export {
+  NotesTreeDocNodeContext,
+  type NotesTreeDocNodeProps,
+} from './sections/notes/doc-node-context';
 export { NavigationPanelOrganize } from './sections/organize';
 export { NavigationPanelProjects } from './sections/projects';
 export { NavigationPanelTags } from './sections/tags';

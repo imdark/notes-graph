@@ -16,6 +16,7 @@ import {
 import { cssVarV2 } from '@toeverything/theme/v2';
 import {
   useCallback,
+  useContext,
   useDeferredValue,
   useEffect,
   useMemo,
@@ -23,11 +24,11 @@ import {
 } from 'react';
 
 import { CollapsibleSection } from '../../layouts/collapsible-section';
-import { NavigationPanelDocNode } from '../../nodes/doc';
 import { HasChildrenContext } from '../../nodes/doc/has-children-context';
 import { NavigationPanelProjectNode } from '../../nodes/project';
 import { NavigationPanelTreeNode, NavigationPanelTreeRoot } from '../../tree';
-import { useProgressiveCount } from './use-progressive-count';
+import { NotesTreeDocNodeContext } from './doc-node-context';
+import { useLazyProgressiveCount } from './use-lazy-progressive-count';
 
 const InboxNodeIcon = ({ className }: { className?: string }) => (
   <svg
@@ -105,19 +106,28 @@ const SearchIcon = ({ className }: { className?: string }) => (
 const InboxNode = ({
   parentPath,
   orphanIds,
+  activeDocId,
 }: {
   parentPath: string[];
   orphanIds: string[];
+  activeDocId: string | null;
 }) => {
   const t = useI18n();
   const navigationPanelService = useService(NavigationPanelService);
+  const DocNode = useContext(NotesTreeDocNodeContext);
   const path = useMemo(() => [...parentPath, 'inbox'], [parentPath]);
   const collapsed = useLiveData(navigationPanelService.collapsed$(path));
   const setCollapsed = useCallback(
     (value: boolean) => navigationPanelService.setCollapsed(path, value),
     [navigationPanelService, path]
   );
-  const shown = useProgressiveCount(orphanIds.length, !collapsed);
+  // Rows mount as the list is scrolled; the active note's row is always
+  // mounted so the reveal effect below can scroll to it.
+  const { shown, sentinelRef } = useLazyProgressiveCount(
+    orphanIds.length,
+    !collapsed,
+    activeDocId ? orphanIds.indexOf(activeDocId) + 1 : 0
+  );
 
   return (
     <NavigationPanelTreeNode
@@ -129,7 +139,7 @@ const InboxNode = ({
       data-testid="navigation-panel-notes-inbox"
     >
       {orphanIds.slice(0, shown).map(id => (
-        <NavigationPanelDocNode
+        <DocNode
           key={id}
           docId={id}
           parentPath={path}
@@ -137,6 +147,9 @@ const InboxNode = ({
           alwaysShowChildren
         />
       ))}
+      {shown < orphanIds.length ? (
+        <div ref={sentinelRef} data-testid="navigation-panel-notes-more" />
+      ) : null}
     </NavigationPanelTreeNode>
   );
 };
@@ -150,19 +163,26 @@ const InboxNode = ({
 const JournalNode = ({
   parentPath,
   journalIds,
+  activeDocId,
 }: {
   parentPath: string[];
   journalIds: string[];
+  activeDocId: string | null;
 }) => {
   const t = useI18n();
   const navigationPanelService = useService(NavigationPanelService);
+  const DocNode = useContext(NotesTreeDocNodeContext);
   const path = useMemo(() => [...parentPath, 'journal'], [parentPath]);
   const collapsed = useLiveData(navigationPanelService.collapsed$(path));
   const setCollapsed = useCallback(
     (value: boolean) => navigationPanelService.setCollapsed(path, value),
     [navigationPanelService, path]
   );
-  const shown = useProgressiveCount(journalIds.length, !collapsed);
+  const { shown, sentinelRef } = useLazyProgressiveCount(
+    journalIds.length,
+    !collapsed,
+    activeDocId ? journalIds.indexOf(activeDocId) + 1 : 0
+  );
 
   return (
     <NavigationPanelTreeNode
@@ -174,7 +194,7 @@ const JournalNode = ({
       data-testid="navigation-panel-notes-journal"
     >
       {journalIds.slice(0, shown).map(id => (
-        <NavigationPanelDocNode
+        <DocNode
           key={id}
           docId={id}
           parentPath={path}
@@ -182,6 +202,9 @@ const JournalNode = ({
           alwaysShowChildren
         />
       ))}
+      {shown < journalIds.length ? (
+        <div ref={sentinelRef} data-testid="navigation-panel-notes-more" />
+      ) : null}
     </NavigationPanelTreeNode>
   );
 };
@@ -211,6 +234,7 @@ export const NavigationPanelNotes = () => {
     ProjectsService,
   });
   const t = useI18n();
+  const DocNode = useContext(NotesTreeDocNodeContext);
   const path = useMemo(() => ['notes'], []);
   const searchPath = useMemo(() => [...path, 'search'], [path]);
 
@@ -472,8 +496,9 @@ export const NavigationPanelNotes = () => {
         el.scrollIntoView({ block: 'nearest' });
         return;
       }
-      // Long Inbox/Journal lists mount in batches (useProgressiveCount), so
-      // the row can take a few seconds to exist.
+      // Long Inbox/Journal lists mount in batches (useLazyProgressiveCount;
+      // the active row is forced in via minCount), so the row can take a few
+      // frames to exist.
       if (attempts++ < 600) {
         raf = requestAnimationFrame(tryScroll);
       }
@@ -557,7 +582,7 @@ export const NavigationPanelNotes = () => {
         <NavigationPanelTreeRoot>
           {filtering ? (
             searchResults.map(id => (
-              <NavigationPanelDocNode
+              <DocNode
                 key={id}
                 docId={id}
                 parentPath={searchPath}
@@ -578,7 +603,7 @@ export const NavigationPanelNotes = () => {
                 />
               ))}
               {homeDocId ? (
-                <NavigationPanelDocNode
+                <DocNode
                   docId={homeDocId}
                   parentPath={path}
                   reorderable={false}
@@ -590,9 +615,14 @@ export const NavigationPanelNotes = () => {
                         <JournalNode
                           parentPath={path}
                           journalIds={journalIds}
+                          activeDocId={activeDocId ?? null}
                         />
                       ) : null}
-                      <InboxNode parentPath={path} orphanIds={orphanIds} />
+                      <InboxNode
+                        parentPath={path}
+                        orphanIds={orphanIds}
+                        activeDocId={activeDocId ?? null}
+                      />
                     </>
                   }
                 />

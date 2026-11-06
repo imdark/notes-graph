@@ -1,6 +1,7 @@
 import { Loading } from '@notesgraph/component';
 import { Guard } from '@notesgraph/core/components/guard';
 import type { NodeOperation } from '@notesgraph/core/desktop/components/navigation-panel';
+import { HasChildrenContext } from '@notesgraph/core/desktop/components/navigation-panel/nodes/doc/has-children-context';
 import { WorkspaceDialogService } from '@notesgraph/core/modules/dialogs';
 import { DocsService } from '@notesgraph/core/modules/doc';
 import { DocDisplayMetaService } from '@notesgraph/core/modules/doc-display-meta';
@@ -17,7 +18,16 @@ import {
   useService,
   useServices,
 } from '@notesgraph/infra';
-import { memo, useCallback, useLayoutEffect, useMemo, useState } from 'react';
+import {
+  memo,
+  type ReactNode,
+  useCallback,
+  useContext,
+  useLayoutEffect,
+  useMemo,
+  useState,
+} from 'react';
+import { NEVER } from 'rxjs';
 
 import { AddItemPlaceholder } from '../../layouts/add-item-placeholder';
 import { NavigationPanelTreeNode } from '../../tree/node';
@@ -32,11 +42,21 @@ const NavigationPanelDocNodeImpl = ({
   isLinked,
   operations: additionalOperations,
   parentPath,
+  defaultCollapsed,
+  trailingChildren,
 }: {
   docId: string;
   isLinked?: boolean;
   operations?: NodeOperation[];
   parentPath: string[];
+  /** Collapsed state to use when nothing is stored yet (defaults to collapsed). */
+  defaultCollapsed?: boolean;
+  /** Extra nodes rendered below the doc's linked-doc children. */
+  trailingChildren?: ReactNode;
+  /** Accepted for parity with the desktop row; mobile has no drag and drop. */
+  reorderable?: boolean;
+  /** Accepted for parity with the desktop row; mobile always nests children. */
+  alwaysShowChildren?: boolean;
 }) => {
   const t = useI18n();
   const {
@@ -61,7 +81,9 @@ const NavigationPanelDocNodeImpl = ({
     () => [...parentPath, `doc-${docId}`],
     [parentPath, docId]
   );
-  const collapsed = useLiveData(navigationPanelService.collapsed$(path));
+  const collapsed = useLiveData(
+    navigationPanelService.collapsed$(path, defaultCollapsed)
+  );
   const setCollapsed = useCallback(
     (value: boolean) => {
       navigationPanelService.setCollapsed(path, value);
@@ -70,9 +92,14 @@ const NavigationPanelDocNodeImpl = ({
   );
 
   const docRecord = useLiveData(docsService.list.doc$(docId));
+  // Known workspace-wide from the notes tree's single ref-graph query, so a
+  // collapsed row can show a folder icon and a chevron without its own
+  // indexer subscription.
+  const hasChildren = useContext(HasChildrenContext).has(docId);
   const DocIcon = useLiveData(
     docDisplayMetaService.icon$(docId, {
       reference: isLinked,
+      hasChildren,
     })
   );
 
@@ -89,10 +116,17 @@ const NavigationPanelDocNodeImpl = ({
     [DocIcon]
   );
 
+  // Only an expanded row queries the indexer for its children. With a few
+  // hundred rows on the Home screen, a query per collapsed row was most of
+  // the tree's cost.
   const children = useLiveData(
     useMemo(
-      () => LiveData.from(docsSearchService.watchRefsFrom(docId), null),
-      [docsSearchService, docId]
+      () =>
+        LiveData.from(
+          collapsed ? NEVER : docsSearchService.watchRefsFrom(docId),
+          null
+        ),
+      [docsSearchService, docId, collapsed]
     )
   );
 
@@ -155,7 +189,11 @@ const NavigationPanelDocNodeImpl = ({
       name={docTitle}
       extractEmojiAsIcon={enableEmojiIcon}
       collapsed={collapsed}
-      collapsible={!!children && children.length > 0}
+      collapsible={
+        hasChildren ||
+        Boolean(trailingChildren) ||
+        (!!children && children.length > 0)
+      }
       setCollapsed={setCollapsed}
       to={`/${docId}`}
       active={active}
@@ -184,6 +222,7 @@ const NavigationPanelDocNodeImpl = ({
             : null
         }
       </Guard>
+      {trailingChildren}
       <Guard docId={docId} permission="Doc_Update">
         {canEdit =>
           canEdit ? (
