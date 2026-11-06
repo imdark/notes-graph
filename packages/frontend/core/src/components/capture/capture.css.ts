@@ -11,6 +11,9 @@ export const root = style({
   height: '100%',
   margin: '0 auto',
   padding: '24px 16px',
+  // The hand-off picker adds height, so the page scrolls instead of cutting
+  // its buttons off.
+  overflowY: 'auto',
   selectors: {
     // While the keyboard is up there is little height left, so the mic
     // shrinks and the text box keeps most of it.
@@ -143,6 +146,7 @@ export const modelProgress = style({
 });
 
 export const handOff = style({
+  flexShrink: 0,
   display: 'flex',
   flexDirection: 'column',
   gap: 10,
