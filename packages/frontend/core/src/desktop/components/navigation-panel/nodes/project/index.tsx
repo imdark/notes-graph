@@ -7,11 +7,11 @@ import { ProjectsService } from '@notesgraph/core/modules/projects';
 import { WorkspaceService } from '@notesgraph/core/modules/workspace';
 import { useI18n } from '@notesgraph/i18n';
 import { useLiveData, useService, useServices } from '@notesgraph/infra';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useContext, useMemo, useState } from 'react';
 
+import { NotesTreeDocNodeContext } from '../../sections/notes/doc-node-context';
 import { NavigationPanelTreeNode } from '../../tree';
 import type { NodeOperation } from '../../tree/types';
-import { NavigationPanelDocNode } from '../doc';
 import type { GenericNavigationPanelNode } from '../types';
 
 export const NavigationPanelProjectNode = ({
@@ -29,6 +29,7 @@ export const NavigationPanelProjectNode = ({
       WorkspaceService,
     });
   const navigationPanelService = useService(NavigationPanelService);
+  const DocNode = useContext(NotesTreeDocNodeContext);
   const [renaming, setRenaming] = useState(false);
   // Member sharing requires the server; local workspaces group docs only.
   const supportsMembers = workspaceService.workspace.flavour !== 'local';
@@ -136,7 +137,7 @@ export const NavigationPanelProjectNode = ({
         />
       )}
       {project.docIds.map(docId => (
-        <NavigationPanelDocNode
+        <DocNode
           key={docId}
           docId={docId}
           reorderable={false}

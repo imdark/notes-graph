@@ -1,5 +1,8 @@
 import { SafeArea, useThemeColorV2 } from '@notesgraph/component';
-import { NavigationPanelNotes } from '@notesgraph/core/desktop/components/navigation-panel';
+import {
+  NavigationPanelNotes,
+  NotesTreeDocNodeContext,
+} from '@notesgraph/core/desktop/components/navigation-panel';
 
 import { AppTabs } from '../../components';
 import {
@@ -9,6 +12,7 @@ import {
   NavigationPanelProjects,
   NavigationPanelTags,
 } from '../../components/navigation';
+import { NavigationPanelDocNode } from '../../components/navigation/nodes/doc';
 import { HomeHeader, RecentDocs } from '../../views';
 
 export const Component = () => {
@@ -29,7 +33,11 @@ export const Component = () => {
         >
           <NavigationPanelFavorites />
           <NavigationPanelProjects />
-          <NavigationPanelNotes />
+          {/* The notes tree renders the mobile doc row: no drag and drop,
+              tooltips or hover menus, which matters with hundreds of rows. */}
+          <NotesTreeDocNodeContext.Provider value={NavigationPanelDocNode}>
+            <NavigationPanelNotes />
+          </NotesTreeDocNodeContext.Provider>
           <NavigationPanelOrganize />
           <NavigationPanelCollections />
           <NavigationPanelTags />
