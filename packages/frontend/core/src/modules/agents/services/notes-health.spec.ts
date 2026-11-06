@@ -33,6 +33,7 @@ describe('notes health check', () => {
       'stale',
       'contradictions',
       'stubs',
+      'typos',
       '- [ ]',
     ]) {
       expect(NOTES_HEALTH_INSTRUCTIONS).toContain(check);
