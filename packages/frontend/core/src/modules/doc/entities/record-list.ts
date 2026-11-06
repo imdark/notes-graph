@@ -61,8 +61,22 @@ export class DocRecordList extends Entity {
     false
   );
 
+  // One LiveData per doc id. Callers (tree rows, cards, titles) ask for this
+  // on every render; handing back the same instance lets useLiveData keep its
+  // subscription instead of tearing one down and building another per render,
+  // and lets every consumer of the same doc share one upstream selector.
+  private readonly docCache = new Map<
+    string,
+    LiveData<DocRecord | undefined>
+  >();
+
   public doc$(id: string) {
-    return this.docsMap$.selector(map => map.get(id));
+    let doc$ = this.docCache.get(id);
+    if (!doc$) {
+      doc$ = this.docsMap$.selector(map => map.get(id));
+      this.docCache.set(id, doc$);
+    }
+    return doc$;
   }
 
   public setPrimaryMode(id: string, mode: DocMode) {
