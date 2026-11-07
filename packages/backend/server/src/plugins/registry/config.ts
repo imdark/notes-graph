@@ -18,12 +18,6 @@ export interface RegistryConfig {
    * memory" notes, and hand those facts to the next run. Needs copilot.
    */
   agentMemory: boolean;
-  /**
-   * Nightly, count repeated mistakes over recent agent runs and keep the
-   * "Proposed harness changes" note current. Proposals only. Off by default:
-   * it writes a note into every workspace that has runs.
-   */
-  learn: boolean;
 }
 
 declare global {
@@ -33,7 +27,6 @@ declare global {
       maxDevicesPerWorkspace: ConfigItem<number>;
       fcmServiceAccount: ConfigItem<string>;
       agentMemory: ConfigItem<boolean>;
-      learn: ConfigItem<boolean>;
     };
   }
 }
@@ -81,11 +74,5 @@ defineModuleConfig('registry', {
     default: true,
     schema: z.boolean(),
     env: ['NOTESGRAPH_AGENT_MEMORY', 'boolean'],
-  },
-  learn: {
-    desc: 'Nightly learn pass over agent runs: keeps the "Proposed harness changes" note current. Proposals only; off by default.',
-    default: false,
-    schema: z.boolean(),
-    env: ['NOTESGRAPH_AGENT_LEARN', 'boolean'],
   },
 });

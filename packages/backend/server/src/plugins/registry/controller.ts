@@ -575,15 +575,28 @@ export class RegistryController {
     @CurrentUser() user: CurrentUserType,
     @Param('workspaceId') workspaceId: string,
     @Query('device') device?: string,
-    @Query('status') status?: string
+    @Query('status') status?: string,
+    @Query('kind') kind?: string,
+    /** ISO time: only runs that ended at or after it. */
+    @Query('since') since?: string,
+    @Query('limit') limit?: string
   ) {
     this.assertEnabled();
     await this.ac.user(user.id).workspace(workspaceId).assert('Workspace.Read');
+    const finishedSince = since ? new Date(since) : undefined;
+    if (finishedSince && Number.isNaN(finishedSince.getTime())) {
+      throw new BadRequest('since must be an ISO date');
+    }
+    const take = limit ? Number(limit) : undefined;
+    if (take !== undefined && !(Number.isInteger(take) && take > 0)) {
+      throw new BadRequest('limit must be a positive integer');
+    }
     return {
       jobs: await this.jobs.list(
         workspaceId,
         device || undefined,
-        status || undefined
+        status || undefined,
+        { kind: kind || undefined, finishedSince, limit: take }
       ),
     };
   }

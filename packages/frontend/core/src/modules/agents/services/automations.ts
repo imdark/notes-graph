@@ -116,6 +116,8 @@ export interface AutomationTemplate {
   description: string;
   triggers: AutomationTrigger[];
   code: string;
+  /** Longer than the default for a template that works through many notes. */
+  timeoutSeconds?: number;
 }
 
 /** What a new automation starts with, before a template or an edit. */
