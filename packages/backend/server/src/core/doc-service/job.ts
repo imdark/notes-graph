@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaClient } from '@prisma/client';
 
-import { JOB_SIGNAL, JobQueue, metrics, OnJob } from '../../base';
+import { Config, JOB_SIGNAL, JobQueue, metrics, OnJob } from '../../base';
 import { Models } from '../../models';
 import {
   DatabaseDocReader,
@@ -45,7 +45,8 @@ export class DocServiceCronJob {
     private readonly docWriter: DocWriter,
     private readonly prisma: PrismaClient,
     private readonly job: JobQueue,
-    private readonly models: Models
+    private readonly models: Models,
+    private readonly config: Config
   ) {}
 
   @OnJob('doc.mergePendingDocUpdates')
@@ -182,6 +183,8 @@ export class DocServiceCronJob {
 
   @Cron(CronExpression.EVERY_DAY_AT_3AM)
   async scheduleEnrichUntitledDocs() {
+    // Off unless configured: it renames notes in every workspace.
+    if (!this.config.docService.enrichment.enabled) return;
     await this.job.add(
       'doc.enrichUntitledDocs',
       {},
