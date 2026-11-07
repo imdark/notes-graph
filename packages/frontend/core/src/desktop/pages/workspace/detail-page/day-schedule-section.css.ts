@@ -9,6 +9,7 @@ export const wrapper = style({
   paddingLeft: cssVar('--notesgraph-editor-side-padding', '24'),
   paddingRight: cssVar('--notesgraph-editor-side-padding', '24'),
   paddingTop: '24px',
+  paddingBottom: '16px',
   boxSizing: 'border-box',
 });
 
