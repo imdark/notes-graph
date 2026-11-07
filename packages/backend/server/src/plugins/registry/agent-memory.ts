@@ -14,13 +14,20 @@ import { PromptRuntime } from '../copilot/runtime/prompt-runtime';
 import {
   applyMemoryOps,
   extractionContent,
+  groupByDomain,
   groupBySubject,
+  type LessonOp,
+  lessonsSection,
+  LESSONS_ROOT_TITLE,
   linkedDocIds,
   MEMORY_ROOT_TITLE,
   type MemoryOps,
+  newLessonNote,
   parseExtraction,
   parseFacts,
+  parseLessons,
   recallFacts,
+  recallLessons,
   recallSection,
 } from './agent-memory-facts';
 import { type AgentProfile, profileFor } from './agent-profiles';
@@ -37,10 +44,24 @@ const OP_SCHEMA = {
   },
 };
 
+const LESSON_SCHEMA = {
+  type: 'array',
+  items: {
+    type: 'object',
+    properties: {
+      domain: { type: 'string' },
+      lesson: { type: 'string' },
+      appliesTo: { type: 'string' },
+    },
+    required: ['domain', 'lesson', 'appliesTo'],
+    additionalProperties: false,
+  },
+};
+
 const EXTRACTION_SCHEMA = {
   type: 'object',
-  properties: { create: OP_SCHEMA, delete: OP_SCHEMA },
-  required: ['create', 'delete'],
+  properties: { create: OP_SCHEMA, delete: OP_SCHEMA, lessons: LESSON_SCHEMA },
+  required: ['create', 'delete', 'lessons'],
   additionalProperties: false,
 };
 
@@ -51,6 +72,13 @@ const ROOT_BODY =
   'What agents have learned about you, one note per subject, each linked ' +
   'below. Edit or delete anything here: agents read these notes before ' +
   'they start, and add to them after a run.';
+
+const LESSONS_ROOT_BODY =
+  'How you want kinds of tasks done, one note per kind (e.g. "Trip ' +
+  'planning"), each linked below. An agent whose task is of that kind is ' +
+  'given every lesson in its note. Add an "Applies to:" line to a note to ' +
+  'name the words that mark such tasks, e.g. "Applies to: trip, travel, ' +
+  'vacation". Edit or delete anything here.';
 
 interface Memory {
   rootId: string | null;
@@ -64,6 +92,12 @@ interface Memory {
  * claimed, the facts that bear on it and the most recent ones go into its
  * system prompt.
  *
+ * The same extraction proposes lessons: how the user wants a kind of task
+ * done, appended to that kind's note under "Agent lessons". A run whose task
+ * is of a kind with a note gets all of that note's lessons, so a checklist
+ * learned once ("when planning a trip, pack games for the kids") is acted on
+ * every time rather than found by chance.
+ *
  * Only runs a person started on a Claude agent are read: a health check or
  * other device job has nothing to say about anyone. The extraction is not a
  * job itself, so remembering a run can't set off another. Copilot may not be
@@ -74,8 +108,9 @@ interface Memory {
 export class AgentMemoryService {
   private readonly logger = new Logger(AgentMemoryService.name);
   /**
-   * "Agent memory" notes created here, by workspace, until their title has
-   * reached workspace_pages (on the next snapshot) and they can be found.
+   * "Agent memory" and "Agent lessons" notes created here, by workspace and
+   * title, until their title has reached workspace_pages (on the next
+   * snapshot) and they can be found.
    */
   private readonly createdRoots = new Map<string, string>();
   /**
@@ -122,14 +157,30 @@ export class AgentMemoryService {
   ): Promise<AgentProfile | null> {
     if (!profile || !job.createdBy || !this.enabled) return profile;
     try {
-      const memory = await this.load(job.workspaceId, job.createdBy);
-      if (!memory?.notes.length) return profile;
-      const facts = memory.notes.flatMap(note =>
+      const query = `${job.title ?? ''}\n${job.instructions}`;
+      const memory = await this.load(
+        job.workspaceId,
+        job.createdBy,
+        MEMORY_ROOT_TITLE
+      );
+      const facts = (memory?.notes ?? []).flatMap(note =>
         parseFacts(note.subject, note.markdown)
       );
-      const section = recallSection(
-        recallFacts(facts, `${job.title ?? ''}\n${job.instructions}`)
+      const lessons = await this.load(
+        job.workspaceId,
+        job.createdBy,
+        LESSONS_ROOT_TITLE
       );
+      const section =
+        recallSection(recallFacts(facts, query)) +
+        lessonsSection(
+          recallLessons(
+            (lessons?.notes ?? []).map(note =>
+              parseLessons(note.subject, note.markdown)
+            ),
+            query
+          )
+        );
       if (!section) return profile;
       return {
         ...profile,
@@ -158,9 +209,10 @@ export class AgentMemoryService {
 
     const runtime = this.promptRuntime();
     if (!runtime) return;
-    const memory = await this.load(workspaceId, userId);
+    const memory = await this.load(workspaceId, userId, MEMORY_ROOT_TITLE);
+    const lessons = await this.load(workspaceId, userId, LESSONS_ROOT_TITLE);
     // A memory note this person can't read is not one to write to either.
-    if (!memory) return;
+    if (!memory && !lessons) return;
 
     const today = new Date().toISOString().slice(0, 10);
     const content = extractionContent({
@@ -170,8 +222,11 @@ export class AgentMemoryService {
       questions,
       result: job.result,
       log: job.log,
-      facts: memory.notes.flatMap(note =>
+      facts: (memory?.notes ?? []).flatMap(note =>
         parseFacts(note.subject, note.markdown)
+      ),
+      lessons: (lessons?.notes ?? []).map(note =>
+        parseLessons(note.subject, note.markdown)
       ),
     });
     const output = await runtime.runStructured(
@@ -183,19 +238,100 @@ export class AgentMemoryService {
       }
     );
     const ops = parseExtraction(output.value);
-    if (!ops.create.length && !ops.delete.length) return;
-    const { created, deleted } = await this.apply(
-      workspaceId,
-      userId,
-      memory,
-      ops,
-      today
-    );
-    if (created || deleted) {
-      this.logger.log(
-        `job ${jobId}: agent memory +${created} -${deleted} fact(s)`
+    if (memory && (ops.create.length || ops.delete.length)) {
+      const { created, deleted } = await this.apply(
+        workspaceId,
+        userId,
+        memory,
+        ops,
+        today
       );
+      if (created || deleted) {
+        this.logger.log(
+          `job ${jobId}: agent memory +${created} -${deleted} fact(s)`
+        );
+      }
     }
+    if (lessons && ops.lessons.length) {
+      const learned = await this.applyLessons(
+        workspaceId,
+        userId,
+        lessons,
+        ops.lessons,
+        today
+      );
+      if (learned) {
+        this.logger.log(`job ${jobId}: agent lessons +${learned}`);
+      }
+    }
+  }
+
+  /** New lessons appended to their domain's note, or a new note for one. */
+  private async applyLessons(
+    workspaceId: string,
+    userId: string,
+    memory: Memory,
+    ops: LessonOp[],
+    today: string
+  ) {
+    let created = 0;
+    for (const [key, group] of groupByDomain(ops)) {
+      const note = memory.notes.find(
+        n => n.subject.trim().toLowerCase() === key
+      );
+      const add = { create: group.lessons, delete: [] };
+      if (note) {
+        const can = await this.ac
+          .user(userId)
+          .workspace(workspaceId)
+          .doc(note.docId)
+          .can('Doc.Update');
+        if (!can) continue;
+        const next = applyMemoryOps(note.markdown, note.subject, add, today);
+        if (!next.created) continue;
+        await this.writer.updateDoc(
+          workspaceId,
+          note.docId,
+          next.markdown,
+          userId
+        );
+        note.markdown = next.markdown;
+        created += next.created;
+        continue;
+      }
+
+      const next = applyMemoryOps(
+        newLessonNote(group.appliesTo),
+        group.domain,
+        add,
+        today
+      );
+      if (!next.created) continue;
+      const rootId =
+        memory.rootId ??
+        (await this.createRoot(
+          workspaceId,
+          userId,
+          LESSONS_ROOT_TITLE,
+          LESSONS_ROOT_BODY
+        ));
+      if (!rootId) return created;
+      memory.rootId = rootId;
+      const { docId } = await this.writer.createDoc(
+        workspaceId,
+        group.domain,
+        next.markdown,
+        userId
+      );
+      await this.writer.linkDoc(workspaceId, rootId, docId, userId);
+      memory.notes.push({
+        docId,
+        subject: group.domain,
+        markdown: next.markdown,
+      });
+      created += next.created;
+    }
+    return created;
   }
 
   private async apply(
@@ -241,7 +377,13 @@ export class AgentMemoryService {
       );
       if (!next.created) continue;
       const rootId =
-        memory.rootId ?? (await this.createRoot(workspaceId, userId));
+        memory.rootId ??
+        (await this.createRoot(
+          workspaceId,
+          userId,
+          MEMORY_ROOT_TITLE,
+          ROOT_BODY
+        ));
       if (!rootId) return { created, deleted };
       memory.rootId = rootId;
       const { docId } = await this.writer.createDoc(
@@ -261,7 +403,12 @@ export class AgentMemoryService {
     return { created, deleted };
   }
 
-  private async createRoot(workspaceId: string, userId: string) {
+  private async createRoot(
+    workspaceId: string,
+    userId: string,
+    title: string,
+    body: string
+  ) {
     const can = await this.ac
       .user(userId)
       .workspace(workspaceId)
@@ -269,30 +416,29 @@ export class AgentMemoryService {
     if (!can) return null;
     const { docId } = await this.writer.createDoc(
       workspaceId,
-      MEMORY_ROOT_TITLE,
-      ROOT_BODY,
+      title,
+      body,
       userId
     );
-    this.createdRoots.set(workspaceId, docId);
+    this.createdRoots.set(`${workspaceId}\n${title}`, docId);
     return docId;
   }
 
   /**
-   * The "Agent memory" note and the subject notes linked from it. Null when
-   * there is one but `userId` may not read it; no root when there is none yet.
+   * The note titled `title` ("Agent memory" or "Agent lessons") and the
+   * subject notes linked from it. Null when there is one but `userId` may not
+   * read it; no root when there is none yet.
    */
   private async load(
     workspaceId: string,
-    userId: string
+    userId: string,
+    title: string
   ): Promise<Memory | null> {
-    const found = await this.models.doc.findIdsByExactTitle(
-      workspaceId,
-      MEMORY_ROOT_TITLE
-    );
-    const created = this.createdRoots.get(workspaceId);
-    if (created && found.includes(created))
-      this.createdRoots.delete(workspaceId);
-    const rootId = this.createdRoots.get(workspaceId) ?? found[0];
+    const found = await this.models.doc.findIdsByExactTitle(workspaceId, title);
+    const key = `${workspaceId}\n${title}`;
+    const created = this.createdRoots.get(key);
+    if (created && found.includes(created)) this.createdRoots.delete(key);
+    const rootId = this.createdRoots.get(key) ?? found[0];
     if (!rootId) return { rootId: null, notes: [] };
 
     const access = this.ac.user(userId).workspace(workspaceId);
@@ -300,7 +446,7 @@ export class AgentMemoryService {
     const root = await this.reader.getDocMarkdown(workspaceId, rootId, false);
     if (!root) {
       // Unreadable rather than absent: skip, rather than start a second one.
-      if (rootId === created) this.createdRoots.delete(workspaceId);
+      if (rootId === created) this.createdRoots.delete(key);
       return null;
     }
 
