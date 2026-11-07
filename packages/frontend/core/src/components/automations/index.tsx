@@ -241,6 +241,9 @@ export const AutomationsView = () => {
         name: template?.name ?? '',
         triggers: template?.triggers ?? [{ type: 'manual' }],
         code: template?.code ?? BLANK_AUTOMATION_CODE,
+        ...(template?.timeoutSeconds
+          ? { timeoutSeconds: template.timeoutSeconds }
+          : {}),
       },
     });
 

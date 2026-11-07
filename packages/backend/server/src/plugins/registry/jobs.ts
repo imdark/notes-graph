@@ -572,6 +572,12 @@ function parseTitle(value: unknown): string | null {
   return title || null;
 }
 
+/** How long past its timeout a run's token stays good: reports can lag. */
+const RUN_TOKEN_MARGIN_SECONDS = 120;
+/** The access token minted for an automation run, by name. */
+export const runTokenName = (automationId: string, runId: string) =>
+  `automation:${automationId}:${runId}`;
+
 /**
  * Dispatching agent work to registered devices.
  *
@@ -984,11 +990,15 @@ export class RegistryJobService {
   async list(
     workspaceId: string,
     deviceKey?: string,
-    status?: string
+    status?: string,
+    options: { kind?: string; finishedSince?: Date; limit?: number } = {}
   ): Promise<JobDto[]> {
     const jobs = await this.models.registryJob.list(workspaceId, {
       deviceKey,
       status,
+      kind: options.kind,
+      finishedSince: options.finishedSince,
+      limit: options.limit,
     });
     return jobs.map(job => toJobDto(job));
   }
@@ -1071,7 +1081,13 @@ export class RegistryJobService {
       kind: job.kind,
     });
     if (job.kind === 'automation') {
-      return { ...toJobDto(job), secrets: await this.revealSecrets(job) };
+      return {
+        ...toJobDto(job),
+        secrets: {
+          ...(await this.revealSecrets(job)),
+          ...(await this.runIdentity(job)),
+        },
+      };
     }
     await this.tasks?.claimed(job);
     const profile = await this.profile(job);
@@ -1082,6 +1098,42 @@ export class RegistryJobService {
         ? await this.memory.withRecall(job, profile)
         : profile,
     };
+  }
+
+  /**
+   * The run's own identity: a token for the automation's creator that lives
+   * as long as the run may (its timeout plus a margin) and is revoked when
+   * the run ends (AutomationService.finishRun). The runner hands it to the
+   * code as `notesgraph.fetch`, so an automation can read and write the
+   * workspace through the ordinary API as the person who made it, with no
+   * secret to set up. Reserved names: a workspace secret cannot shadow them.
+   */
+  private async runIdentity(job: RegistryJob): Promise<Record<string, string>> {
+    if (!job.createdBy) return {};
+    const payload = job.payload as {
+      automationId?: string;
+      runId?: string;
+      timeoutSeconds?: number;
+    } | null;
+    if (!payload?.automationId || !payload.runId) return {};
+    const seconds = Math.max(60, Number(payload.timeoutSeconds) || 60);
+    try {
+      const { token } = await this.models.accessToken.create({
+        userId: job.createdBy,
+        name: runTokenName(payload.automationId, payload.runId),
+        expiresAt: new Date(
+          Date.now() + (seconds + RUN_TOKEN_MARGIN_SECONDS) * 1000
+        ),
+      });
+      return {
+        NOTESGRAPH_TOKEN: token,
+        NOTESGRAPH_WORKSPACE: job.workspaceId,
+      };
+    } catch (err) {
+      // The run still goes, without `notesgraph`; its code will say so.
+      this.logger.warn(`no identity for run ${payload.runId}: ${err}`);
+      return {};
+    }
   }
 
   /**

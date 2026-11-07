@@ -112,12 +112,19 @@ export class NotesApiController {
   async findDocs(
     @CurrentUser() user: CurrentUserType,
     @Param('workspaceId') workspaceId: string,
-    @Query('q') q?: string
+    @Query('q') q?: string,
+    /** Most docs to return; 50 unless asked, never more than 1000. */
+    @Query('limit') limit?: string
   ) {
     await this.ac.user(user.id).workspace(workspaceId).assert('Workspace.Read');
+    const take = limit ? Number(limit) : 50;
+    if (!(Number.isInteger(take) && take > 0)) {
+      throw new BadRequestException('limit must be a positive integer');
+    }
     const found = await this.models.doc.findByTitleMatch(
       workspaceId,
-      (q ?? '').trim()
+      (q ?? '').trim(),
+      Math.min(take, 1000)
     );
     const docs = await this.ac
       .user(user.id)
