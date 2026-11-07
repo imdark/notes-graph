@@ -175,6 +175,38 @@ export class RegistryJobModel extends BaseModel {
   }
 
   /**
+   * Agent runs that ended since `since`, newest first, each with the
+   * questions it asked the user: what the nightly learn pass reads.
+   */
+  async listFinishedSince(workspaceId: string, since: Date, limit: number) {
+    const rows = await this.db.registryJob.findMany({
+      where: {
+        workspaceId,
+        kind: 'agent',
+        status: { in: [...JOB_TERMINAL] },
+        finishedAt: { gte: since },
+      },
+      orderBy: { finishedAt: 'desc' },
+      take: limit,
+      select: {
+        id: true,
+        title: true,
+        log: true,
+        questions: {
+          where: { kind: 'question' },
+          select: { text: true },
+        },
+      },
+    });
+    return rows.map(row => ({
+      id: row.id,
+      title: row.title,
+      log: row.log,
+      questions: row.questions.map(q => q.text),
+    }));
+  }
+
+  /**
    * Hand the oldest queued job for a device to one runner.
    *
    * The update is conditional on the row still being claimable, so two
