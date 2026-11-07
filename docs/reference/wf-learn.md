@@ -20,16 +20,22 @@ It never edits Agent rules, skills or Agent memory itself.
 Not built yet: the accept/reject panel on the Agents page, helpful/harmful
 counters, and bench replay validation (steps 2 and 3 of the plan).
 
-## Run from offline enrichment (CLOUD-92)
+## Nightly on the server (CLOUD-92)
 
-The offline enrichment pass (empty or untitled notes, typos) should also run
-`wf learn` so retro and self-improvement proposals land without a manual run.
-Enrichment lives in the `wf` repo, so the wiring is not in this repo. Intended
-shape:
+The server can run the counting half of `wf learn` itself, every night at
+4am after the 3am doc enrichment, when `registry.learn` is on
+(`NOTESGRAPH_AGENT_LEARN=true`; off by default) (`AgentLearnService`,
+`packages/backend/server/src/plugins/registry/learn-job.ts`; the detectors
+are pure in `learn.ts`). It reads each workspace's agent runs of the last 14
+days from the registry (the transcript tail in `registry_jobs.log` and the
+questions in `registry_job_questions`), applies the four detectors above, and
+keeps a note titled "Proposed harness changes" current, filed under
+`ai / proposals`, with at most 10 findings as to-dos. A to-do the user ticked
+stays ticked on later nights; a finding no longer seen is dropped. A finding
+whose runs read web content says "review closely".
 
-- After the enrichment pass, call `wf learn` over sessions captured since the
-  last run. Keep the `--limit` cap so a nightly run cannot flood the inbox.
-- Output stays proposals only (`<project> / ai / proposals`). Enrichment never
-  edits Agent rules, skills or Agent memory.
-- Harness²-style baseline-vs-edited comparison stays a `wf bench` job, not part
-  of the nightly pass, because of its per-task cost.
+Proposals only: the job never edits Agent rules, skills or Agent memory. No
+model is called on the server; the findings are the output, and the local
+`wf learn` can still turn them into worded deltas. The Harness²-style
+baseline-vs-edited comparison stays a `wf bench` job because of its per-task
+cost.
