@@ -13,7 +13,7 @@ export { OrganizeService } from './services/organize';
 export function configureOrganizeModule(framework: Framework) {
   framework
     .scope(WorkspaceScope)
-    .service(OrganizeService)
+    .service(OrganizeService, [FolderStore])
     .entity(FolderTree, [FolderStore])
     .entity(FolderNode, [FolderStore])
     .store(FolderStore, [WorkspaceDBService]);
