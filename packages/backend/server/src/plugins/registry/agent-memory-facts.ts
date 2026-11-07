@@ -29,6 +29,37 @@ export interface MemoryOps {
   delete: MemoryOp[];
 }
 
+/**
+ * Lessons are the other half of memory: not facts about the user but how
+ * they want a kind of task done, e.g. "when planning a trip, pack games for
+ * the kids". They live in notes titled with the kind of task ("Trip
+ * planning"), linked under "Agent lessons". A run whose task is of that kind
+ * is handed every lesson in the note, so it acts on them instead of
+ * rediscovering them.
+ *
+ * A lesson note may say which tasks it is for in an "Applies to:" line,
+ * comma-separated, e.g. "Applies to: trip, travel, vacation, flights". The
+ * note's title always counts as one of them.
+ */
+export const LESSONS_ROOT_TITLE = 'Agent lessons';
+
+export interface LessonNote {
+  domain: string;
+  /** Phrases naming tasks of this kind; the title is the first. */
+  triggers: string[];
+  lessons: MemoryFact[];
+}
+
+export interface LessonOp {
+  domain: string;
+  lesson: string;
+  /** Comma-separated words for the "Applies to:" line of a new note. */
+  appliesTo: string;
+}
+
+const APPLIES_TO = /^applies\s+(?:to|when)\s*:\s*(.*)$/i;
+const MAX_LESSON_OPS = 10;
+
 const AS_OF = /\s*\(as of (\d{4}-\d{2}-\d{2})\)\s*\.?\s*$/i;
 const LIST_MARKER = /^(?:[-*+]|\d+[.)])\s+(?:\[[ xX-]\]\s+)?/;
 const STAMP = /^>\s*Edited via MCP by /;
@@ -106,7 +137,9 @@ export function linkedDocIds(markdown: string, selfId?: string): string[] {
  * An extraction's output, made safe to write: trimmed one-line strings,
  * capped, nothing empty, nothing filed under the memory note itself.
  */
-export function parseExtraction(value: unknown): MemoryOps {
+export function parseExtraction(
+  value: unknown
+): MemoryOps & { lessons: LessonOp[] } {
   const ops = (list: unknown): MemoryOp[] =>
     (Array.isArray(list) ? list : [])
       .map(item => ({
@@ -121,7 +154,77 @@ export function parseExtraction(value: unknown): MemoryOps {
       )
       .slice(0, MAX_OPS);
   const record = (value ?? {}) as Record<string, unknown>;
-  return { create: ops(record.create), delete: ops(record.delete) };
+  const lessons = (Array.isArray(record.lessons) ? record.lessons : [])
+    .map(item => ({
+      domain: oneLine(item?.domain, MAX_SUBJECT),
+      lesson: oneLine(item?.lesson, MAX_FACT),
+      appliesTo: oneLine(item?.appliesTo, MAX_FACT),
+    }))
+    .filter(
+      op =>
+        op.domain &&
+        op.lesson &&
+        op.domain.toLowerCase() !== LESSONS_ROOT_TITLE.toLowerCase()
+    )
+    .slice(0, MAX_LESSON_OPS);
+  return { create: ops(record.create), delete: ops(record.delete), lessons };
+}
+
+/** A lesson note's "Applies to:" phrases, its title first, and its lessons. */
+export function parseLessons(domain: string, markdown: string): LessonNote {
+  const triggers = [domain];
+  const lessons: MemoryFact[] = [];
+  for (const line of markdown.split('\n')) {
+    const text = factFromLine(line);
+    if (!text) continue;
+    const applies = APPLIES_TO.exec(text.replace(/[*_]/g, ''));
+    if (applies) {
+      triggers.push(
+        ...applies[1]
+          .split(/[,;]/)
+          .map(phrase => phrase.trim())
+          .filter(Boolean)
+      );
+      continue;
+    }
+    lessons.push({
+      subject: domain,
+      text,
+      date: AS_OF.exec(text)?.[1] ?? null,
+    });
+  }
+  return { domain, triggers, lessons };
+}
+
+/** The opening of a new lesson note: its "Applies to:" line, if any. */
+export function newLessonNote(appliesTo: string): string {
+  const phrases = appliesTo
+    .split(/[,;]/)
+    .map(phrase => phrase.trim())
+    .filter(Boolean);
+  return phrases.length ? `Applies to: ${phrases.join(', ')}\n` : '';
+}
+
+/** Lesson ops by domain, case-insensitively; the first spelling names it. */
+export function groupByDomain(
+  ops: LessonOp[]
+): Map<string, { domain: string; appliesTo: string; lessons: string[] }> {
+  const groups = new Map<
+    string,
+    { domain: string; appliesTo: string; lessons: string[] }
+  >();
+  for (const op of ops) {
+    const key = op.domain.toLowerCase();
+    const group = groups.get(key) ?? {
+      domain: op.domain,
+      appliesTo: op.appliesTo,
+      lessons: [],
+    };
+    group.lessons.push(op.lesson);
+    if (!group.appliesTo) group.appliesTo = op.appliesTo;
+    groups.set(key, group);
+  }
+  return groups;
 }
 
 /** Ops by subject, case-insensitively; the first spelling names the note. */
@@ -287,6 +390,86 @@ export function recallSection(facts: MemoryFact[]): string {
   );
 }
 
+/**
+ * A word's stem, loosely, so "planning", "plans" and "plan" meet:
+ * a plural or -ing/-ed ending off, then a doubled last letter.
+ */
+function stem(word: string): string {
+  let base = word;
+  for (const end of ['ing', 'ed', 'es', 's']) {
+    if (base.endsWith(end) && base.length - end.length >= 3) {
+      base = base.slice(0, -end.length);
+      break;
+    }
+  }
+  if (base.length >= 4 && base.at(-1) === base.at(-2)) base = base.slice(0, -1);
+  return base;
+}
+
+function stems(text: string): Set<string> {
+  return new Set([...words(text)].map(stem));
+}
+
+/**
+ * The lesson notes for a run that is about `query`: those with a trigger
+ * phrase all of whose words are in the task, most matching phrases first.
+ * Each note comes with all its lessons, since the point is that none is
+ * forgotten, up to `maxChars` of text in all.
+ */
+export function recallLessons(
+  notes: LessonNote[],
+  query: string,
+  { maxChars = 2000 }: { maxChars?: number } = {}
+): LessonNote[] {
+  const asked = stems(query);
+  const matched = notes
+    .map((note, index) => {
+      let score = 0;
+      for (const phrase of note.triggers) {
+        const needed = stems(phrase);
+        if (needed.size && [...needed].every(word => asked.has(word))) score++;
+      }
+      return { note, index, score };
+    })
+    .filter(entry => entry.score > 0 && entry.note.lessons.length)
+    .sort((a, b) => b.score - a.score || a.index - b.index);
+
+  const picked: LessonNote[] = [];
+  let chars = 0;
+  for (const { note } of matched) {
+    const lessons: MemoryFact[] = [];
+    let size = note.domain.length + 2;
+    for (const lesson of note.lessons) {
+      const line = lesson.text.length + 3;
+      if (chars + size + line > maxChars) break;
+      lessons.push(lesson);
+      size += line;
+    }
+    if (!lessons.length) break;
+    picked.push({ ...note, lessons });
+    chars += size;
+  }
+  return picked;
+}
+
+/** The system prompt's section for recalled lessons; empty for none. */
+export function lessonsSection(notes: LessonNote[]): string {
+  if (!notes.length) return '';
+  const body = notes
+    .map(
+      note =>
+        `${note.domain}:\n${note.lessons.map(l => `- ${l.text}`).join('\n')}`
+    )
+    .join('\n');
+  return (
+    `Lessons for this kind of task, from the user's "${LESSONS_ROOT_TITLE}" ` +
+    `notes: how they want it done, learned on earlier runs. Work each one ` +
+    `into what you do, and in your answer say which you applied and which ` +
+    `did not fit this time. If the user corrects one or tells you another, ` +
+    `update its note.\n${body}\n`
+  );
+}
+
 export interface ExtractionInput {
   today: string;
   instructions: string;
@@ -295,6 +478,7 @@ export interface ExtractionInput {
   result: string | null;
   log: string;
   facts: MemoryFact[];
+  lessons?: LessonNote[];
 }
 
 const MAX_INSTRUCTIONS = 4_000;
@@ -320,6 +504,18 @@ export function extractionContent(input: ExtractionInput): string {
     `## The agent's final answer\n${(input.result ?? '').slice(0, MAX_RESULT) || '(none)'}`,
     `## End of the run's transcript\n${tail(input.log, MAX_LOG) || '(empty)'}`,
     `## Facts already in memory\n${tail(known, MAX_KNOWN) || '(none yet)'}`,
+    `## Lessons already kept\n${
+      tail(
+        (input.lessons ?? [])
+          .map(
+            note =>
+              `${note.domain} (applies to: ${note.triggers.join(', ')}):\n` +
+              note.lessons.map(l => `- ${l.text}`).join('\n')
+          )
+          .join('\n'),
+        MAX_KNOWN
+      ) || '(none yet)'
+    }`,
   ];
   return sections.join('\n\n');
 }

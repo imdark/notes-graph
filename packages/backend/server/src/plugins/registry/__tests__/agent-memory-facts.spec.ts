@@ -4,12 +4,17 @@ import {
   applyMemoryOps,
   extractionContent,
   factKey,
+  groupByDomain,
   groupBySubject,
+  lessonsSection,
   linkedDocIds,
   type MemoryFact,
+  newLessonNote,
   parseExtraction,
   parseFacts,
+  parseLessons,
   recallFacts,
+  recallLessons,
   recallSection,
 } from '../agent-memory-facts';
 
@@ -69,7 +74,11 @@ test('extraction output is cleaned and capped', t => {
   t.deepEqual(ops.create[0], { subject: 'Cosmo', fact: 'Likes dinosaurs' });
   t.is(ops.create.length, 20);
   t.deepEqual(ops.delete, []);
-  t.deepEqual(parseExtraction(undefined), { create: [], delete: [] });
+  t.deepEqual(parseExtraction(undefined), {
+    create: [],
+    delete: [],
+    lessons: [],
+  });
 });
 
 test('ops group by subject regardless of case', t => {
@@ -211,4 +220,132 @@ test('the extraction reads the end of a long transcript', t => {
   t.true(content.includes('Q: How old is Cosmo?\nA: 7'));
   t.true(content.includes('THE END'));
   t.true(content.length < 20_000);
+});
+
+const tripNote = [
+  'Applies to: travel, **vacation**; flight',
+  '',
+  '- Bring toys and games for Cosmo (as of 2026-11-07)',
+  '- [ ] Plan a physical activity for each day',
+  '[Family](/workspace/ws/doc-family)',
+  '> Edited via MCP by claude — 2026-11-07 10:00',
+].join('\n');
+
+test('a lesson note reads as its triggers and its lessons', t => {
+  const note = parseLessons('Trip planning', tripNote);
+  t.deepEqual(note.triggers, ['Trip planning', 'travel', 'vacation', 'flight']);
+  t.deepEqual(note.lessons, [
+    {
+      subject: 'Trip planning',
+      text: 'Bring toys and games for Cosmo (as of 2026-11-07)',
+      date: '2026-11-07',
+    },
+    {
+      subject: 'Trip planning',
+      text: 'Plan a physical activity for each day',
+      date: null,
+    },
+  ]);
+});
+
+const lessonNotes = [
+  parseLessons('Trip planning', tripNote),
+  parseLessons('Grocery shopping', '- Buy oat milk, not cow milk\n'),
+  parseLessons('Empty', 'Applies to: anything\n'),
+];
+
+test('a task recalls the notes for its kind, with every lesson', t => {
+  const picked = recallLessons(lessonNotes, 'Plan our trips to Kyoto in May');
+  t.deepEqual(
+    picked.map(n => n.domain),
+    ['Trip planning']
+  );
+  t.is(picked[0].lessons.length, 2);
+  t.deepEqual(
+    recallLessons(lessonNotes, 'Book a flight for the conference').map(
+      n => n.domain
+    ),
+    ['Trip planning']
+  );
+  // One word of a two-word title is not enough, and a note with no lessons
+  // is never recalled.
+  t.deepEqual(recallLessons(lessonNotes, 'Plan the sprint'), []);
+  t.deepEqual(recallLessons(lessonNotes, 'anything at all'), []);
+});
+
+test('lesson recall stays within its character budget', t => {
+  const long = parseLessons(
+    'Trip planning',
+    Array.from(
+      { length: 50 },
+      (_, i) => `- lesson ${i} ${'x'.repeat(60)}`
+    ).join('\n')
+  );
+  const [picked] = recallLessons([long], 'trip planning', { maxChars: 500 });
+  t.true(picked.lessons.length > 0 && picked.lessons.length < 50);
+  t.true(lessonsSection([picked]).length < 900);
+});
+
+test('the lessons section lists each domain with its lessons', t => {
+  t.is(lessonsSection([]), '');
+  const section = lessonsSection(recallLessons(lessonNotes, 'vacation ideas'));
+  t.true(section.includes('"Agent lessons"'));
+  t.true(
+    section.includes(
+      'Trip planning:\n- Bring toys and games for Cosmo (as of 2026-11-07)\n- Plan'
+    )
+  );
+});
+
+test('lesson ops are cleaned, capped and grouped by domain', t => {
+  const { lessons } = parseExtraction({
+    lessons: [
+      { domain: ' Trip planning ', lesson: 'Pack\n snacks', appliesTo: 'trip' },
+      { domain: 'trip planning', lesson: 'Book seats together' },
+      { domain: 'Agent lessons', lesson: 'filed under the root' },
+      { domain: 'Trip planning', lesson: '' },
+      ...Array.from({ length: 20 }, (_, i) => ({
+        domain: 'X',
+        lesson: `l${i}`,
+      })),
+    ],
+  });
+  t.deepEqual(lessons[0], {
+    domain: 'Trip planning',
+    lesson: 'Pack snacks',
+    appliesTo: 'trip',
+  });
+  t.is(lessons.length, 10);
+  const groups = groupByDomain(lessons);
+  t.deepEqual(groups.get('trip planning'), {
+    domain: 'Trip planning',
+    appliesTo: 'trip',
+    lessons: ['Pack snacks', 'Book seats together'],
+  });
+});
+
+test('a new lesson note starts with its Applies to line', t => {
+  t.is(
+    newLessonNote(' trip, travel ;; vacation '),
+    'Applies to: trip, travel, vacation\n'
+  );
+  t.is(newLessonNote(''), '');
+});
+
+test('the extraction is shown the lessons already kept', t => {
+  const content = extractionContent({
+    today,
+    instructions: 'Plan a trip',
+    title: null,
+    questions: [],
+    result: null,
+    log: '',
+    facts: [],
+    lessons: lessonNotes,
+  });
+  t.true(
+    content.includes(
+      '## Lessons already kept\nTrip planning (applies to: Trip planning, travel, vacation, flight):'
+    )
+  );
 });
