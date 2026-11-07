@@ -246,6 +246,52 @@ test('learn keeps a ticked finding ticked on the next night and updates in place
   );
 });
 
+test('learn counts the same read three times as a reread, but not a file read in parts', async t => {
+  // As the runner logs a call: JSON, cut at 160 characters.
+  const read = (input: object) => {
+    const json = JSON.stringify(input);
+    return '→ Read  ' + (json.length <= 160 ? json : json.slice(0, 159) + '…');
+  };
+  const long =
+    '/work/cache/checkout-cloud-91-Mobile-clicking-on-the-last-block-in-a-no/blocksuite/notesgraph/widgets/slash-menu/src/widget.ts';
+  const lines = [
+    ...[0, 200, 400].map(offset =>
+      read({ file_path: '/src/a.ts', offset, limit: 200 })
+    ),
+    ...[0, 200, 400].map(offset =>
+      read({ file_path: long, offset, limit: 200 })
+    ),
+    ...[1, 2, 3].map(() => read({ file_path: '/src/same.ts' })),
+  ];
+  let markdown = '';
+  await run(LEARN_FROM_RUNS_TEMPLATE, (method, path, body) => {
+    if (path.startsWith('/api/registry/workspaces/ws1/jobs?')) {
+      return { jobs: [{ id: 'run-a', title: 'Run A', status: 'done' }] };
+    }
+    if (path.endsWith('/jobs/run-a?logFrom=0')) {
+      return {
+        job: {
+          id: 'run-a',
+          title: 'Run A',
+          status: 'done',
+          log: transcript(lines),
+          questions: [],
+        },
+      };
+    }
+    if (path.startsWith('/api/workspaces/ws1/docs?q=')) return { docs: [] };
+    if (method === 'POST') {
+      markdown = (body as { markdown: string }).markdown;
+      return { docId: 'note-1' };
+    }
+    throw new Error(`unexpected ${method} ${path}`);
+  });
+  const rereads = markdown.match(/\*\*reread\*\*: [^\n]*/g) ?? [];
+  t.deepEqual(rereads, [
+    '**reread**: /src/same.ts read 3 times in one run (Read), no write in between',
+  ]);
+});
+
 test('learn with no runs and no note writes nothing', async t => {
   const { output, calls } = await run(LEARN_FROM_RUNS_TEMPLATE, (_m, path) => {
     if (path.startsWith('/api/registry/workspaces/ws1/jobs?'))
