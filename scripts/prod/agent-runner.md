@@ -88,7 +88,9 @@ CLAUDE_CODE_OAUTH_TOKEN=<token from claude setup-token>
 # … or, instead, an API key billed per use:
 # ANTHROPIC_API_KEY=<key from console.anthropic.com>
 RUNNER_REPO=https://github.com/imdark/notes-graph
-GH_TOKEN=<fine-grained token: that repo only, contents + pull requests read/write>
+# Fine-grained token, that repo only. Read and write on Contents, Pull
+# requests and Actions. Deploys start deploy-prod.yml, which needs Actions.
+GH_TOKEN=<fine-grained token>
 OMNISEEK_URL=http://omniseek:8765
 OMNISEEK_TOKEN=<from /opt/notesgraph/data/omniseek/credentials/omniseek_http.json>
 # Optional
@@ -112,6 +114,10 @@ and only when `tools/agent-runner` or `yarn.lock` changed.
 - **The device:** "Cloud (server)" appears in an agent's device picker.
 - **A run:** a Claude Code agent on it runs with the Mac's runner stopped. Its
   log starts `$ claude … (claude-code, job …, cloud)`.
+- **Deploys:** the runner's log has no "GH_TOKEN can't start workflows"
+  warning. To check by hand, ask for a workflow that doesn't exist; a 404
+  means the token may start workflows, a 403 means it lacks Actions write:
+  `docker exec notesgraph_agent_runner gh api -X POST repos/imdark/notes-graph/actions/workflows/no-such.yml/dispatches -f ref=main`
 - **Isolation:** from inside the runner, postgres is unreachable:
   `docker exec notesgraph_agent_runner sh -c 'timeout 3 bash -c "</dev/tcp/postgres/5432"' && echo REACHABLE || echo blocked`
 

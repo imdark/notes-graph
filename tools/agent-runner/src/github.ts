@@ -177,6 +177,36 @@ const branchExists = (gh: Gh, repo: string, branch: string) =>
   );
 
 /**
+ * Whether the token may start workflows in `repo`, which a deploy needs
+ * (`gh workflow run deploy-prod.yml`, as scripts/release.sh does). It asks
+ * GitHub to start a workflow that doesn't exist, so nothing runs: GitHub
+ * checks the permission first and answers 403 without Actions write, 404
+ * with it. Anything else (no network, a bad token) is 'unknown'.
+ */
+export async function canStartWorkflows(
+  gh: Gh,
+  repo: string
+): Promise<'yes' | 'no' | 'unknown'> {
+  try {
+    await gh([
+      'api',
+      '-X',
+      'POST',
+      `repos/${repo}/actions/workflows/agent-runner-permission-check.yml/dispatches`,
+      '-f',
+      'ref=main',
+      '--silent',
+    ]);
+    return 'yes';
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (/HTTP 404/.test(message)) return 'yes';
+    if (/HTTP 403/.test(message)) return 'no';
+    return 'unknown';
+  }
+}
+
+/**
  * Answer one request. `defaultRepo` is the repo listed when the request
  * names none: the runner's own.
  */

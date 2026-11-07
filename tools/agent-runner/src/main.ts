@@ -8,6 +8,7 @@ import { hostname } from 'node:os';
 import { query } from '@anthropic-ai/claude-agent-sdk';
 
 import { NotesGraphApi } from './api';
+import { canStartWorkflows, ghCli, repoFromUrl } from './github';
 import { serve } from './serve';
 
 function required(name: string): string {
@@ -66,6 +67,22 @@ for (const signal of ['SIGTERM', 'SIGINT'] as const) {
   });
 }
 
+const ghToken = process.env.GH_TOKEN?.trim() || undefined;
+const runnerRepo = repoFromUrl(process.env.RUNNER_REPO?.trim());
+if (ghToken && runnerRepo) {
+  // A deploy asked for from the Deployments screen starts a GitHub workflow;
+  // say so now rather than when an agent run reports nothing shipped.
+  const allowed = await canStartWorkflows(ghCli(ghToken), runnerRepo);
+  if (allowed === 'no') {
+    log(
+      `warning: GH_TOKEN can't start workflows in ${runnerRepo}, so deploys from this runner will fail. ` +
+        'Give the token "Actions: Read and write" on GitHub (see scripts/prod/agent-runner.md).'
+    );
+  } else if (allowed === 'unknown') {
+    log(`warning: couldn't check whether GH_TOKEN can start workflows in ${runnerRepo}`);
+  }
+}
+
 log(`serving ${deviceKey} for ${workspaces.length} workspace(s)`);
 await serve({
   api,
@@ -83,7 +100,7 @@ await serve({
     omniseekUrl: process.env.OMNISEEK_URL?.trim() || undefined,
     omniseekToken: process.env.OMNISEEK_TOKEN?.trim() || undefined,
     ...claudeLogin(),
-    ghToken: process.env.GH_TOKEN?.trim() || undefined,
+    ghToken,
   },
   log,
   signal: stop.signal,
