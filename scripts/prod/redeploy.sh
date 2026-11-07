@@ -252,8 +252,18 @@ ls -1t backups/db-*.sql.gz 2>/dev/null | tail -n +$((BACKUPS_KEEP + 1)) | xargs 
 ls -1t backups/config-*.tar.gz 2>/dev/null | tail -n +$((BACKUPS_KEEP + 1)) | xargs -r rm -f || true
 # -----------------------------------------------------------------------------
 
-step "rolling stack (migration runs first)"
-docker compose -f compose.yml --env-file .env up -d --force-recreate notesgraph_migration notesgraph
+# The migration runs on its own, attached, before the server is touched. It
+# used to run as a dependency of the recreated server: compose removed the
+# running server container first, then waited on the migration, so a
+# migration that failed (2026-11-07: the new build threw at load) left the
+# new server container never started and prod answering 502, while this
+# script claimed the previous build still ran. With `set -e` a failure here
+# ends the deploy with the old server still up.
+step "migration (the running server stays up until it passes)"
+docker compose -f compose.yml --env-file .env up --force-recreate --exit-code-from notesgraph_migration notesgraph_migration
+step_end
+step "rolling stack"
+docker compose -f compose.yml --env-file .env up -d --force-recreate notesgraph
 docker compose -f compose.yml --env-file .env up -d
 docker image prune -f > /dev/null
 step_end

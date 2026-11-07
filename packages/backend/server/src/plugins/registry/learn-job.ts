@@ -15,7 +15,9 @@ import {
 
 declare global {
   interface Jobs {
-    'registry.learnFromRuns': {
+    // A job name starts with its queue, one of base/job/queue/def.ts; a name
+    // with an unknown queue throws when the server loads, in every flavor.
+    'nightly.learnFromRuns': {
       lastWorkspaceSid?: number;
     };
   }
@@ -46,15 +48,11 @@ export class AgentLearnService {
   async scheduleLearnFromRuns() {
     // Off unless configured: it writes a note into every workspace with runs.
     if (!this.config.registry.learn) return;
-    await this.job.add(
-      'registry.learnFromRuns',
-      {},
-      { jobId: 'learnFromRuns' }
-    );
+    await this.job.add('nightly.learnFromRuns', {}, { jobId: 'learnFromRuns' });
   }
 
-  @OnJob('registry.learnFromRuns')
-  async learnFromRuns(payload: Jobs['registry.learnFromRuns']) {
+  @OnJob('nightly.learnFromRuns')
+  async learnFromRuns(payload: Jobs['nightly.learnFromRuns']) {
     const workspaces = await this.models.workspace.list(
       { sid: { gt: payload.lastWorkspaceSid ?? 0 } },
       { id: true, sid: true },
