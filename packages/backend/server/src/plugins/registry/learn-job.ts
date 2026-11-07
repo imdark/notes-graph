@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 
-import { JOB_SIGNAL, JobQueue, OnJob } from '../../base';
+import { Config, JOB_SIGNAL, JobQueue, OnJob } from '../../base';
 import { DocReader, DocWriter } from '../../core/doc';
 import { Models } from '../../models';
 import {
@@ -38,11 +38,14 @@ export class AgentLearnService {
     private readonly models: Models,
     private readonly reader: DocReader,
     private readonly writer: DocWriter,
-    private readonly job: JobQueue
+    private readonly job: JobQueue,
+    private readonly config: Config
   ) {}
 
   @Cron(CronExpression.EVERY_DAY_AT_4AM)
   async scheduleLearnFromRuns() {
+    // Off unless configured: it writes a note into every workspace with runs.
+    if (!this.config.registry.learn) return;
     await this.job.add(
       'registry.learnFromRuns',
       {},

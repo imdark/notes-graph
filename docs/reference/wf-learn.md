@@ -22,8 +22,9 @@ counters, and bench replay validation (steps 2 and 3 of the plan).
 
 ## Nightly on the server (CLOUD-92)
 
-The server runs the counting half of `wf learn` itself, every night at 4am
-after the 3am doc enrichment (`AgentLearnService`,
+The server can run the counting half of `wf learn` itself, every night at
+4am after the 3am doc enrichment, when `registry.learn` is on
+(`NOTESGRAPH_AGENT_LEARN=true`; off by default) (`AgentLearnService`,
 `packages/backend/server/src/plugins/registry/learn-job.ts`; the detectors
 are pure in `learn.ts`). It reads each workspace's agent runs of the last 14
 days from the registry (the transcript tail in `registry_jobs.log` and the
