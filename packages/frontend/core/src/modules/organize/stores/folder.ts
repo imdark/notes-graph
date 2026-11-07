@@ -1,4 +1,5 @@
 import { Store } from '@notesgraph/infra';
+import { map } from 'rxjs';
 
 import type { WorkspaceDBService } from '../../db';
 
@@ -15,6 +16,43 @@ export class FolderStore extends Store {
     return this.dbService.db.folders.find$({
       parentId: parentId,
     });
+  }
+
+  /**
+   * Ids of every doc filed in an `ai / conversations` folder (at any depth
+   * below it) — the transcripts agent runs leave behind.
+   */
+  watchConversationDocIds() {
+    return this.dbService.db.folders.find$().pipe(
+      map(rows => {
+        const byId = new Map(rows.map(row => [row.id, row]));
+        const isConversationFolder = (id: string | null | undefined) => {
+          const seen = new Set<string>();
+          let current = id ? byId.get(id) : undefined;
+          while (current && !seen.has(current.id)) {
+            seen.add(current.id);
+            const parent = current.parentId
+              ? byId.get(current.parentId)
+              : undefined;
+            if (
+              current.type === 'folder' &&
+              current.data === 'conversations' &&
+              parent?.type === 'folder' &&
+              parent.data === 'ai'
+            ) {
+              return true;
+            }
+            current = parent;
+          }
+          return false;
+        };
+        return rows
+          .filter(
+            row => row.type === 'doc' && isConversationFolder(row.parentId)
+          )
+          .map(row => row.data);
+      })
+    );
   }
 
   watchIsLoading() {
