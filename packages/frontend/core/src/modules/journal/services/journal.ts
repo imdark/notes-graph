@@ -126,6 +126,16 @@ export class JournalService extends Service {
     );
   }
 
+  /**
+   * Link a freshly captured note from the journal of today, creating that
+   * journal if the day has none yet. Never links a journal to itself.
+   */
+  async addToTodayJournal(docId: string) {
+    const journal = this.ensureJournalByDate(new Date());
+    if (journal.id === docId) return;
+    await this.docsService.addLinkedDoc(journal.id, docId);
+  }
+
   ensureJournalByDate(maybeDate: MaybeDate) {
     const day = dayjs(maybeDate);
     const title = day.format(JOURNAL_DATE_FORMAT);

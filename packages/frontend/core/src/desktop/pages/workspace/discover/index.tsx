@@ -1,5 +1,6 @@
 import { Button, Checkbox, Input, notify } from '@notesgraph/component';
 import { DocsService } from '@notesgraph/core/modules/doc';
+import { JournalService } from '@notesgraph/core/modules/journal';
 import { GlobalCacheService } from '@notesgraph/core/modules/storage';
 import { TagService } from '@notesgraph/core/modules/tag';
 import { VirtualViewsService } from '@notesgraph/core/modules/virtual-views';
@@ -243,6 +244,7 @@ const InterestsRow = ({
 const DiscoverPage = () => {
   const t = useI18n();
   const docsService = useService(DocsService);
+  const journalService = useService(JournalService);
   const workbench = useService(WorkbenchService).workbench;
   const globalCache = useService(GlobalCacheService).globalCache;
   const tagService = useService(TagService);
@@ -399,6 +401,7 @@ const DiscoverPage = () => {
       docsService
         .createDocFromSharedText(item.link, item.title)
         .then(docId => {
+          journalService.addToTodayJournal(docId).catch(console.error);
           notify.success({ title: t['com.notesgraph.discover.saved']() });
           workbench.openDoc(docId, { at: 'active' });
         })
@@ -406,7 +409,7 @@ const DiscoverPage = () => {
           notify.error({ title: t['com.notesgraph.discover.saveFailed']() })
         );
     },
-    [docsService, workbench, t]
+    [docsService, journalService, workbench, t]
   );
 
   return (
