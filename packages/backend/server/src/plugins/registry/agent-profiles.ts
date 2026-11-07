@@ -230,6 +230,15 @@ const withGitLock = (command: string, waitSeconds: number) =>
   `else ${command}; fi`;
 
 /**
+ * Where install_deps puts corepack's yarn shim, and the PATH every tool runs
+ * with so `yarn` finds it. A plain `corepack enable` symlinks into node's own
+ * bin directory, which the runner's user may not own: three runs on
+ * 2026-11-07 failed with "EACCES: permission denied, symlink".
+ */
+const SHIMS = '{cache}/bin';
+const WITH_SHIMS = `export PATH="${SHIMS}:$PATH" && cd "$AGENT_CWD"`;
+
+/**
  * A code task works in its own worktree of the repo on a fresh branch, the
  * way wf gives a claude-code job a worktree of the runner's checkout. One
  * blobless mirror is kept in {cache} and fetched first, so a job costs a
@@ -264,7 +273,9 @@ const CODE_AUTOMATION: Automation = {
       description:
         "Install the repo's dependencies (corepack + yarn install). Needed once " +
         'before run_tests or typecheck; takes several minutes.',
-      run: 'cd "$AGENT_CWD" && corepack enable && yarn install --mode=skip-build',
+      run:
+        `mkdir -p ${SHIMS} && corepack enable --install-directory ${SHIMS} && ` +
+        `${WITH_SHIMS} && yarn install --mode=skip-build`,
       timeout: 2400,
     },
     {
@@ -272,7 +283,7 @@ const CODE_AUTOMATION: Automation = {
       description:
         'Run the vitest tests at a path in the repo (e.g. packages/frontend/core/src/modules/agents) ' +
         'and return the output. Run install_deps first.',
-      run: 'cd "$AGENT_CWD" && yarn vitest run "$ARG_PATH"',
+      run: `${WITH_SHIMS} && yarn vitest run "$ARG_PATH"`,
       params: {
         path: {
           description: 'File or directory to test, relative to the repo root.',
@@ -286,7 +297,7 @@ const CODE_AUTOMATION: Automation = {
       description:
         'Typecheck a package of the repo (e.g. packages/frontend/core) with scripts/typecheck.sh. ' +
         'Run install_deps first.',
-      run: 'cd "$AGENT_CWD" && scripts/typecheck.sh "$ARG_PACKAGE"',
+      run: `${WITH_SHIMS} && scripts/typecheck.sh "$ARG_PACKAGE"`,
       params: {
         package: {
           description: 'Package directory, relative to the repo root.',
