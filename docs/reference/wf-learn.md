@@ -19,3 +19,17 @@ It never edits Agent rules, skills or Agent memory itself.
 
 Not built yet: the accept/reject panel on the Agents page, helpful/harmful
 counters, and bench replay validation (steps 2 and 3 of the plan).
+
+## Run from offline enrichment (CLOUD-92)
+
+The offline enrichment pass (empty or untitled notes, typos) should also run
+`wf learn` so retro and self-improvement proposals land without a manual run.
+Enrichment lives in the `wf` repo, so the wiring is not in this repo. Intended
+shape:
+
+- After the enrichment pass, call `wf learn` over sessions captured since the
+  last run. Keep the `--limit` cap so a nightly run cannot flood the inbox.
+- Output stays proposals only (`<project> / ai / proposals`). Enrichment never
+  edits Agent rules, skills or Agent memory.
+- Harness²-style baseline-vs-edited comparison stays a `wf bench` job, not part
+  of the nightly pass, because of its per-task cost.
