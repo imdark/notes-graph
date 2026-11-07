@@ -20,6 +20,7 @@ import {
   WorkspaceService,
 } from '../workspace';
 import { QuickSearch } from './entities/quick-search';
+import { AskGraphQuickSearchSession } from './impls/ask-graph';
 import { CollectionsQuickSearchSession } from './impls/collections';
 import { CommandsQuickSearchSession } from './impls/commands';
 import { CreationQuickSearchSession } from './impls/creation';
@@ -36,6 +37,7 @@ import { RecentDocsService } from './services/recent-pages';
 
 export { QuickSearch } from './entities/quick-search';
 export { QuickSearchService, RecentDocsService };
+export { AskGraphQuickSearchSession } from './impls/ask-graph';
 export { CollectionsQuickSearchSession } from './impls/collections';
 export { CommandsQuickSearchSession } from './impls/commands';
 export { CreationQuickSearchSession } from './impls/creation';
@@ -68,6 +70,12 @@ export function configureQuickSearchModule(framework: Framework) {
       DocsService,
       DocDisplayMetaService,
       FeatureFlagService,
+    ])
+    .entity(AskGraphQuickSearchSession, [
+      WorkspaceServerService,
+      DocsSearchService,
+      DocsService,
+      DocDisplayMetaService,
     ])
     .entity(LinksQuickSearchSession, [
       WorkspaceService,

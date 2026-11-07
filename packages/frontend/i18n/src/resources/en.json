@@ -1211,6 +1211,8 @@
   "com.notesgraph.quicksearch.search-locally": "Search locally",
   "com.notesgraph.quicksearch.group.searchfor": "Search for \"{{query}}\"",
   "com.notesgraph.quicksearch.group.searchfor-locally": "Search for \"{{query}}\" (locally)",
+  "com.notesgraph.quicksearch.group.ask-graph-learnings": "Learnings for \"{{query}}\"",
+  "com.notesgraph.quicksearch.group.ask-graph-related": "Related notes for \"{{query}}\"",
   "com.notesgraph.quicksearch.group.did-you-mean": "Did you mean",
   "com.notesgraph.resetSyncStatus.button": "Reset sync",
   "com.notesgraph.resetSyncStatus.description": "This operation may fix some synchronization issues.",
