@@ -28,9 +28,36 @@ const settled = () =>
   new Promise(resolve => setTimeout(resolve, RELEASE_SETTLE_MS));
 
 /**
+ * The org keywords that make a line a task when typed out as text rather
+ * than as a chip. Any other capitalised first word is just a word: a line
+ * starting "AI ..." or "API ..." is not a task with status "AI".
+ */
+const TYPED_STATUS_KEYWORDS = new Set([
+  'TODO',
+  'DONE',
+  'DOING',
+  'WIP',
+  'STRT',
+  'NEXT',
+  'WAITING',
+  'HOLD',
+  'BLOCKED',
+  'CANCELLED',
+  'CANCELED',
+  QUEUED_STATUS,
+  'COMMITTED',
+  'MERGED',
+  'DEPLOYED',
+]);
+
+const isTypedStatus = (statusText: string): boolean =>
+  statusText.startsWith('[') || TYPED_STATUS_KEYWORDS.has(statusText);
+
+/**
  * A task's org status: the chip embed (one attributed character at the start
- * whose `orgStatus` holds the org text), a raw typed annotation like `[-] `,
- * or — for a checkbox item with neither — its native checked state.
+ * whose `orgStatus` holds the org text), a raw typed annotation like `[-] ` or
+ * `TODO ` (see TYPED_STATUS_KEYWORDS), or — for a checkbox item with neither —
+ * its native checked state.
  */
 export const readTaskStatus = (
   model: BlockModel
@@ -45,7 +72,7 @@ export const readTaskStatus = (
     return { text: embedded, length: first.insert.length, embedded: true };
   }
   const prefix = parseOrgStatusPrefix(text.toString());
-  if (prefix) {
+  if (prefix && isTypedStatus(prefix.statusText)) {
     return { text: prefix.statusText, length: prefix.length, embedded: false };
   }
   const props = model.props as { type?: string; checked?: boolean };
