@@ -103,9 +103,11 @@ const short = (text, n = 160) => {
   const flat = String(text).split(/\s+/).filter(Boolean).join(' ');
   return flat.length <= n ? flat : flat.slice(0, n - 1) + '…';
 };
+// A string, number or boolean field of a tool input logged as JSON. Read's
+// offset and limit are numbers.
 const field = (input, name) => {
-  const m = new RegExp('"' + name + '":"((?:[^"\\\\]|\\\\.)*)"').exec(input);
-  return m ? m[1] : null;
+  const m = new RegExp('"' + name + '":(?:"((?:[^"\\\\]|\\\\.)*)"|(-?\\d+(?:\\.\\d+)?|true|false))').exec(input);
+  return m ? (m[1] !== undefined ? m[1] : m[2]) : null;
 };
 function signature(text) {
   const lines = String(text)
@@ -151,6 +153,10 @@ function scan(run) {
       pending.push({ tool, input });
       if (UNTRUSTED.test(tool)) untrusted = true;
       const target = READ_TOOLS[tool] ? field(input, READ_TOOLS[tool]) : null;
+      // The runner cuts a logged input at 160 characters. Past a long path
+      // that drops offset and limit, so a cut read can't be told apart from
+      // the other parts of its file and isn't counted.
+      if (target && input.endsWith('…')) continue;
       if (target) {
         const key = tool + '\t' + target + '\t' + READ_PARTS.map(f => field(input, f) || '').join('\0');
         const n = (current.get(key) || 0) + 1;
