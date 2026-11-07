@@ -824,6 +824,19 @@ export class DocModel extends BaseModel {
     return rows.map(row => row.docId);
   }
 
+  /** Docs with no title, for the nightly enrichment to name or flag. */
+  async findUntitledDocIds(workspaceId: string) {
+    const rows = await this.db.workspaceDoc.findMany({
+      where: {
+        workspaceId,
+        docId: { not: workspaceId },
+        OR: [{ title: null }, { title: '' }],
+      },
+      select: { docId: true },
+    });
+    return rows.map(row => row.docId);
+  }
+
   /**
    * Docs titled `title` (case-insensitive), most recently edited first. The
    * title is the one kept from the doc's last snapshot, so a doc created
