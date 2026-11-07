@@ -7,5 +7,7 @@ import { globalVars } from '../../styles/variables.css';
 export const body = style({
   flex: 1,
   minHeight: 0,
+  display: 'flex',
+  flexDirection: 'column',
   paddingBottom: fallbackVar(globalVars.appKeyboardHeight, '0px'),
 });
