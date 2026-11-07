@@ -35,6 +35,7 @@ import {
   gitBase,
   type RunChanges,
 } from './changes';
+import { fetchGuardHooks } from './fetch-guard';
 import {
   answerGitHubRequest,
   type Gh,
@@ -335,8 +336,9 @@ export async function runJob(job: Job, deps: RunDeps): Promise<RunOutcome> {
       },
       allowedTools,
       canUseTool: permissionPrompt(ctx),
-      // What the person sends the run from NotesGraph while it works.
-      hooks: steerHooks(ctx),
+      // What the person sends the run from NotesGraph while it works, and
+      // no more fetches from a site that keeps failing.
+      hooks: { ...steerHooks(ctx), ...fetchGuardHooks() },
       mcpServers,
       strictMcpConfig: true,
       // Nothing from the runner's own settings or CLAUDE.md files; the profile is the agent.
