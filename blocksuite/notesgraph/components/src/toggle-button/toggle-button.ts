@@ -93,11 +93,13 @@ export class ToggleButton extends WithDisposable(ShadowlessElement) {
     this.updateCollapsed(false);
   };
 
-  private _pillHost: Element | null = null;
+  private _pillHost: HTMLElement | null = null;
 
   override connectedCallback() {
     super.connectedCallback();
-    this._pillHost = this.closest(`.${TOGGLE_BUTTON_PARENT_CLASS}`);
+    this._pillHost = this.closest<HTMLElement>(
+      `.${TOGGLE_BUTTON_PARENT_CLASS}`
+    );
     this._pillHost?.addEventListener('click', this._onPillClick, true);
   }
 
