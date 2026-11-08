@@ -44,6 +44,7 @@ import {
   shownStage,
   stepResult,
   stuckReason,
+  unlistedPullRequests,
 } from './deployments';
 
 const task = (blockId: string, stage: ShipStage, pullRequest?: string) => ({
@@ -607,6 +608,22 @@ describe('checking ready branches', () => {
     expect(
       stuckReason({ stage: 'merged', pullRequest: null }, undefined)
     ).toBeNull();
+  });
+
+  test('looks up committed tasks whose pull request the list lacks', () => {
+    const url = (n: number) => `https://github.com/imdark/notes-graph/pull/${n}`;
+    const tasks = [
+      { stage: 'committed' as const, pullRequest: url(1) }, // listed
+      { stage: 'committed' as const, pullRequest: url(2) }, // checked already
+      { stage: 'committed' as const, pullRequest: url(3) }, // unlisted
+      { stage: 'committed' as const, pullRequest: url(3) }, // same, once
+      { stage: 'merged' as const, pullRequest: url(4) }, // not to merge
+      { stage: 'committed' as const, pullRequest: null },
+      { stage: 'committed' as const, pullRequest: 'not a url' },
+    ];
+    expect(
+      unlistedPullRequests(tasks, new Set([url(1)]), new Set([url(2)]))
+    ).toEqual([{ repo: 'imdark/notes-graph', number: 3, url: url(3) }]);
   });
 
   test('asks gh for state and branch, with jq escapes intact', () => {

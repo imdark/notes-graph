@@ -29,6 +29,7 @@ import {
   type ShipTaskDetails,
   shownStage,
   stuckReason,
+  unlistedPullRequests,
 } from '@notesgraph/core/modules/agents';
 import {
   FeatureFlagService,
@@ -536,6 +537,27 @@ export const DeploymentsView = () => {
   useEffect(() => {
     if (notesRead) refresh();
   }, [notesRead, refresh]);
+
+  // A COMMITTED task's pull request that the list doesn't have isn't open:
+  // it was merged before the latest merges, or closed. Ask GitHub which,
+  // once a list read without error says what is open, so the task leaves
+  // "Ready to merge" without a "Check ready branches".
+  const listedOk = github.at !== null && !github.loading && !github.error;
+  const unlisted = useMemo(
+    () =>
+      listedOk
+        ? unlistedPullRequests(
+            rows,
+            new Set(pullsByUrl.keys()),
+            new Set(branchChecks.keys())
+          )
+        : [],
+    [listedOk, rows, pullsByUrl, branchChecks]
+  );
+  useEffect(() => {
+    if (!agent || unlisted.length === 0) return;
+    deployments.lookUpUnlisted(agent, unlisted).catch(() => {});
+  }, [agent, deployments, unlisted]);
 
   // Open pull requests no task names, and merged ones no task names.
   const named = useMemo(

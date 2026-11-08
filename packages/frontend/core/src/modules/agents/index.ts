@@ -71,6 +71,7 @@ export {
   type ShipTaskDetails,
   shownStage,
   stuckReason,
+  unlistedPullRequests,
 } from './services/deployments';
 export {
   AgentAlreadyRunningError,

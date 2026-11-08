@@ -504,6 +504,27 @@ export function parseBranchChecks(
 }
 
 /**
+ * The pull requests COMMITTED tasks name that neither the pull request list
+ * (open ones, latest merges) nor a branch check accounts for: not open, so
+ * merged before the latest merges or closed, until GitHub is asked.
+ */
+export function unlistedPullRequests(
+  tasks: { stage: ShipStage; pullRequest: string | null }[],
+  listed: ReadonlySet<string>,
+  checked: ReadonlySet<string>
+): Pick<PullRequest, 'repo' | 'number' | 'url'>[] {
+  const found = new Map<string, Pick<PullRequest, 'repo' | 'number' | 'url'>>();
+  for (const { stage, pullRequest: url } of tasks) {
+    if (stage !== 'committed' || !url) continue;
+    if (listed.has(url) || checked.has(url) || found.has(url)) continue;
+    const repo = repoOf(url);
+    const number = pullRequestNumber(url);
+    if (repo && number) found.set(url, { repo, number, url });
+  }
+  return [...found.values()];
+}
+
+/**
  * Why a COMMITTED task has nothing to merge, or null when it may: no pull
  * request named, or "Check ready branches" found it closed, gone from
  * GitHub, or open on a branch that was deleted. Unchecked, a named pull
@@ -1383,6 +1404,49 @@ export class DeploymentsService extends Service {
       }
     }
     return { checks, deleted, failed };
+  }
+
+  /** Pull requests {@link lookUpUnlisted} asked about, or is asking about. */
+  private readonly lookedUp = new Set<string>();
+
+  /**
+   * Ask GitHub, through wf on the agent's device, where pull requests stand
+   * that tasks name but the pull request list doesn't have: merged before
+   * its latest merges, or closed. What it finds goes in
+   * {@link branchChecks$}, as "Check ready branches" would, so they leave
+   * "Ready to merge". It changes no note and deletes no branch; each pull
+   * request is asked about once.
+   */
+  async lookUpUnlisted(
+    agent: Agent,
+    prs: Pick<PullRequest, 'repo' | 'number' | 'url'>[]
+  ): Promise<void> {
+    const ask = prs.filter(
+      pr => !this.lookedUp.has(pr.url) && !this.branchChecks$.value.has(pr.url)
+    );
+    if (ask.length === 0) return;
+    for (const pr of ask) this.lookedUp.add(pr.url);
+    try {
+      const checks = parseBranchChecks(
+        await this.runCommand(
+          agent,
+          {
+            op: 'check',
+            prs: ask.map(({ repo, number }) => ({ repo, number })),
+          },
+          branchCheckCommand(ask),
+          `Look up ${ask.length} pull request${ask.length === 1 ? '' : 's'}`
+        ),
+        ask
+      );
+      const known = new Map(this.branchChecks$.value);
+      for (const check of checks) known.set(check.url, check);
+      this.branchChecks$.setValue(known);
+    } catch (err) {
+      // Asked again on the next refresh.
+      for (const pr of ask) this.lookedUp.delete(pr.url);
+      throw err;
+    }
   }
 
   /** Move a task to MERGED, as an agent that merged it would. */
