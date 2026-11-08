@@ -3,6 +3,7 @@ import { describe, expect, test } from 'vitest';
 import type { Job } from '../api';
 import {
   answerGitHubRequest,
+  canStartWorkflows,
   type Gh,
   isGitHubRequest,
   parseGitHubRequest,
@@ -176,5 +177,39 @@ describe('Deployments requests on the cloud runner', () => {
     );
     expect(outcome).toEqual({ result: 'Merged', steps: 0 });
     expect(lines[0]).toMatch(/gh: merge/);
+  });
+});
+
+describe('canStartWorkflows', () => {
+  const failing =
+    (message: string, calls: string[][] = []): Gh =>
+    async args => {
+      calls.push(args);
+      throw new Error(message);
+    };
+
+  test('a 404 for the missing workflow means the token may start workflows', async () => {
+    const calls: string[][] = [];
+    expect(
+      await canStartWorkflows(failing('gh: Not Found (HTTP 404)', calls), 'a/b')
+    ).toBe('yes');
+    expect(calls[0]).toContain(
+      'repos/a/b/actions/workflows/agent-runner-permission-check.yml/dispatches'
+    );
+  });
+
+  test('a 403 means it may not', async () => {
+    expect(
+      await canStartWorkflows(
+        failing('gh: Resource not accessible by personal access token (HTTP 403)'),
+        'a/b'
+      )
+    ).toBe('no');
+  });
+
+  test('anything else is unknown', async () => {
+    expect(
+      await canStartWorkflows(failing('gh: Bad credentials (HTTP 401)'), 'a/b')
+    ).toBe('unknown');
   });
 });

@@ -93,7 +93,15 @@ if [[ "$PUSH" == "1" ]]; then
 fi
 
 # gh prints the new run's URL; its last path segment is the run id.
-RUN_URL="$(gh workflow run deploy-prod.yml --ref main 2>&1 | grep -Eo 'https://[^ ]+/actions/runs/[0-9]+' | tail -1 || true)"
+if ! DISPATCH="$(gh workflow run deploy-prod.yml --ref main 2>&1)"; then
+  echo "!! the deploy didn't start: $DISPATCH" >&2
+  if [[ "$DISPATCH" == *"HTTP 403"* ]]; then
+    echo "!! this GitHub token can't start workflows; it needs \"Actions: Read and write\" on the repo" >&2
+  fi
+  [[ "$PUSH" == "1" ]] && echo "!! main is at ${SHA:0:8} now; run this again once the token is fixed" >&2
+  exit 1
+fi
+RUN_URL="$(grep -Eo 'https://[^ ]+/actions/runs/[0-9]+' <<<"$DISPATCH" | tail -1 || true)"
 if [[ -z "$RUN_URL" ]]; then
   echo "==> deploy started; find it with: gh run list --workflow deploy-prod.yml --limit 1"
   [[ "$WAIT" == "1" ]] && { echo "!! couldn't get the run id to wait on" >&2; exit 1; }
