@@ -437,7 +437,7 @@ export const NOTESGRAPH_FLAGS = {
     defaultState: false,
   },
   enable_cmdk_ask_agent: {
-    commit: '',
+    commit: '3e0fe3d5b3c7c10b964ec293f8ac8e89354e84b0',
     category: 'notesgraph',
     displayName: 'Ask the agent from Ctrl-K',
     description:
