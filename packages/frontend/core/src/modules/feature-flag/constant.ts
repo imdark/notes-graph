@@ -436,6 +436,15 @@ export const NOTESGRAPH_FLAGS = {
     configurable: true,
     defaultState: false,
   },
+  enable_deploy_verify_stuck: {
+    commit: '1ac189a91d9bd57a0772fa4d4263ecfa9b653afb',
+    category: 'notesgraph',
+    displayName: 'Verify not-ready-to-merge tasks with Claude',
+    description:
+      'A Verify with Claude button on the Not ready to merge section of the Deployments page. Claude Code finds out for each task whether its work landed some other way (a merged PR, redone in another PR, on the base branch), then sets it deployed, merged, done or back to todo, with a note giving the evidence.',
+    configurable: true,
+    defaultState: true,
+  },
 } satisfies { [key in string]: FlagInfo };
 
 // oxlint-disable-next-line no-redeclare

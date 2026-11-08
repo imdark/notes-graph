@@ -72,6 +72,7 @@ export {
   shownStage,
   stuckReason,
   unlistedPullRequests,
+  verifyBrief,
 } from './services/deployments';
 export {
   AgentAlreadyRunningError,
