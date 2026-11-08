@@ -474,7 +474,12 @@ describe('running a job', () => {
     expect(options.env!.ANTHROPIC_API_KEY).toBe('sk-test');
     expect(options.env!.CLAUDE_CODE_OAUTH_TOKEN).toBeUndefined();
     expect(options.settingSources).toEqual([]);
-    expect(Object.keys(options.hooks!).sort()).toEqual(['PostToolUse', 'Stop']);
+    expect(Object.keys(options.hooks!).sort()).toEqual([
+      'PostToolUse',
+      'PostToolUseFailure',
+      'PreToolUse',
+      'Stop',
+    ]);
     expect(lines.some(l => l.startsWith('⚙ setup · prepare ✓'))).toBe(true);
     expect(lines.at(-2)).toMatch(/^✓ finished in 3 turns/);
     expect(lines.at(-1)).toMatch(/^⚙ teardown · note ✓/);
