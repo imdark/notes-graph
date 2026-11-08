@@ -69,7 +69,21 @@ export const DEFAULT_DEV_SERVER_CONFIG: RspackDevServerConfiguration = {
   compress: !process.env.CI,
   setupExitSignals: true,
   client: {
-    overlay: process.env.DISABLE_DEV_OVERLAY === 'true' ? false : undefined,
+    overlay:
+      process.env.DISABLE_DEV_OVERLAY === 'true'
+        ? false
+        : {
+            errors: true,
+            warnings: true,
+            // "ResizeObserver loop completed with undelivered notifications"
+            // is the browser noting that a resize callback changed layout in
+            // the same frame, not an app error. The overlay showed it as an
+            // uncaught error over the page, which blocked E2E clicks (the
+            // edgeless synced-doc drag test). The function is sent to the
+            // browser as source, so it must stand alone.
+            runtimeErrors: (error: Error) =>
+              !/ResizeObserver loop/.test(error?.message ?? ''),
+          },
     logging: process.env.CI ? 'none' : 'error',
     // see: https://webpack.js.org/configuration/dev-server/#websocketurl
     // must be an explicit ws/wss URL because custom protocols (e.g. assets://)
