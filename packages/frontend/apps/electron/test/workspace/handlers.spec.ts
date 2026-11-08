@@ -3,7 +3,15 @@ import path from 'node:path';
 import { universalId } from '@notesgraph/nbstore';
 import fs from 'fs-extra';
 import { v4 } from 'uuid';
-import { afterAll, afterEach, describe, expect, test, vi } from 'vitest';
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  describe,
+  expect,
+  test,
+  vi,
+} from 'vitest';
 
 const tmpDir = path.join(__dirname, 'tmp');
 const appDataPath = path.join(tmpDir, 'app-data');
@@ -19,6 +27,14 @@ vi.doMock('@notesgraph/electron/helper/main-rpc', () => ({
     getPath: async () => appDataPath,
   },
 }));
+
+// The first import of the handlers loads the native module and, on a cold
+// CI runner, waits on vite re-optimising dependencies: once over 60s, which
+// timed out whichever test came first. Pay it here, with room, after the
+// mocks above are registered.
+beforeAll(async () => {
+  await import('@notesgraph/electron/helper/workspace/handlers');
+}, 180_000);
 
 afterEach(async () => {
   try {
