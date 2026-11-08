@@ -545,8 +545,8 @@ export class DocModel extends BaseModel {
       AND "workspace_pages"."page_id" = "snapshots"."guid"
       WHERE
         "workspace_pages"."workspace_id" = ${workspaceId}
-        AND "workspace_pages"."title" ILIKE ${pattern}
-      ORDER BY "workspace_pages"."title" ASC
+        AND COALESCE("workspace_pages"."title", '') ILIKE ${pattern}
+      ORDER BY "workspace_pages"."title" ASC NULLS FIRST
       LIMIT ${limit}
     `;
   }
@@ -820,19 +820,6 @@ export class DocModel extends BaseModel {
       select: {
         docId: true,
       },
-    });
-    return rows.map(row => row.docId);
-  }
-
-  /** Docs with no title, for the nightly enrichment to name or flag. */
-  async findUntitledDocIds(workspaceId: string) {
-    const rows = await this.db.workspaceDoc.findMany({
-      where: {
-        workspaceId,
-        docId: { not: workspaceId },
-        OR: [{ title: null }, { title: '' }],
-      },
-      select: { docId: true },
     });
     return rows.map(row => row.docId);
   }

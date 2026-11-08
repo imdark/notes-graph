@@ -57,6 +57,8 @@ export interface CreateRegistryJobInput {
  * runner from before automations never receives code it can't run.
  */
 export const JOB_KINDS = ['agent', 'automation'] as const;
+/** Most jobs one listing returns, whatever limit is asked for. */
+export const MAX_LISTED_JOBS = 500;
 export type JobKind = (typeof JOB_KINDS)[number];
 
 /** The kinds a runner's claim asks for: known names only, agent by default. */
@@ -159,6 +161,9 @@ export class RegistryJobModel extends BaseModel {
       deviceKey?: string;
       status?: string;
       agentId?: string;
+      kind?: string;
+      /** Only runs that ended at or after this. */
+      finishedSince?: Date;
       limit?: number;
     } = {}
   ): Promise<RegistryJob[]> {
@@ -168,42 +173,14 @@ export class RegistryJobModel extends BaseModel {
         ...(filter.deviceKey ? { deviceKey: filter.deviceKey } : {}),
         ...(filter.agentId ? { agentId: filter.agentId } : {}),
         ...(filter.status ? { status: filter.status } : {}),
+        ...(filter.kind ? { kind: filter.kind } : {}),
+        ...(filter.finishedSince
+          ? { finishedAt: { gte: filter.finishedSince } }
+          : {}),
       },
       orderBy: { createdAt: 'desc' },
-      take: filter.limit ?? 50,
+      take: Math.min(filter.limit ?? 50, MAX_LISTED_JOBS),
     });
-  }
-
-  /**
-   * Agent runs that ended since `since`, newest first, each with the
-   * questions it asked the user: what the nightly learn pass reads.
-   */
-  async listFinishedSince(workspaceId: string, since: Date, limit: number) {
-    const rows = await this.db.registryJob.findMany({
-      where: {
-        workspaceId,
-        kind: 'agent',
-        status: { in: [...JOB_TERMINAL] },
-        finishedAt: { gte: since },
-      },
-      orderBy: { finishedAt: 'desc' },
-      take: limit,
-      select: {
-        id: true,
-        title: true,
-        log: true,
-        questions: {
-          where: { kind: 'question' },
-          select: { text: true },
-        },
-      },
-    });
-    return rows.map(row => ({
-      id: row.id,
-      title: row.title,
-      log: row.log,
-      questions: row.questions.map(q => q.text),
-    }));
   }
 
   /**

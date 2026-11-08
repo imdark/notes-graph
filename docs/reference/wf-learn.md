@@ -20,22 +20,22 @@ It never edits Agent rules, skills or Agent memory itself.
 Not built yet: the accept/reject panel on the Agents page, helpful/harmful
 counters, and bench replay validation (steps 2 and 3 of the plan).
 
-## Nightly on the server (CLOUD-92)
+## Nightly, as an automation (CLOUD-92)
 
-The server can run the counting half of `wf learn` itself, every night at
-4am after the 3am doc enrichment, when `registry.learn` is on
-(`NOTESGRAPH_AGENT_LEARN=true`; off by default) (`AgentLearnService`,
-`packages/backend/server/src/plugins/registry/learn-job.ts`; the detectors
-are pure in `learn.ts`). It reads each workspace's agent runs of the last 14
-days from the registry (the transcript tail in `registry_jobs.log` and the
-questions in `registry_job_questions`), applies the four detectors above, and
-keeps a note titled "Proposed harness changes" current, filed under
-`ai / proposals`, with at most 10 findings as to-dos. A to-do the user ticked
-stays ticked on later nights; a finding no longer seen is dropped. A finding
-whose runs read web content says "review closely".
+The counting half of `wf learn` ships as an automation template, "Learn from
+agent runs nightly" (`packages/backend/server/src/plugins/automations/
+nightly-templates.ts`, see `automations.md`). Start it from the Automations
+page: it runs on a device the workspace registered (the cloud runner on a
+self-hosted box) every night at 4am, reads the last 14 days of agent runs
+with their transcripts and questions through the registry API as its
+creator, applies the four detectors above, and keeps a note titled
+"Proposed harness changes" current under `ai / proposals`, with at most 10
+findings as to-dos. A to-do the person ticked stays ticked on later nights; a
+finding no longer seen is dropped. A finding whose runs read web content
+says "review closely". Pause, reschedule, run now and read its log like any
+automation.
 
-Proposals only: the job never edits Agent rules, skills or Agent memory. No
-model is called on the server; the findings are the output, and the local
-`wf learn` can still turn them into worded deltas. The Harness²-style
-baseline-vs-edited comparison stays a `wf bench` job because of its per-task
-cost.
+Proposals only: it never edits Agent rules, skills or Agent memory, and no
+model is called; the local `wf learn` can still turn the findings into worded
+deltas. The Harness²-style baseline-vs-edited comparison stays a `wf bench`
+job because of its per-task cost.

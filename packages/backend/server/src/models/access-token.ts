@@ -63,6 +63,11 @@ export class AccessTokenModel extends BaseModel {
     return { ...created, token };
   }
 
+  /** Revoke the user's tokens by name: how a run's token goes when it ends. */
+  async revokeByName(userId: string, name: string) {
+    await this.db.accessToken.deleteMany({ where: { userId, name } });
+  }
+
   async revoke(id: string, userId: string) {
     await this.db.accessToken.deleteMany({
       where: {

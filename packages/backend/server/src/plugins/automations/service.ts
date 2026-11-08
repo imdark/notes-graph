@@ -14,6 +14,7 @@ import {
 import { BadRequest, NotFound, OnEvent } from '../../base';
 import { Models, RUN_LOG_CAP } from '../../models';
 import { type GateQuery, JobGates, RegistryJobService } from '../registry';
+import { runTokenName } from '../registry/jobs';
 import { endActions, hookJob, prestartVerdict } from './hooks';
 import {
   type AgentHook,
@@ -294,6 +295,21 @@ export class AutomationService implements OnModuleInit {
       event.workspaceId,
       event.jobId
     );
+    // The run's token (RegistryJobService.runIdentity) dies with the run.
+    try {
+      const owner = await this.models.automation.get(
+        event.workspaceId,
+        run.automationId
+      );
+      if (owner) {
+        await this.models.accessToken?.revokeByName(
+          owner.createdBy,
+          runTokenName(run.automationId, run.id)
+        );
+      }
+    } catch (err) {
+      this.logger.warn(`revoking run ${run.id}'s token: ${err}`);
+    }
     const status = runStatus(event.status, event.error);
     const finished = await this.models.automation.updateRun(run.id, {
       status,

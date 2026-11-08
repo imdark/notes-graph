@@ -111,12 +111,17 @@ async function runAutomation(
         `${job.payload.runtime ?? 'shell'} automations run on a device with wf, not on the cloud runner`
       );
     }
+    const secrets = job.secrets ?? {};
     const output = await runCode(
       {
         code: job.payload.code,
         input: job.payload.input,
-        secrets: job.secrets ?? {},
+        secrets,
         timeoutSeconds: job.payload.timeoutSeconds,
+        // The server mints NOTESGRAPH_TOKEN on claim for a run with a creator.
+        notesgraph: secrets.NOTESGRAPH_TOKEN
+          ? { url: api.url, workspaceId, token: secrets.NOTESGRAPH_TOKEN }
+          : undefined,
       },
       { say: line => reporter.append(`${line}\n`), signal: stop.signal }
     );

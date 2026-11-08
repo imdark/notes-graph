@@ -1,7 +1,9 @@
 /**
  * Runs an automation's code: the body of an async function, given `input`
- * (what triggered it), `secrets` (the workspace secrets it names), `console`
- * and `fetch`. What it returns is the run's output.
+ * (what triggered it), `secrets` (the workspace secrets it names), `console`,
+ * `fetch` and, when the run carries an identity, `notesgraph`: the workspace
+ * API as the automation's creator (see docs/reference/automations.md). What
+ * it returns is the run's output.
  *
  * The code runs in a worker thread, inside a `vm` context. The worker is what
  * makes a run stoppable: a timeout or a cancel terminates it, however busy
@@ -18,6 +20,19 @@ export interface CodeJob {
   input?: unknown;
   secrets?: Record<string, string>;
   timeoutSeconds?: number;
+  /**
+   * The run's identity on its NotesGraph server, for the sandbox's
+   * `notesgraph` helper. Absent for a run with no creator to act as.
+   */
+  notesgraph?: NotesGraphIdentity;
+}
+
+export interface NotesGraphIdentity {
+  /** The server's base url, as this runner reaches it. */
+  url: string;
+  workspaceId: string;
+  /** A token for the automation's creator, good for the run's duration. */
+  token: string;
 }
 
 export interface CodeRunOptions {
@@ -64,6 +79,48 @@ const context = vm.createContext({
   },
   input: workerData.input,
   secrets: Object.freeze({ ...workerData.secrets }),
+  // The workspace API as the automation's creator. \`fetch(path, init)\`
+  // takes a path under the server (\`/api/workspaces/...\`), sends a JSON
+  // body given an object, and returns the parsed JSON (or the text when the
+  // reply is not JSON); it throws with the status and message on an error.
+  notesgraph: workerData.notesgraph
+    ? Object.freeze({
+        url: workerData.notesgraph.url,
+        workspaceId: workerData.notesgraph.workspaceId,
+        async fetch(path, init = {}) {
+          const body =
+            init.body !== undefined &&
+            init.body !== null &&
+            typeof init.body !== 'string'
+              ? JSON.stringify(init.body)
+              : init.body;
+          const headers = new Headers(init.headers || {});
+          headers.set('Authorization', 'Bearer ' + workerData.notesgraph.token);
+          if (body !== undefined && !headers.has('Content-Type')) {
+            headers.set('Content-Type', 'application/json');
+          }
+          const url = workerData.notesgraph.url.replace(/\\/$/, '') + path;
+          const response = await fetch(url, { ...init, body, headers });
+          const text = await response.text();
+          let parsed = text;
+          try {
+            parsed = text ? JSON.parse(text) : null;
+          } catch {}
+          if (!response.ok) {
+            const message =
+              parsed && typeof parsed === 'object' && parsed.message
+                ? parsed.message
+                : text.slice(0, 200);
+            const error = new Error(
+              (init.method || 'GET') + ' ' + path + ': ' + response.status + ' ' + message
+            );
+            error.status = response.status;
+            throw error;
+          }
+          return parsed;
+        },
+      })
+    : undefined,
   fetch,
   Headers,
   Request,
@@ -80,6 +137,7 @@ const context = vm.createContext({
   structuredClone,
   atob,
   btoa,
+  crypto,
 });
 
 (async () => {
@@ -126,6 +184,7 @@ export function runCode(job: CodeJob, opts: CodeRunOptions = {}) {
         code: job.code,
         input: job.input ?? null,
         secrets: job.secrets ?? {},
+        notesgraph: job.notesgraph ?? null,
       },
       // No env: secrets come in as `secrets`, nothing else of the runner's.
       env: {},

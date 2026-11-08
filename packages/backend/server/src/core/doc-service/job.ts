@@ -2,14 +2,9 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaClient } from '@prisma/client';
 
-import { Config, JOB_SIGNAL, JobQueue, metrics, OnJob } from '../../base';
+import { JOB_SIGNAL, JobQueue, metrics, OnJob } from '../../base';
 import { Models } from '../../models';
-import {
-  DatabaseDocReader,
-  DocWriter,
-  PgWorkspaceDocStorageAdapter,
-} from '../doc';
-import { enrichDoc } from './enrichment';
+import { DatabaseDocReader, PgWorkspaceDocStorageAdapter } from '../doc';
 
 declare global {
   interface Jobs {
@@ -20,13 +15,6 @@ declare global {
     'doc.recordPendingDocUpdatesCount': {};
     'doc.findEmptySummaryDocs': {
       lastFixedWorkspaceSid?: number;
-    };
-    'doc.enrichUntitledDocs': {
-      lastWorkspaceSid?: number;
-    };
-    'doc.enrichUntitledDoc': {
-      workspaceId: string;
-      docId: string;
     };
     'doc.autoFixedDocSummary': {
       workspaceId: string;
@@ -42,11 +30,9 @@ export class DocServiceCronJob {
   constructor(
     private readonly workspace: PgWorkspaceDocStorageAdapter,
     private readonly docReader: DatabaseDocReader,
-    private readonly docWriter: DocWriter,
     private readonly prisma: PrismaClient,
     private readonly job: JobQueue,
-    private readonly models: Models,
-    private readonly config: Config
+    private readonly models: Models
   ) {}
 
   @OnJob('doc.mergePendingDocUpdates')
@@ -179,65 +165,5 @@ export class DocServiceCronJob {
 
     await this.models.doc.upsertMeta(workspaceId, docId, content);
     return;
-  }
-
-  @Cron(CronExpression.EVERY_DAY_AT_3AM)
-  async scheduleEnrichUntitledDocs() {
-    // Off unless configured: it renames notes in every workspace.
-    if (!this.config.docService.enrichment.enabled) return;
-    await this.job.add(
-      'doc.enrichUntitledDocs',
-      {},
-      { jobId: 'enrichUntitledDocs' }
-    );
-  }
-
-  @OnJob('doc.enrichUntitledDocs')
-  async enrichUntitledDocs(payload: Jobs['doc.enrichUntitledDocs']) {
-    const workspaces = await this.models.workspace.list(
-      { sid: { gt: payload.lastWorkspaceSid ?? 0 } },
-      { id: true, sid: true },
-      100
-    );
-    if (workspaces.length === 0) {
-      return JOB_SIGNAL.Done;
-    }
-
-    for (const workspace of workspaces) {
-      const docIds = await this.models.doc.findUntitledDocIds(workspace.id);
-      for (const docId of docIds) {
-        await this.job.add(
-          'doc.enrichUntitledDoc',
-          { workspaceId: workspace.id, docId },
-          { jobId: `enrichUntitledDoc/${workspace.id}/${docId}` }
-        );
-      }
-    }
-
-    payload.lastWorkspaceSid = workspaces[workspaces.length - 1].sid;
-    return JOB_SIGNAL.Repeat;
-  }
-
-  /**
-   * Names an untitled note from its body. A note with neither title nor body
-   * is only logged: removing it also means removing its entry from the
-   * workspace's root doc, which nothing on the server does yet.
-   */
-  @OnJob('doc.enrichUntitledDoc')
-  async enrichUntitledDoc({
-    workspaceId,
-    docId,
-  }: Jobs['doc.enrichUntitledDoc']) {
-    const content = await this.docReader.getFullDocContent(workspaceId, docId);
-    if (!content) return;
-
-    const result = enrichDoc({ title: content.title, body: content.summary });
-    if (result.action === 'setTitle') {
-      await this.docWriter.updateDocMeta(workspaceId, docId, {
-        title: result.title,
-      });
-    } else if (result.action === 'flagEmpty') {
-      this.logger.log(`Doc ${docId} in workspace ${workspaceId} is empty`);
-    }
   }
 }

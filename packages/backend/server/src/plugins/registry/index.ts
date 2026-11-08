@@ -13,7 +13,6 @@ import { RegistryController } from './controller';
 import { RegistryHealthService } from './health';
 import { JobGates } from './job-gates';
 import { RegistryJobService } from './jobs';
-import { AgentLearnService } from './learn-job';
 import { MonitoringAgentService } from './monitoring-agent';
 import { AgentPushService } from './push';
 import { RegistryService } from './service';
@@ -45,7 +44,6 @@ import { TerminalSessionService } from './terminal-sessions';
     AgentPushService,
     JobTaskClaims,
     AgentMemoryService,
-    AgentLearnService,
     RegistryJobShareService,
     AgentRules,
     SkillNoteService,
