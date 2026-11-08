@@ -204,7 +204,7 @@ test('learn keeps a ticked finding ticked on the next night and updates in place
     if (path.startsWith('/api/registry/workspaces/ws1/jobs?')) {
       return { jobs: [{ id: 'run-a', title: 'Run A', status: 'done' }] };
     }
-    if (/\/jobs\/run-a\?logFrom=0$/.test(path)) {
+    if (path.endsWith('/jobs/run-a?logFrom=0')) {
       return {
         job: {
           id: 'run-a',

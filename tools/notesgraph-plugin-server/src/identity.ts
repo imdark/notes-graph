@@ -4,7 +4,7 @@
  * user it is, forwarding the request's own Cookie / Authorization, and whether
  * they are an admin (the `Admin` feature on their account).
  */
-import http from 'node:http';
+import type http from 'node:http';
 
 export interface CallerUser {
   id: string;

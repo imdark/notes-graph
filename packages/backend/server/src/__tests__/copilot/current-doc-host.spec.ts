@@ -8,7 +8,10 @@ import {
 
 /** The open document read into the chat prompt. */
 
-const host = (canRead: boolean, doc: { title: string; markdown: string } | null) =>
+const host = (
+  canRead: boolean,
+  doc: { title: string; markdown: string } | null
+) =>
   new CurrentDocHost(
     { getDocMarkdown: async () => doc } as any,
     {
@@ -43,6 +46,8 @@ test('a long document is cut, and an untitled one is named', t => {
     markdown: 'a'.repeat(MAX_CURRENT_DOC_CHARS + 10),
   });
   t.is(params.currentDocTitle, 'Untitled');
-  t.true(params.currentDocContent.startsWith('a'.repeat(MAX_CURRENT_DOC_CHARS)));
+  t.true(
+    params.currentDocContent.startsWith('a'.repeat(MAX_CURRENT_DOC_CHARS))
+  );
   t.regex(params.currentDocContent, /call doc_read for the rest/);
 });

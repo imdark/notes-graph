@@ -32,21 +32,14 @@ export {
 } from './services/cloud-runner';
 export { AgentContextService } from './services/context';
 export {
-  configureTerminalSocketAuth,
-  TERMINAL_HARNESSES,
-  type TerminalConnection,
-  TerminalService,
-  type TerminalSessionInfo,
-} from './services/terminal';
-export {
   type BranchCheck,
   canFixToMerge,
-  type DeployCiRun,
   deployableTasks,
+  type DeployCiRun,
   DeploymentsService,
   deployRunsFor,
-  flagStage,
   type FlagStage,
+  flagStage,
   type LiveCheck,
   type MergeReadiness,
   mergeReadiness,
@@ -64,8 +57,8 @@ export {
   shipAgents,
   type ShipReport,
   shipReportText,
-  shipsWithAutomations,
   type ShipStage,
+  shipsWithAutomations,
   shipTargets,
   type ShipTask,
   type ShipTaskDetails,
@@ -223,6 +216,13 @@ export {
   QUEUED_STATUS,
   releaseQueuedTasks,
 } from './services/task-claim';
+export {
+  configureTerminalSocketAuth,
+  TERMINAL_HARNESSES,
+  type TerminalConnection,
+  TerminalService,
+  type TerminalSessionInfo,
+} from './services/terminal';
 export { AgentRunLogsStore, type SavedAskChat } from './stores/agent-run-logs';
 export {
   type AgentRun,

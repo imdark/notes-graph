@@ -754,27 +754,27 @@ export class TableCell extends SignalWatcher(
           // plain-string cell): one keeps the inline editor it first bound.
           this.text,
           html`<rich-text
-          ${ref(this.richText$)}
-          data-disable-ask-ai
-          data-not-block-text
-          style=${styleMap({
-            minHeight: '22px',
-            padding: '8px 12px',
-          })}
-          .yText="${this.text}"
-          .inlineEventSource="${this.topContenteditableElement ?? nothing}"
-          .attributesSchema="${this.inlineManager?.getSchema()}"
-          .attributeRenderer="${this.inlineManager?.getRenderer()}"
-          .embedChecker="${this.inlineManager?.embedChecker}"
-          .markdownMatches="${this.inlineManager?.markdownMatches}"
-          .readonly="${this.readonly}"
-          .enableClipboard="${true}"
-          .verticalScrollContainerGetter="${() =>
-            this.topContenteditableElement?.host
-              ? getViewportElement(this.topContenteditableElement.host)
-              : null}"
-          data-parent-flavour="notesgraph:table"
-        ></rich-text>`
+            ${ref(this.richText$)}
+            data-disable-ask-ai
+            data-not-block-text
+            style=${styleMap({
+              minHeight: '22px',
+              padding: '8px 12px',
+            })}
+            .yText="${this.text}"
+            .inlineEventSource="${this.topContenteditableElement ?? nothing}"
+            .attributesSchema="${this.inlineManager?.getSchema()}"
+            .attributeRenderer="${this.inlineManager?.getRenderer()}"
+            .embedChecker="${this.inlineManager?.embedChecker}"
+            .markdownMatches="${this.inlineManager?.markdownMatches}"
+            .readonly="${this.readonly}"
+            .enableClipboard="${true}"
+            .verticalScrollContainerGetter="${() =>
+              this.topContenteditableElement?.host
+                ? getViewportElement(this.topContenteditableElement.host)
+                : null}"
+            data-parent-flavour="notesgraph:table"
+          ></rich-text>`
         )}
         ${this.renderOptionsButton()} ${this.renderColumnIndicator()}
         ${this.renderRowIndicator()}

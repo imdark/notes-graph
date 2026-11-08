@@ -83,12 +83,12 @@ A card that ships code climbs `committed` → `merged` → `deployed` → `done`
 **never** done just because the code is written. Each is a custom `update_task`
 status (rendered `COMMITTED`/`MERGED`/`DEPLOYED`; only `done` writes CLOSED):
 
-| status      | set when                                                                     |
-| ----------- | ---------------------------------------------------------------------------- |
-| `committed` | the work is committed on its branch (PR opened or pushed)                    |
+| status      | set when                                                                      |
+| ----------- | ----------------------------------------------------------------------------- |
+| `committed` | the work is committed on its branch (PR opened or pushed)                     |
 | `merged`    | that branch landed on `stage` (`gh pr view <branch> --json state` → `MERGED`) |
 | `deployed`  | a release containing it was deployed (the `Deploy prod` run succeeded)        |
-| `done`      | the deployed change was verified live                                        |
+| `done`      | the deployed change was verified live                                         |
 
 Stages only move forward. Before finishing, sweep: `list_blocks
 {docId:"_NYa0NxmRK", status:"committed"}`, then `merged`, then `deployed`, and

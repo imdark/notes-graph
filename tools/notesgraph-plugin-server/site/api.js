@@ -26,12 +26,13 @@ export class ApiError extends Error {
 }
 
 async function request(method, path, body) {
-  const res = await fetch(`${API_BASE}${path}`, {
-    method,
-    credentials: 'same-origin',
-    headers: body === undefined ? {} : { 'content-type': 'application/json' },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
+  // A body only goes with a request that takes one: never a GET.
+  const init = { method, credentials: 'same-origin', headers: {} };
+  if (body !== undefined && method !== 'GET') {
+    init.headers = { 'content-type': 'application/json' };
+    init.body = JSON.stringify(body);
+  }
+  const res = await fetch(`${API_BASE}${path}`, init);
   const text = await res.text();
   let data = null;
   if (text) {

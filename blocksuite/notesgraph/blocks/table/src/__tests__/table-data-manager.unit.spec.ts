@@ -4,7 +4,10 @@ import { describe, expect, test } from 'vitest';
 import { TableDataManager } from '../table-data-manager';
 
 /** A table model as the data manager reads it, with cells as stored. */
-const stubModel = (cells: Record<string, { text: unknown }>, readonly = false) =>
+const stubModel = (
+  cells: Record<string, { text: unknown }>,
+  readonly = false
+) =>
   ({
     store: { readonly, transact: (fn: () => void) => fn() },
     props: { cells, rows: {}, columns: {} },

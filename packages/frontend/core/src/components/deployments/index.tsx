@@ -1,11 +1,11 @@
 import { Button, Checkbox, Input, notify } from '@notesgraph/component';
 import {
+  type Agent,
   AgentRunSessionService,
   AgentsService,
   type AgentTarget,
   agentTargetKey,
   canFixToMerge,
-  type Agent,
   type DeployCiRun,
   type DeployInfo,
   DeploymentsService,
@@ -22,8 +22,8 @@ import {
   type ShipAction,
   shipAgents,
   shipReportText,
-  shipsWithAutomations,
   type ShipStage,
+  shipsWithAutomations,
   shipTargets,
   type ShipTask,
   type ShipTaskDetails,
@@ -183,7 +183,9 @@ export const useDeployCiRuns = (agent: Agent | undefined): DeployCiRun[] => {
     if (!agent || !repo) return;
     const read = () => deployments.refreshDeployCiRuns(agent, repo);
     read().catch(() => {});
-    const timer = setInterval(() => read().catch(() => {}), 30_000);
+    const timer = setInterval(() => {
+      read().catch(() => {});
+    }, 30_000);
     return () => clearInterval(timer);
   }, [agent, deployments, repo]);
   return runs;

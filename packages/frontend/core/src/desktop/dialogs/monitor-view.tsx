@@ -7,8 +7,8 @@ import {
   monitorChatMessages,
   type MonitorReading,
   MonitorsService,
-  type RemoteJob,
   RemoteAgentRunnerService,
+  type RemoteJob,
   RESEARCH_MODEL,
 } from '@notesgraph/core/modules/agents';
 import type { DialogComponentProps } from '@notesgraph/core/modules/dialogs';

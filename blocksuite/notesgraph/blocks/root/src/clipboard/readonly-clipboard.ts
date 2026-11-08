@@ -66,7 +66,8 @@ export class ReadOnlyClipboard extends LifeCycleWatcher {
   protected readonly _setPlainText = (e: ClipboardEvent) => {
     const text =
       this.std.host.ownerDocument.getSelection()?.toString() ||
-      this._selectedText();    if (!text || !e.clipboardData) return false;
+      this._selectedText();
+    if (!text || !e.clipboardData) return false;
     e.clipboardData.setData('text/plain', text);
     return true;
   };

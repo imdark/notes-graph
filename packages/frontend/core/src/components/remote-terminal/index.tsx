@@ -361,7 +361,9 @@ export const RemoteTerminal = ({
         <Button
           variant="primary"
           disabled={busy || !device || !devices.includes(device)}
-          onClick={start}
+          onClick={() => {
+            start().catch(() => {});
+          }}
         >
           Open
         </Button>
@@ -378,13 +380,13 @@ export const RemoteTerminal = ({
             <Button onClick={() => setConnection(null)}>Detach</Button>
             <Button
               disabled={busy}
-              onClick={() =>
+              onClick={() => {
                 run(async () => {
                   await connection.close();
                   if (session.status === 'exited') setConnection(null);
                   await refresh();
-                })
-              }
+                }).catch(() => {});
+              }}
             >
               {session.status === 'exited' ? 'Remove' : 'End'}
             </Button>
@@ -399,7 +401,9 @@ export const RemoteTerminal = ({
               className={styles.chip}
               data-active={connection && session.id === s.id ? '' : undefined}
               data-exited={s.status === 'exited' ? '' : undefined}
-              onClick={() => resume(s)}
+              onClick={() => {
+                resume(s).catch(() => {});
+              }}
             >
               {sessionLabel(s)}
             </button>

@@ -325,8 +325,8 @@ const MAX_ATTACHMENTS = 6;
 export function safeArtifactName(name: unknown): string {
   const base = String(name ?? '')
     .split(/[\\/]/)
-    .pop()!
-    .normalize('NFKD')
+    .at(-1)
+    ?.normalize('NFKD')
     .replace(/[^\w.-]+/g, '-')
     .replace(/^[-.]+|[-.]+$/g, '')
     .slice(0, 80);

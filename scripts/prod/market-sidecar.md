@@ -11,21 +11,21 @@ record of them; both were backed up in place before editing
 
 ## What is public and what is not
 
-| route                                                 | exposure                 |
-| ----------------------------------------------------- | ------------------------ |
-| `GET /` and `GET /site/*` (the marketplace website)   | public                   |
-| `GET /plugins`, `GET /plugins/:id`                    | public                   |
-| `GET /download/:id/:version/*`                        | public                   |
-| `GET /pubkey`, `GET /health`                          | public                   |
-| `GET /me`, `GET /me/plugins`, `GET /admin/pending`    | public route, asks who   |
-| `POST /developers` (sign up as a developer / rotate)  | signed in                |
-| `POST /publish` (developer-signed submission)         | signed in + developer    |
-| `POST /admin/:id/:version/approve\|reject`            | signed in + **admin**    |
-| `POST /p/:id/:fn` (runs plugin server code)           | signed in                |
+| route                                                | exposure               |
+| ---------------------------------------------------- | ---------------------- |
+| `GET /` and `GET /site/*` (the marketplace website)  | public                 |
+| `GET /plugins`, `GET /plugins/:id`                   | public                 |
+| `GET /download/:id/:version/*`                       | public                 |
+| `GET /pubkey`, `GET /health`                         | public                 |
+| `GET /me`, `GET /me/plugins`, `GET /admin/pending`   | public route, asks who |
+| `POST /developers` (sign up as a developer / rotate) | signed in              |
+| `POST /publish` (developer-signed submission)        | signed in + developer  |
+| `POST /admin/:id/:version/approve\|reject`           | signed in + **admin**  |
+| `POST /p/:id/:fn` (runs plugin server code)          | signed in              |
 
 The sidecar has no session of its own, so it gets **no published port**, and
 Caddy draws the line above: a write must carry a valid app session. Since
-2026-11-02 the sidecar also asks the app *who* the caller is (`identity.ts`:
+2026-11-02 the sidecar also asks the app _who_ the caller is (`identity.ts`:
 the request's own Cookie / Authorization forwarded to `/graphql`
 `currentUser { id name email features }`, `Admin` in `features` makes a
 reviewer). That is what `/me`, developer sign-up, ownership and the review
@@ -51,7 +51,7 @@ Anyone can browse; publishing needs a developer account. On the website
    (`src/signing.ts` and `site/signing.js`, the same bytes):
    `sha256(JSON.stringify(manifest) + for each path sorted: path + "\n" + hex(sha256(bytes)) + "\n")`,
    signs it with the private key, and posts `{manifest, files, keyId,
-   signature}` to `/publish`. Text files travel as strings, anything else as
+signature}` to `/publish`. Text files travel as strings, anything else as
    `{base64}`; 20 MB cap.
 3. The server verifies the signature against the key on record for the
    calling user, refuses an id first published by someone else, refuses a

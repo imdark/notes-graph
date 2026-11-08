@@ -40,7 +40,9 @@ describe('hostFor', () => {
   test('the prod-host machine this person may run on and that is up', () => {
     expect(hostFor([cloud, prod], up)?.key).toBe('prod');
     // An admin-only host reads as no job target to anyone else.
-    expect(hostFor([cloud, { ...prod, agentTarget: false }], up)).toBeUndefined();
+    expect(
+      hostFor([cloud, { ...prod, agentTarget: false }], up)
+    ).toBeUndefined();
     expect(hostFor([cloud, prod], d => d.key !== 'prod')).toBeUndefined();
     expect(hostFor([cloud], up)).toBeUndefined();
   });
@@ -61,8 +63,8 @@ describe('a cloud runner failure', () => {
   test('stays on the runner without a host, and another machine on itself', () => {
     expect(checkFailure(cloud, disk, true).deviceKey).toBe('cloud');
     expect(checkFailure(device(), disk, true, prod).deviceKey).toBe('laptop');
-    expect(checkFailure(device(), disk, true, prod).details.join('\n')).not.toMatch(
-      /Run on prod/
-    );
+    expect(
+      checkFailure(device(), disk, true, prod).details.join('\n')
+    ).not.toMatch(/Run on prod/);
   });
 });

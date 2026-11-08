@@ -12,14 +12,15 @@ import {
   deleteBranchCommand,
   deletesBranch,
   deployableTasks,
+  deployedNote,
   DeployRepoMissing,
   deployReposFor,
-  keptBranches,
-  shipRepos,
   deployRunsFor,
   findPullRequest,
   flagStage,
   isShipStage,
+  keptBranches,
+  lastLogLine,
   liveCheckNote,
   mergeCommand,
   mergeReadiness,
@@ -32,14 +33,13 @@ import {
   pullRequestsCommand,
   pullRequestStage,
   type RunTask,
-  deployedNote,
-  lastLogLine,
   SHIP_AUTOMATIONS,
   shipAgents,
   shipBrief,
   shipReportText,
-  shipsWithAutomations,
+  shipRepos,
   type ShipStage,
+  shipsWithAutomations,
   shipTargets,
   shownStage,
   stepResult,
@@ -237,7 +237,9 @@ describe('verifyBrief', () => {
     for (const status of ['`deployed`', '`merged`', '`done`', '`todo`']) {
       expect(text).toContain(status);
     }
-    expect(text).toContain('Never `done`: that waits for someone to check it live');
+    expect(text).toContain(
+      'Never `done`: that waits for someone to check it live'
+    );
     expect(text).toContain('Don’t merge, push, open or close PRs');
     expect(text).toContain('read the note before trying again');
     // No repos set: it speaks of main.
@@ -653,7 +655,8 @@ describe('checking ready branches', () => {
   });
 
   test('looks up committed tasks whose pull request the list lacks', () => {
-    const url = (n: number) => `https://github.com/imdark/notes-graph/pull/${n}`;
+    const url = (n: number) =>
+      `https://github.com/imdark/notes-graph/pull/${n}`;
     const tasks = [
       { stage: 'committed' as const, pullRequest: url(1) }, // listed
       { stage: 'committed' as const, pullRequest: url(2) }, // checked already

@@ -302,7 +302,10 @@ const stored = (over: Record<string, unknown> = {}): any => ({
 test('an admin-only device is not a job target for anyone but an admin', async t => {
   const prod = stored();
   const laptop = stored({ key: 'laptop', name: 'laptop', adminOnly: false });
-  const { service } = makeService({ devices: [prod, laptop], admins: ['admin'] });
+  const { service } = makeService({
+    devices: [prod, laptop],
+    admins: ['admin'],
+  });
   const dtos = [toDeviceDto(prod), toDeviceDto(laptop)];
 
   const member = await service.viewFor(userId, dtos);
@@ -332,7 +335,12 @@ test('only an admin re-registers, removes or flags an admin-only device', async 
   );
 
   t.is(await service.remove(workspaceId, 'prod', 'admin'), 1);
-  const flagged = await service.setAdminOnly(workspaceId, 'admin', 'prod', true);
+  const flagged = await service.setAdminOnly(
+    workspaceId,
+    'admin',
+    'prod',
+    true
+  );
   t.true(flagged?.adminOnly);
   await t.throwsAsync(
     service.setAdminOnly(workspaceId, 'admin', 'prod', 'yes'),

@@ -79,7 +79,9 @@ if (ghToken && runnerRepo) {
         'Give the token "Actions: Read and write" on GitHub (see scripts/prod/agent-runner.md).'
     );
   } else if (allowed === 'unknown') {
-    log(`warning: couldn't check whether GH_TOKEN can start workflows in ${runnerRepo}`);
+    log(
+      `warning: couldn't check whether GH_TOKEN can start workflows in ${runnerRepo}`
+    );
   }
 }
 

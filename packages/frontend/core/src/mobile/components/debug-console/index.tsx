@@ -63,9 +63,7 @@ async function copyText(text: string) {
   }
 }
 
-function createErrorsTool(eruda: {
-  Tool: new () => any;
-}) {
+function createErrorsTool(eruda: { Tool: new () => any }) {
   const tool = new eruda.Tool();
   let box: HTMLElement | undefined;
   let filter = '';
@@ -86,17 +84,15 @@ function createErrorsTool(eruda: {
       '<button class="ng-errors-copy" style="padding:6px 12px">Copy</button>' +
       '<button class="ng-errors-clear" style="padding:6px 12px">Clear</button></div>' +
       '<pre class="ng-errors-list" style="margin:0;padding:8px;white-space:pre-wrap;word-break:break-all;user-select:text;-webkit-user-select:text"></pre>';
-    box
-      .querySelector('.ng-errors-filter')
-      ?.addEventListener('input', e => {
-        filter = (e.target as HTMLInputElement).value;
-        render();
-      });
+    box.querySelector('.ng-errors-filter')?.addEventListener('input', e => {
+      filter = (e.target as HTMLInputElement).value;
+      render();
+    });
     box.querySelector('.ng-errors-copy')?.addEventListener('click', () => {
       const q = filter.toLowerCase();
-      void copyText(
+      copyText(
         errorEntries.filter(e => e.toLowerCase().includes(q)).join('\n\n')
-      );
+      ).catch(() => {});
     });
     box.querySelector('.ng-errors-clear')?.addEventListener('click', () => {
       errorEntries.length = 0;

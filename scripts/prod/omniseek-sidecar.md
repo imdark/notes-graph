@@ -77,10 +77,10 @@ in) lists the allowlisted `omniseek_*` tools.
 The server and the cloud runner each have their own copy of OmniSeek's URL
 and token, and each needs it set:
 
-| Who                       | Env file             | Variables                                             |
-| ------------------------- | -------------------- | ----------------------------------------------------- |
-| `notesgraph` (the server) | `.env`               | `NOTESGRAPH_OMNISEEK_URL`, `NOTESGRAPH_OMNISEEK_TOKEN` |
-| `agent-runner`            | `.env.agent-runner`  | `OMNISEEK_URL`, `OMNISEEK_TOKEN`                       |
+| Who                       | Env file            | Variables                                              |
+| ------------------------- | ------------------- | ------------------------------------------------------ |
+| `notesgraph` (the server) | `.env`              | `NOTESGRAPH_OMNISEEK_URL`, `NOTESGRAPH_OMNISEEK_TOKEN` |
+| `agent-runner`            | `.env.agent-runner` | `OMNISEEK_URL`, `OMNISEEK_TOKEN`                       |
 
 A research agent whose server has an AI model runs its loop in the tab and
 calls OmniSeek **through the server**, not the runner. So a healthy OmniSeek

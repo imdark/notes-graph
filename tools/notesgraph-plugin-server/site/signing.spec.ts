@@ -1,4 +1,4 @@
-import { createHash, sign as nodeSign, createPrivateKey } from 'node:crypto';
+import { createHash, createPrivateKey, sign as nodeSign } from 'node:crypto';
 
 import { describe, expect, test } from 'vitest';
 

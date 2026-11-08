@@ -201,7 +201,9 @@ describe('canStartWorkflows', () => {
   test('a 403 means it may not', async () => {
     expect(
       await canStartWorkflows(
-        failing('gh: Resource not accessible by personal access token (HTTP 403)'),
+        failing(
+          'gh: Resource not accessible by personal access token (HTTP 403)'
+        ),
         'a/b'
       )
     ).toBe('no');
