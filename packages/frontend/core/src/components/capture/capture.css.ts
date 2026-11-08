@@ -8,12 +8,17 @@ export const root = style({
   gap: 20,
   width: '100%',
   maxWidth: 560,
+  // A definite height from the parent, so overflowY has something to overflow.
   height: '100%',
+  flex: '1 1 0',
+  minHeight: 0,
   margin: '0 auto',
   padding: '24px 16px',
   // The hand-off picker adds height, so the page scrolls instead of cutting
   // its buttons off.
   overflowY: 'auto',
+  overscrollBehavior: 'contain',
+  WebkitOverflowScrolling: 'touch',
   selectors: {
     // While the keyboard is up there is little height left, so the mic
     // shrinks and the text box keeps most of it.
@@ -174,6 +179,7 @@ export const handOffList = style({
   flexDirection: 'column',
   maxHeight: 220,
   overflowY: 'auto',
+  overscrollBehavior: 'contain',
 });
 
 // A whole row is the tap target, at least 44px tall on a phone.
