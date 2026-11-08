@@ -1,4 +1,4 @@
-import { LightbulbIcon } from '@blocksuite/icons/rc';
+import { AiThinkingIcon } from '@blocksuite/icons/rc';
 import { ServerFeature } from '@notesgraph/graphql';
 import { effect, Entity, LiveData, onStart } from '@notesgraph/infra';
 import { truncate } from 'lodash-es';
@@ -128,7 +128,7 @@ export class AskGraphQuickSearchSession
                   },
                   label: { title, subTitle: doc.blockContent },
                   score: doc.score,
-                  icon: LightbulbIcon,
+                  icon: AiThinkingIcon,
                   timestamp: updatedDate,
                   payload: doc,
                 } as QuickSearchItem<'docs', AskGraphPayload>;
