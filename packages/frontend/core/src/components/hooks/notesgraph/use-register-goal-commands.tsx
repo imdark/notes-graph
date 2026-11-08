@@ -12,9 +12,10 @@ import {
 } from '@blocksuite/notesgraph/std';
 import type { BlockModel } from '@blocksuite/notesgraph/store';
 import { registerNotesGraphCommand } from '@notesgraph/core/commands';
+import { AgentsService } from '@notesgraph/core/modules/agents';
 import type { Editor } from '@notesgraph/core/modules/editor';
 import { QuickSearchService } from '@notesgraph/core/modules/quicksearch';
-import { useService } from '@notesgraph/infra';
+import { useLiveData, useService } from '@notesgraph/infra';
 import { useEffect } from 'react';
 
 /**
@@ -54,6 +55,10 @@ const isGoal = (model: ListBlockModel) =>
  */
 export function useRegisterGoalCommands(editor: Editor, active: boolean) {
   const quickSearch = useService(QuickSearchService).quickSearch;
+  // The palette lists commands in registration order, and these belong
+  // under the agent commands. Those register again whenever the agent list
+  // changes (it loads after the page opens), so register again with them.
+  const agents = useLiveData(useService(AgentsService).agentsFor$('block'));
 
   useEffect(() => {
     if (!active) return;
@@ -104,5 +109,5 @@ export function useRegisterGoalCommands(editor: Editor, active: boolean) {
     return () => {
       for (const unsub of unsubs) unsub();
     };
-  }, [editor, active, quickSearch]);
+  }, [editor, active, quickSearch, agents]);
 }
