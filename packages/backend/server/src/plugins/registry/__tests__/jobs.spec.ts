@@ -996,10 +996,14 @@ test('a claimed job carries how to run it, the same for every runner', async t =
     ['checkout', 'wf project', 'task']
   );
   t.regex(workflow!.profile!.automation.setup[1].run, /name: CLOUD/);
+  // It takes turns on the shared git mirror (see withGitLock), so the
+  // command sits inside the lock.
+  const task = workflow!.profile!.automation.setup[2].run;
   t.regex(
-    workflow!.profile!.automation.setup[2].run,
-    /^wf agent prepare-task .*--prompt-file \{prompt_file\} --out \{job_dir\}\/automation\.json$/
+    task,
+    /wf agent prepare-task .*--prompt-file \{prompt_file\} --out \{job_dir\}\/automation\.json/
   );
+  t.regex(task, /flock -w \d+ 9 .*9>\{cache\}\/git\.lock/);
 
   t.is((await claimWith('command'))?.profile, null, 'not a Claude agent');
   t.is((await claimWith(null))?.profile, null);
