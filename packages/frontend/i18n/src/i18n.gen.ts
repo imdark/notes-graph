@@ -4897,6 +4897,12 @@ export function useNotesGraphI18N(): {
     ["com.notesgraph.quicksearch.group.searchfor-locally"](options: {
         readonly query: string;
     }): string;
+    ["com.notesgraph.quicksearch.group.ask-graph-learnings"](options: Readonly<{
+      query: string;
+    }>): string;
+    ["com.notesgraph.quicksearch.group.ask-graph-related"](options: Readonly<{
+      query: string;
+    }>): string;
     /**
       * `Did you mean`
       */

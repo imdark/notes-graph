@@ -4,6 +4,7 @@ import { track } from '@notesgraph/track';
 import type { DocsService } from '../../doc';
 import type { UrlService } from '../../url';
 import type { WorkbenchService } from '../../workbench';
+import { AskGraphQuickSearchSession } from '../impls/ask-graph';
 import { CollectionsQuickSearchSession } from '../impls/collections';
 import { CommandsQuickSearchSession } from '../impls/commands';
 import { CreationQuickSearchSession } from '../impls/creation';
@@ -34,6 +35,7 @@ export class CMDKQuickSearchService extends Service {
           this.framework.createEntity(CollectionsQuickSearchSession),
           this.framework.createEntity(CommandsQuickSearchSession),
           this.framework.createEntity(CreationQuickSearchSession),
+          this.framework.createEntity(AskGraphQuickSearchSession),
           this.framework.createEntity(DocsQuickSearchSession),
           this.framework.createEntity(LinksQuickSearchSession),
           this.framework.createEntity(TagsQuickSearchSession),
