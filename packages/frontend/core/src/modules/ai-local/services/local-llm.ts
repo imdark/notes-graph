@@ -59,7 +59,9 @@ export class LocalLLMService extends Service {
     // engines are never initialised at once.
     const pending = this.loadPromise;
     this.loadingModelId = modelId;
-    const run = (async () => {
+    // Declared first: the load's own `finally` compares against it.
+    let run: Promise<void> | undefined;
+    run = (async () => {
       try {
         if (pending) await pending.catch(() => {});
         if (this.engine && this.modelId === modelId) return;
