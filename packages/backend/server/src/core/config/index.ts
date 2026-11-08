@@ -27,5 +27,6 @@ export class ServerConfigModule {}
 })
 export class ServerConfigResolverModule {}
 export type { DeployInfo } from './deploy-info';
+export { readDeployInfo } from './deploy-info';
 export { ServerService };
 export { ServerFeature } from './types';
