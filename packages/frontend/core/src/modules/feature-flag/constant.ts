@@ -437,7 +437,7 @@ export const NOTESGRAPH_FLAGS = {
     defaultState: false,
   },
   enable_deploy_verify_stuck: {
-    commit: '',
+    commit: '1ac189a91d9bd57a0772fa4d4263ecfa9b653afb',
     category: 'notesgraph',
     displayName: 'Verify not-ready-to-merge tasks with Claude',
     description:
