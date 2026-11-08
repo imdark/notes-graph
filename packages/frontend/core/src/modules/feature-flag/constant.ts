@@ -436,6 +436,15 @@ export const NOTESGRAPH_FLAGS = {
     configurable: true,
     defaultState: false,
   },
+  enable_cmdk_ask_agent: {
+    commit: '',
+    category: 'notesgraph',
+    displayName: 'Ask the agent from Ctrl-K',
+    description:
+      'Typing "? your question" in Ctrl-K adds an "Ask the agent" row. It opens AI chat with the question, and the agent searches your notes for learnings and related knowledge before it answers.',
+    configurable: true,
+    defaultState: true,
+  },
 } satisfies { [key in string]: FlagInfo };
 
 // oxlint-disable-next-line no-redeclare

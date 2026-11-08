@@ -3,6 +3,7 @@ import { BlockStdScope } from '@blocksuite/notesgraph/std';
 import type { Workspace } from '@blocksuite/notesgraph/store';
 import { observeResize, useConfirmModal } from '@notesgraph/component';
 import {
+  AIAppEvents,
   AIChatRuntime,
   createAIRequestService,
   useAIChatElement,
@@ -53,6 +54,11 @@ import {
   WorkbenchService,
 } from '@notesgraph/core/modules/workbench';
 import { WorkspaceService } from '@notesgraph/core/modules/workspace';
+import {
+  pendingAskAgent$,
+  sendAskAgent,
+  takeAskAgent,
+} from '@notesgraph/core/utils/ask-agent';
 import {
   hasPendingQuickAskPrompt,
   isQuickAskWindow,
@@ -194,6 +200,41 @@ export const Component = () => {
     ) ?? null;
   const { docDisplayConfig, searchMenuConfig, reasoningConfig } =
     useAIChatConfig();
+
+  // A question asked from Ctrl-K ("? …" → Ask the agent) starts its own chat
+  // and is sent with the workspace search tools on, so the agent looks up
+  // learnings in the notes before answering. If a reply is still streaming,
+  // the question waits until it ends.
+  const runtimeReady = snapshot?.readiness === 'ready';
+  const canSend = !!snapshot?.uiPolicy.canSend;
+  useEffect(() => {
+    if (!draftReady || !runtimeReady || !canSend) return;
+    const sub = pendingAskAgent$.subscribe(pending => {
+      if (pending?.workspaceId !== workspaceId) return;
+      const question = takeAskAgent(workspaceId);
+      if (!question) return;
+      const userInfo = AIAppEvents.userInfo.value;
+      sendAskAgent(runtime, question, {
+        toolsConfig: framework.get(AIToolsConfigService).config.value,
+        modelId: framework.get(AIModelService).modelId.value,
+        reasoning: !!reasoningConfig.enabled.value,
+        userInfo: {
+          userId: userInfo?.id,
+          userName: userInfo?.name,
+          avatarUrl: userInfo?.avatarUrl ?? undefined,
+        },
+      }).catch(console.error);
+    });
+    return () => sub.unsubscribe();
+  }, [
+    canSend,
+    draftReady,
+    framework,
+    reasoningConfig,
+    runtime,
+    runtimeReady,
+    workspaceId,
+  ]);
 
   const onOpenDoc = useCallback(
     (docId: string) => {
