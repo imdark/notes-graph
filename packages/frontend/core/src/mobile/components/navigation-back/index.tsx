@@ -4,7 +4,8 @@ import {
   type IconButtonProps,
   useIsInsideModal,
 } from '@notesgraph/component';
-import { useService } from '@notesgraph/infra';
+import { WorkbenchService } from '@notesgraph/core/modules/workbench';
+import { useService, useServiceOptional } from '@notesgraph/infra';
 import { type MouseEvent, useCallback, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 
@@ -27,6 +28,7 @@ export const NavigationBackButton = ({
   const navigationGesture = useService(NavigationGestureService);
   const isInsideModal = useIsInsideModal();
 
+  const workbench = useServiceOptional(WorkbenchService)?.workbench;
   const navigate = useNavigate();
 
   const handleRouteBack = useCallback(() => {
@@ -36,14 +38,21 @@ export const NavigationBackButton = ({
     }
     // react-router stores the entry index in history.state. At index 0 (cold
     // start on a deep link) history.back() is a silent no-op, so the button
-    // looked dead; go to the root instead.
+    // looked dead; go home instead. Inside a workspace this has to go through
+    // the workbench: `navigate` here is the view's own memory router, which
+    // the view never syncs back, so it rendered the view's 404 route ('/' has
+    // no match there) while the URL and the view history stayed put.
     const idx = (window.history.state as { idx?: number } | null)?.idx;
     if (idx === 0) {
-      navigate('/', { replace: true });
+      if (workbench) {
+        workbench.open('/home', { replaceHistory: true });
+      } else {
+        navigate('/', { replace: true });
+      }
       return;
     }
     history.back();
-  }, [backAction, navigate]);
+  }, [backAction, navigate, workbench]);
 
   // Keep the editor focused on press. Otherwise the press blurs it, the
   // virtual keyboard collapses and the header shifts before the click lands,
