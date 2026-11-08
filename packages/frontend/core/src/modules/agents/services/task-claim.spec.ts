@@ -3,9 +3,11 @@ import { describe, expect, test } from 'vitest';
 
 import {
   isOpenTask,
+  isPlainBlock,
   markTasksQueued,
   markTasksStarted,
   releaseQueuedTasks,
+  readTaskStatus,
   reopenTasks,
   subBlockIds,
   targetTaskIds,
@@ -125,6 +127,24 @@ describe('isOpenTask', () => {
     expect(
       ['box', 'typed', 'queued', 'going', 'done', 'prose'].map(open)
     ).toEqual([true, true, false, false, false, false]);
+  });
+});
+
+describe('isPlainBlock', () => {
+  test('a capitalised first word is not a status keyword', () => {
+    const { store } = storeOf({
+      ai: { ops: [{ insert: 'AI agents should file bugs' }] },
+      api: { ops: [{ insert: 'API docs are stale' }] },
+      typed: { ops: [{ insert: 'WAITING on review' }] },
+      box: { ops: [{ insert: '[-] half done' }] },
+    });
+    const model = (id: string) => store.getBlock(id)!.model;
+
+    expect(
+      ['ai', 'api', 'typed', 'box'].map(id => isPlainBlock(model(id)))
+    ).toEqual([true, true, false, false]);
+    expect(readTaskStatus(model('ai'))).toBeNull();
+    expect(readTaskStatus(model('typed'))?.text).toBe('WAITING');
   });
 });
 
