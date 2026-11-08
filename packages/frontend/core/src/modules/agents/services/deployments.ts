@@ -890,6 +890,76 @@ export function shipBrief(
   };
 }
 
+/**
+ * What the agent of a verify run reads: the "Not ready to merge" tasks
+ * (COMMITTED with nothing open to merge), and how to find out for each
+ * whether its work landed some other way and set its status to match. It
+ * only reads code and GitHub; its one write is update_task. `repos` are the
+ * branches set on the screen, when known.
+ */
+export function verifyBrief(
+  tasks: (ShipTask & ShipTaskDetails & { stuck?: string | null })[],
+  repos?: readonly DeployRepo[]
+): AgentContext {
+  const title = `Verify ${plural(tasks.length, 'task')} not ready to merge`;
+  const lines = tasks.map((task, i) =>
+    [
+      `${i + 1}. ${task.title || task.text}`,
+      `   - why it's here: ${task.stuck ?? 'nothing open to merge'}`,
+      `   - pull request: ${task.pullRequest ?? 'none named'}`,
+      `   - task: block ${task.blockId} in note "${task.docTitle}" (doc ${task.docId})`,
+    ].join('\n')
+  );
+  const base = repos?.length ? 'its repo’s base branch' : 'main';
+  const deployBranch = repos?.length ? 'its repo’s deploy branch' : 'main';
+  return {
+    title,
+    label: plural(tasks.length, 'task'),
+    text: [
+      `# ${title}`,
+      '',
+      'Asked for from the Deployments screen in NotesGraph. These tasks are marked COMMITTED, but there is nothing open to merge: no pull request is named, or the one named was closed or is gone. Find out for each whether its work landed anyway, and set its status to what is true.',
+      '',
+      ...(repos && repos.length > 0
+        ? [
+            '## Branches',
+            '',
+            ...repos.map(
+              repo =>
+                `- ${repo.repo}: pull requests merge into \`${repo.baseBranch}\`; prod deploys from \`${repo.deployBranch}\``
+            ),
+            '',
+          ]
+        : []),
+      '## Tasks',
+      '',
+      ...lines,
+      '',
+      '## How to check each',
+      '',
+      '- Read the task and the notes under it (read_document, search_blocks with its docId). Agents that worked on it often name a branch, a PR, a commit or a reason there; the notes can also be wrong.',
+      '- A closed PR’s work is often redone in another PR, or folded into a later branch. Search GitHub (`gh pr list --state all --search "…"`) and git (`git log --grep`, `-S`/`-G`) by the feature’s words and by the task key in branch names (PERSONAL-nnn, CLOUD-nn), not only by the PR number.',
+      `- Trust the code over commit messages: the feature should be in ${base} as it is now. Fetch first.`,
+      `- Live means in prod’s build: the deploy_info tool’s pullRequests check (or the commit ${deployBranch} is deployed at) says whether a merged PR is out.`,
+      '',
+      '## What to set',
+      '',
+      '- In prod: `deployed`, with a note naming the merged PR(s) or commit and what in the code shows it. Never `done`: that waits for someone to check it live.',
+      `- Merged into ${base} but not deployed yet: \`merged\`, with the same kind of note.`,
+      '- Nothing to ship (a plan or research item, a duplicate, or replaced by a later task that shipped): `done`, with a note saying why and naming the task or PR that replaced it.',
+      '- No sign the work landed: `todo`, with a note saying what you searched and anything partial, such as a closed PR or a branch that never merged.',
+      '- If the evidence conflicts, or whether it counts is the user’s call (it was built differently than asked), leave the status as it is and say why in your final answer.',
+      '- Start each note with "Checked <date>:" and keep it to two or three sentences. One update_task per task, with the status and the note together.',
+      '- If an update reports an error, read the note before trying again: it may have gone through, and a second try would add the note twice.',
+      '',
+      '## Limits',
+      '',
+      '- Only read code and GitHub. Don’t merge, push, open or close PRs, delete branches or deploy; the only writes are update_task on these tasks.',
+      '- Finish with one line per task: its new status and the evidence, plus the ones you left for the user and why.',
+    ].join('\n'),
+  };
+}
+
 /** A ship run's brief opens with its title; a deploy's is one of these. */
 const DEPLOY_BRIEF = /^# (?:Merge and deploy|Deploy) \d+ features?\b/;
 
@@ -1788,6 +1858,40 @@ export class DeploymentsService extends Service {
         agent,
         target,
         shipBrief(chosen, action, { pulls: github.pulls, untracked }, repos)
+      )
+      .catch(() => {
+        // The run's own record carries any failure.
+      });
+    return target;
+  }
+
+  /**
+   * Send "Not ready to merge" tasks to `agent` to verify (see
+   * {@link verifyBrief}). The run's record sits on the first task's note,
+   * as a ship run's does. The screen's repo branches go in the brief when
+   * they are set; a verify never needs them, so none is not an error.
+   */
+  async verify(
+    agent: Agent,
+    tasks: (ShipTask & ShipTaskDetails & { stuck?: string | null })[]
+  ): Promise<AgentTarget | null> {
+    const first = tasks[0];
+    if (!first) return null;
+    if (this.deployRepos$.value === undefined) {
+      await this.refreshDeployRepos().catch(() => {});
+    }
+    const target: AgentTarget = {
+      kind: 'selection',
+      docId: first.docId,
+      blockIds: tasks
+        .filter(task => task.docId === first.docId)
+        .map(task => task.blockId),
+    };
+    this.runSessions
+      .start(
+        agent,
+        target,
+        verifyBrief(tasks, this.deployRepos$.value ?? undefined)
       )
       .catch(() => {
         // The run's own record carries any failure.
