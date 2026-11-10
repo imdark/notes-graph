@@ -34,20 +34,20 @@ function generateTitle(body) {
   return (lastSpace > 20 ? cut.slice(0, lastSpace) : cut).replace(/[.,;:\s]+$/, '') + '…';
 }
 
-const { docs } = await notesgraph.fetch('/api/workspaces/' + ws + '/docs?limit=1000');
+const { docs } = await notesgraph.fetch('/api/notes/workspaces/' + ws + '/docs?limit=1000');
 const untitled = docs.filter(doc => !doc.title.trim() && doc.docId !== ws);
 const titled = [];
 const empty = [];
 for (const doc of untitled) {
   const { markdown } = await notesgraph.fetch(
-    '/api/workspaces/' + ws + '/docs/' + encodeURIComponent(doc.docId) + '/markdown'
+    '/api/notes/workspaces/' + ws + '/docs/' + encodeURIComponent(doc.docId) + '/markdown'
   );
   const title = generateTitle(markdown || '');
   if (!title) {
     empty.push(doc.docId);
     continue;
   }
-  await notesgraph.fetch('/api/workspaces/' + ws + '/docs/' + encodeURIComponent(doc.docId), {
+  await notesgraph.fetch('/api/notes/workspaces/' + ws + '/docs/' + encodeURIComponent(doc.docId), {
     method: 'PUT',
     body: { title },
   });
@@ -55,15 +55,18 @@ for (const doc of untitled) {
   console.log('titled ' + doc.docId + ': ' + title);
 }
 for (const docId of empty) console.log('empty, left alone: ' + docId);
-console.log(titled.length + ' titled, ' + empty.length + ' empty of ' + untitled.length + ' untitled');
-return { titled, empty };
+const summary = titled.length + ' titled, ' + empty.length + ' empty of ' + untitled.length + ' untitled';
+console.log(summary);
+// summary is what a monitor running this records as its reading
+return { summary, titled, empty };
 `;
 
 /**
  * The counting half of wf learn: repeated mistakes over recent agent runs,
  * kept as to-dos in a "Proposed harness changes" note. Proposals only.
  */
-export const LEARN_FROM_RUNS_TEMPLATE = String.raw`// Counts over the last 14 days of agent runs, no model: the same tool
+export const LEARN_FROM_RUNS_TEMPLATE = String.raw`// Counts over the last 14 days of agent runs and of the Claude Code
+// conversations wf publishes as notes, no model: the same tool
 // failing the same way 3+ times in one run (stuck), the same failure in 3+
 // runs (recurring), the same question asked of you in 2+ runs, the same
 // file or note read 3+ times with no write between (reread). The findings
@@ -114,7 +117,8 @@ function signature(text) {
     .replace(/<\/?tool_use_error>/g, '')
     .split(/\r?\n/)
     .map(l => l.trim())
-    .filter(l => l && !/^Exit code \d+$/.test(l));
+    // npx prints "npm warn Unknown project config ..." ahead of the real error
+    .filter(l => l && !/^Exit code \d+$/.test(l) && !/^npm warn /i.test(l));
   if (!lines.length) return '';
   let line = lines[0].startsWith('Traceback') ? lines[lines.length - 1] : lines[0];
   line = line.replace(/(['"]).*?\1/g, '<q>');
@@ -272,42 +276,86 @@ for (const j of finished) {
   const { job } = await notesgraph.fetch(api + '/jobs/' + encodeURIComponent(j.id) + '?logFrom=0');
   scans.push(scan(job));
 }
+
+// Claude Code conversations wf publishes as notes, titled
+// "2026-10-21 TASK-13 · 9eb740b0": each tool call and result is rewritten
+// as the runner's log lines and counted the same way. A result failed when
+// it starts with a nonzero exit code or is a tool_use_error.
+const CONVERSATION_TITLE = /^(\d{4}-\d{2}-\d{2}) .* · [0-9a-f]{8}$/;
+const SECTION = /^### Tool (?:call: \u0060([^\u0060]+)\u0060|result)[ \t]*\n+\u0060\u0060\u0060[^\n]*\n([\s\S]*?)\n\u0060\u0060\u0060/gm;
+function conversationLog(markdown) {
+  const out = [];
+  for (const m of String(markdown).matchAll(SECTION)) {
+    const text = m[2].trim();
+    if (m[1]) {
+      let input = text.split(/\s+/).join(' ');
+      try { input = JSON.stringify(JSON.parse(text)); } catch {}
+      out.push('→ ' + m[1] + '  ' + input);
+      continue;
+    }
+    if (!/^Exit code [1-9]\d*\b/.test(text) && !text.includes('<tool_use_error>')) {
+      out.push('  ← ok');
+      continue;
+    }
+    const errorLines = text
+      .replace(/<\/?tool_use_error>/g, '')
+      .split(/\r?\n/)
+      .map(l => l.trim())
+      .filter(l => l && !/^Exit code \d+$/.test(l) && !/^npm warn /i.test(l) && !/^… \[\d+ chars truncated\]$/.test(l));
+    const first = errorLines[0] || 'failed';
+    out.push('  ✗ ' + (first.startsWith('Traceback') ? errorLines[errorLines.length - 1] : first));
+  }
+  return out.join('\n');
+}
+const sinceDay = since.slice(0, 10);
+const listed = await notesgraph.fetch('/api/notes/workspaces/' + ws + '/docs?q=&limit=1000');
+const conversations = listed.docs.filter(d => {
+  const m = CONVERSATION_TITLE.exec(d.title.trim());
+  return m && m[1] >= sinceDay;
+});
+console.log(conversations.length + ' conversations since ' + sinceDay);
+for (const c of conversations) {
+  const { markdown } = await notesgraph.fetch('/api/notes/workspaces/' + ws + '/docs/' + encodeURIComponent(c.docId) + '/markdown');
+  scans.push(scan({ id: c.docId, title: c.title.trim(), questions: [], log: conversationLog(markdown) }));
+}
+const seen = finished.length + ' runs and ' + conversations.length + ' conversations';
+
 const findings = detect(scans);
 for (const f of findings) f.id = await findingId(f);
 for (const f of findings) console.log(f.id + ' ' + f.kind + ': ' + f.summary);
 
-const { docs } = await notesgraph.fetch('/api/workspaces/' + ws + '/docs?q=' + encodeURIComponent(NOTE_TITLE) + '&limit=20');
+const { docs } = await notesgraph.fetch('/api/notes/workspaces/' + ws + '/docs?q=' + encodeURIComponent(NOTE_TITLE) + '&limit=20');
 const existing = docs.find(d => d.title.trim().toLowerCase() === NOTE_TITLE.toLowerCase());
 if (!existing && findings.length === 0) {
-  console.log('no repeated mistakes in ' + finished.length + ' runs; no note to write');
-  return { runs: finished.length, findings: [] };
+  console.log('no repeated mistakes in ' + seen + '; no note to write');
+  return { runs: finished.length, conversations: conversations.length, findings: [] };
 }
 let kept = new Set();
 if (existing) {
-  const { markdown } = await notesgraph.fetch('/api/workspaces/' + ws + '/docs/' + encodeURIComponent(existing.docId) + '/markdown');
+  const { markdown } = await notesgraph.fetch('/api/notes/workspaces/' + ws + '/docs/' + encodeURIComponent(existing.docId) + '/markdown');
   for (const m of String(markdown || '').matchAll(/^- \[x\] \u0060(F-[0-9a-f]{6})\u0060/gim)) kept.add(m[1]);
 }
 const lines = [
-  'Patterns counted over the agent runs of the last ' + DAYS + ' days (' + finished.length + ' runs scanned on ' + new Date().toISOString().slice(0, 10) + '), no model. Nothing here is applied: each is a proposal for the "Agent rules" note, a skill or Agent memory. Tick one once you have acted on it; it stays ticked on later nights.',
+  'Patterns counted over the agent runs and Claude Code conversations of the last ' + DAYS + ' days (' + seen + ' scanned on ' + new Date().toISOString().slice(0, 10) + '), no model. Nothing here is applied: each is a proposal for the "Agent rules" note, a skill or Agent memory. Tick one once you have acted on it; it stays ticked on later nights.',
   '',
   '## Findings',
 ];
 if (findings.length === 0) lines.push('', 'No repeated mistakes found.');
 for (const f of findings) {
-  lines.push('', '- ' + (kept.has(f.id) ? '[x]' : '[ ]') + ' ' + BT + f.id + BT + ' **' + f.kind + '**: ' + md(f.summary), '  - runs: ' + f.runs.map(r => md(r.title)).join(', '));
+  lines.push('', '- ' + (kept.has(f.id) ? '[x]' : '[ ]') + ' ' + BT + f.id + BT + ' **' + f.kind + '**: ' + md(f.summary), '  - seen in: ' + f.runs.map(r => md(r.title)).join(', '));
   for (const ex of f.examples) lines.push('  - e.g. ' + BT + ex + BT);
   if (f.untrusted) lines.push('  - review closely: a run behind this read web content');
 }
 const markdown = lines.join('\n');
 let docId = existing && existing.docId;
 if (docId) {
-  await notesgraph.fetch('/api/workspaces/' + ws + '/docs/' + encodeURIComponent(docId), { method: 'PUT', body: { markdown } });
+  await notesgraph.fetch('/api/notes/workspaces/' + ws + '/docs/' + encodeURIComponent(docId), { method: 'PUT', body: { markdown } });
 } else {
-  const created = await notesgraph.fetch('/api/workspaces/' + ws + '/docs', { method: 'POST', body: { title: NOTE_TITLE, markdown, folder: FOLDER } });
+  const created = await notesgraph.fetch('/api/notes/workspaces/' + ws + '/docs', { method: 'POST', body: { title: NOTE_TITLE, markdown, folder: FOLDER } });
   docId = created.docId;
 }
 console.log(findings.length + ' findings; "' + NOTE_TITLE + '" is up to date (' + docId + ')');
-return { runs: finished.length, findings: findings.map(f => f.id + ' ' + f.summary), docId };
+return { runs: finished.length, conversations: conversations.length, findings: findings.map(f => f.id + ' ' + f.summary), docId };
 `;
 
 export const NIGHTLY_TEMPLATES = [
@@ -322,9 +370,9 @@ export const NIGHTLY_TEMPLATES = [
   },
   {
     id: 'learn-from-runs',
-    name: 'Learn from agent runs nightly',
+    name: 'Learn from agent runs and conversations nightly',
     description:
-      'Every night at 4am, count repeated mistakes over the last 14 days of agent runs and keep the "Proposed harness changes" note current. Proposals only.',
+      'Every night at 4am, count repeated mistakes over the last 14 days of agent runs and Claude Code conversations and keep the "Proposed harness changes" note current. Proposals only.',
     triggers: [{ type: 'cron', expr: '0 4 * * *' }],
     code: LEARN_FROM_RUNS_TEMPLATE,
     timeoutSeconds: 10 * 60,

@@ -436,6 +436,34 @@ export const NOTESGRAPH_FLAGS = {
     configurable: true,
     defaultState: false,
   },
+  enable_cmdk_ask_agent: {
+    commit: '3e0fe3d5b3c7c10b964ec293f8ac8e89354e84b0',
+    category: 'notesgraph',
+    displayName: 'Ask the agent from Ctrl-K',
+    description:
+      'Typing "? your question" in Ctrl-K adds an "Ask the agent" row. It opens AI chat with the question, and the agent searches your notes for learnings and related knowledge before it answers.',
+    configurable: true,
+    defaultState: true,
+  },
+  enable_deploy_verify_stuck: {
+    commit: '1ac189a91d9bd57a0772fa4d4263ecfa9b653afb',
+    category: 'notesgraph',
+    displayName: 'Verify not-ready-to-merge tasks with Claude',
+    description:
+      'A Verify with Claude button on the Not ready to merge section of the Deployments page. Claude Code finds out for each task whether its work landed some other way (a merged PR, redone in another PR, on the base branch), then sets it deployed, merged, done or back to todo, with a note giving the evidence.',
+    configurable: true,
+    defaultState: true,
+  },
+  enable_special_tags: {
+    commit: '7bdd594f3578a8ad2034071ae4a412c617c121c5',
+    category: 'notesgraph',
+    displayName:
+      'Special tags for journal, AI conversation, calendar and captured notes',
+    description:
+      'Tags journal pages, AI conversations, calendar event notes and ideas from capture mode with a Journal, AI conversation, Calendar event or Captured idea tag, once each. Journal, conversation and calendar notes are never suggested as parents and stay out of the Inbox and the Duplicates page. All four can be searched with is:journal, is:conversation, is:calendar and is:idea (or left out with -is:). Remove the tag to make a note ordinary again.',
+    configurable: true,
+    defaultState: true,
+  },
 } satisfies { [key in string]: FlagInfo };
 
 // oxlint-disable-next-line no-redeclare

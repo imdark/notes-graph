@@ -4904,6 +4904,20 @@ export function useNotesGraphI18N(): {
       query: string;
     }>): string;
     /**
+      * `Agent`
+      */
+    ["com.notesgraph.quicksearch.group.ask-graph-agent"](): string;
+    /**
+      * `Ask the agent: {{query}}`
+      */
+    ["com.notesgraph.quicksearch.ask-graph-agent"](options: {
+        readonly query: string;
+    }): string;
+    /**
+      * `Searches your notes and learnings, then answers in AI chat`
+      */
+    ["com.notesgraph.quicksearch.ask-graph-agent.hint"](): string;
+    /**
       * `Did you mean`
       */
     ["com.notesgraph.quicksearch.group.did-you-mean"](): string;
@@ -9806,6 +9820,28 @@ export function useNotesGraphI18N(): {
       * `Something new`
       */
     ["com.notesgraph.discover.interests.discover"](): string;
+    /**
+      * `Added by you`
+      */
+    ["com.notesgraph.discover.interests.added"](): string;
+    /**
+      * `Re-read my notes`
+      */
+    ["com.notesgraph.discover.interests.regenerate"](): string;
+    /**
+      * `Add an interest`
+      */
+    ["com.notesgraph.discover.interests.add.placeholder"](): string;
+    /**
+      * `Remove {{topic}}`
+      */
+    ["com.notesgraph.discover.interests.remove"](options: Readonly<{
+        topic: string;
+    }>): string;
+    /**
+      * `Undo my changes`
+      */
+    ["com.notesgraph.discover.interests.reset"](): string;
     /**
       * `Sync`
       */

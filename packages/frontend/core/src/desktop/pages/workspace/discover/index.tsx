@@ -1,4 +1,4 @@
-import { Button, Checkbox, notify } from '@notesgraph/component';
+import { Button, Checkbox, Input, notify } from '@notesgraph/component';
 import { DocsService } from '@notesgraph/core/modules/doc';
 import { JournalService } from '@notesgraph/core/modules/journal';
 import { GlobalCacheService } from '@notesgraph/core/modules/storage';
@@ -30,13 +30,19 @@ import {
   saveTopics,
 } from './feed';
 import {
+  addInterest,
   AREA_LABELS,
   deriveInterests,
+  type InterestEdits,
   INTERESTS_MAX_AGE_MS,
   interestSearchTopics,
+  loadInterestEdits,
   loadInterests,
   loadUseInterests,
+  NO_EDITS,
   type NotesSnapshot,
+  removeInterest,
+  saveInterestEdits,
   saveInterests,
   saveUseInterests,
   type UserInterests,
@@ -192,56 +198,124 @@ const InterestsRow = ({
   enabled,
   onToggle,
   interests,
+  edits,
   topics,
+  regenerating,
+  onRegenerate,
+  onRemove,
+  onAdd,
+  onReset,
 }: {
   enabled: boolean;
   onToggle: () => void;
   interests: UserInterests | null;
+  edits: InterestEdits;
   topics: string[];
+  regenerating: boolean;
+  onRegenerate: () => void;
+  onRemove: (topic: string) => void;
+  onAdd: (topic: string) => void;
+  onReset: () => void;
 }) => {
   const t = useI18n();
+  const [draft, setDraft] = useState('');
   const groups = useMemo(() => {
     const general = new Set(interests?.general.map(i => i.label));
     const discover = new Set(interests?.discover);
+    const added = new Set(edits.added);
     return [
+      {
+        kind: 'added',
+        label: t['com.notesgraph.discover.interests.added'](),
+        topics: topics.filter(x => added.has(x)),
+      },
       {
         kind: 'specific',
         label: t['com.notesgraph.discover.interests.specific'](),
-        topics: topics.filter(x => !general.has(x) && !discover.has(x)),
+        topics: topics.filter(
+          x => !added.has(x) && !general.has(x) && !discover.has(x)
+        ),
       },
       {
         kind: 'general',
         label: t['com.notesgraph.discover.interests.general'](),
-        topics: topics.filter(x => general.has(x)),
+        topics: topics.filter(x => !added.has(x) && general.has(x)),
       },
       {
         kind: 'discover',
         label: t['com.notesgraph.discover.interests.discover'](),
-        topics: topics.filter(x => discover.has(x)),
+        topics: topics.filter(x => !added.has(x) && discover.has(x)),
       },
     ];
-  }, [interests, topics, t]);
+  }, [interests, edits.added, topics, t]);
+
+  const submit = useCallback(() => {
+    if (!draft.trim()) return;
+    onAdd(draft);
+    setDraft('');
+  }, [draft, onAdd]);
+
+  const edited = edits.added.length > 0 || edits.removed.length > 0;
 
   return (
     <div className={styles.interests}>
-      <label className={styles.interestsToggle}>
-        <Checkbox checked={enabled} onChange={onToggle} />
-        {t['com.notesgraph.discover.interests.toggle']()}
-      </label>
-      {enabled
-        ? groups.map(group =>
+      <div className={styles.interestsBar}>
+        <label className={styles.interestsToggle}>
+          <Checkbox checked={enabled} onChange={onToggle} />
+          {t['com.notesgraph.discover.interests.toggle']()}
+        </label>
+        {enabled ? (
+          <>
+            <Button
+              variant="plain"
+              size="default"
+              loading={regenerating}
+              disabled={regenerating}
+              onClick={onRegenerate}
+            >
+              {t['com.notesgraph.discover.interests.regenerate']()}
+            </Button>
+            {edited ? (
+              <Button variant="plain" size="default" onClick={onReset}>
+                {t['com.notesgraph.discover.interests.reset']()}
+              </Button>
+            ) : null}
+          </>
+        ) : null}
+      </div>
+      {enabled ? (
+        <>
+          {groups.map(group =>
             group.topics.length ? (
               <div key={group.kind} className={styles.interestsGroup}>
                 <span className={styles.interestsLabel}>{group.label}</span>
                 {group.topics.map(topic => (
                   <span key={topic} className={styles.interestChip}>
                     {topic}
+                    <button
+                      type="button"
+                      className={styles.interestRemove}
+                      aria-label={t['com.notesgraph.discover.interests.remove']({
+                        topic,
+                      })}
+                      onClick={() => onRemove(topic)}
+                    >
+                      ×
+                    </button>
                   </span>
                 ))}
               </div>
             ) : null
-          )
-        : null}
+          )}
+          <Input
+            className={styles.interestAdd}
+            placeholder={t['com.notesgraph.discover.interests.add.placeholder']()}
+            value={draft}
+            onChange={setDraft}
+            onEnter={submit}
+          />
+        </>
+      ) : null}
     </div>
   );
 };
@@ -270,33 +344,74 @@ const DiscoverPage = () => {
     loadInterests(globalCache, workspaceId)
   );
 
+  const [edits, setEdits] = useState<InterestEdits>(() =>
+    loadInterestEdits(globalCache, workspaceId)
+  );
+  const [regenerating, setRegenerating] = useState(false);
+
+  const readInterests = useCallback(async () => {
+    const derived = deriveInterests(
+      await readNotesSnapshot(docsService, tagService)
+    );
+    saveInterests(globalCache, workspaceId, derived);
+    return derived;
+  }, [docsService, tagService, globalCache, workspaceId]);
+
   // Re-read the notes for interests when there are none stored yet or the
   // stored ones are more than a day old.
   useEffect(() => {
     const stored = loadInterests(globalCache, workspaceId);
     setInterests(stored);
+    setEdits(loadInterestEdits(globalCache, workspaceId));
     if (stored && Date.now() - stored.computedAt <= INTERESTS_MAX_AGE_MS) {
       return;
     }
     let cancelled = false;
-    readNotesSnapshot(docsService, tagService)
-      .then(snapshot => {
-        const derived = deriveInterests(snapshot);
-        saveInterests(globalCache, workspaceId, derived);
+    readInterests()
+      .then(derived => {
         if (!cancelled) setInterests(derived);
       })
       .catch(() => {});
     return () => {
       cancelled = true;
     };
-  }, [docsService, tagService, globalCache, workspaceId]);
+  }, [readInterests, globalCache, workspaceId]);
+
+  const regenerate = useCallback(() => {
+    setRegenerating(true);
+    readInterests()
+      .then(setInterests)
+      .catch(console.error)
+      .finally(() => setRegenerating(false));
+  }, [readInterests]);
+
+  const updateEdits = useCallback(
+    (change: (prev: InterestEdits) => InterestEdits) => {
+      setEdits(prev => {
+        const next = change(prev);
+        saveInterestEdits(globalCache, workspaceId, next);
+        return next;
+      });
+    },
+    [globalCache, workspaceId]
+  );
+  const onRemoveInterest = useCallback(
+    (topic: string) => updateEdits(prev => removeInterest(prev, topic)),
+    [updateEdits]
+  );
+  const onAddInterest = useCallback(
+    (topic: string) => updateEdits(prev => addInterest(prev, topic)),
+    [updateEdits]
+  );
+  const onResetInterests = useCallback(
+    () => updateEdits(() => NO_EDITS),
+    [updateEdits]
+  );
 
   const interestTopics = useMemo(
     () =>
-      useInterests && interests
-        ? interestSearchTopics(interests, manualTopics)
-        : [],
-    [useInterests, interests, manualTopics]
+      useInterests ? interestSearchTopics(interests, manualTopics, edits) : [],
+    [useInterests, interests, manualTopics, edits]
   );
   const topics = useMemo(
     () => [...manualTopics, ...interestTopics],
@@ -451,7 +566,13 @@ const DiscoverPage = () => {
             enabled={useInterests}
             onToggle={toggleInterests}
             interests={interests}
+            edits={edits}
             topics={interestTopics}
+            regenerating={regenerating}
+            onRegenerate={regenerate}
+            onRemove={onRemoveInterest}
+            onAdd={onAddInterest}
+            onReset={onResetInterests}
           />
           {feed.length === 0 ? (
             <div className={styles.status}>

@@ -29,6 +29,7 @@ import {
   type ShipTaskDetails,
   shownStage,
   stuckReason,
+  unlistedPullRequests,
 } from '@notesgraph/core/modules/agents';
 import {
   FeatureFlagService,
@@ -424,6 +425,10 @@ export const DeploymentsView = () => {
   const repoBranches = useLiveData(
     useService(FeatureFlagService).flags.enable_deploy_repo_branches.$
   );
+  // Claude Code checks the "Not ready to merge" tasks and sets them right.
+  const verifyStuck = useLiveData(
+    useService(FeatureFlagService).flags.enable_deploy_verify_stuck.$
+  );
   const deployRepos = useLiveData(deployments.deployRepos$);
   useEffect(() => {
     if (repoBranches) deployments.refreshDeployRepos().catch(() => {});
@@ -536,6 +541,27 @@ export const DeploymentsView = () => {
   useEffect(() => {
     if (notesRead) refresh();
   }, [notesRead, refresh]);
+
+  // A COMMITTED task's pull request that the list doesn't have isn't open:
+  // it was merged before the latest merges, or closed. Ask GitHub which,
+  // once a list read without error says what is open, so the task leaves
+  // "Ready to merge" without a "Check ready branches".
+  const listedOk = github.at !== null && !github.loading && !github.error;
+  const unlisted = useMemo(
+    () =>
+      listedOk
+        ? unlistedPullRequests(
+            rows,
+            new Set(pullsByUrl.keys()),
+            new Set(branchChecks.keys())
+          )
+        : [],
+    [listedOk, rows, pullsByUrl, branchChecks]
+  );
+  useEffect(() => {
+    if (!agent || unlisted.length === 0) return;
+    deployments.lookUpUnlisted(agent, unlisted).catch(() => {});
+  }, [agent, deployments, unlisted]);
 
   // Open pull requests no task names, and merged ones no task names.
   const named = useMemo(
@@ -815,6 +841,28 @@ export const DeploymentsView = () => {
     },
     [agent, deployments, github.pulls, repoBranches, rows]
   );
+
+  /**
+   * Hand the "Not ready to merge" tasks to Claude Code to find out whether
+   * each one's work landed, and set its status with the evidence.
+   */
+  const verifyWithClaude = useCallback(async () => {
+    if (!agent || stuck.length === 0) return;
+    try {
+      const target = await deployments.verify(agent, stuck);
+      if (!target) return;
+      setSent({ agentId: agent.id, target });
+      notify.success({
+        title: `Sent ${stuck.length} task${stuck.length === 1 ? '' : 's'} to Claude to verify`,
+        message: `${agent.name} on ${agent.deviceKey} checks each against GitHub and the code, then updates its status with a note. Ones it can't decide it leaves for you.`,
+      });
+    } catch (err) {
+      notify.error({
+        title: "Couldn't send it",
+        message: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }, [agent, deployments, stuck]);
 
   /**
    * Merge the chosen tasks and deploy, with the merge and deploy automations
@@ -1306,6 +1354,19 @@ export const DeploymentsView = () => {
             or without its branch. Mark it merged if the work is on main another
             way, or done if nothing is left to ship.
           </div>
+          {verifyStuck && agent ? (
+            <div className={styles.rowActions}>
+              <Button
+                variant="primary"
+                onClick={() => void verifyWithClaude()}
+                disabled={busy}
+                tooltip="Claude Code checks each task against GitHub and the code: where its work landed, or that it didn't. It sets each one deployed, merged, done or back to todo with a note giving the evidence, and leaves the unclear ones for you. It merges and deploys nothing."
+                data-testid="deployments-stuck-verify"
+              >
+                Verify with Claude ({stuck.length})
+              </Button>
+            </div>
+          ) : null}
           <div className={styles.rows}>
             {stuck.map(row => {
               const key = rowKey(row);

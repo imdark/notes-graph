@@ -1,11 +1,13 @@
 /**
  * NotesGraph Web Clipper — background service worker.
  *
- * Flow: inject the extractor into the active tab (the user's authenticated
- * session) → capture title/text/images (fetched IN the page so cookies/referer
- * are the user's) → open the NotesGraph app's /clipper/import receiver → hand
- * off a ClipperInput via window.postMessage. The app persists the attachments
- * as blobs (ImportClipperService + MarkdownTransformer.importMarkdownWithAssets).
+ * Flow: open the NotesGraph app's /clipper/import receiver in a background tab
+ * and hand it a pending ClipperInput (title + link) via window.postMessage, so
+ * the note exists at once. Meanwhile inject the extractor into the active tab
+ * (the user's authenticated session) and capture title/text/images (fetched IN
+ * the page so cookies/referer are the user's), then send that as the full
+ * ClipperInput, which the app writes into the same note and stores the
+ * attachments as blobs (ImportClipperService.fillClippedDoc).
  */
 
 const DEFAULT_APP_BASE = 'https://app.notesgraph.com';
@@ -99,24 +101,33 @@ function deliverToApp(payload) {
     sourceUrl: payload.sourceUrl,
     attachments,
     workspace: payload.workspace,
+    pending: !!payload.pending,
   };
-  let done = false;
-  const started = Date.now();
-  const send = () => {
-    if (done || Date.now() - started > 20_000) return;
-    // A port can be transferred only once, so each send gets its own.
-    const channel = new MessageChannel();
-    channel.port1.onmessage = () => {
-      done = true;
+  // Resolves true once the page answers, false if it hasn't in 20s.
+  return new Promise(resolve => {
+    let done = false;
+    const started = Date.now();
+    const send = () => {
+      if (done) return;
+      if (Date.now() - started > 20_000) {
+        resolve(false);
+        return;
+      }
+      // A port can be transferred only once, so each send gets its own.
+      const channel = new MessageChannel();
+      channel.port1.onmessage = () => {
+        done = true;
+        resolve(true);
+      };
+      window.postMessage(
+        { type: 'notesgraph-clipper:import', payload: clipperInput },
+        '*',
+        [channel.port2]
+      );
+      setTimeout(send, 500);
     };
-    window.postMessage(
-      { type: 'notesgraph-clipper:import', payload: clipperInput },
-      '*',
-      [channel.port2]
-    );
-    setTimeout(send, 500);
-  };
-  send();
+    send();
+  });
 }
 
 /**
@@ -180,12 +191,61 @@ function buildMarkdown(clip, imageKeys, videoKey, hasAudio) {
   return parts.join('\n');
 }
 
+function sendToAppTab(tabId, payload) {
+  return chrome.scripting
+    .executeScript({ target: { tabId }, func: deliverToApp, args: [payload] })
+    .then(([r]) => !!(r && r.result));
+}
+
+/**
+ * Starts a clip and returns as soon as the NotesGraph tab is open, so the
+ * popup isn't held while the page is read. The note is made first from the
+ * tab's title and link; the text, images and video follow when they're read.
+ */
 async function clipActiveTab() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab || !tab.id || /^(chrome|edge|about):/.test(tab.url || '')) {
     throw new Error('This page cannot be clipped.');
   }
+  const appBase = await getAppBase();
+  // Opened behind the current tab, so reading the page isn't interrupted.
+  const appTab = await chrome.tabs.create({
+    url: `${appBase}/clipper/import`,
+    active: false,
+  });
+  void finishClip(tab, appTab.id).catch(console.error);
+  return { started: true };
+}
 
+async function finishClip(tab, appTabId) {
+  const title = tab.title || 'Clipped page';
+  const noteCreated = waitForTabComplete(appTabId).then(() =>
+    sendToAppTab(appTabId, {
+      pending: true,
+      title,
+      contentMarkdown: `# ${title}\n\n[Original](${tab.url})\n\n_Clipping the page…_`,
+      sourceUrl: tab.url,
+      workspace: 'last-open-workspace',
+    })
+  );
+  const content = readClip(tab).catch(err => ({
+    title,
+    contentMarkdown: `# ${title}\n\n[Original](${tab.url})\n\nCouldn't clip the page: ${
+      err && err.message ? err.message : err
+    }`,
+    sourceUrl: tab.url,
+    workspace: 'last-open-workspace',
+  }));
+  if (!(await noteCreated)) {
+    // Not signed in, or no workspace to pick by itself: show the tab so the
+    // user can finish there. The content is sent to it all the same.
+    await chrome.tabs.update(appTabId, { active: true });
+  }
+  await sendToAppTab(appTabId, await content);
+}
+
+/** Reads the page's text, images and any captured video into a payload. */
+async function readClip(tab) {
   const [{ result: clip }] = await withTimeout(
     chrome.scripting
       .executeScript({ target: { tabId: tab.id }, files: ['extract-clip.js'] })
@@ -218,7 +278,7 @@ async function clipActiveTab() {
     attachmentsData[videoKey] = video.dataUrl;
   }
 
-  const payload = {
+  return {
     title: clip.title || clip.siteName || 'Clipped page',
     contentMarkdown: buildMarkdown(
       clip,
@@ -233,16 +293,6 @@ async function clipActiveTab() {
     sourceUrl: clip.url,
     workspace: 'last-open-workspace',
   };
-
-  const appBase = await getAppBase();
-  const appTab = await chrome.tabs.create({ url: `${appBase}/clipper/import` });
-  await waitForTabComplete(appTab.id);
-  await chrome.scripting.executeScript({
-    target: { tabId: appTab.id },
-    func: deliverToApp,
-    args: [payload],
-  });
-  return { images: imageKeys.length, video: !!videoKey };
 }
 
 chrome.commands.onCommand.addListener(command => {

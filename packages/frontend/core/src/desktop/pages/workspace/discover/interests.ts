@@ -493,11 +493,13 @@ const SEARCH_GENERAL = 3;
  * the user's own manual topics.
  */
 export function interestSearchTopics(
-  interests: UserInterests,
-  manual: string[] = []
+  interests: UserInterests | null,
+  manual: string[] = [],
+  edits: InterestEdits = NO_EDITS
 ): string[] {
   const out: string[] = [];
   const seen = new Set(manual.map(t => t.toLowerCase()));
+  const removed = new Set(edits.removed.map(t => t.toLowerCase()));
   const add = (t: string) => {
     const key = t.toLowerCase();
     if (!seen.has(key)) {
@@ -505,10 +507,87 @@ export function interestSearchTopics(
       out.push(t);
     }
   };
-  interests.specific.slice(0, SEARCH_SPECIFIC).forEach(i => add(i.label));
-  interests.general.slice(0, SEARCH_GENERAL).forEach(i => add(i.label));
-  interests.discover.forEach(add);
+  // Removed interests are dropped before the cut, so the next strongest one
+  // takes the freed slot.
+  const kept = (label: string) => !removed.has(label.toLowerCase());
+  edits.added.forEach(add);
+  if (interests) {
+    interests.specific
+      .filter(i => kept(i.label))
+      .slice(0, SEARCH_SPECIFIC)
+      .forEach(i => add(i.label));
+    interests.general
+      .filter(i => kept(i.label))
+      .slice(0, SEARCH_GENERAL)
+      .forEach(i => add(i.label));
+    interests.discover.filter(kept).forEach(add);
+  }
   return out;
+}
+
+/**
+ * The user's changes to the interests read from their notes: ones they took
+ * out and ones they added themselves. Kept apart from the derived interests so
+ * re-reading the notes doesn't undo them.
+ */
+export interface InterestEdits {
+  removed: string[];
+  added: string[];
+}
+
+export const NO_EDITS: InterestEdits = { removed: [], added: [] };
+
+const sameLabel = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
+
+/** Take an interest out of the feed; an added one is simply forgotten. */
+export function removeInterest(
+  edits: InterestEdits,
+  label: string
+): InterestEdits {
+  if (edits.added.some(a => sameLabel(a, label))) {
+    return {
+      ...edits,
+      added: edits.added.filter(a => !sameLabel(a, label)),
+    };
+  }
+  if (edits.removed.some(r => sameLabel(r, label))) return edits;
+  return { ...edits, removed: [...edits.removed, label] };
+}
+
+/** Add an interest of the user's own; adding a removed one brings it back. */
+export function addInterest(
+  edits: InterestEdits,
+  label: string
+): InterestEdits {
+  const trimmed = label.trim().replace(/\s+/g, ' ');
+  if (!trimmed) return edits;
+  const removed = edits.removed.filter(r => !sameLabel(r, trimmed));
+  if (removed.length !== edits.removed.length) {
+    return { ...edits, removed };
+  }
+  if (edits.added.some(a => sameLabel(a, trimmed))) return edits;
+  return { ...edits, added: [...edits.added, trimmed] };
+}
+
+const EDITS_PREFIX = 'discover:interest-edits:v1:';
+
+export function loadInterestEdits(
+  cache: Memento,
+  workspaceId: string
+): InterestEdits {
+  const value = cache.get<InterestEdits>(EDITS_PREFIX + workspaceId);
+  if (value && Array.isArray(value.removed) && Array.isArray(value.added)) {
+    return value;
+  }
+  return NO_EDITS;
+}
+
+export function saveInterestEdits(
+  cache: Memento,
+  workspaceId: string,
+  edits: InterestEdits
+): void {
+  cache.set<InterestEdits>(EDITS_PREFIX + workspaceId, edits);
 }
 
 const INTERESTS_PREFIX = 'discover:interests:v1:';
