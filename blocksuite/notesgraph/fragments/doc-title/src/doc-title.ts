@@ -19,6 +19,7 @@ import { css, html } from 'lit';
 import { property, query, state } from 'lit/decorators.js';
 
 const DOC_BLOCK_CHILD_PADDING = 24;
+const META_TITLE_UPDATE_DELAY = 300;
 
 export class DocTitle extends WithDisposable(ShadowlessElement) {
   static override styles = css`
@@ -140,10 +141,36 @@ export class DocTitle extends WithDisposable(ShadowlessElement) {
   };
 
   private readonly _updateTitleInMeta = () => {
+    this._cancelPendingMetaUpdate();
     if (!this._rootModel) return;
-    this.doc.workspace.meta.setDocMeta(this.doc.id, {
-      title: this._rootModel.props.title.toString(),
-    });
+    const title = this._rootModel.props.title.toString();
+    if (this.doc.workspace.meta.getDocMeta(this.doc.id)?.title === title) {
+      return;
+    }
+    this.doc.workspace.meta.setDocMeta(this.doc.id, { title });
+  };
+
+  // Writing the workspace meta re-runs every doc-list subscriber (title
+  // index, reference nodes, sidebar), each of which walks all docs. Doing that
+  // per keystroke made typing in the title lag, so it waits for a pause.
+  private _metaUpdateTimer: ReturnType<typeof setTimeout> | null = null;
+
+  private _cancelPendingMetaUpdate() {
+    if (this._metaUpdateTimer === null) return;
+    clearTimeout(this._metaUpdateTimer);
+    this._metaUpdateTimer = null;
+  }
+
+  private _scheduleMetaUpdate() {
+    this._cancelPendingMetaUpdate();
+    this._metaUpdateTimer = setTimeout(
+      this._updateTitleInMeta,
+      META_TITLE_UPDATE_DELAY
+    );
+  }
+
+  private readonly _flushMetaUpdate = () => {
+    if (this._metaUpdateTimer !== null) this._updateTitleInMeta();
   };
 
   private get _std() {
@@ -198,15 +225,18 @@ export class DocTitle extends WithDisposable(ShadowlessElement) {
     );
 
     const updateMetaTitle = () => {
-      this._updateTitleInMeta();
+      this._scheduleMetaUpdate();
       this.requestUpdate();
     };
+
+    this._disposables.addFromEvent(this, 'focusout', this._flushMetaUpdate);
 
     if (this._rootModel) {
       const rootModel = this._rootModel;
       rootModel.props.title.yText.observe(updateMetaTitle);
       this._disposables.add(() => {
         rootModel.props.title.yText.unobserve(updateMetaTitle);
+        this._flushMetaUpdate();
       });
     }
   }
