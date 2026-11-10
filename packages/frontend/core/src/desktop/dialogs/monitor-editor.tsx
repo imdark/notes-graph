@@ -32,8 +32,11 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import * as styles from './setting/workspace-setting/agents/styles.css';
 
-/** What a monitor watches, as the editor offers it. */
-type What = 'url' | 'command' | 'agent';
+/**
+ * What a monitor watches, as the editor offers it. 'automation' (a monitor
+ * that runs a workspace automation) is made elsewhere and only edited here.
+ */
+type What = 'url' | 'command' | 'agent' | 'automation';
 
 const WHAT: { value: What; label: string; note: string }[] = [
   { value: 'url', label: 'A website or API', note: 'Fetched by the server' },
@@ -218,7 +221,8 @@ export const MonitorEditorDialog = ({
 
   const kind: MonitorKind = what === 'agent' ? 'agent' : 'check';
   const minimum = MIN_INTERVAL_MINUTES[kind];
-  const needsDevice = what !== 'url';
+  // An automation runs on the device it's deployed to, not one picked here.
+  const needsDevice = what !== 'url' && what !== 'automation';
 
   useEffect(() => {
     if (!needsDevice) return;
@@ -289,18 +293,23 @@ export const MonitorEditorDialog = ({
                 command: command.trim(),
                 extract: { type: extractType, pattern: pattern || undefined },
               }
-            : {
-                instructions: instructions.trim(),
-                model,
-                tools:
-                  (agent ? runAs(agent).tools : existing?.spec.tools) ?? [],
-                // With the flag off, a monitor keeps what it was saved with.
-                skills: skillsEnabled
-                  ? skills.length
-                    ? skills
-                    : undefined
-                  : existing?.spec.skills,
-              },
+            : what === 'automation'
+              ? {
+                  automationId: existing?.spec.automationId,
+                  extract: { type: extractType, pattern: pattern || undefined },
+                }
+              : {
+                  instructions: instructions.trim(),
+                  model,
+                  tools:
+                    (agent ? runAs(agent).tools : existing?.spec.tools) ?? [],
+                  // With the flag off, a monitor keeps what it was saved with.
+                  skills: skillsEnabled
+                    ? skills.length
+                      ? skills
+                      : undefined
+                    : existing?.spec.skills,
+                },
       intervalMinutes: Math.max(interval, minimum),
       condition:
         conditionType === 'above' || conditionType === 'below'
@@ -439,7 +448,9 @@ export const MonitorEditorDialog = ({
       ? /^https?:\/\//.test(url.trim())
       : what === 'command'
         ? !!command.trim() && !!deviceKey
-        : !!instructions.trim() && !!deviceKey;
+        : what === 'automation'
+          ? !!existing?.spec.automationId
+          : !!instructions.trim() && !!deviceKey;
   const patternOk =
     what === 'agent' ||
     !['regex', 'jsonpath'].includes(extractType) ||
@@ -467,31 +478,42 @@ export const MonitorEditorDialog = ({
             />
           </div>
 
-          <div className={styles.field}>
-            <span className={styles.label}>Watch</span>
-            <div className={styles.checkGrid} role="radiogroup">
-              {WHAT.map(option => (
-                <label
-                  key={option.value}
-                  className={styles.check}
-                  title={option.note}
-                >
-                  <Checkbox
-                    role="radio"
-                    aria-checked={what === option.value}
-                    checked={what === option.value}
-                    onChange={() => {
-                      setWhat(option.value);
-                      if (option.value === 'agent' && interval < 60)
-                        setInterval(360);
-                    }}
-                    data-testid={`monitor-what-${option.value}`}
-                  />
-                  {option.label}
-                </label>
-              ))}
+          {what === 'automation' ? (
+            <div className={styles.field}>
+              <span className={styles.label}>Watch</span>
+              <span className={styles.hint} data-testid="monitor-automation">
+                Runs a workspace automation each time, on the device it is
+                deployed to, and reads the value from its output. Its code is on
+                the Automations page.
+              </span>
             </div>
-          </div>
+          ) : (
+            <div className={styles.field}>
+              <span className={styles.label}>Watch</span>
+              <div className={styles.checkGrid} role="radiogroup">
+                {WHAT.map(option => (
+                  <label
+                    key={option.value}
+                    className={styles.check}
+                    title={option.note}
+                  >
+                    <Checkbox
+                      role="radio"
+                      aria-checked={what === option.value}
+                      checked={what === option.value}
+                      onChange={() => {
+                        setWhat(option.value);
+                        if (option.value === 'agent' && interval < 60)
+                          setInterval(360);
+                      }}
+                      data-testid={`monitor-what-${option.value}`}
+                    />
+                    {option.label}
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
 
           {what === 'url' ? (
             <div className={styles.field}>

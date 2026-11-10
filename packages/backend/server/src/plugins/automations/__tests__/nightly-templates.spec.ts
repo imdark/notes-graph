@@ -117,6 +117,7 @@ test('titling names untitled notes from their body and leaves empty ones', async
     ]
   );
   t.deepEqual(output, {
+    summary: '2 titled, 1 empty of 3 untitled',
     titled: [
       { docId: 'a', title: 'The fastest drone simulator' },
       {

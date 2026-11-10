@@ -55,8 +55,10 @@ for (const doc of untitled) {
   console.log('titled ' + doc.docId + ': ' + title);
 }
 for (const docId of empty) console.log('empty, left alone: ' + docId);
-console.log(titled.length + ' titled, ' + empty.length + ' empty of ' + untitled.length + ' untitled');
-return { titled, empty };
+const summary = titled.length + ' titled, ' + empty.length + ' empty of ' + untitled.length + ' untitled';
+console.log(summary);
+// summary is what a monitor running this records as its reading
+return { summary, titled, empty };
 `;
 
 /**

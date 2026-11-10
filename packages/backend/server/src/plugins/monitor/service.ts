@@ -14,6 +14,7 @@ import { DocWriter } from '../../core/doc';
 import { NotificationService } from '../../core/notification/service';
 import { PermissionAccess } from '../../core/permission';
 import { DocMode, Models } from '../../models';
+import { AutomationService } from '../automations/service';
 import { AgentPushService, RegistryJobService } from '../registry';
 import {
   blockLine,
@@ -42,11 +43,17 @@ declare global {
 }
 
 export type MonitorKind = 'check' | 'agent';
-export type MonitorSource = 'url' | 'command';
+export type MonitorSource = 'url' | 'command' | 'automation';
 
 export interface MonitorSpec {
   url?: string;
   command?: string;
+  /**
+   * automation: the workspace automation each run starts. Its deployed code
+   * runs on its own device; the run's output is the result `extract` reads
+   * (a `summary` field via jsonpath, say).
+   */
+  automationId?: string;
   extract?: ExtractSpec;
   /**
    * agent: what to do each run, and the device harness to do it with. The run
@@ -103,7 +110,8 @@ export class MonitorService {
     private readonly jobs: RegistryJobService,
     private readonly queue: JobQueue,
     @Optional() private readonly push?: AgentPushService,
-    @Optional() private readonly event?: EventBus
+    @Optional() private readonly event?: EventBus,
+    @Optional() private readonly automations?: AutomationService
   ) {}
 
   /** Queue a run now (the cron and "Run now" both come through here). */
@@ -151,6 +159,10 @@ export class MonitorService {
           instructions: spec.command ?? '',
           agentName: monitor.name,
         });
+        return;
+      }
+      if (monitor.kind === 'check' && monitor.source === 'automation') {
+        await this.startAutomation(monitor, spec);
         return;
       }
       if (monitor.kind === 'agent') {
@@ -216,6 +228,30 @@ export class MonitorService {
     );
     await this.models.monitor.update(monitor.id, {
       pendingJobId: job.id,
+      reportedValue: null,
+      lastRunAt: new Date(),
+    });
+  }
+
+  /**
+   * Start the automation's deployed code as the monitor's creator. Its run
+   * is a registry job like a command check's, so the result comes back
+   * through onJobFinished below.
+   */
+  private async startAutomation(monitor: Monitor, spec: MonitorSpec) {
+    if (!this.automations) throw new Error('Automations are not available');
+    if (!spec.automationId) throw new Error('No automation chosen to run');
+    const automation = await this.automations.getOwned(
+      monitor.workspaceId,
+      spec.automationId
+    );
+    const run = await this.automations.start(automation, {
+      type: 'manual',
+      by: monitor.createdBy,
+    });
+    if (!run.jobId) throw new Error('The automation run has no job');
+    await this.models.monitor.update(monitor.id, {
+      pendingJobId: run.jobId,
       reportedValue: null,
       lastRunAt: new Date(),
     });
@@ -448,8 +484,13 @@ export class MonitorService {
           throw new BadRequest('A command check needs a command');
         if (!input.deviceKey)
           throw new BadRequest('A command check needs a device');
+      } else if (input.source === 'automation') {
+        if (!input.spec.automationId?.trim())
+          throw new BadRequest('An automation check needs an automation');
       } else {
-        throw new BadRequest("A check's source must be 'url' or 'command'");
+        throw new BadRequest(
+          "A check's source must be 'url', 'command' or 'automation'"
+        );
       }
       const type = input.spec.extract?.type ?? 'number';
       if (!['number', 'regex', 'jsonpath', 'text'].includes(type)) {
