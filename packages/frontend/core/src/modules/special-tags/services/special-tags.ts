@@ -30,11 +30,12 @@ const sameIds = (a: string[], b: string[]) => a.join() === b.join();
 
 /**
  * Special tags: an ordinary workspace tag per kind of note the app makes
- * (journal pages, agent conversations, calendar event notes).
+ * (journal pages, agent conversations, calendar event notes, captured ideas).
  *
  * The app recognises each kind the way it always has (the `journal`
  * property, the `calendarEvent` property, the `ai / conversations` folder or
- * a link under a "conversations" note) and puts the kind's tag on the note
+ * a link under a "conversations" note, the `capturedAt` property capture mode
+ * sets) and puts the kind's tag on the note
  * once, remembering that in the note's `specialTagged` property. From then on
  * the tag is what counts: remove it and the note is an ordinary note, and it
  * is not put back.
@@ -70,9 +71,17 @@ export class SpecialTagsService extends Service {
     new Map<SpecialKind, Set<string>>()
   );
 
-  /** Every doc carrying any special tag. */
-  readonly specialDocIds$ = this.docIdsByKind$.map(
-    byKind => new Set([...byKind.values()].flatMap(ids => [...ids]))
+  /**
+   * Docs carrying the tag of a record kind (journal, conversation, calendar
+   * event): the ones parent suggestions, the Inbox and Duplicates leave out.
+   */
+  readonly recordDocIds$ = this.docIdsByKind$.map(
+    byKind =>
+      new Set(
+        [...byKind.entries()]
+          .filter(([kind]) => SPECIAL_TAGS[kind].isRecord)
+          .flatMap(([, ids]) => [...ids])
+      )
   );
 
   /** Notes titled "conversations" that `wf` links each conversation under. */
@@ -116,13 +125,17 @@ export class SpecialTagsService extends Service {
     this.journal.allJournalDocIds$,
     this.docs.schemaPropertyValues$('calendarEvent'),
     this.detectedConversationIds$,
+    this.docs.schemaPropertyValues$('capturedAt'),
   ]).pipe(
-    map(([journalIds, calendarValues, conversationIds]) => ({
+    map(([journalIds, calendarValues, conversationIds, capturedValues]) => ({
       journal: [...journalIds],
       'calendar-event': [...calendarValues]
         .filter(([, value]) => !!value?.externalEventId)
         .map(([id]) => id),
       'ai-conversation': conversationIds,
+      'captured-idea': [...capturedValues]
+        .filter(([, value]) => !!value)
+        .map(([id]) => id),
     }))
   );
 
@@ -135,7 +148,7 @@ export class SpecialTagsService extends Service {
     switchMap(enabled =>
       combineLatest([
         enabled
-          ? this.specialDocIds$.map(ids => [...ids])
+          ? this.recordDocIds$.map(ids => [...ids])
           : this.detected$.pipe(
               map(d => [...d.journal, ...d['ai-conversation']])
             ),

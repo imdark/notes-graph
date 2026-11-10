@@ -80,7 +80,7 @@ export function useDuplicateGroups(): DuplicateGroup[] {
             // recurring meeting), so they aren't offered as duplicates.
             const skip$ = specialTags.enabled$.pipe(
               switchMap(enabled =>
-                enabled ? specialTags.specialDocIds$ : of(new Set<string>())
+                enabled ? specialTags.recordDocIds$ : of(new Set<string>())
               )
             );
             const rows$ = combineLatest(

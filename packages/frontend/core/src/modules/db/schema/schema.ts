@@ -144,6 +144,9 @@ export const NotesGraph_WORKSPACE_DB_SCHEMA = {
     // note, by kind. Each is applied once, so a tag the user removes stays
     // removed.
     specialTagged: f.json<string[]>().optional(),
+    // ISO time capture mode made this note (its "Captured idea" tag comes
+    // from this, see modules/special-tags).
+    capturedAt: f.string().optional(),
     // a note the web clipper made from a page: where it was clipped from (when
     // the clipper says) and when, so the note can be compiled into the rest
     // of the user's notes later (see modules/agents compile-source).

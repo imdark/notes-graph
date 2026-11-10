@@ -64,8 +64,12 @@ function setup(docs: FakeDoc[], opts: { enabled?: boolean } = {}) {
           return { value: doc ? record(doc) : undefined };
         },
       },
-      schemaPropertyValues$: () =>
-        of(new Map([['cal1', { externalEventId: 'e1', date: '2026-11-09' }]])),
+      schemaPropertyValues$: (key: string) =>
+        of(
+          key === 'capturedAt'
+            ? new Map([['idea1', '2026-11-09T20:00:00.000Z']])
+            : new Map([['cal1', { externalEventId: 'e1', date: '2026-11-09' }]])
+        ),
     } as any)
     // the "conversations" hub links conv2
     .service(DocsSearchService, {
@@ -92,6 +96,7 @@ const workspace = (): FakeDoc[] => [
   { id: 'conv1', title: '2026-10-21 TASK-13 · 430b6a77', tags: [], props: {} },
   { id: 'conv2', title: '2026-10-21 TASK-10 · b711e374', tags: [], props: {} },
   { id: 'hub', title: 'conversations', tags: [], props: {} },
+  { id: 'idea1', title: 'call the bank', tags: [], props: {} },
   { id: 'plain', title: 'trip to canada', tags: ['mine'], props: {} },
 ];
 
@@ -118,6 +123,7 @@ describe('SpecialTagsService', () => {
       conv1: [SPECIAL_TAGS['ai-conversation'].id],
       conv2: [SPECIAL_TAGS['ai-conversation'].id],
       hub: [],
+      idea1: [SPECIAL_TAGS['captured-idea'].id],
       plain: ['mine'],
     });
     expect(docs.find(d => d.id === 'conv2')?.props.specialTagged).toEqual([
@@ -148,9 +154,12 @@ describe('SpecialTagsService', () => {
   test('flag on: tagged notes and the hub are never parents', async () => {
     const docs = workspace();
     docs.find(d => d.id === 'cal1')!.tags = [SPECIAL_TAGS['calendar-event'].id];
+    // a captured idea is a note to file, so it can still be a parent
+    docs.find(d => d.id === 'idea1')!.tags = [SPECIAL_TAGS['captured-idea'].id];
     const { service } = setup(docs);
     const ids = await firstValueFrom(service.notParentIds$);
-    // only what carries a tag (none of the others are tagged yet), plus the hub
+    // only what carries a record tag (none of the others are tagged yet),
+    // plus the hub
     expect([...ids].sort()).toEqual(['cal1', 'hub']);
   });
 

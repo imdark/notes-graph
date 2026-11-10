@@ -300,10 +300,10 @@ export const NavigationPanelNotes = () => {
   // app made, so a parentless one isn't something to file: keep it out of
   // the Inbox. Journal pages still go to the Journal node below.
   const specialTagsOn = useLiveData(specialTagsService.enabled$);
-  const specialDocIds = useLiveData(specialTagsService.specialDocIds$);
+  const recordDocIds = useLiveData(specialTagsService.recordDocIds$);
   const notInboxIds = useMemo(
-    () => (specialTagsOn ? specialDocIds : new Set<string>()),
-    [specialTagsOn, specialDocIds]
+    () => (specialTagsOn ? recordDocIds : new Set<string>()),
+    [specialTagsOn, recordDocIds]
   );
   const projects = useLiveData(projectsService.projects.projects$);
 
