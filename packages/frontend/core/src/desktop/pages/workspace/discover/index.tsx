@@ -1,4 +1,4 @@
-import { Button, Checkbox, Input, notify } from '@notesgraph/component';
+import { Button, Checkbox, notify } from '@notesgraph/component';
 import { DocsService } from '@notesgraph/core/modules/doc';
 import { JournalService } from '@notesgraph/core/modules/journal';
 import { GlobalCacheService } from '@notesgraph/core/modules/storage';
@@ -24,12 +24,13 @@ import {
   fetchCardImage,
   fetchDiscoverFeed,
   loadCachedFeed,
+  DEFAULT_TOPICS,
   loadTopics,
-  parseTopicsInput,
   saveCachedFeed,
   saveTopics,
 } from './feed';
 import {
+  AREA_LABELS,
   deriveInterests,
   INTERESTS_MAX_AGE_MS,
   interestSearchTopics,
@@ -41,6 +42,10 @@ import {
   type UserInterests,
 } from './interests';
 import { interleaveFeed, virtualItemsToFeed } from './records';
+import { TopicsPicker } from './topics-picker';
+
+/** How long the picker waits after the last change before refetching. */
+const TOPICS_COMMIT_DELAY_MS = 700;
 
 /** One read of the titles, tags and edit dates of every note not in the trash. */
 async function readNotesSnapshot(
@@ -253,7 +258,9 @@ const DiscoverPage = () => {
   const [manualTopics, setManualTopics] = useState<string[]>(() =>
     loadTopics()
   );
-  const [draft, setDraft] = useState<string>(() => loadTopics().join(', '));
+  // The picker's selection; it becomes `manualTopics` (and refetches the
+  // feed) once the user stops changing it for a moment.
+  const [draftTopics, setDraftTopics] = useState<string[]>(manualTopics);
   const [items, setItems] = useState<DiscoverItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -385,12 +392,25 @@ const DiscoverPage = () => {
     }
   }, [topics, loadingMore]);
 
-  const applyTopics = useCallback(() => {
-    const parsed = parseTopicsInput(draft);
-    saveTopics(parsed);
-    setManualTopics(parsed);
-    setDraft(parsed.join(', '));
-  }, [draft]);
+  useEffect(() => {
+    if (draftTopics.join('|') === manualTopics.join('|')) return;
+    const timer = setTimeout(() => {
+      saveTopics(draftTopics);
+      setManualTopics(draftTopics);
+    }, TOPICS_COMMIT_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, [draftTopics, manualTopics]);
+
+  const topicSuggestions = useMemo(
+    () => [
+      ...DEFAULT_TOPICS,
+      ...(interests?.specific.map(i => i.label) ?? []),
+      ...(interests?.general.map(i => i.label) ?? []),
+      ...(interests?.discover ?? []),
+      ...AREA_LABELS,
+    ],
+    [interests]
+  );
 
   const onOpen = useCallback((item: DiscoverItem) => {
     window.open(item.link, '_blank', 'noopener,noreferrer');
@@ -418,16 +438,11 @@ const DiscoverPage = () => {
       <ViewIcon icon="ai" />
       <ViewHeader>
         <div className={styles.header}>
-          <Input
-            className={styles.topicsInput}
-            placeholder={t['com.notesgraph.discover.topics.placeholder']()}
-            value={draft}
-            onChange={setDraft}
-            onEnter={applyTopics}
+          <TopicsPicker
+            selected={draftTopics}
+            suggestions={topicSuggestions}
+            onChange={setDraftTopics}
           />
-          <Button variant="primary" size="default" onClick={applyTopics}>
-            {t['com.notesgraph.discover.update']()}
-          </Button>
         </div>
       </ViewHeader>
       <ViewBody>

@@ -9,8 +9,24 @@ export const header = style({
   maxWidth: 720,
 });
 
-export const topicsInput = style({
+export const topicsPicker = style({
   flex: 1,
+  minWidth: 0,
+  minHeight: 28,
+  display: 'flex',
+  alignItems: 'center',
+  padding: '2px 8px',
+  boxSizing: 'border-box',
+  border: `1px solid ${cssVarV2.layer.insideBorder.blackBorder}`,
+  borderRadius: 8,
+  backgroundColor: cssVarV2('input/background'),
+  cursor: 'pointer',
+  selectors: {
+    '&[data-state=open]': {
+      borderColor: cssVarV2('button/primary'),
+      boxShadow: '0px 0px 0px 2px rgba(30, 150, 235, 0.30)',
+    },
+  },
 });
 
 export const body = style({

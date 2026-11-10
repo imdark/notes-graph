@@ -320,6 +320,11 @@ const AREAS: Area[] = [
   },
 ];
 
+/** Every general area name, offered as a ready-made topic in the topic picker. */
+export const AREA_LABELS: string[] = [
+  ...new Set(AREAS.flatMap(a => [a.label, ...a.related])),
+];
+
 const STOPWORDS = new Set(
   (
     'a an and are as at be by for from has have how i in into is it its me my of on or our so the this that to was we what when where which who why will with you your ' +
