@@ -34,20 +34,20 @@ function generateTitle(body) {
   return (lastSpace > 20 ? cut.slice(0, lastSpace) : cut).replace(/[.,;:\s]+$/, '') + '…';
 }
 
-const { docs } = await notesgraph.fetch('/api/workspaces/' + ws + '/docs?limit=1000');
+const { docs } = await notesgraph.fetch('/api/notes/workspaces/' + ws + '/docs?limit=1000');
 const untitled = docs.filter(doc => !doc.title.trim() && doc.docId !== ws);
 const titled = [];
 const empty = [];
 for (const doc of untitled) {
   const { markdown } = await notesgraph.fetch(
-    '/api/workspaces/' + ws + '/docs/' + encodeURIComponent(doc.docId) + '/markdown'
+    '/api/notes/workspaces/' + ws + '/docs/' + encodeURIComponent(doc.docId) + '/markdown'
   );
   const title = generateTitle(markdown || '');
   if (!title) {
     empty.push(doc.docId);
     continue;
   }
-  await notesgraph.fetch('/api/workspaces/' + ws + '/docs/' + encodeURIComponent(doc.docId), {
+  await notesgraph.fetch('/api/notes/workspaces/' + ws + '/docs/' + encodeURIComponent(doc.docId), {
     method: 'PUT',
     body: { title },
   });
@@ -276,7 +276,7 @@ const findings = detect(scans);
 for (const f of findings) f.id = await findingId(f);
 for (const f of findings) console.log(f.id + ' ' + f.kind + ': ' + f.summary);
 
-const { docs } = await notesgraph.fetch('/api/workspaces/' + ws + '/docs?q=' + encodeURIComponent(NOTE_TITLE) + '&limit=20');
+const { docs } = await notesgraph.fetch('/api/notes/workspaces/' + ws + '/docs?q=' + encodeURIComponent(NOTE_TITLE) + '&limit=20');
 const existing = docs.find(d => d.title.trim().toLowerCase() === NOTE_TITLE.toLowerCase());
 if (!existing && findings.length === 0) {
   console.log('no repeated mistakes in ' + finished.length + ' runs; no note to write');
@@ -284,7 +284,7 @@ if (!existing && findings.length === 0) {
 }
 let kept = new Set();
 if (existing) {
-  const { markdown } = await notesgraph.fetch('/api/workspaces/' + ws + '/docs/' + encodeURIComponent(existing.docId) + '/markdown');
+  const { markdown } = await notesgraph.fetch('/api/notes/workspaces/' + ws + '/docs/' + encodeURIComponent(existing.docId) + '/markdown');
   for (const m of String(markdown || '').matchAll(/^- \[x\] \u0060(F-[0-9a-f]{6})\u0060/gim)) kept.add(m[1]);
 }
 const lines = [
@@ -301,9 +301,9 @@ for (const f of findings) {
 const markdown = lines.join('\n');
 let docId = existing && existing.docId;
 if (docId) {
-  await notesgraph.fetch('/api/workspaces/' + ws + '/docs/' + encodeURIComponent(docId), { method: 'PUT', body: { markdown } });
+  await notesgraph.fetch('/api/notes/workspaces/' + ws + '/docs/' + encodeURIComponent(docId), { method: 'PUT', body: { markdown } });
 } else {
-  const created = await notesgraph.fetch('/api/workspaces/' + ws + '/docs', { method: 'POST', body: { title: NOTE_TITLE, markdown, folder: FOLDER } });
+  const created = await notesgraph.fetch('/api/notes/workspaces/' + ws + '/docs', { method: 'POST', body: { title: NOTE_TITLE, markdown, folder: FOLDER } });
   docId = created.docId;
 }
 console.log(findings.length + ' findings; "' + NOTE_TITLE + '" is up to date (' + docId + ')');

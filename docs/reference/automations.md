@@ -31,7 +31,7 @@ is revoked when the run ends (`RegistryJobService.runIdentity`,
 - `notesgraph.workspaceId`.
 - `notesgraph.fetch(path, init?)`: `fetch` against the server with the
   token's `Authorization` header. `path` is a path under the server such
-  as `/api/workspaces/<id>/docs`. An object `body` is sent as JSON. The
+  as `/api/notes/workspaces/<id>/docs`. An object `body` is sent as JSON. The
   reply is returned parsed when it is JSON, as text otherwise; a non-2xx
   reply throws an Error whose message carries the method, path, status and
   the server's message, with `status` set on it.
@@ -47,11 +47,11 @@ automations, and a run can do nothing its creator could not.
 
 ## Useful endpoints
 
-- `GET /api/workspaces/:id/docs?q=&limit=1000`: docs by title match
+- `GET /api/notes/workspaces/:id/docs?q=&limit=1000`: docs by title match
   (`q` empty for all), as `{docs: [{docId, title}]}`. `limit` up to 1000.
-- `GET /api/workspaces/:id/docs/:docId/markdown`.
-- `PUT /api/workspaces/:id/docs/:docId` with `{markdown?, title?}`.
-- `POST /api/workspaces/:id/docs` with `{title, markdown, folder?: string[]}`.
+- `GET /api/notes/workspaces/:id/docs/:docId/markdown`.
+- `PUT /api/notes/workspaces/:id/docs/:docId` with `{markdown?, title?}`.
+- `POST /api/notes/workspaces/:id/docs` with `{title, markdown, folder?: string[]}`.
 - `GET /api/registry/workspaces/:id/jobs?kind=agent&since=<iso>&limit=200`:
   runs, newest first; `GET .../jobs/:jobId?logFrom=0` for one run with its
   transcript and questions.

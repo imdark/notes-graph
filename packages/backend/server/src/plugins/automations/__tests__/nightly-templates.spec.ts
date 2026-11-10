@@ -9,6 +9,12 @@ import {
   TITLE_UNTITLED_NOTES_TEMPLATE,
 } from '../nightly-templates';
 
+/** Path prefixes of the server routes the templates use (notes-api, registry). */
+const REAL_ROUTES = [
+  '/api/notes/workspaces/ws1/',
+  '/api/registry/workspaces/ws1/',
+];
+
 /**
  * Runs a template the way the runner's sandbox does: as the body of an
  * async function with `notesgraph`, `console` and the few web globals the
@@ -30,6 +36,12 @@ async function run(
         init: { method?: string; body?: unknown } = {}
       ) => {
         const method = init.method ?? 'GET';
+        // Only routes the server really has: these templates once called
+        // /api/workspaces/:id/docs, which the server answers with the web
+        // app's HTML, and the loose fake below didn't notice.
+        if (!REAL_ROUTES.some(prefix => path.startsWith(prefix))) {
+          throw new Error(`no such server route: ${method} ${path}`);
+        }
         calls.push({ method, path, body: init.body });
         return routes(method, path, init.body);
       },
@@ -76,7 +88,7 @@ test('titling names untitled notes from their body and leaves empty ones', async
   const { output, calls, log } = await run(
     TITLE_UNTITLED_NOTES_TEMPLATE,
     (method, path, body) => {
-      if (path.startsWith('/api/workspaces/ws1/docs?')) {
+      if (path.startsWith('/api/notes/workspaces/ws1/docs?')) {
         return {
           docs: [
             { docId: 'ws1', title: '' },
@@ -156,8 +168,9 @@ test('learn finds a stuck run and writes the proposals note under ai / proposals
           },
         };
       }
-      if (path.startsWith('/api/workspaces/ws1/docs?q=')) return { docs: [] };
-      if (method === 'POST' && path === '/api/workspaces/ws1/docs') {
+      if (path.startsWith('/api/notes/workspaces/ws1/docs?q='))
+        return { docs: [] };
+      if (method === 'POST' && path === '/api/notes/workspaces/ws1/docs') {
         return { docId: 'note-1', folderId: 'f' };
       }
       throw new Error(`unexpected ${method} ${path}`);
@@ -215,7 +228,7 @@ test('learn keeps a ticked finding ticked on the next night and updates in place
         },
       };
     }
-    if (path.startsWith('/api/workspaces/ws1/docs?q=')) {
+    if (path.startsWith('/api/notes/workspaces/ws1/docs?q=')) {
       return {
         docs: previous
           ? [{ docId: 'note-1', title: 'Proposed harness changes' }]
@@ -279,7 +292,8 @@ test('learn counts the same read three times as a reread, but not a file read in
         },
       };
     }
-    if (path.startsWith('/api/workspaces/ws1/docs?q=')) return { docs: [] };
+    if (path.startsWith('/api/notes/workspaces/ws1/docs?q='))
+      return { docs: [] };
     if (method === 'POST') {
       markdown = (body as { markdown: string }).markdown;
       return { docId: 'note-1' };
@@ -296,7 +310,8 @@ test('learn with no runs and no note writes nothing', async t => {
   const { output, calls } = await run(LEARN_FROM_RUNS_TEMPLATE, (_m, path) => {
     if (path.startsWith('/api/registry/workspaces/ws1/jobs?'))
       return { jobs: [] };
-    if (path.startsWith('/api/workspaces/ws1/docs?q=')) return { docs: [] };
+    if (path.startsWith('/api/notes/workspaces/ws1/docs?q='))
+      return { docs: [] };
     throw new Error(`unexpected ${path}`);
   });
   t.deepEqual(output, { runs: 0, findings: [] });
