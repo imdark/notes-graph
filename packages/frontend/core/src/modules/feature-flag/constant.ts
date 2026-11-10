@@ -455,7 +455,7 @@ export const NOTESGRAPH_FLAGS = {
     defaultState: true,
   },
   enable_youtube_backup: {
-    commit: '',
+    commit: '0e3b087bab97a093ecbe9ebbeb5f669db18bef37',
     category: 'notesgraph',
     displayName: 'Back up YouTube videos',
     description:
