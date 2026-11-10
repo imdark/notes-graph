@@ -7,20 +7,27 @@ browser session**, so it captures content on sites a server crawler can't reach
 
 ## How it works
 
-1. `extract-clip.js` reads the live DOM (title, `<article>/<main>` text, og +
-   in-page images, direct `<video>` sources). Injected as a plain content
-   script — no page-CSP exceptions needed.
-2. `background.js` fetches each image **in the page** (so your cookies/referer
+1. `background.js` opens the app's **`/clipper/import`** page in a background
+   tab and posts it a pending `ClipperInput` (`pending: true`, the tab's title
+   and link) via `window.postMessage`. The app creates the note from that
+   straight away. The popup returns at this point; it doesn't wait for the page
+   to be read.
+2. Meanwhile `extract-clip.js` reads the live DOM (title, `<article>/<main>`
+   text, og + in-page images, direct `<video>` sources). Injected as a plain
+   content script — no page-CSP exceptions needed.
+3. `background.js` fetches each image **in the page** (so your cookies/referer
    apply), turns them into data URLs, builds a markdown body that references
-   them, then opens the app's **`/clipper/import`** page and posts a
-   `ClipperInput { title, contentMarkdown, contentHtml, attachments }` to it via
-   `window.postMessage`.
-3. The app (`ImportClipperService` + `MarkdownTransformer.importMarkdownWithAssets`)
-   stores the attachments as **workspace blobs** and creates the doc — so the
-   clipped images are archived and survive the original being deleted.
+   them, and posts the full
+   `ClipperInput { title, contentMarkdown, contentHtml, attachments }`.
+4. The app (`ImportClipperService.fillClippedDoc`) replaces the note's body with
+   it and stores the attachments as **workspace blobs**, so the clipped images
+   are archived and survive the original being deleted. If reading the page
+   fails, the note keeps its title and link plus the reason.
 
-This reuses the existing `/clipper/import` receiver; nothing else in the app
-needs to change.
+If the app can't create the note by itself (you're signed out, or there's no
+last-used workspace), the tab is brought to the front so you can finish there.
+The app must be deployed with `pending` support before this extension is used:
+an older app would save the title-and-link note as the whole clip.
 
 ## Load it (unpacked)
 
@@ -29,7 +36,8 @@ needs to change.
 3. (Optional) Extension **Settings** → set the app URL (default
    `https://app.notesgraph.com`; use `http://localhost:8080` for local dev).
 4. Open any page → click the toolbar icon → **Clip this page** (or `Ctrl/⌘+Shift+Y`).
-   A NotesGraph tab opens and imports it into your last workspace.
+   A NotesGraph tab opens behind the current one and imports it into your last
+   workspace.
 
 You must be **signed in** to NotesGraph in that browser.
 
