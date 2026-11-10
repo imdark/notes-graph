@@ -191,7 +191,7 @@ test('learn finds a stuck run and writes the proposals note under ai / proposals
   };
   t.is(created.title, 'Proposed harness changes');
   t.deepEqual(created.folder, ['ai', 'proposals']);
-  t.regex(created.markdown, /2 runs scanned/);
+  t.regex(created.markdown, /2 runs and 0 conversations scanned/);
   t.regex(
     created.markdown,
     /- \[ \] `F-[0-9a-f]{6}` \*\*stuck\*\*: Bash failed 3\+ times \(up to 3\) in one run/
@@ -314,6 +314,73 @@ test('learn with no runs and no note writes nothing', async t => {
       return { docs: [] };
     throw new Error(`unexpected ${path}`);
   });
-  t.deepEqual(output, { runs: 0, findings: [] });
+  t.deepEqual(output, { runs: 0, conversations: 0, findings: [] });
   t.false(calls.some(c => c.method !== 'GET'));
+});
+
+test('learn reads recent Claude Code conversations wf published as notes', async t => {
+  const day = (ago: number) =>
+    new Date(Date.now() - ago * 86400000).toISOString().slice(0, 10);
+  const fence = '```';
+  const call = (tool: string, input: string) =>
+    `### Tool call: \`${tool}\`\n\n${fence}\n${input}\n\n${fence}\n`;
+  const result = (text: string) =>
+    `### Tool result\n\n${fence}\n${text}\n${fence}\n`;
+  const failingCall = [
+    call('Bash', '{"command": "yarn vitest run packages/x"}'),
+    result(
+      'Exit code 127\nnpm warn Unknown project config "shell-emulator".\n/bin/sh: vitest: command not found'
+    ),
+  ].join('\n');
+  const conversation = [
+    '# TASK-1 — abcdef12',
+    '## Transcript',
+    '### User',
+    'run the tests',
+    failingCall,
+    failingCall,
+    failingCall,
+    call('Read', '{"file_path": "/repo/a.ts"}'),
+    result('1\tconst a = 1;'),
+  ].join('\n\n');
+  const recent = `${day(1)} TASK-1 · abcdef12`;
+  const old = `${day(30)} TASK-0 · 00000000`;
+  const { output, calls } = await run(
+    LEARN_FROM_RUNS_TEMPLATE,
+    (method, path, body) => {
+      if (path.startsWith('/api/registry/workspaces/ws1/jobs?')) {
+        return { jobs: [] };
+      }
+      if (path === '/api/notes/workspaces/ws1/docs?q=&limit=1000') {
+        return {
+          docs: [
+            { docId: 'conv-new', title: recent },
+            { docId: 'conv-old', title: old },
+            { docId: 'plain', title: 'trip to canada' },
+          ],
+        };
+      }
+      if (path.startsWith('/api/notes/workspaces/ws1/docs?q=')) {
+        return { docs: [] };
+      }
+      if (path === '/api/notes/workspaces/ws1/docs/conv-new/markdown') {
+        return { markdown: conversation };
+      }
+      if (method === 'POST' && path === '/api/notes/workspaces/ws1/docs') {
+        return { docId: 'note-1', body };
+      }
+      throw new Error(`unexpected ${method} ${path}`);
+    }
+  );
+  // only the recent conversation is read
+  t.false(calls.some(c => c.path.includes('conv-old')));
+  const post = calls.find(c => c.method === 'POST')!;
+  const markdown = (post.body as { markdown: string }).markdown;
+  t.regex(markdown, /0 runs and 1 conversations/);
+  t.regex(
+    markdown,
+    /\*\*stuck\*\*: Bash failed 3\+ times \(up to 3\) in one run with: \\<path\\>: vitest: command not found/
+  );
+  t.true(markdown.includes(`seen in: ${recent}`));
+  t.like(output as object, { runs: 0, conversations: 1 });
 });
