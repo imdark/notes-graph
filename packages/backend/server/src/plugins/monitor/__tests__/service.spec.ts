@@ -73,6 +73,17 @@ function setup(options: { canWrite?: boolean; monitor?: any } = {}) {
   const push: any = {
     monitorAlert: async (...args: any[]) => pushes.push(args),
   };
+  const started: any[] = [];
+  const automations: any = {
+    getOwned: async (workspaceId: string, id: string) => {
+      if (id !== 'auto-1') throw new Error('No such automation');
+      return { id, workspaceId, name: 'Title untitled notes nightly' };
+    },
+    start: async (automation: any, trigger: any) => {
+      started.push({ automation, trigger });
+      return { id: 'run-1', jobId: 'job-auto' };
+    },
+  };
   const service = new MonitorService(
     models,
     writer,
@@ -80,9 +91,20 @@ function setup(options: { canWrite?: boolean; monitor?: any } = {}) {
     ac,
     jobs,
     queue,
-    push
+    push,
+    undefined,
+    automations
   );
-  return { service, writes, readings, updates, alerts, pushes, queued };
+  return {
+    service,
+    writes,
+    readings,
+    updates,
+    alerts,
+    pushes,
+    queued,
+    started,
+  };
 }
 
 test('a first reading is written to the block and kept, without alerting', async t => {
@@ -393,4 +415,67 @@ test('validate refuses a check that runs too often or has no URL', t => {
       intervalMinutes: 60,
     })
   );
+});
+
+const automationMonitor = (over: Record<string, unknown> = {}) =>
+  monitorRow({
+    name: 'Untitled notes',
+    source: 'automation',
+    intervalMinutes: 1440,
+    spec: {
+      automationId: 'auto-1',
+      extract: { type: 'jsonpath', pattern: 'summary' },
+    },
+    ...over,
+  });
+
+test('an automation check starts the automation as its creator and waits on its job', async t => {
+  const monitor = automationMonitor();
+  const { service, started, queued, updates } = setup({ monitor });
+  await service.run({ monitorId: 'm1' });
+  t.is(queued.length, 0, 'no device job of its own');
+  t.is(started[0].automation.id, 'auto-1');
+  t.deepEqual(started[0].trigger, { type: 'manual', by: 'u1' });
+  t.is(updates.at(-1).pendingJobId, 'job-auto');
+});
+
+test('the automation run’s summary becomes the reading', async t => {
+  const monitor = automationMonitor({ pendingJobId: 'job-auto' });
+  const { service, writes } = setup({ monitor });
+  await service.onJobFinished({
+    workspaceId: 'ws',
+    jobId: 'job-auto',
+    agentId: 'automation',
+    deviceKey: 'cloud',
+    kind: 'automation',
+    status: 'done',
+    result: JSON.stringify({
+      summary: '1 titled, 17 empty of 18 untitled',
+      titled: [{ docId: 'a', title: 'x' }],
+    }),
+    error: null,
+  } as any);
+  t.true(
+    writes[0][3].startsWith('Untitled notes: 1 titled, 17 empty of 18 untitled')
+  );
+});
+
+test('an automation check whose automation is gone fails the run', async t => {
+  const monitor = automationMonitor({
+    spec: { automationId: 'gone', extract: { type: 'text' } },
+  });
+  const { service, updates } = setup({ monitor });
+  await service.run({ monitorId: 'm1' });
+  t.regex(String(updates.at(-1).lastError), /No such automation/);
+});
+
+test('validate wants an automation for an automation check', t => {
+  const { service } = setup();
+  const base = { kind: 'check', source: 'automation', intervalMinutes: 1440 };
+  t.notThrows(() =>
+    service.validate({ ...base, spec: { automationId: 'auto-1' } })
+  );
+  t.throws(() => service.validate({ ...base, spec: {} }), {
+    message: /needs an automation/,
+  });
 });

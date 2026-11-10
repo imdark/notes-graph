@@ -18,5 +18,6 @@ import { AutomationService } from './service';
   imports: [PermissionModule, RegistryModule],
   providers: [AutomationService, AutomationCronJobs],
   controllers: [AutomationController, AutomationWebhookController],
+  exports: [AutomationService],
 })
 export class AutomationsModule {}
