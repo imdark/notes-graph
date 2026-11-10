@@ -3,6 +3,7 @@ import { pick } from 'lodash-es';
 import z from 'zod/v3';
 
 import { publishCommentChanged } from '../../../core/comment/realtime';
+import { readDeployInfo } from '../../../core/config';
 import { DocReader, DocWriter } from '../../../core/doc';
 import { PermissionAccess } from '../../../core/permission';
 import { RealtimePublisher } from '../../../core/realtime';
@@ -39,6 +40,7 @@ import {
   svgToPng,
 } from './canvas';
 import { commentText, replyContent } from './comments';
+import { deployInfoAnswer } from './deploy-info';
 import {
   DEFAULT_STALE_DAYS,
   DEFAULT_STUB_CHARS,
@@ -1440,6 +1442,32 @@ export class WorkspaceMcpProvider {
       },
     });
 
+    const deployInfoTool = defineTool({
+      name: 'deploy_info',
+      title: 'Deploy Info',
+      description:
+        "What this NotesGraph server is running: the commit, branch and commit subject it was deployed from, when, whether the tree had uncommitted changes (dirty), the pull requests merged into it (newest first) and its feature flags, each by the commit that added it. Pass pullRequests to check whether those pull request numbers are live: each comes back live true or false, or null when it is older than the record reaches back. It only reads. A server deployed without a record (dev, self-hosted) says so.",
+      parser: z.object({
+        pullRequests: z.array(z.number().int().positive()).max(100).optional(),
+      }),
+      inputSchema: {
+        type: 'object',
+        properties: {
+          pullRequests: {
+            type: 'array',
+            items: { type: 'number' },
+            description:
+              'Pull request numbers to check for being in the running build.',
+          },
+        },
+        additionalProperties: false,
+      },
+      execute: async ({ pullRequests }) =>
+        toolText(
+          JSON.stringify(deployInfoAnswer(await readDeployInfo(), pullRequests))
+        ),
+    });
+
     const tools = [
       readDocument,
       readComments,
@@ -1457,6 +1485,7 @@ export class WorkspaceMcpProvider {
       getBacklinks,
       getLinks,
       notesHealthTool,
+      deployInfoTool,
     ];
 
     if (env.dev || env.namespaces.canary || env.mcpWriteToolsEnabled) {

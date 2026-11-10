@@ -44,6 +44,8 @@ import {
   shownStage,
   stepResult,
   stuckReason,
+  unlistedPullRequests,
+  verifyBrief,
 } from './deployments';
 
 const task = (blockId: string, stage: ShipStage, pullRequest?: string) => ({
@@ -210,6 +212,47 @@ describe('shipAgents', () => {
       agent('claude', {}),
     ];
     expect(shipAgents(agents).map(a => a.id)).toEqual(['claude', 'workflow']);
+  });
+});
+
+describe('verifyBrief', () => {
+  const closed = 'https://github.com/o/r/pull/9';
+  const tasks = [
+    { ...task('a', 'committed'), stuck: 'No pull request' },
+    { ...task('b', 'committed', closed), stuck: 'Closed without merging' },
+  ];
+
+  test('names each task, why it is stuck and its pull request', () => {
+    const brief = verifyBrief(tasks);
+    expect(brief.title).toBe('Verify 2 tasks not ready to merge');
+    expect(brief.label).toBe('2 tasks');
+    expect(brief.text).toContain('block a in note "2026-10-06" (doc d1)');
+    expect(brief.text).toContain("why it's here: Closed without merging");
+    expect(brief.text).toContain(`pull request: ${closed}`);
+    expect(brief.text).toContain('pull request: none named');
+  });
+
+  test('sets statuses with evidence, and never merges, deploys or marks done unverified', () => {
+    const { text } = verifyBrief(tasks);
+    for (const status of ['`deployed`', '`merged`', '`done`', '`todo`']) {
+      expect(text).toContain(status);
+    }
+    expect(text).toContain('Never `done`: that waits for someone to check it live');
+    expect(text).toContain('Don’t merge, push, open or close PRs');
+    expect(text).toContain('read the note before trying again');
+    // No repos set: it speaks of main.
+    expect(text).toContain('the feature should be in main');
+    expect(text).not.toContain('## Branches');
+  });
+
+  test('uses the repo branches the screen has set', () => {
+    const { text } = verifyBrief(tasks, [
+      { repo: 'o/r', baseBranch: 'stage', deployBranch: 'main' },
+    ]);
+    expect(text).toContain(
+      '- o/r: pull requests merge into `stage`; prod deploys from `main`'
+    );
+    expect(text).toContain('the feature should be in its repo’s base branch');
   });
 });
 
@@ -607,6 +650,22 @@ describe('checking ready branches', () => {
     expect(
       stuckReason({ stage: 'merged', pullRequest: null }, undefined)
     ).toBeNull();
+  });
+
+  test('looks up committed tasks whose pull request the list lacks', () => {
+    const url = (n: number) => `https://github.com/imdark/notes-graph/pull/${n}`;
+    const tasks = [
+      { stage: 'committed' as const, pullRequest: url(1) }, // listed
+      { stage: 'committed' as const, pullRequest: url(2) }, // checked already
+      { stage: 'committed' as const, pullRequest: url(3) }, // unlisted
+      { stage: 'committed' as const, pullRequest: url(3) }, // same, once
+      { stage: 'merged' as const, pullRequest: url(4) }, // not to merge
+      { stage: 'committed' as const, pullRequest: null },
+      { stage: 'committed' as const, pullRequest: 'not a url' },
+    ];
+    expect(
+      unlistedPullRequests(tasks, new Set([url(1)]), new Set([url(2)]))
+    ).toEqual([{ repo: 'imdark/notes-graph', number: 3, url: url(3) }]);
   });
 
   test('asks gh for state and branch, with jq escapes intact', () => {

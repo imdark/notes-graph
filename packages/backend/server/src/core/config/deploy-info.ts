@@ -35,20 +35,28 @@ const isDeployInfo = (value: any): value is DeployInfo =>
   typeof value.deployedAt === 'string' &&
   Array.isArray(value.pullRequests);
 
+// Fixed for the life of the process: a deploy replaces the container.
+let cached: Promise<DeployInfo | null> | null = null;
+
+/**
+ * The running build's deploy record, read once. Null on a build that wasn't
+ * deployed with a record (dev, self-hosted).
+ */
+export function readDeployInfo(): Promise<DeployInfo | null> {
+  cached ??= readFile(join(process.cwd(), DEPLOY_INFO_FILE), 'utf8')
+    .then(text => {
+      const parsed = JSON.parse(text);
+      return isDeployInfo(parsed) ? parsed : null;
+    })
+    .catch(() => null);
+  return cached;
+}
+
 @Controller('/api/server')
 export class DeployInfoController {
-  // Fixed for the life of the process: a deploy replaces the container.
-  private info: Promise<DeployInfo | null> | null = null;
-
   /** Null on a build that wasn't deployed with a record (dev, self-hosted). */
   @Get('/deploy-info')
   async deployInfo(): Promise<{ deployInfo: DeployInfo | null }> {
-    this.info ??= readFile(join(process.cwd(), DEPLOY_INFO_FILE), 'utf8')
-      .then(text => {
-        const parsed = JSON.parse(text);
-        return isDeployInfo(parsed) ? parsed : null;
-      })
-      .catch(() => null);
-    return { deployInfo: await this.info };
+    return { deployInfo: await readDeployInfo() };
   }
 }

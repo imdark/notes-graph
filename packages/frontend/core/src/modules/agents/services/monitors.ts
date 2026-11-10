@@ -13,13 +13,15 @@ import type { RemoteJob } from './remote-runner';
  */
 
 export type MonitorKind = 'check' | 'agent';
-export type MonitorSource = 'url' | 'command';
+export type MonitorSource = 'url' | 'command' | 'automation';
 export type ExtractType = 'number' | 'regex' | 'jsonpath' | 'text';
 export type ConditionType = 'change' | 'above' | 'below' | 'always';
 
 export interface MonitorSpec {
   url?: string;
   command?: string;
+  /** automation: the workspace automation each run starts. */
+  automationId?: string;
   extract?: { type: ExtractType; pattern?: string };
   instructions?: string;
   model?: string;

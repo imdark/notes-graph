@@ -2652,5 +2652,8 @@
   "com.notesgraph.discover.interests.regenerate": "Re-read my notes",
   "com.notesgraph.discover.interests.add.placeholder": "Add an interest",
   "com.notesgraph.discover.interests.remove": "Remove {{topic}}",
-  "com.notesgraph.discover.interests.reset": "Undo my changes"
+  "com.notesgraph.discover.interests.reset": "Undo my changes",
+  "com.notesgraph.quicksearch.group.ask-graph-agent": "Agent",
+  "com.notesgraph.quicksearch.ask-graph-agent": "Ask the agent: {{query}}",
+  "com.notesgraph.quicksearch.ask-graph-agent.hint": "Searches your notes and learnings, then answers in AI chat"
 }

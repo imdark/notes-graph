@@ -33,6 +33,7 @@ import type {
   PluginAgentDevice,
   PluginAgentTarget,
   PluginAgentTemplate,
+  PluginBlock,
   PluginContext,
   PluginDefinition,
   PluginDoc,
@@ -59,6 +60,8 @@ export interface HarnessOptions {
   backend?: Record<string, (payload?: unknown) => unknown>;
   /** Seeds `ctx.docs`. */
   docs?: PluginDoc[];
+  /** What `ctx.docs.getBlocks(docId)` returns, keyed by doc id. */
+  blocks?: Record<string, PluginBlock[]>;
   /** Seeds `ctx.agents`: the templates on offer, agents already there, devices. */
   agents?: {
     templates?: PluginAgentTemplate[];
@@ -206,9 +209,9 @@ export function createPluginHarness(options: HarnessOptions): PluginHarness {
         docs.push(doc);
         return doc;
       },
-      getBlocks: async () => {
+      getBlocks: async docId => {
         req('docs');
-        return [];
+        return [...(options.blocks?.[docId] ?? [])];
       },
       insertBlock: async () => {
         req('docs');

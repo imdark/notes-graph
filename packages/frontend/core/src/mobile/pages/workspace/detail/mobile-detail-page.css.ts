@@ -137,6 +137,22 @@ globalStyle('.notesgraph-page-root-block-container', {
   },
 });
 
+// Keep the note body taller than the screen. When a tap moves the caret to
+// another line, Android's WebView scrolls the focused editable into view, and
+// that is the whole note body (notesgraph-page-root), not the line. A body
+// that fits on screen gets centred, so the page jumped away from what was
+// being read. One taller than the screen gets scrolled only as far as the
+// caret, which a tap has just put in view, so it stays put. Reproduced and
+// checked on a Galaxy S24 over CDP.
+globalStyle('notesgraph-page-root', {
+  minHeight: 'calc(100dvh + 40px)',
+});
+
+// A peeked doc scrolls inside its sheet, not the page.
+globalStyle('[data-peek-view-wrapper] notesgraph-page-root', {
+  minHeight: 'unset',
+});
+
 export const journalIconButton = style({
   position: 'absolute',
   zIndex: 1,
