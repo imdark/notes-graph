@@ -436,6 +436,15 @@ export const NOTESGRAPH_FLAGS = {
     configurable: true,
     defaultState: false,
   },
+  enable_cmdk_ask_agent: {
+    commit: '3e0fe3d5b3c7c10b964ec293f8ac8e89354e84b0',
+    category: 'notesgraph',
+    displayName: 'Ask the agent from Ctrl-K',
+    description:
+      'Typing "? your question" in Ctrl-K adds an "Ask the agent" row. It opens AI chat with the question, and the agent searches your notes for learnings and related knowledge before it answers.',
+    configurable: true,
+    defaultState: true,
+  },
   enable_deploy_verify_stuck: {
     commit: '1ac189a91d9bd57a0772fa4d4263ecfa9b653afb',
     category: 'notesgraph',
