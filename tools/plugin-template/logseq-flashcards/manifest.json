@@ -1,0 +1,22 @@
+{
+  "id": "com.notesgraph.logseq-flashcards",
+  "name": "Logseq Flashcards",
+  "version": "0.1.0",
+  "description": "Turn a note's questions and answers into Logseq #card blocks you can paste into Logseq or save as a page file.",
+  "author": "NotesGraph",
+  "platforms": ["web", "desktop", "mobile"],
+  "permissions": ["ui", "docs", "hooks"],
+  "entry": { "client": "index.js" },
+  "contributes": {
+    "commands": [
+      {
+        "id": "logseq-flashcards:copy",
+        "title": "Logseq flashcards: Copy this note's cards"
+      },
+      {
+        "id": "logseq-flashcards:download",
+        "title": "Logseq flashcards: Download this note as a Logseq page"
+      }
+    ]
+  }
+}

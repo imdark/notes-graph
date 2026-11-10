@@ -1,6 +1,12 @@
 import { describe, expect, test } from 'vitest';
 
-import { deriveInterests, interestSearchTopics } from './interests';
+import {
+  addInterest,
+  deriveInterests,
+  interestSearchTopics,
+  NO_EDITS,
+  removeInterest,
+} from './interests';
 
 const NOW = Date.UTC(2026, 9, 18);
 const DAY = 24 * 60 * 60 * 1000;
@@ -88,5 +94,48 @@ describe('interestSearchTopics', () => {
       ['TELEOP']
     );
     expect(topics).toEqual(['Robotics', 'Embedded systems']);
+  });
+
+  test('puts added interests first and lets the next one fill a removed slot', () => {
+    const specific = ['A', 'B', 'C', 'D', 'E', 'F', 'G'].map(label => ({
+      label,
+      weight: 1,
+    }));
+    const topics = interestSearchTopics(
+      { specific, general: [], discover: ['Music'], computedAt: NOW },
+      [],
+      { added: ['Sailing'], removed: ['b', 'Music'] }
+    );
+    expect(topics).toEqual(['Sailing', 'A', 'C', 'D', 'E', 'F', 'G']);
+  });
+
+  test('searches added interests before any have been read from the notes', () => {
+    expect(
+      interestSearchTopics(null, [], { added: ['Sailing'], removed: [] })
+    ).toEqual(['Sailing']);
+  });
+});
+
+describe('interest edits', () => {
+  test('removing an added interest forgets it instead of hiding it', () => {
+    const added = addInterest(NO_EDITS, '  sailing   boats ');
+    expect(added).toEqual({ added: ['sailing boats'], removed: [] });
+    expect(removeInterest(added, 'Sailing Boats')).toEqual(NO_EDITS);
+  });
+
+  test('adding a removed interest brings it back', () => {
+    const removed = removeInterest(NO_EDITS, 'Robotics');
+    expect(removed).toEqual({ added: [], removed: ['Robotics'] });
+    expect(addInterest(removed, 'robotics')).toEqual(NO_EDITS);
+  });
+
+  test('ignores blanks and duplicates', () => {
+    const once = addInterest(NO_EDITS, 'Sailing');
+    expect(addInterest(once, 'SAILING')).toBe(once);
+    expect(addInterest(once, '   ')).toBe(once);
+    expect(removeInterest(removeInterest(NO_EDITS, 'X'), 'x')).toEqual({
+      added: [],
+      removed: ['X'],
+    });
   });
 });

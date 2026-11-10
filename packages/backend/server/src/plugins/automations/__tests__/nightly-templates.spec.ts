@@ -9,6 +9,12 @@ import {
   TITLE_UNTITLED_NOTES_TEMPLATE,
 } from '../nightly-templates';
 
+/** Path prefixes of the server routes the templates use (notes-api, registry). */
+const REAL_ROUTES = [
+  '/api/notes/workspaces/ws1/',
+  '/api/registry/workspaces/ws1/',
+];
+
 /**
  * Runs a template the way the runner's sandbox does: as the body of an
  * async function with `notesgraph`, `console` and the few web globals the
@@ -30,6 +36,12 @@ async function run(
         init: { method?: string; body?: unknown } = {}
       ) => {
         const method = init.method ?? 'GET';
+        // Only routes the server really has: these templates once called
+        // /api/workspaces/:id/docs, which the server answers with the web
+        // app's HTML, and the loose fake below didn't notice.
+        if (!REAL_ROUTES.some(prefix => path.startsWith(prefix))) {
+          throw new Error(`no such server route: ${method} ${path}`);
+        }
         calls.push({ method, path, body: init.body });
         return routes(method, path, init.body);
       },
@@ -76,7 +88,7 @@ test('titling names untitled notes from their body and leaves empty ones', async
   const { output, calls, log } = await run(
     TITLE_UNTITLED_NOTES_TEMPLATE,
     (method, path, body) => {
-      if (path.startsWith('/api/workspaces/ws1/docs?')) {
+      if (path.startsWith('/api/notes/workspaces/ws1/docs?')) {
         return {
           docs: [
             { docId: 'ws1', title: '' },
@@ -105,6 +117,7 @@ test('titling names untitled notes from their body and leaves empty ones', async
     ]
   );
   t.deepEqual(output, {
+    summary: '2 titled, 1 empty of 3 untitled',
     titled: [
       { docId: 'a', title: 'The fastest drone simulator' },
       {
@@ -156,8 +169,9 @@ test('learn finds a stuck run and writes the proposals note under ai / proposals
           },
         };
       }
-      if (path.startsWith('/api/workspaces/ws1/docs?q=')) return { docs: [] };
-      if (method === 'POST' && path === '/api/workspaces/ws1/docs') {
+      if (path.startsWith('/api/notes/workspaces/ws1/docs?q='))
+        return { docs: [] };
+      if (method === 'POST' && path === '/api/notes/workspaces/ws1/docs') {
         return { docId: 'note-1', folderId: 'f' };
       }
       throw new Error(`unexpected ${method} ${path}`);
@@ -178,7 +192,7 @@ test('learn finds a stuck run and writes the proposals note under ai / proposals
   };
   t.is(created.title, 'Proposed harness changes');
   t.deepEqual(created.folder, ['ai', 'proposals']);
-  t.regex(created.markdown, /2 runs scanned/);
+  t.regex(created.markdown, /2 runs and 0 conversations scanned/);
   t.regex(
     created.markdown,
     /- \[ \] `F-[0-9a-f]{6}` \*\*stuck\*\*: Bash failed 3\+ times \(up to 3\) in one run/
@@ -215,7 +229,7 @@ test('learn keeps a ticked finding ticked on the next night and updates in place
         },
       };
     }
-    if (path.startsWith('/api/workspaces/ws1/docs?q=')) {
+    if (path.startsWith('/api/notes/workspaces/ws1/docs?q=')) {
       return {
         docs: previous
           ? [{ docId: 'note-1', title: 'Proposed harness changes' }]
@@ -279,7 +293,8 @@ test('learn counts the same read three times as a reread, but not a file read in
         },
       };
     }
-    if (path.startsWith('/api/workspaces/ws1/docs?q=')) return { docs: [] };
+    if (path.startsWith('/api/notes/workspaces/ws1/docs?q='))
+      return { docs: [] };
     if (method === 'POST') {
       markdown = (body as { markdown: string }).markdown;
       return { docId: 'note-1' };
@@ -296,9 +311,77 @@ test('learn with no runs and no note writes nothing', async t => {
   const { output, calls } = await run(LEARN_FROM_RUNS_TEMPLATE, (_m, path) => {
     if (path.startsWith('/api/registry/workspaces/ws1/jobs?'))
       return { jobs: [] };
-    if (path.startsWith('/api/workspaces/ws1/docs?q=')) return { docs: [] };
+    if (path.startsWith('/api/notes/workspaces/ws1/docs?q='))
+      return { docs: [] };
     throw new Error(`unexpected ${path}`);
   });
-  t.deepEqual(output, { runs: 0, findings: [] });
+  t.deepEqual(output, { runs: 0, conversations: 0, findings: [] });
   t.false(calls.some(c => c.method !== 'GET'));
+});
+
+test('learn reads recent Claude Code conversations wf published as notes', async t => {
+  const day = (ago: number) =>
+    new Date(Date.now() - ago * 86400000).toISOString().slice(0, 10);
+  const fence = '```';
+  const call = (tool: string, input: string) =>
+    `### Tool call: \`${tool}\`\n\n${fence}\n${input}\n\n${fence}\n`;
+  const result = (text: string) =>
+    `### Tool result\n\n${fence}\n${text}\n${fence}\n`;
+  const failingCall = [
+    call('Bash', '{"command": "yarn vitest run packages/x"}'),
+    result(
+      'Exit code 127\nnpm warn Unknown project config "shell-emulator".\n/bin/sh: vitest: command not found'
+    ),
+  ].join('\n');
+  const conversation = [
+    '# TASK-1 — abcdef12',
+    '## Transcript',
+    '### User',
+    'run the tests',
+    failingCall,
+    failingCall,
+    failingCall,
+    call('Read', '{"file_path": "/repo/a.ts"}'),
+    result('1\tconst a = 1;'),
+  ].join('\n\n');
+  const recent = `${day(1)} TASK-1 · abcdef12`;
+  const old = `${day(30)} TASK-0 · 00000000`;
+  const { output, calls } = await run(
+    LEARN_FROM_RUNS_TEMPLATE,
+    (method, path, body) => {
+      if (path.startsWith('/api/registry/workspaces/ws1/jobs?')) {
+        return { jobs: [] };
+      }
+      if (path === '/api/notes/workspaces/ws1/docs?q=&limit=1000') {
+        return {
+          docs: [
+            { docId: 'conv-new', title: recent },
+            { docId: 'conv-old', title: old },
+            { docId: 'plain', title: 'trip to canada' },
+          ],
+        };
+      }
+      if (path.startsWith('/api/notes/workspaces/ws1/docs?q=')) {
+        return { docs: [] };
+      }
+      if (path === '/api/notes/workspaces/ws1/docs/conv-new/markdown') {
+        return { markdown: conversation };
+      }
+      if (method === 'POST' && path === '/api/notes/workspaces/ws1/docs') {
+        return { docId: 'note-1', body };
+      }
+      throw new Error(`unexpected ${method} ${path}`);
+    }
+  );
+  // only the recent conversation is read
+  t.false(calls.some(c => c.path.includes('conv-old')));
+  const post = calls.find(c => c.method === 'POST')!;
+  const markdown = (post.body as { markdown: string }).markdown;
+  t.regex(markdown, /0 runs and 1 conversations/);
+  t.regex(
+    markdown,
+    /\*\*stuck\*\*: Bash failed 3\+ times \(up to 3\) in one run with: \\<path\\>: vitest: command not found/
+  );
+  t.true(markdown.includes(`seen in: ${recent}`));
+  t.like(output as object, { runs: 0, conversations: 1 });
 });

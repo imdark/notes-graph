@@ -21,21 +21,39 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import * as styles from './style.css';
 
-const clipperInput$ = new LiveData<ClipperInput | null>(null);
-const port$ = new LiveData<MessagePort | null>(null);
+// A clip arrives in two messages: a pending one with just the title and link,
+// so the note is made at once, then the full one with the page content. An
+// older clipper sends only the full one. The clipper repeats each message
+// until it is answered, so the first copy is kept and later ones only replace
+// the port to answer on.
+const pendingInput$ = new LiveData<ClipperInput | null>(null);
+const fullInput$ = new LiveData<ClipperInput | null>(null);
+const pendingPort$ = new LiveData<MessagePort | null>(null);
+const fullPort$ = new LiveData<MessagePort | null>(null);
 
 window.addEventListener('message', event => {
   if (
     typeof event.data === 'object' &&
     event.data.type === 'notesgraph-clipper:import'
   ) {
-    clipperInput$.value = event.data.payload;
-
+    const payload: ClipperInput = event.data.payload;
+    const input$ = payload.pending ? pendingInput$ : fullInput$;
+    const port$ = payload.pending ? pendingPort$ : fullPort$;
+    if (!input$.value) input$.value = payload;
     if (event.ports.length > 0) {
       port$.value = event.ports[0];
     }
   }
 });
+
+function reply(port: MessagePort | null, type: string) {
+  const arg = { type };
+  if (port) {
+    port.postMessage(arg);
+  } else {
+    window.postMessage(arg);
+  }
+}
 
 export const Component = () => {
   const importClipperService = useService(ImportClipperService);
@@ -45,11 +63,18 @@ export const Component = () => {
 
   const [importing, setImporting] = useState(false);
   const [importingError, setImportingError] = useState<any>(null);
-  const clipperInput = useLiveData(clipperInput$);
-  const [clipperInputSnapshot, setClipperInputSnapshot] =
-    useState<ClipperInput | null>(null);
-  const isMissingInput = !clipperInputSnapshot;
-  const workspaceStrategy = clipperInputSnapshot?.workspace ?? 'select-by-user';
+  const pendingInput = useLiveData(pendingInput$);
+  const fullInput = useLiveData(fullInput$);
+  // What a new note is made from: the full clip if it is already here.
+  const clipperInput = fullInput ?? pendingInput;
+  // A note made from the pending clip, waiting for the full one.
+  const [pendingDoc, setPendingDoc] = useState<{
+    workspace: WorkspaceMetadata;
+    docId: string;
+  } | null>(null);
+  const fillStarted = useRef(false);
+  const isMissingInput = !clipperInput;
+  const workspaceStrategy = clipperInput?.workspace ?? 'select-by-user';
   const serverService = useService(ServerService);
   const workspacesService = useService(WorkspacesService);
   const serverConfig = useLiveData(serverService.server.config$);
@@ -76,12 +101,6 @@ export const Component = () => {
     session.revalidate();
   }, [session]);
 
-  useEffect(() => {
-    if (!clipperInputSnapshot) {
-      setClipperInputSnapshot(clipperInput);
-    }
-  }, [clipperInput, clipperInputSnapshot]);
-
   const handleSelectedWorkspace = useCallback(
     (workspaceMetadata: WorkspaceMetadata) => {
       return setSelectedWorkspace(workspaceMetadata);
@@ -97,59 +116,80 @@ export const Component = () => {
   );
 
   const handleSuccess = useCallback(() => {
-    const arg = { type: 'notesgraph-clipper:import:success' };
-    const port = port$.value;
     track.clipper.$.$.createDoc();
-    if (port) {
-      port.postMessage(arg);
-    } else {
-      window.postMessage(arg);
-    }
+    reply(fullPort$.value, 'notesgraph-clipper:import:success');
     window.close();
   }, []);
 
+  // Once a note exists: done if it holds the full clip, otherwise tell the
+  // clipper the note is made and wait for the page content.
+  const handleCreated = useCallback(
+    (input: ClipperInput, workspace: WorkspaceMetadata, docId: string) => {
+      if (input.pending) {
+        reply(pendingPort$.value, 'notesgraph-clipper:import:created');
+        setPendingDoc({ workspace, docId });
+      } else {
+        handleSuccess();
+      }
+    },
+    [handleSuccess]
+  );
+
   const handleImportToSelectedWorkspace = useAsyncCallback(async () => {
-    if (clipperInputSnapshot && selectedWorkspace) {
+    if (clipperInput && selectedWorkspace) {
       // save the last opened workspace id
       localStorage.setItem('last_workspace_id', selectedWorkspace.id);
       setImporting(true);
       try {
-        await importClipperService.importToWorkspace(
+        const docId = await importClipperService.importToWorkspace(
           selectedWorkspace,
-          clipperInputSnapshot
+          clipperInput
         );
-        handleSuccess();
+        handleCreated(clipperInput, selectedWorkspace, docId);
       } catch (err) {
         setImportingError(err);
       } finally {
         setImporting(false);
       }
     }
-  }, [
-    clipperInputSnapshot,
-    handleSuccess,
-    importClipperService,
-    selectedWorkspace,
-  ]);
+  }, [clipperInput, handleCreated, importClipperService, selectedWorkspace]);
 
   const handleImportToNewWorkspace = useAsyncCallback(async () => {
-    if (!clipperInputSnapshot) {
+    if (!clipperInput) {
       return;
     }
     setImporting(true);
     try {
-      await importClipperService.importToNewWorkspace(
-        'notesgraph-cloud',
-        'Workspace',
-        clipperInputSnapshot
-      );
-      handleSuccess();
+      const flavour = 'notesgraph-cloud';
+      const { workspaceId, docId } =
+        await importClipperService.importToNewWorkspace(
+          flavour,
+          'Workspace',
+          clipperInput
+        );
+      handleCreated(clipperInput, { id: workspaceId, flavour }, docId);
     } catch (err) {
       setImportingError(err);
     } finally {
       setImporting(false);
     }
-  }, [clipperInputSnapshot, handleSuccess, importClipperService]);
+  }, [clipperInput, handleCreated, importClipperService]);
+
+  useEffect(() => {
+    if (!pendingDoc || !fullInput || fillStarted.current) return;
+    fillStarted.current = true;
+    setImporting(true);
+    importClipperService
+      .fillClippedDoc(pendingDoc.workspace, pendingDoc.docId, fullInput)
+      .then(handleSuccess)
+      .catch(err => {
+        setImportingError(err);
+        setImporting(false);
+      });
+  }, [pendingDoc, fullInput, importClipperService, handleSuccess]);
+
+  // The note is made but the page content hasn't come yet.
+  const waitingForContent = !!pendingDoc && !importingError;
 
   const handleClickSignIn = useCallback(() => {
     window.open(
@@ -193,7 +233,8 @@ export const Component = () => {
     notLogin,
   ]);
 
-  const disabled = isMissingInput || importing || notLogin;
+  // Once the note is made, importing again would make a second one.
+  const disabled = isMissingInput || importing || notLogin || !!pendingDoc;
 
   if (notLogin) {
     // not login
@@ -221,7 +262,11 @@ export const Component = () => {
       <h6 className={styles.mainTitle}>
         {t['com.notesgraph.import-clipper.dialog.createDocFromClipper']()}
       </h6>
-      {noWorkspace ? (
+      {waitingForContent ? (
+        <p className={styles.desc}>
+          Note created. Adding the page’s text and images…
+        </p>
+      ) : noWorkspace ? (
         <p className={styles.desc}>A new workspace will be created.</p>
       ) : (
         <>

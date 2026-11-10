@@ -3,23 +3,69 @@ import { useEffect, useState } from 'react';
 
 import * as styles from './index.css';
 
+const PROBE_INTERVAL_MS = 15_000;
+const PROBE_TIMEOUT_MS = 5_000;
+
 /**
- * Live browser connectivity, from `navigator.onLine` + the online/offline
- * window events. This is network reachability (not cloud-sync state) — the
- * signal users mean by "am I offline?". SSR-safe default of online.
+ * Whether the app's server answers. Any HTTP response counts: it means the
+ * request went out and came back. Only a network error or a timeout is
+ * "unreachable".
+ */
+const probeServer = async () => {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), PROBE_TIMEOUT_MS);
+  try {
+    await fetch('/info', { cache: 'no-store', signal: controller.signal });
+    return true;
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timer);
+  }
+};
+
+/**
+ * Live connectivity: `navigator.onLine` and the online/offline window events,
+ * checked against the server. Chrome can get stuck reporting offline after
+ * the machine changes networks, in every tab and across reloads, while
+ * requests go through fine. So "offline" from the browser is only believed
+ * once a request to the server also fails, and it is re-checked every 15s
+ * until either side says online. SSR-safe default of online.
  */
 export const useNetworkOnline = () => {
   const [online, setOnline] = useState(() =>
     typeof navigator !== 'undefined' ? navigator.onLine : true
   );
   useEffect(() => {
-    const on = () => setOnline(true);
-    const off = () => setOnline(false);
-    window.addEventListener('online', on);
-    window.addEventListener('offline', off);
+    let disposed = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+
+    const check = async () => {
+      clearTimeout(timer);
+      if (navigator.onLine) {
+        setOnline(true);
+        return;
+      }
+      const reachable = await probeServer();
+      if (disposed) return;
+      setOnline(reachable);
+      if (!navigator.onLine) {
+        timer = setTimeout(onChange, PROBE_INTERVAL_MS);
+      }
+    };
+
+    // check() never rejects (probeServer catches), the catch is for lint.
+    const onChange = () => {
+      check().catch(() => {});
+    };
+    window.addEventListener('online', onChange);
+    window.addEventListener('offline', onChange);
+    onChange();
     return () => {
-      window.removeEventListener('online', on);
-      window.removeEventListener('offline', off);
+      disposed = true;
+      clearTimeout(timer);
+      window.removeEventListener('online', onChange);
+      window.removeEventListener('offline', onChange);
     };
   }, []);
   return online;

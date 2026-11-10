@@ -19,6 +19,10 @@ import { z } from 'zod';
 
 import { normalizeSearchText } from '../../../utils/normalize-search-text';
 import type { DocsService } from '../../doc/services/docs';
+import {
+  SPECIAL_TAGS,
+  specialKindForSearch,
+} from '../../special-tags/constants';
 import type { WorkspaceService } from '../../workspace';
 import {
   hasSearchFilters,
@@ -387,18 +391,37 @@ export class DocsSearchService extends Service {
       );
     }
 
+    // is:/-is: special-tag kinds, read from each doc's tags. An unknown kind
+    // matches nothing.
+    const withKind = (kind: string) => {
+      const special = specialKindForSearch(kind);
+      const tagId = special ? SPECIAL_TAGS[special].id : undefined;
+      return new Set(
+        tagId
+          ? this.docsService.list.docs$.value
+              .filter(record => record.meta$.value.tags?.includes(tagId))
+              .map(record => record.id)
+          : []
+      );
+    };
+    const kindSets = filters.kinds.map(withKind);
+    const notKindIds = filters.notKinds.flatMap(kind => [...withKind(kind)]);
+
     return combineLatest([
       requiredQueries.length ? combineLatest(requiredQueries) : of([]),
       excludedQueries.length ? combineLatest(excludedQueries) : of([]),
     ]).pipe(
       map(([required, excludedSets]) => {
         let allowed = docs;
-        for (const ids of required) {
+        for (const ids of [...required, ...kindSets]) {
           allowed = allowed
             ? new Set([...allowed].filter(id => ids.has(id)))
             : ids;
         }
-        const excluded = new Set(excludedSets.flatMap(ids => [...ids]));
+        const excluded = new Set([
+          ...excludedSets.flatMap(ids => [...ids]),
+          ...notKindIds,
+        ]);
         return { allowed, excluded };
       })
     );
