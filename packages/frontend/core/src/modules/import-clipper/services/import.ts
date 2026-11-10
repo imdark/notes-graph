@@ -17,11 +17,57 @@ export interface ClipperInput {
   /** The page the content was clipped from, when the clipper sends it. */
   sourceUrl?: string;
   workspace?: 'select-by-user' | 'last-open-workspace';
+  /**
+   * Set on the first message of a clip: just the title and link, so the note
+   * exists straight away. The page content follows in a second message,
+   * which {@link ImportClipperService.fillClippedDoc} writes into that note.
+   */
+  pending?: boolean;
 }
 
 export class ImportClipperService extends Service {
   constructor(private readonly workspacesService: WorkspacesService) {
     super();
+  }
+
+  /** Replaces the body of a note made from a pending clip with the full clip. */
+  async fillClippedDoc(
+    workspaceMetadata: WorkspaceMetadata,
+    docId: string,
+    clipperInput: ClipperInput
+  ) {
+    const { workspace, dispose: disposeWorkspace } =
+      this.workspacesService.open({
+        metadata: workspaceMetadata,
+      });
+    const docsService = workspace.scope.get(DocsService);
+    const { doc, release } = docsService.open(docId);
+    try {
+      // The page's own title can differ from the tab title the note got.
+      await docsService.changeDocTitle(docId, clipperInput.title);
+      await doc.waitForSyncReady();
+      const store = doc.blockSuiteDoc;
+      const note = store.getBlocksByFlavour('notesgraph:note')[0];
+      if (!note) throw new Error('Clipped note has no body');
+      store.transact(() => {
+        // Copy first: deleting a block mutates `children`.
+        for (const child of note.model.children.slice()) {
+          store.deleteBlock(child);
+        }
+      });
+      await MarkdownTransformer.importMarkdownToBlock({
+        doc: store,
+        blockId: note.id,
+        markdown: clipperInput.contentMarkdown,
+        assets: clipperInput.attachments ?? {},
+        extensions: getStoreManager().config.init().value.get('store'),
+      });
+      workspace.engine.doc.addPriority(docId, 100);
+      await workspace.engine.doc.waitForSynced(docId);
+    } finally {
+      release();
+      disposeWorkspace();
+    }
   }
 
   async importToWorkspace(
