@@ -43,7 +43,12 @@ describe('runsForModel', () => {
   const runs = [run('on-list', { blockId: 'list' })];
   const list = { id: 'list' } as BlockModel;
   const item = (text: string) =>
-    ({ id: 'b2', text: { deltas$: { value: [{ insert: text }] } } }) as never;
+    ({
+      id: 'b2',
+      // The name is the real Text API's (a signal there), not an observable.
+      // eslint-disable-next-line rxjs/finnish
+      text: { deltas$: { value: [{ insert: text }] } },
+    }) as never;
   const store = {
     getParent: (model: BlockModel) => (model.id === 'b2' ? list : null),
   } as unknown as Store;

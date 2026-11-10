@@ -1,5 +1,9 @@
 import { Button, notify } from '@notesgraph/component';
 import {
+  DeployInProgress,
+  useDeployCiRuns,
+} from '@notesgraph/core/components/deployments';
+import {
   type AgentRun,
   AgentRunsStore,
   AgentsService,
@@ -15,10 +19,6 @@ import { FeatureFlagService } from '@notesgraph/core/modules/feature-flag';
 import { useLiveData, useService } from '@notesgraph/infra';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
-import {
-  DeployInProgress,
-  useDeployCiRuns,
-} from '@notesgraph/core/components/deployments';
 import { RunRow, useMinuteTick } from './agent-run-row';
 import * as styles from './agents.css';
 

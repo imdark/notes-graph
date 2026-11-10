@@ -89,7 +89,7 @@ export function downloadKeyFile(keyFile) {
   const a = document.createElement('a');
   a.href = url;
   a.download = KEY_FILE_NAME;
-  document.body.appendChild(a);
+  document.body.append(a);
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1000);

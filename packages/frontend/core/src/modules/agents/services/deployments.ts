@@ -362,8 +362,7 @@ export const lastLogLine = (logs: string | undefined): string =>
   (logs ?? '')
     .split('\n')
     .map(line => line.trim())
-    .filter(Boolean)
-    .pop() ?? '';
+    .findLast(Boolean) ?? '';
 
 /** The note a deploy leaves under each task it took out. */
 export const deployedNote = (commit: string, at: Date): string =>

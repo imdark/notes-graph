@@ -109,7 +109,11 @@ body::after {
       rgba(0, 0, 0, 0.14) 0 1px,
       transparent 1px 3px
     ),
-    radial-gradient(120% 100% at 50% 50%, transparent 60%, rgba(4, 2, 10, 0.5) 100%);
+    radial-gradient(
+      120% 100% at 50% 50%,
+      transparent 60%,
+      rgba(4, 2, 10, 0.5) 100%
+    );
 }
 
 a {

@@ -16,8 +16,8 @@ import { PermissionAccess } from '../../core/permission';
 import { Models } from '../../models';
 import { toJobDto } from '../registry/jobs';
 import {
-  type MonitorAlerts,
   monitorAgentId,
+  type MonitorAlerts,
   MonitorService,
   type MonitorSpec,
 } from './service';

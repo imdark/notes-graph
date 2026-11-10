@@ -31,9 +31,9 @@ import {
 } from '@notesgraph/core/modules/cloud';
 import { registerNativePreviewHandlers } from '@notesgraph/core/modules/code-block-preview-renderer';
 import { DocsService } from '@notesgraph/core/modules/doc';
-import { JournalService } from '@notesgraph/core/modules/journal';
 import { GlobalContextService } from '@notesgraph/core/modules/global-context';
 import { I18nProvider } from '@notesgraph/core/modules/i18n';
+import { JournalService } from '@notesgraph/core/modules/journal';
 import { LifecycleService } from '@notesgraph/core/modules/lifecycle';
 import {
   configureLocalStorageStateStorageImpls,

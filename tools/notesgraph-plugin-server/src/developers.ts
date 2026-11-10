@@ -55,7 +55,7 @@ export function currentKey(dev: Developer): DeveloperKey {
 }
 
 export class DeveloperStore {
-  private developers: Developer[];
+  private readonly developers: Developer[];
 
   constructor(private readonly file: string) {
     this.developers = this.load();

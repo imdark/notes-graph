@@ -4,14 +4,14 @@ import {
   popMenu,
   popupTargetFromElement,
 } from '@blocksuite/notesgraph/components/context-menu';
+import { EnterIcon } from '@blocksuite/notesgraph/components/icons';
+import { focusTextModel } from '@blocksuite/notesgraph/rich-text';
 import {
   BLOCK_ID_ATTR,
   TextSelection,
   WidgetComponent,
   WidgetViewExtension,
 } from '@blocksuite/notesgraph/std';
-import { EnterIcon } from '@blocksuite/notesgraph/components/icons';
-import { focusTextModel } from '@blocksuite/notesgraph/rich-text';
 import type { ExtensionType } from '@blocksuite/notesgraph/store';
 import { IconType } from '@notesgraph/component';
 import {
@@ -175,9 +175,10 @@ export class AgentAssignWidget extends WidgetComponent {
     }
 
     try {
-      const flag = framework.get(FeatureFlagService).flags.enable_add_row_pill.$;
-      this._addRowOn = !!flag.value;
-      const flagSub = flag.subscribe(on => {
+      const flag$ =
+        framework.get(FeatureFlagService).flags.enable_add_row_pill.$;
+      this._addRowOn = !!flag$.value;
+      const flagSub = flag$.subscribe(on => {
         this._addRowOn = !!on;
       });
       this._disposables.add(() => flagSub.unsubscribe());
@@ -315,7 +316,8 @@ export class AgentAssignWidget extends WidgetComponent {
    * the next line down, so the button never covers text on either line.
    */
   private _place() {
-    const button = this.renderRoot.querySelector<HTMLElement>('.ng-agent-pills');
+    const button =
+      this.renderRoot.querySelector<HTMLElement>('.ng-agent-pills');
     // Every block's widget re-renders on each streamed run event; a hidden
     // one must not force a layout to find that out.
     if (!button) {

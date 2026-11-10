@@ -2122,7 +2122,9 @@ __metadata:
     "@emotion/css": "npm:^11.13.5"
     "@floating-ui/dom": "npm:^1.6.13"
     "@preact/signals-core": "npm:^1.8.0"
+    "@vitest/browser-playwright": "npm:^4.1.8"
     lit: "npm:^3.2.0"
+    vitest: "npm:^4.1.8"
     zod: "npm:^3.25.76"
   languageName: unknown
   linkType: soft

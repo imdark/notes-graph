@@ -33,7 +33,9 @@ export const hostFor = (
 ): RegistryDevice | undefined =>
   devices.find(
     device =>
-      device.labels?.role === 'prod-host' && device.agentTarget && online(device)
+      device.labels?.role === 'prod-host' &&
+      device.agentTarget &&
+      online(device)
   );
 
 /**

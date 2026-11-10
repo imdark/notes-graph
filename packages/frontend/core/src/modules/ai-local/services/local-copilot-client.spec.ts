@@ -120,8 +120,8 @@ describe('LocalCopilotClient chat beside a note', () => {
     } as never);
     expect(second).toBeTruthy();
     await finished(local.chatTextStream({ sessionId } as never));
-    const history = sent[1].filter(m => m.role === 'user');
-    expect(history[0].content).toBe('summarise this page');
+    const firstUser = sent[1].find(m => m.role === 'user');
+    expect(firstUser?.content).toBe('summarise this page');
   });
 
   test("a client with tools is told the open note's id", async () => {

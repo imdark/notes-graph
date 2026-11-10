@@ -170,14 +170,14 @@ export class AskGraphQuickSearchSession
             groupScore: number
           ) =>
             docs
-              .filter(doc => {
-                if (seen.has(doc.docId)) return false;
-                return !!this.docsService.list.doc$(doc.docId).value;
+              .flatMap(doc => {
+                if (seen.has(doc.docId)) return [];
+                const record = this.docsService.list.doc$(doc.docId).value;
+                return record ? [{ doc, record }] : [];
               })
               .slice(0, MAX_PER_GROUP)
-              .map(doc => {
+              .map(({ doc, record }) => {
                 seen.add(doc.docId);
-                const record = this.docsService.list.doc$(doc.docId).value!;
                 const { title, updatedDate } =
                   this.docDisplayMetaService.getDocDisplayMeta(record);
                 return {

@@ -27,6 +27,10 @@
     "lit": "^3.2.0",
     "zod": "^3.25.76"
   },
+  "devDependencies": {
+    "@vitest/browser-playwright": "^4.1.8",
+    "vitest": "^4.1.8"
+  },
   "exports": {
     ".": "./src/index.ts",
     "./view": "./src/view.ts",

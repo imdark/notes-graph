@@ -8,6 +8,16 @@ import { html } from 'lit-html';
 
 export const TOGGLE_BUTTON_PARENT_CLASS = 'blocksuite-toggle-button-parent';
 
+/**
+ * How far right of the text the "…" pill reaches on `line`, from the styles
+ * below: a 4px margin, 6px padding each side, and the ellipsis at 0.78em,
+ * with a few pixels to spare so a tap on its edge still counts.
+ */
+export const pillWidth = (line: Element) => {
+  const fontSize = parseFloat(getComputedStyle(line).fontSize) || 16;
+  return 4 + 12 + fontSize * 0.78 + 8;
+};
+
 export class ToggleButton extends WithDisposable(ShadowlessElement) {
   static override styles = css`
     .toggle-icon {
@@ -77,8 +87,10 @@ export class ToggleButton extends WithDisposable(ShadowlessElement) {
   `;
 
   // The pill is a pseudo-element, so it has no click target of its own: a
-  // click on the line element itself (not on a text span) that lands right of
-  // the last glyph is a click on the pill.
+  // click on the line element itself (not on a text span) that lands where
+  // the pill is drawn, just right of the last glyph, is a click on the pill.
+  // Only there: a click further right, in the line's blank space, puts the
+  // caret at the end of the line as it does on any other line.
   private readonly _onPillClick = (e: MouseEvent) => {
     if (!this.collapsed) return;
     const target = e.target;
@@ -87,17 +99,21 @@ export class ToggleButton extends WithDisposable(ShadowlessElement) {
     if (!line || (target !== line && target.parentElement !== line)) return;
     const lastChild = target.lastElementChild ?? target;
     const textRight = lastChild.getBoundingClientRect().right;
-    if (e.clientX < textRight) return;
+    if (e.clientX < textRight || e.clientX > textRight + pillWidth(target)) {
+      return;
+    }
     e.preventDefault();
     e.stopPropagation();
     this.updateCollapsed(false);
   };
 
-  private _pillHost: Element | null = null;
+  private _pillHost: HTMLElement | null = null;
 
   override connectedCallback() {
     super.connectedCallback();
-    this._pillHost = this.closest(`.${TOGGLE_BUTTON_PARENT_CLASS}`);
+    this._pillHost = this.closest<HTMLElement>(
+      `.${TOGGLE_BUTTON_PARENT_CLASS}`
+    );
     this._pillHost?.addEventListener('click', this._onPillClick, true);
   }
 

@@ -6,7 +6,6 @@ import { afterEach, expect, test, vi } from 'vitest';
 import { Doc as YDoc, encodeStateAsUpdate } from 'yjs';
 
 import { DummyConnection } from '../connection';
-import { DummyDocStorage } from '../storage/dummy/doc';
 import {
   IndexedDBBlobStorage,
   IndexedDBBlobSyncStorage,
@@ -33,6 +32,7 @@ import {
   type SearchResult,
   SpaceStorage,
 } from '../storage';
+import { DummyDocStorage } from '../storage/dummy/doc';
 import { Sync } from '../sync';
 import { DocSyncPeer } from '../sync/doc/peer';
 import { IndexerSyncImpl } from '../sync/indexer';

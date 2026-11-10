@@ -72,12 +72,12 @@ A card that ships code climbs `committed` → `merged` → `deployed` → `done`
 is **never** marked done just because the code is written. Each is a custom
 `update_task` status (rendered `COMMITTED`/`MERGED`/`DEPLOYED`, no CLOSED stamp):
 
-| status      | set when                                                                     |
-| ----------- | ---------------------------------------------------------------------------- |
-| `committed` | the work is committed on its branch (PR opened or pushed)                    |
+| status      | set when                                                                      |
+| ----------- | ----------------------------------------------------------------------------- |
+| `committed` | the work is committed on its branch (PR opened or pushed)                     |
 | `merged`    | that branch landed on `stage` (`gh pr view <branch> --json state` → `MERGED`) |
 | `deployed`  | a release containing it was deployed (the `Deploy prod` run succeeded)        |
-| `done`      | the deployed change was verified live — writes CLOSED                        |
+| `done`      | the deployed change was verified live — writes CLOSED                         |
 
 Stages only move forward. Before finishing a run, sweep the board:
 `list_blocks` with status `committed`, then `merged`, then `deployed`, and

@@ -1446,7 +1446,7 @@ export class WorkspaceMcpProvider {
       name: 'deploy_info',
       title: 'Deploy Info',
       description:
-        "What this NotesGraph server is running: the commit, branch and commit subject it was deployed from, when, whether the tree had uncommitted changes (dirty), the pull requests merged into it (newest first) and its feature flags, each by the commit that added it. Pass pullRequests to check whether those pull request numbers are live: each comes back live true or false, or null when it is older than the record reaches back. It only reads. A server deployed without a record (dev, self-hosted) says so.",
+        'What this NotesGraph server is running: the commit, branch and commit subject it was deployed from, when, whether the tree had uncommitted changes (dirty), the pull requests merged into it (newest first) and its feature flags, each by the commit that added it. Pass pullRequests to check whether those pull request numbers are live: each comes back live true or false, or null when it is older than the record reaches back. It only reads. A server deployed without a record (dev, self-hosted) says so.',
       parser: z.object({
         pullRequests: z.array(z.number().int().positive()).max(100).optional(),
       }),
@@ -1895,7 +1895,7 @@ export class WorkspaceMcpProvider {
         name: 'report_monitor_value',
         title: 'Report Monitor Value',
         description:
-          "Report the number a scheduled agent monitor watches (a price, a count, a rate): it becomes the monitor's reading, which its alerts compare and its trend charts. Call it during the monitor's run with the monitorId its instructions give, with the bare number (1899, not \"$1,899\"). Calling it again in the same run replaces the value.",
+          'Report the number a scheduled agent monitor watches (a price, a count, a rate): it becomes the monitor\'s reading, which its alerts compare and its trend charts. Call it during the monitor\'s run with the monitorId its instructions give, with the bare number (1899, not "$1,899"). Calling it again in the same run replaces the value.',
         parser: z.object({
           monitorId: z.string(),
           value: z.number().finite(),
@@ -1938,9 +1938,7 @@ export class WorkspaceMcpProvider {
           await this.models.monitor.update(monitorId, {
             reportedValue: String(value),
           });
-          return toolText(
-            JSON.stringify({ success: true, monitorId, value })
-          );
+          return toolText(JSON.stringify({ success: true, monitorId, value }));
         },
       });
 
