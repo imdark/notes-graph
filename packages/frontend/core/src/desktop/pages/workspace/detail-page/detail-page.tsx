@@ -29,6 +29,7 @@ import { useRegisterAgentCommands } from '@notesgraph/core/components/hooks/note
 import { useRegisterBlocksuiteEditorCommands } from '@notesgraph/core/components/hooks/notesgraph/use-register-blocksuite-editor-commands';
 import { useRegisterGoalCommands } from '@notesgraph/core/components/hooks/notesgraph/use-register-goal-commands';
 import { useRegisterSelectionEditCommands } from '@notesgraph/core/components/hooks/notesgraph/use-register-selection-edit-commands';
+import { useRegisterVideoBackupCommands } from '@notesgraph/core/components/hooks/notesgraph/use-register-video-backup-commands';
 import { useActiveBlocksuiteEditor } from '@notesgraph/core/components/hooks/use-block-suite-editor';
 import { NotesGraphErrorBoundary } from '@notesgraph/core/components/notesgraph/notesgraph-error-boundary';
 // import { PageAIOnboarding } from '@notesgraph/core/components/notesgraph/ai-onboarding';
@@ -262,6 +263,7 @@ const DetailPageImpl = memo(function DetailPageImpl() {
   useRegisterSelectionEditCommands(editor, isActiveView);
   useRegisterAgentCommands(editor, isActiveView);
   useRegisterGoalCommands(editor, isActiveView);
+  useRegisterVideoBackupCommands(editor, isActiveView);
   useAgentFinishedNotification(isActiveView);
 
   const journalService = useService(JournalService);

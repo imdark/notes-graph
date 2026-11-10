@@ -10,6 +10,16 @@
 # just `node`. Native/browser deps stay external and resolve from node_modules.
 FROM mcr.microsoft.com/playwright:v1.58.2-noble
 
+# yt-dlp (standalone binary, no Python needed) + ffmpeg to merge the video and
+# audio streams, for the "Back up video" download (/clip/video). YouTube
+# changes often, so the image takes the latest yt-dlp release when it rebuilds.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends ffmpeg curl ca-certificates \
+ && rm -rf /var/lib/apt/lists/* \
+ && curl -fsSL -o /usr/local/bin/yt-dlp \
+      https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux \
+ && chmod a+rx /usr/local/bin/yt-dlp
+
 WORKDIR /app
 COPY . .
 

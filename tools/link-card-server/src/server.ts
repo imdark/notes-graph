@@ -1,3 +1,4 @@
+import { createReadStream } from 'node:fs';
 import { appendFile } from 'node:fs/promises';
 import http from 'node:http';
 
@@ -13,6 +14,12 @@ import {
 } from '@notesgraph/link-card';
 import { renderScreenshot } from '@notesgraph/link-card/screenshot';
 import { ImapFlow } from 'imapflow';
+
+import {
+  DEFAULT_MAX_VIDEO_BYTES,
+  downloadYoutubeVideo,
+  VideoDownloadError,
+} from './youtube-video';
 
 const PORT = Number(process.env.PORT ?? 8088);
 const BASE_URL = process.env.LINK_CARD_BASE_URL ?? `http://localhost:${PORT}`;
@@ -407,6 +414,43 @@ async function handle(req: http.IncomingMessage, res: http.ServerResponse) {
       } catch (err) {
         sendJson(res, 422, { error: (err as Error).message });
       }
+      return;
+    }
+
+    // YouTube video backup: yt-dlp downloads the video (<= 720p mp4) and it is
+    // streamed back for the app to store as an attachment blob. The title
+    // rides in a header so the body stays the raw file.
+    if (path === '/clip/video') {
+      const url = reqUrl.searchParams.get('url');
+      if (!isHttpUrl(url)) {
+        sendJson(res, 400, { error: 'Invalid or missing "url"' });
+        return;
+      }
+      const requested = Number(reqUrl.searchParams.get('maxBytes'));
+      const maxBytes =
+        Number.isFinite(requested) && requested > 0
+          ? Math.min(requested, DEFAULT_MAX_VIDEO_BYTES)
+          : DEFAULT_MAX_VIDEO_BYTES;
+      let video;
+      try {
+        video = await downloadYoutubeVideo(url, maxBytes);
+      } catch (err) {
+        const status = err instanceof VideoDownloadError ? err.status : 500;
+        sendJson(res, status, { error: (err as Error).message });
+        return;
+      }
+      res.writeHead(200, {
+        'content-type': 'video/mp4',
+        'content-length': String(video.size),
+        'cache-control': 'no-store',
+        'x-video-title': encodeURIComponent(video.title),
+        'Access-Control-Expose-Headers': 'x-video-title',
+        ...CORS,
+      });
+      const stream = createReadStream(video.path);
+      stream.on('close', () => void video.cleanup());
+      stream.on('error', () => res.destroy());
+      stream.pipe(res);
       return;
     }
 
