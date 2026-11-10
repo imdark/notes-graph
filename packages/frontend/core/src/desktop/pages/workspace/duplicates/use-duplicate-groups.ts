@@ -1,4 +1,5 @@
 import { DocsService } from '@notesgraph/core/modules/doc';
+import { SpecialTagsService } from '@notesgraph/core/modules/special-tags';
 import { LiveData, useLiveData, useService } from '@notesgraph/infra';
 import { useMemo } from 'react';
 import { combineLatest, debounceTime, map, of, switchMap } from 'rxjs';
@@ -66,6 +67,7 @@ function buildGroups(rows: DuplicateDoc[]): DuplicateGroup[] {
  */
 export function useDuplicateGroups(): DuplicateGroup[] {
   const docsService = useService(DocsService);
+  const specialTags = useService(SpecialTagsService);
 
   const groups$ = useMemo(
     () =>
@@ -73,7 +75,15 @@ export function useDuplicateGroups(): DuplicateGroup[] {
         docsService.list.docs$.pipe(
           switchMap(records => {
             if (records.length === 0) return of([] as DuplicateGroup[]);
-            return combineLatest(
+            // Journal pages, conversations and calendar notes (special tags)
+            // share titles by design ("2026-10-21 TASK-13 · …", one note per
+            // recurring meeting), so they aren't offered as duplicates.
+            const skip$ = specialTags.enabled$.pipe(
+              switchMap(enabled =>
+                enabled ? specialTags.specialDocIds$ : of(new Set<string>())
+              )
+            );
+            const rows$ = combineLatest(
               records.map(record =>
                 combineLatest([
                   record.title$,
@@ -90,12 +100,13 @@ export function useDuplicateGroups(): DuplicateGroup[] {
                   }))
                 )
               )
-            ).pipe(
+            );
+            return combineLatest([rows$, skip$]).pipe(
               debounceTime(300),
-              map(rows =>
+              map(([rows, skip]) =>
                 buildGroups(
                   rows
-                    .filter(r => !r.trash)
+                    .filter(r => !r.trash && !skip.has(r.id))
                     .map(({ id, title, createdAt, updatedAt }) => ({
                       id,
                       title,
@@ -109,7 +120,7 @@ export function useDuplicateGroups(): DuplicateGroup[] {
         ),
         []
       ),
-    [docsService]
+    [docsService, specialTags]
   );
 
   return useLiveData(groups$);

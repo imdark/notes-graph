@@ -67,6 +67,7 @@ import { configureScheduleModule } from './schedule';
 import { configSearchMenuModule } from './search-menu';
 import { configureShareDocsModule } from './share-doc';
 import { configureShareSettingModule } from './share-setting';
+import { configureSpecialTagsModule } from './special-tags';
 import {
   configureCommonGlobalStorageImpls,
   configureStorageModule,
@@ -137,6 +138,7 @@ export function configureCommonModules(framework: Framework) {
   configureUserspaceModule(framework);
   configureAppSidebarModule(framework);
   configureJournalModule(framework);
+  configureSpecialTagsModule(framework);
   configureScheduleModule(framework);
   configureUrlModule(framework);
   configureAppThemeModule(framework);

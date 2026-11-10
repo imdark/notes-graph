@@ -445,6 +445,15 @@ export const NOTESGRAPH_FLAGS = {
     configurable: true,
     defaultState: true,
   },
+  enable_special_tags: {
+    commit: '',
+    category: 'notesgraph',
+    displayName: 'Special tags for journal, AI conversation and calendar notes',
+    description:
+      'Tags journal pages, AI conversations and calendar event notes with a Journal, AI conversation or Calendar event tag, once each. Notes with these tags are never suggested as parents, stay out of the Inbox and the Duplicates page, and can be searched with is:journal, is:conversation and is:calendar (or left out with -is:). Remove the tag to make a note ordinary again.',
+    configurable: true,
+    defaultState: true,
+  },
 } satisfies { [key in string]: FlagInfo };
 
 // oxlint-disable-next-line no-redeclare

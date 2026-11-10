@@ -74,6 +74,15 @@ export class TagStore extends Store {
     return newId;
   }
 
+  /** Add a tag with a fixed id, unless one with that id already exists. */
+  ensureTagOption(option: Pick<Tag, 'id' | 'value' | 'color'>) {
+    if (this.tagOptions$.value.some(o => o.id === option.id)) return;
+    this.updateTagOptions([
+      ...this.tagOptions$.value,
+      { ...option, createDate: Date.now(), updateDate: Date.now() },
+    ]);
+  }
+
   updateProperties = (properties: DocsPropertiesMeta) => {
     this.workspaceService.workspace.docCollection.meta.setProperties(
       properties

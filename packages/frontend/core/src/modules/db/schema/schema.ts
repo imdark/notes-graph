@@ -140,6 +140,10 @@ export const NotesGraph_WORKSPACE_DB_SCHEMA = {
         date: string;
       }>()
       .optional(),
+    // the special tags (modules/special-tags) the app has already put on this
+    // note, by kind. Each is applied once, so a tag the user removes stays
+    // removed.
+    specialTagged: f.json<string[]>().optional(),
     // a note the web clipper made from a page: where it was clipped from (when
     // the clipper says) and when, so the note can be compiled into the rest
     // of the user's notes later (see modules/agents compile-source).

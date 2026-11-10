@@ -6,6 +6,7 @@ import { HomeDocService } from '@notesgraph/core/modules/home-doc';
 import { JournalService } from '@notesgraph/core/modules/journal';
 import { NavigationPanelService } from '@notesgraph/core/modules/navigation-panel';
 import { ProjectsService } from '@notesgraph/core/modules/projects';
+import { SpecialTagsService } from '@notesgraph/core/modules/special-tags';
 import { useI18n } from '@notesgraph/i18n';
 import {
   LiveData,
@@ -224,6 +225,7 @@ export const NavigationPanelNotes = () => {
     navigationPanelService,
     journalService,
     projectsService,
+    specialTagsService,
   } = useServices({
     DocsService,
     DocsSearchService,
@@ -232,6 +234,7 @@ export const NavigationPanelNotes = () => {
     NavigationPanelService,
     JournalService,
     ProjectsService,
+    SpecialTagsService,
   });
   const t = useI18n();
   const DocNode = useContext(NotesTreeDocNodeContext);
@@ -293,6 +296,15 @@ export const NavigationPanelNotes = () => {
   const nonTrashIds = useLiveData(docsService.list.nonTrashDocsIds$);
   const docsMap = useLiveData(docsService.list.docsMap$);
   const journalDocIds = useLiveData(journalService.allJournalDocIds$);
+  // Conversations and calendar event notes (special tags) are records the
+  // app made, so a parentless one isn't something to file: keep it out of
+  // the Inbox. Journal pages still go to the Journal node below.
+  const specialTagsOn = useLiveData(specialTagsService.enabled$);
+  const specialDocIds = useLiveData(specialTagsService.specialDocIds$);
+  const notInboxIds = useMemo(
+    () => (specialTagsOn ? specialDocIds : new Set<string>()),
+    [specialTagsOn, specialDocIds]
+  );
   const projects = useLiveData(projectsService.projects.projects$);
 
   // Docs that belong to a project render nested under their project node at the
@@ -374,7 +386,7 @@ export const NavigationPanelNotes = () => {
       if (id === homeDocId || reachable.has(id) || projectDocIds.has(id))
         return;
       if (journalDocIds.has(id)) journalRoots.push(id);
-      else inboxRoots.push(id);
+      else if (!notInboxIds.has(id)) inboxRoots.push(id);
       visit(id);
       drain();
     };
@@ -407,6 +419,7 @@ export const NavigationPanelNotes = () => {
     nonTrashIds,
     homeDocId,
     journalDocIds,
+    notInboxIds,
     projectDocIds,
     titleOf,
   ]);
