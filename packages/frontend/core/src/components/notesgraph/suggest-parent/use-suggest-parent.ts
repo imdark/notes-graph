@@ -39,6 +39,50 @@ function orElse<T>(fallback: T) {
 // `journal` property — `ngraph capture` and agents create these by title alone.
 const DATE_TITLE = /^\d{4}-\d{2}-\d{2}$/;
 
+// `wf` files each agent conversation in the `ai / conversations` folder and
+// also links it under a note titled "conversations" (the note tree is built
+// from links). Either one marks a transcript.
+const CONVERSATIONS_HUB_TITLE = 'conversations';
+
+/**
+ * Agent conversation transcripts, and the "conversations" notes that hold
+ * them: docs in the `ai / conversations` folder, plus every doc linked under
+ * a note titled "conversations". The folder alone misses transcripts that
+ * were linked but never filed, which kept showing up as parents.
+ */
+function watchConversationDocIds(
+  docsService: DocsService,
+  docsSearch: DocsSearchService,
+  organizeService: OrganizeService
+): Observable<string[]> {
+  const hubIds$ = docsService.list.docs$.pipe(
+    map(records =>
+      records
+        .filter(
+          r =>
+            !r.trash$.value &&
+            (r.title$.value ?? '').trim().toLowerCase() ===
+              CONVERSATIONS_HUB_TITLE
+        )
+        .map(r => r.id)
+    ),
+    distinctUntilChanged((a, b) => a.join() === b.join())
+  );
+  const linked$ = hubIds$.pipe(
+    switchMap(hubIds =>
+      hubIds.length === 0
+        ? of([] as string[])
+        : docsSearch.watchRefsFrom(hubIds).pipe(
+            map(refs => [...hubIds, ...refs.map(r => r.docId)]),
+            orElse(hubIds)
+          )
+    )
+  );
+  return combineLatest([organizeService.conversationDocIds$, linked$]).pipe(
+    map(([filed, linked]) => [...filed, ...linked])
+  );
+}
+
 export interface ParentCandidate {
   docId: string;
   title: string;
@@ -178,9 +222,9 @@ export function useSuggestedParents(
             // suggestions. Uses the app's first-class journal marker; date-titled
             // notes without it are dropped by DATE_TITLE below.
             journalService.allJournalDocIds$,
-            // Agent conversation transcripts (`ai / conversations`) are
-            // records of a run, not topics to file notes under.
-            organizeService.conversationDocIds$,
+            // Agent conversation transcripts are records of a run, not
+            // topics to file notes under.
+            watchConversationDocIds(docsService, docsSearch, organizeService),
           ]).pipe(
             map(
               ([
