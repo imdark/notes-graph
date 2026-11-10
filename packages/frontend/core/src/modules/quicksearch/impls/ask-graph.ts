@@ -152,6 +152,8 @@ export class AskGraphQuickSearchSession
         dates: [],
         include: [],
         exclude: [],
+        kinds: [],
+        notKinds: [],
       });
       const related$ = this.docsSearchService.search$(text, prefer);
       return combineLatest([learnings$, related$]).pipe(

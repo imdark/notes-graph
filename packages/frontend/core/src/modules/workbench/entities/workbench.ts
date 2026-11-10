@@ -9,6 +9,7 @@ import { nanoid } from 'nanoid';
 import type { GlobalState } from '../../storage';
 import type { WorkbenchNewTabHandler } from '../services/workbench-new-tab-handler';
 import type { WorkbenchDefaultState } from '../services/workbench-view-state';
+import { isSameLocation } from './same-location';
 import { View } from './view';
 
 export type WorkbenchPosition = 'beside' | 'active' | 'head' | 'tail' | number;
@@ -217,7 +218,10 @@ export class Workbench extends Entity {
           throw new Unreachable();
         }
       } else {
-        if (replaceHistory) {
+        // Opening the page that is already showing (a double tap, a link to
+        // the current doc) must not push a duplicate entry: the next back
+        // press would land on the same page and look like it did nothing.
+        if (replaceHistory || isSameLocation(view.history.location, to)) {
           view.history.replace(to);
         } else {
           view.history.push(to);

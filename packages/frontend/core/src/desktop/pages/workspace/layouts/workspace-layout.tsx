@@ -9,6 +9,7 @@ import { DocumentTitle } from '@notesgraph/core/desktop/components/document-titl
 import { WorkspaceDialogs } from '@notesgraph/core/desktop/dialogs';
 import { PeekViewManagerModal } from '@notesgraph/core/modules/peek-view';
 import { QuotaCheck } from '@notesgraph/core/modules/quota';
+import { SpecialTagsSync } from '@notesgraph/core/modules/special-tags';
 import { WorkbenchService } from '@notesgraph/core/modules/workbench';
 import { WorkspaceService } from '@notesgraph/core/modules/workspace';
 import { LiveData, useLiveData, useService } from '@notesgraph/infra';
@@ -28,6 +29,7 @@ export const WorkspaceLayout = function WorkspaceLayout({
       ) : null}
       <AiLoginRequiredModal />
       <WorkspaceSideEffects />
+      <SpecialTagsSync />
       <PeekViewManagerModal />
       <DocumentTitle />
 

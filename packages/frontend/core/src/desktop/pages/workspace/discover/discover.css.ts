@@ -65,12 +65,49 @@ export const interestsLabel = style({
   marginRight: 2,
 });
 
+export const interestsBar = style({
+  display: 'flex',
+  flexWrap: 'wrap',
+  alignItems: 'center',
+  gap: 8,
+});
+
 export const interestChip = style({
-  padding: '2px 10px',
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 2,
+  padding: '2px 4px 2px 10px',
   borderRadius: 999,
   background: cssVarV2('layer/background/secondary'),
   color: cssVarV2('text/primary'),
   whiteSpace: 'nowrap',
+});
+
+export const interestRemove = style({
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  // 24px keeps the tap target usable on a phone without growing the chip much.
+  width: 24,
+  height: 24,
+  borderRadius: 999,
+  fontSize: 14,
+  lineHeight: 1,
+  color: cssVarV2('text/secondary'),
+  cursor: 'pointer',
+  selectors: {
+    '&:hover': {
+      background: cssVarV2('layer/background/hoverOverlay'),
+      color: cssVarV2('text/primary'),
+    },
+    '&:focus-visible': {
+      outline: `2px solid ${cssVarV2('layer/insideBorder/primaryBorder')}`,
+    },
+  },
+});
+
+export const interestAdd = style({
+  maxWidth: 240,
 });
 
 export const loadMore = style({

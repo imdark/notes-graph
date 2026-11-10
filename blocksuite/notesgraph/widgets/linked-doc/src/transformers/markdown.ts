@@ -217,6 +217,8 @@ type ImportMarkdownToBlockOptions = {
   markdown: string;
   blockId: string;
   extensions: ExtensionType[];
+  /** Media the markdown references by path, as in importMarkdownWithAssets. */
+  assets?: Record<string, Blob>;
 };
 
 type ImportMarkdownToDocOptions = {
@@ -427,15 +429,26 @@ async function importMarkdownToBlock({
   markdown,
   blockId,
   extensions,
+  assets,
 }: ImportMarkdownToBlockOptions) {
   const provider = getProvider(extensions);
   const job = doc.getTransformer([
     defaultImageProxyMiddleware,
     docLinkBaseURLMiddleware(doc.workspace.id),
   ]);
+  let file = markdown;
+  if (assets) {
+    const staged = await stageMarkdownAssets(doc.workspace, markdown, assets);
+    bindImportedAssetsToJob(
+      job,
+      staged.pendingAssets,
+      staged.pendingPathBlobIdMap
+    );
+    file = staged.content;
+  }
   const adapter = new MarkdownAdapter(job, provider);
   const snapshot = await adapter.toSliceSnapshot({
-    file: markdown,
+    file,
     assets: job.assetsManager,
     workspaceId: doc.workspace.id,
     pageId: doc.id,
@@ -511,6 +524,37 @@ async function importMarkdownWithAssets({
   const preferredTitle = meta.title ?? fileName;
   const provider = getProvider(extensions);
 
+  const {
+    pendingAssets,
+    pendingPathBlobIdMap,
+    content: finalContent,
+  } = await stageMarkdownAssets(collection, content, assets);
+
+  const job = createMarkdownImportJob({ collection, schema, preferredTitle });
+  bindImportedAssetsToJob(job, pendingAssets, pendingPathBlobIdMap);
+
+  const mdAdapter = new MarkdownAdapter(job, provider);
+  const page = await mdAdapter.toDoc({
+    file: finalContent,
+    assets: job.assetsManager,
+  });
+  if (!page) {
+    return;
+  }
+  applyMetaPatch(collection, page.id, meta);
+  return page.id;
+}
+
+/**
+ * Stages a path→Blob map for a markdown import: images are staged for the
+ * job's assets manager, and anything else is stored as a blob and appended to
+ * the markdown as an attachment footnote. Returns the markdown to import.
+ */
+async function stageMarkdownAssets(
+  collection: Workspace,
+  content: string,
+  assets: Record<string, Blob> | undefined
+) {
   const pendingAssets: AssetMap = new Map();
   const pendingPathBlobIdMap: PathBlobIdMap = new Map();
   // Non-image assets (e.g. a captured video) don't render from a markdown image
@@ -552,19 +596,7 @@ async function importMarkdownWithAssets({
     ? `${content}\n\n${footnoteRefs.join(' ')}\n\n${footnoteDefs.join('\n\n')}`
     : content;
 
-  const job = createMarkdownImportJob({ collection, schema, preferredTitle });
-  bindImportedAssetsToJob(job, pendingAssets, pendingPathBlobIdMap);
-
-  const mdAdapter = new MarkdownAdapter(job, provider);
-  const page = await mdAdapter.toDoc({
-    file: finalContent,
-    assets: job.assetsManager,
-  });
-  if (!page) {
-    return;
-  }
-  applyMetaPatch(collection, page.id, meta);
-  return page.id;
+  return { pendingAssets, pendingPathBlobIdMap, content: finalContent };
 }
 
 /**

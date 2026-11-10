@@ -61,6 +61,30 @@ test('word-only filters are not scope filters', t => {
   t.is(searchText(filters), 'q3', 'falls back to must-contain words');
 });
 
+test('is: and -is: pick special-tag kinds out of the query', t => {
+  const filters = parseSearchQuery(
+    'deploy is:Conversation -is:journal -is:"calendar" -draft'
+  );
+  t.is(filters.text, 'deploy');
+  t.deepEqual(filters.kinds, ['conversation']);
+  t.deepEqual(filters.notKinds, ['journal', 'calendar']);
+  t.deepEqual(filters.exclude, ['draft']);
+  t.true(hasScopeFilters(filters));
+});
+
+test('-is: alone is a search filter but not a scope filter', t => {
+  const filters = parseSearchQuery('-is:conversation');
+  t.is(filters.text, '');
+  t.true(hasSearchFilters(filters));
+  t.false(hasScopeFilters(filters));
+});
+
+test('a bare is: stays search text', t => {
+  const filters = parseSearchQuery('what is: this');
+  t.is(filters.text, 'what is: this');
+  t.false(hasSearchFilters(filters));
+});
+
 test('date operators map to half-open whole-day ranges', t => {
   const range = (q: string) =>
     dateFilterRange(parseSearchQuery(q).dates, 'updated');

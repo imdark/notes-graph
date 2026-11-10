@@ -19,6 +19,7 @@ import { configureCloudModule } from './cloud';
 import { configureCodeBlockPreviewRendererModule } from './code-block-preview-renderer';
 import { configureCollectionModule } from './collection';
 import { configureCollectionRulesModule } from './collection-rules';
+import { configureCodeRunnerPluginModule } from './code-runner-plugin';
 import { configureCommentModule } from './comment';
 import { configureWorkspaceDBModule } from './db';
 import { configureDialogModule } from './dialogs';
@@ -67,6 +68,7 @@ import { configureScheduleModule } from './schedule';
 import { configSearchMenuModule } from './search-menu';
 import { configureShareDocsModule } from './share-doc';
 import { configureShareSettingModule } from './share-setting';
+import { configureSpecialTagsModule } from './special-tags';
 import {
   configureCommonGlobalStorageImpls,
   configureStorageModule,
@@ -112,6 +114,7 @@ export function configureCommonModules(framework: Framework) {
   configureDocModeRegistryModule(framework);
   configurePluginModule(framework);
   configureEdgelessPluginModule(framework);
+  configureCodeRunnerPluginModule(framework);
   configureShareDocsModule(framework);
   configureShareSettingModule(framework);
   configureTelemetryModule(framework);
@@ -137,6 +140,7 @@ export function configureCommonModules(framework: Framework) {
   configureUserspaceModule(framework);
   configureAppSidebarModule(framework);
   configureJournalModule(framework);
+  configureSpecialTagsModule(framework);
   configureScheduleModule(framework);
   configureUrlModule(framework);
   configureAppThemeModule(framework);

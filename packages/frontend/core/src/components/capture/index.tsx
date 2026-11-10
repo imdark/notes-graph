@@ -140,6 +140,8 @@ export const CaptureView = ({
     try {
       if (!noteRef.current) {
         const record = docsService.createDoc();
+        // marks it as a captured idea (it gets that special tag)
+        record.setProperty('capturedAt', new Date().toISOString());
         const { doc, release } = docsService.open(record.id);
         noteRef.current = { id: record.id, store: doc.blockSuiteDoc, release };
         setDocId(record.id);

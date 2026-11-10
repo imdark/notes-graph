@@ -2648,6 +2648,11 @@
   "error.REPLY_NOT_FOUND": "Reply not found.",
   "error.COMMENT_ATTACHMENT_NOT_FOUND": "Comment attachment not found.",
   "error.COMMENT_ATTACHMENT_QUOTA_EXCEEDED": "You have exceeded the comment attachment size quota.",
+  "com.notesgraph.discover.interests.added": "Added by you",
+  "com.notesgraph.discover.interests.regenerate": "Re-read my notes",
+  "com.notesgraph.discover.interests.add.placeholder": "Add an interest",
+  "com.notesgraph.discover.interests.remove": "Remove {{topic}}",
+  "com.notesgraph.discover.interests.reset": "Undo my changes",
   "com.notesgraph.quicksearch.group.ask-graph-agent": "Agent",
   "com.notesgraph.quicksearch.ask-graph-agent": "Ask the agent: {{query}}",
   "com.notesgraph.quicksearch.ask-graph-agent.hint": "Searches your notes and learnings, then answers in AI chat"
