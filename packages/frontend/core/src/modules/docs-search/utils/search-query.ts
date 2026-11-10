@@ -11,6 +11,8 @@
  *   dt>=2026-01-01      doc updated on/after the day (also dt<= dt> dt< dt=)
  *   ct>=2026-01-01      same, on the doc's created date
  *   +"word" / -"word"   the text must / must not contain the word or phrase
+ *   is:conversation     doc has a special tag: journal, conversation or
+ *   -is:conversation    calendar (modules/special-tags); -is: leaves them out
  *
  * Values may be quoted to include spaces. Dates are whole UTC days. Anything
  * else is the search text.
@@ -37,6 +39,10 @@ export interface SearchQueryFilters {
   dates: SearchDateFilter[];
   include: string[];
   exclude: string[];
+  /** `is:` special-tag kinds (journal, conversation, calendar) a hit must have. */
+  kinds: string[];
+  /** `-is:` kinds a hit must not have. */
+  notKinds: string[];
 }
 
 /** A half-open millisecond range: `from` inclusive, `to` exclusive. */
@@ -49,6 +55,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const FIELD_TOKEN = /^(tag|prop|doc):(.+)$/i;
 const DATE_TOKEN = /^(dt|ct)(>=|<=|>|<|=)(\d{4}-\d{2}-\d{2})$/i;
 const WORD_TOKEN = /^([+-])(.+)$/;
+const IS_TOKEN = /^(-?)is:(.+)$/i;
 
 /** Split on whitespace, keeping `"quoted parts"` (anywhere in a token) whole. */
 function tokenize(query: string): string[] {
@@ -93,10 +100,21 @@ export function parseSearchQuery(query: string): SearchQueryFilters {
     dates: [],
     include: [],
     exclude: [],
+    kinds: [],
+    notKinds: [],
   };
   const text: string[] = [];
 
   for (const token of tokenize(query)) {
+    const is = IS_TOKEN.exec(token);
+    if (is) {
+      const value = unquote(is[2]).toLowerCase();
+      if (value) {
+        (is[1] ? filters.notKinds : filters.kinds).push(value);
+        continue;
+      }
+    }
+
     const field = FIELD_TOKEN.exec(token);
     if (field) {
       const value = unquote(field[2]);
@@ -147,7 +165,8 @@ export function hasScopeFilters(filters: SearchQueryFilters): boolean {
     filters.tags.length > 0 ||
     filters.props.length > 0 ||
     filters.docs.length > 0 ||
-    filters.dates.length > 0
+    filters.dates.length > 0 ||
+    filters.kinds.length > 0
   );
 }
 
@@ -155,7 +174,8 @@ export function hasSearchFilters(filters: SearchQueryFilters): boolean {
   return (
     hasScopeFilters(filters) ||
     filters.include.length > 0 ||
-    filters.exclude.length > 0
+    filters.exclude.length > 0 ||
+    filters.notKinds.length > 0
   );
 }
 

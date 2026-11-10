@@ -7,8 +7,7 @@ import {
 import { DocsService } from '@notesgraph/core/modules/doc';
 import { DocsSearchService } from '@notesgraph/core/modules/docs-search';
 import { HomeDocService } from '@notesgraph/core/modules/home-doc';
-import { JournalService } from '@notesgraph/core/modules/journal';
-import { OrganizeService } from '@notesgraph/core/modules/organize';
+import { SpecialTagsService } from '@notesgraph/core/modules/special-tags';
 import { WorkbenchService } from '@notesgraph/core/modules/workbench';
 import { LiveData, useLiveData, useService } from '@notesgraph/infra';
 import { useCallback, useMemo } from 'react';
@@ -147,8 +146,7 @@ export function useSuggestedParents(
 ): ParentCandidate[] {
   const docsService = useService(DocsService);
   const docsSearch = useService(DocsSearchService);
-  const journalService = useService(JournalService);
-  const organizeService = useService(OrganizeService);
+  const specialTags = useService(SpecialTagsService);
 
   const suggestions$ = useMemo(() => {
     if (!docId) return new LiveData<ParentCandidate[]>([]);
@@ -173,53 +171,38 @@ export function useSuggestedParents(
             docsSearch
               .watchRefsFrom(docId)
               .pipe(orElse([] as { docId: string }[])),
-            // Journal (daily) pages are a poor parent — a note doesn't belong
-            // "under" a calendar day — so exclude every journal doc from the
-            // suggestions. Uses the app's first-class journal marker; date-titled
-            // notes without it are dropped by DATE_TITLE below.
-            journalService.allJournalDocIds$,
-            // Agent conversation transcripts (`ai / conversations`) are
-            // records of a run, not topics to file notes under.
-            organizeService.conversationDocIds$,
+            // Journal pages, agent conversations and calendar event notes
+            // (the special tags) are records, not topics to file notes under.
+            specialTags.notParentIds$.pipe(orElse(new Set<string>())),
           ]).pipe(
-            map(
-              ([
-                titleIds,
-                bodyMatches,
-                parents,
-                children,
-                journalIds,
-                conversationIds,
-              ]) => {
-                const exclude = new Set<string>([docId]);
-                for (const p of parents) exclude.add(p.docId);
-                for (const c of children) exclude.add(c.docId);
-                for (const j of journalIds) exclude.add(j);
-                for (const c of conversationIds) exclude.add(c);
+            map(([titleIds, bodyMatches, parents, children, notParentIds]) => {
+              const exclude = new Set<string>([docId]);
+              for (const p of parents) exclude.add(p.docId);
+              for (const c of children) exclude.add(c.docId);
+              for (const id of notParentIds) exclude.add(id);
 
-                const ordered = [...titleIds, ...bodyMatches.map(m => m.docId)];
-                const seen = new Set<string>();
-                const out: ParentCandidate[] = [];
-                for (const id of ordered) {
-                  if (exclude.has(id) || seen.has(id)) continue;
-                  seen.add(id);
-                  const record = docsService.list.doc$(id).value;
-                  if (!record) continue; // not a real/loaded doc
-                  const title = (record.title$.value ?? '').trim();
-                  if (DATE_TITLE.test(title)) continue;
-                  out.push({ docId: id, title: title || 'Untitled' });
-                  if (out.length >= limit) break;
-                }
-                return out;
+              const ordered = [...titleIds, ...bodyMatches.map(m => m.docId)];
+              const seen = new Set<string>();
+              const out: ParentCandidate[] = [];
+              for (const id of ordered) {
+                if (exclude.has(id) || seen.has(id)) continue;
+                seen.add(id);
+                const record = docsService.list.doc$(id).value;
+                if (!record) continue; // not a real/loaded doc
+                const title = (record.title$.value ?? '').trim();
+                if (DATE_TITLE.test(title)) continue;
+                out.push({ docId: id, title: title || 'Untitled' });
+                if (out.length >= limit) break;
               }
-            )
+              return out;
+            })
           );
         }),
         orElse([] as ParentCandidate[])
       ),
       []
     );
-  }, [docsService, docsSearch, journalService, organizeService, docId, limit]);
+  }, [docsService, docsSearch, specialTags, docId, limit]);
 
   return useLiveData(suggestions$);
 }

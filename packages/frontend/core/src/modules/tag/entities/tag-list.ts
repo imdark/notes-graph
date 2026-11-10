@@ -32,6 +32,16 @@ export class TagList extends Entity {
     return newTag;
   }
 
+  /** Create a tag with a fixed id if it isn't there yet (renames are kept). */
+  ensureTag(option: { id: string; value: string; color: string }) {
+    this.store.ensureTagOption(option);
+  }
+
+  /** Docs carrying `tagId`, whether or not the tag itself exists yet. */
+  watchTagPageIds(tagId: string) {
+    return this.store.watchTagPageIds(tagId);
+  }
+
   deleteTag(tagId: string) {
     this.store.deleteTag(tagId);
   }

@@ -9,6 +9,7 @@ import {
 } from '@notesgraph/core/modules/cloud';
 import { GlobalContextService } from '@notesgraph/core/modules/global-context';
 import { PeekViewManagerModal } from '@notesgraph/core/modules/peek-view';
+import { SpecialTagsSync } from '@notesgraph/core/modules/special-tags';
 import type {
   Workspace,
   WorkspaceMetadata,
@@ -136,6 +137,7 @@ export const WorkspaceLayout = ({
 
             {/* ---- some side-effect components ---- */}
             <PeekViewManagerModal />
+            <SpecialTagsSync />
             <AiLoginRequiredModal />
             <uniReactRoot.Root />
             <WorkspaceSideEffects />
