@@ -454,6 +454,15 @@ export const NOTESGRAPH_FLAGS = {
     configurable: true,
     defaultState: true,
   },
+  enable_youtube_backup: {
+    commit: '',
+    category: 'notesgraph',
+    displayName: 'Back up YouTube videos',
+    description:
+      'A Back up video button on YouTube links and embeds, and "Back up YouTube videos in this note" in Ctrl-K. The server downloads the video (up to 720p) and saves it as a playable attachment under the link, so the note keeps it even if YouTube takes it down.',
+    configurable: true,
+    defaultState: true,
+  },
 } satisfies { [key in string]: FlagInfo };
 
 // oxlint-disable-next-line no-redeclare

@@ -2,6 +2,7 @@ import {
   CaptionIcon,
   CopyAsImgaeIcon,
   CopyIcon,
+  DownloadIcon,
   EditIcon,
   ExportToMarkdownIcon,
   LinkIcon,
@@ -86,10 +87,15 @@ import {
 import { WorkspaceServerService } from '@notesgraph/core/modules/cloud';
 import { EditorService } from '@notesgraph/core/modules/editor';
 import type { EditorSettingExt } from '@notesgraph/core/modules/editor-setting/entities/editor-setting';
+import { FeatureFlagService } from '@notesgraph/core/modules/feature-flag';
 import type { ClipMode } from '@notesgraph/core/modules/link-card';
 import {
+  backupVideoBlock,
+  hasVideoBackup,
   isYoutubeVideoUrl,
   VideoIngestionService,
+  workspaceFileLimit,
+  youtubeVideoId,
 } from '@notesgraph/core/modules/video-ingestion';
 import { copyLinkToBlockStdScopeClipboard } from '@notesgraph/core/utils/clipboard';
 import { I18n, i18nTime } from '@notesgraph/i18n';
@@ -1443,6 +1449,55 @@ function createImportTranscriptGroup(
   };
 }
 
+/**
+ * "Back up video" on YouTube links and embeds: downloads the video through
+ * the link-card sidecar and saves it as a playable attachment right below,
+ * so the note keeps it if YouTube takes it down. Hidden once a backup exists.
+ */
+function createBackupVideoGroup(
+  framework: FrameworkProvider,
+  klass: typeof BookmarkBlockComponent | typeof EmbedYoutubeBlockComponent
+): ToolbarModuleConfig['actions'][number] {
+  return {
+    id: 'a.backup-video',
+    when: ctx => {
+      if (!framework.get(FeatureFlagService).flags.enable_youtube_backup.value)
+        return false;
+      const url = ctx.getCurrentBlockByType(klass)?.model.props.url;
+      const videoId = url ? youtubeVideoId(url) : null;
+      return !!videoId && !hasVideoBackup(ctx.store, videoId);
+    },
+    actions: [
+      {
+        id: 'backup-video',
+        tooltip: 'Back up video',
+        icon: DownloadIcon(),
+        run(ctx) {
+          const model = ctx.getCurrentBlockByType(klass)?.model;
+          if (!model) return;
+          toast(ctx.host, 'Downloading video to back it up…');
+          backupVideoBlock(ctx.store, model, workspaceFileLimit(framework))
+            .then(result =>
+              toast(
+                ctx.host,
+                result === 'saved'
+                  ? 'Video backed up below the link'
+                  : 'This video is already backed up'
+              )
+            )
+            .catch((err: unknown) => {
+              console.error('[NG-DIAG video-backup] backup failed:', err);
+              toast(
+                ctx.host,
+                err instanceof Error ? err.message : 'Could not back up video'
+              );
+            });
+        },
+      },
+    ],
+  };
+}
+
 function createBookmarkLinkCardToolbarConfig(
   framework: FrameworkProvider,
   resolveImage: LinkCardImageResolver,
@@ -1454,6 +1509,7 @@ function createBookmarkLinkCardToolbarConfig(
     actions: [
       ...base.actions,
       createImportTranscriptGroup(framework, BookmarkBlockComponent),
+      createBackupVideoGroup(framework, BookmarkBlockComponent),
       createConversionsOverride(resolveImage, checkEmbeddable),
     ],
   } satisfies ToolbarModuleConfig;
@@ -1681,6 +1737,7 @@ export const createCustomToolbarExtension = (
           actions: [
             ...base.actions,
             createImportTranscriptGroup(framework, EmbedYoutubeBlockComponent),
+            createBackupVideoGroup(framework, EmbedYoutubeBlockComponent),
           ],
         } satisfies ToolbarModuleConfig;
       })(),

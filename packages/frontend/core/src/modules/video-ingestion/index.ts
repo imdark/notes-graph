@@ -11,6 +11,13 @@ export {
   VideoIngestionService,
   type VideoTranscriptPayload,
 } from './services/video-ingestion';
+export {
+  backupVideoBlock,
+  hasVideoBackup,
+  videosWithoutBackup,
+  workspaceFileLimit,
+  youtubeVideoId,
+} from './video-backup';
 
 /**
  * Video ingestion: drop a video link, get a searchable transcript doc wired
