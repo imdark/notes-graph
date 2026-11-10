@@ -31,41 +31,12 @@ export const DEFAULT_TOPICS = [
   'Science',
 ];
 
-/** The user's interest topics (manual list), persisted in localStorage. */
-export function loadTopics(): string[] {
-  try {
-    const raw = globalThis.localStorage?.getItem(TOPICS_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) {
-        const cleaned = parsed
-          .filter((t): t is string => typeof t === 'string')
-          .map(t => t.trim())
-          .filter(Boolean);
-        if (cleaned.length) return cleaned;
-      }
-    }
-  } catch {
-    // ignore malformed storage
-  }
-  return DEFAULT_TOPICS;
-}
-
-export function saveTopics(topics: string[]): void {
-  const cleaned = topics.map(t => t.trim()).filter(Boolean);
-  try {
-    globalThis.localStorage?.setItem(TOPICS_KEY, JSON.stringify(cleaned));
-  } catch {
-    // ignore (private mode / worker)
-  }
-}
-
-/** Parse a comma / newline separated topic string into a unique list. */
-export function parseTopicsInput(value: string): string[] {
+/** Trimmed, non-empty topics, de-duplicated case-insensitively (first wins). */
+export function uniqueTopics(topics: Iterable<string>): string[] {
   const seen = new Set<string>();
   const out: string[] = [];
-  for (const part of value.split(/[,\n]/)) {
-    const t = part.trim();
+  for (const raw of topics) {
+    const t = raw.trim();
     const key = t.toLowerCase();
     if (t && !seen.has(key)) {
       seen.add(key);
@@ -73,6 +44,95 @@ export function parseTopicsInput(value: string): string[] {
     }
   }
   return out;
+}
+
+function stringList(value: unknown): string[] | null {
+  return Array.isArray(value)
+    ? uniqueTopics(value.filter((t): t is string => typeof t === 'string'))
+    : null;
+}
+
+/**
+ * The user's selected topics, persisted in localStorage. The defaults apply
+ * only until the user has saved a selection; an empty selection stays empty.
+ */
+export function loadTopics(): string[] {
+  try {
+    const raw = globalThis.localStorage?.getItem(TOPICS_KEY);
+    const parsed = raw ? stringList(JSON.parse(raw)) : null;
+    if (parsed) return parsed;
+  } catch {
+    // ignore malformed storage
+  }
+  return DEFAULT_TOPICS;
+}
+
+export function saveTopics(topics: string[]): void {
+  try {
+    globalThis.localStorage?.setItem(
+      TOPICS_KEY,
+      JSON.stringify(uniqueTopics(topics))
+    );
+  } catch {
+    // ignore (private mode / worker)
+  }
+}
+
+const TOPIC_PREFS_KEY = 'notesgraph:discover:topic-prefs';
+
+/** What the topic picker remembers besides the selection. */
+export interface TopicPrefs {
+  /** Topics the user typed in, kept so one turned off can be turned back on. */
+  known: string[];
+  /** Suggested topics the user deleted from the list (lowercase). */
+  hidden: string[];
+  /** Chip colour per topic (keyed by lowercase name). */
+  colors: Record<string, string>;
+}
+
+export function loadTopicPrefs(): TopicPrefs {
+  const prefs: TopicPrefs = { known: [], hidden: [], colors: {} };
+  try {
+    const raw = globalThis.localStorage?.getItem(TOPIC_PREFS_KEY);
+    const parsed = raw ? (JSON.parse(raw) as Partial<TopicPrefs>) : null;
+    if (parsed && typeof parsed === 'object') {
+      prefs.known = stringList(parsed.known) ?? [];
+      prefs.hidden = stringList(parsed.hidden) ?? [];
+      if (parsed.colors && typeof parsed.colors === 'object') {
+        for (const [k, v] of Object.entries(parsed.colors)) {
+          if (typeof v === 'string') prefs.colors[k] = v;
+        }
+      }
+    }
+  } catch {
+    // ignore malformed storage
+  }
+  return prefs;
+}
+
+export function saveTopicPrefs(prefs: TopicPrefs): void {
+  try {
+    globalThis.localStorage?.setItem(TOPIC_PREFS_KEY, JSON.stringify(prefs));
+  } catch {
+    // ignore (private mode / worker)
+  }
+}
+
+/**
+ * The topics offered in the picker: the selection first, then the user's own,
+ * then suggestions (minus the ones the user deleted).
+ */
+export function topicOptions(
+  selected: string[],
+  prefs: TopicPrefs,
+  suggestions: string[]
+): string[] {
+  const hidden = new Set(prefs.hidden);
+  return uniqueTopics([
+    ...selected,
+    ...prefs.known,
+    ...suggestions.filter(s => !hidden.has(s.trim().toLowerCase())),
+  ]);
 }
 
 function googleNewsRssUrl(topic: string): string {

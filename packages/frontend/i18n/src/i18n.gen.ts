@@ -9630,13 +9630,9 @@ export function useNotesGraphI18N(): {
       */
     ["com.notesgraph.discover.title"](): string;
     /**
-      * `Topics you're interested in, comma-separated`
+      * `Pick topics you're interested in`
       */
     ["com.notesgraph.discover.topics.placeholder"](): string;
-    /**
-      * `Update`
-      */
-    ["com.notesgraph.discover.update"](): string;
     /**
       * `Save as note`
       */
