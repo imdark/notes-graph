@@ -446,7 +446,7 @@ export const NOTESGRAPH_FLAGS = {
     defaultState: true,
   },
   enable_special_tags: {
-    commit: '',
+    commit: '7bdd594f3578a8ad2034071ae4a412c617c121c5',
     category: 'notesgraph',
     displayName: 'Special tags for journal, AI conversation and calendar notes',
     description:
