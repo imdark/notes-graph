@@ -19,12 +19,12 @@ import {
 } from '../../../../modules/workbench';
 import * as styles from './discover.css';
 import {
+  DEFAULT_TOPICS,
   type DiscoverItem,
   FEED_MAX_AGE_MS,
   fetchCardImage,
   fetchDiscoverFeed,
   loadCachedFeed,
-  DEFAULT_TOPICS,
   loadTopics,
   saveCachedFeed,
   saveTopics,
