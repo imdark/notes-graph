@@ -9,7 +9,11 @@ import {
   type AgentHarness,
   DEFAULT_MAX_STEPS,
 } from '../stores/agents';
-import { agentRulesSection, type AgentRulesService } from './agent-rules';
+import {
+  agentRulesSection,
+  type AgentRulesService,
+  inlineTags,
+} from './agent-rules';
 import type { ChatModel, CloudAgentRunnerService } from './cloud-runner';
 import type { AgentContext, AgentContextService } from './context';
 import {
@@ -339,12 +343,22 @@ export class AgentExecutorService extends Service implements AgentExecutor {
 
   /**
    * The workspace's "Agent rules" note as a system-prompt section, read at
-   * the start of an in-tab run; empty without one. A device run is given it
-   * by the server instead, with the profile it claims.
+   * the start of an in-tab run; empty without one. Its "For …" sections
+   * are matched against the agent (name, id), the projects the target is
+   * in, and the tags on its note plus the #tags in what the agent reads.
+   * A device run is given it by the server instead, with the profile it
+   * claims, matched the same way (registry/agent-rules.ts).
    */
-  private async agentRulesPrompt(): Promise<string> {
+  private async agentRulesPrompt(
+    agent: Agent,
+    context: AgentContext
+  ): Promise<string> {
     try {
-      const section = agentRulesSection(await this.agentRules.read());
+      const section = agentRulesSection(await this.agentRules.read(), {
+        agents: [agent.name, agent.id],
+        projects: context.scope?.projects,
+        tags: [...(context.scope?.tags ?? []), ...inlineTags(context.text)],
+      });
       return section ? `\n${section}` : '';
     } catch {
       return '';
@@ -960,7 +974,7 @@ export class AgentExecutorService extends Service implements AgentExecutor {
       // Opened before anything is logged, so a server with no copilot fails
       // the run with its reason rather than after a half-written transcript.
       const model = await this.modelFor(agent, harness);
-      const agentRules = await this.agentRulesPrompt();
+      const agentRules = await this.agentRulesPrompt(agent, context);
 
       // An agent given file tools, in a workspace with a folder bound, runs
       // the tool loop, as does every research run (its tools are the point);

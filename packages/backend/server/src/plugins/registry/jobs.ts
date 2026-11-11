@@ -1162,9 +1162,9 @@ export class RegistryJobService {
   /**
    * How the runner is to run a claimed job: its model's profile, with the
    * skill notes it names (looked up in the job's own workspace only) and
-   * the workspace's "Agent rules" note (see agent-rules.ts), both read
-   * now, at the start of the run, so the user's latest edits are the ones
-   * it follows.
+   * the workspace's "Agent rules" note (see agent-rules.ts), with only
+   * the "For …" sections that match this job, both read now, at the start
+   * of the run, so the user's latest edits are the ones it follows.
    */
   private async profile(job: RegistryJob): Promise<AgentProfile | null> {
     const noteSkills =
@@ -1175,10 +1175,9 @@ export class RegistryJobService {
       )) ?? [];
     const profile = profileFor(job.model, job.skills, job.access, noteSkills);
     if (!profile || !this.rules) return profile;
-    return withAgentRules(
-      profile,
-      await this.rules.read(job.workspaceId, job.createdBy)
-    );
+    const rules = await this.rules.read(job.workspaceId, job.createdBy);
+    if (!rules) return profile;
+    return withAgentRules(profile, rules, await this.rules.runContext(job));
   }
 
   async report(
