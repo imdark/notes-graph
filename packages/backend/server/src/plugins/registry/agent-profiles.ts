@@ -214,9 +214,28 @@ const VIDEO_USE: AgentSkill = {
   url: `https://raw.githubusercontent.com/browser-use/video-use/${VIDEO_USE_REF}/SKILL.md`,
 };
 
+/**
+ * Ponytail (MIT), "the laziest senior dev in the room": the smallest change
+ * that fully solves a task, plus review, audit and shortcut-ledger reports.
+ * Pinned to v5.3.3 like antislop. Only the skills: its hooks, status band and
+ * webhook are for an interactive Claude Code, and ponytail-gain / -help only
+ * print reference cards. Opt-in per agent, not a Claude Code default.
+ */
+const PONYTAIL_RELEASE = '7801d061243d7b753bad0e0b3c057cd250b11755'; // v5.3.3
+const PONYTAIL: AgentSkill[] = [
+  'ponytail',
+  'ponytail-review',
+  'ponytail-audit',
+  'ponytail-debt',
+].map(name => ({
+  name,
+  url: `https://raw.githubusercontent.com/DietrichGebert/ponytail/${PONYTAIL_RELEASE}/skills/${name}/SKILL.md`,
+}));
+
 /** Every skill an agent can be given, by name; what the agent editor offers. */
 export const SKILL_CATALOG: AgentSkill[] = [
   ...ANTISLOP,
+  ...PONYTAIL,
   OMNISEEK_INVESTIGATE,
   VIDEO_USE,
 ];

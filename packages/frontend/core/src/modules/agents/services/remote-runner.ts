@@ -28,6 +28,10 @@ export const AGENT_SKILLS: { name: string; desc: string }[] = [
     desc: 'Layouts that reflow phone to desktop',
   },
   { name: 'antislop-code', desc: 'Code comment hygiene' },
+  { name: 'ponytail', desc: 'Smallest change that fully solves the task' },
+  { name: 'ponytail-review', desc: 'Plain-English review of a change' },
+  { name: 'ponytail-audit', desc: 'Ranked quality audit of a whole repo' },
+  { name: 'ponytail-debt', desc: 'Ledger of deferred shortcut: comments' },
   { name: 'omniseek-investigate', desc: 'Deep multi-source research method' },
   {
     name: 'video-use',
