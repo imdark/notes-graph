@@ -143,3 +143,38 @@ test('a note that is all scoped and matches nothing is empty', t => {
     }
   );
 });
+
+test('a fence closes on the next line starting with its marker, however indented or long', t => {
+  const note = lines(
+    '  ````js',
+    '## For tag: x',
+    '    ```` still closes',
+    '## For tag: y',
+    '* y'
+  );
+  t.is(
+    filterAgentRules(note, {}).text,
+    lines('  ````js', '## For tag: x', '    ```` still closes')
+  );
+  // A ~~~ line does not close a ``` fence.
+  const mixed = lines('```', '~~~', '## For tag: x', '```', 'after');
+  t.is(filterAgentRules(mixed, {}).text, mixed);
+});
+
+test('blank lines left at either end go; other whitespace stays', t => {
+  const note = lines(
+    '',
+    '  ',
+    '## For tag: x',
+    '* x',
+    '# Kept',
+    'kept  ',
+    '',
+    '## For tag: y',
+    '* y'
+  );
+  t.deepEqual(filterAgentRules(note, {}), {
+    text: '# Kept\nkept  ',
+    keptScoped: false,
+  });
+});

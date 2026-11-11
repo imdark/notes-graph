@@ -30,7 +30,7 @@ type ScopeKind = 'project' | 'tag' | 'agent';
 
 const HEADING_RE = /^(#{1,6})\s+(.*?)\s*#*\s*$/;
 const SCOPE_RE = /^for\s+(projects?|tags?|agents?)\s*:\s*(.+)$/i;
-const FENCE_RE = /^\s{0,3}(`{3,}|~{3,})/;
+const FENCE_RE = /^\s*(```|~~~)/;
 
 /** A name as matched: lowercase, no leading `#`, spaces/-/_ as one `-`. */
 export function normalizeScopeName(name: string): string {
@@ -77,23 +77,17 @@ export function filterAgentRules(
   const open: { level: number; matches: boolean }[] = [];
   const kept: string[] = [];
   let keptScoped = false;
-  let fence: { char: string; length: number } | null = null;
+  // The marker (``` or ~~~) of the code fence the line is in, if any.
+  let fence: string | null = null;
 
   const all = markdown.split(/\r?\n/);
   const total = all.length;
   for (const line of all) {
-    const fenceMatch = FENCE_RE.exec(line);
+    const marker = FENCE_RE.exec(line)?.[1];
     if (fence) {
-      if (
-        fenceMatch &&
-        fenceMatch[1][0] === fence.char &&
-        fenceMatch[1].length >= fence.length &&
-        line.trim() === fenceMatch[1]
-      ) {
-        fence = null;
-      }
-    } else if (fenceMatch) {
-      fence = { char: fenceMatch[1][0], length: fenceMatch[1].length };
+      if (marker === fence) fence = null;
+    } else if (marker) {
+      fence = marker;
     } else {
       const heading = HEADING_RE.exec(line);
       if (heading) {
@@ -117,12 +111,14 @@ export function filterAgentRules(
   if (kept.length === total) return { text: markdown.trim(), keptScoped };
 
   // A dropped section can leave blank lines on both sides of it: a run of
-  // three or more blank lines becomes two.
+  // three or more blank lines becomes two, and blank lines at either end go.
   const lines: string[] = [];
   let blanks = 0;
   for (const line of kept) {
     blanks = line.trim() ? 0 : blanks + 1;
     if (blanks <= 2) lines.push(line);
   }
-  return { text: lines.join('\n').trim(), keptScoped };
+  while (lines.length && !lines[0].trim()) lines.shift();
+  while (lines.length && !lines[lines.length - 1].trim()) lines.pop();
+  return { text: lines.join('\n'), keptScoped };
 }
