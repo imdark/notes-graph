@@ -101,6 +101,7 @@ await serve({
     omniseekToken: process.env.OMNISEEK_TOKEN?.trim() || undefined,
     ...claudeLogin(),
     ghToken,
+    headroomUrl: process.env.RUNNER_HEADROOM_URL?.trim() || undefined,
   },
   log,
   signal: stop.signal,

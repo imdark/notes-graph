@@ -1,6 +1,7 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 
 import { Config } from '../../../base';
+import { routeThroughHeadroom, steerTerse } from '../../headroom';
 import type { NodeTextMiddleware, ProviderMiddlewareConfig } from '../config';
 import { ToolExecutorHost } from '../runtime/hosts/tool-executor-host';
 import { mapNativeSemanticError } from '../runtime/native-errors';
@@ -82,9 +83,46 @@ export abstract class CopilotProvider<C = any> {
     return spec ? this.createDriverSpec(spec) : undefined;
   }
 
+  /**
+   * The spec with the Headroom plugin applied: calls to the official API go
+   * through the Headroom proxy, and chat gets the steering line for shorter
+   * answers. Both are off unless the `headroom` settings turn them on.
+   */
+  protected withHeadroom(spec: ProviderDriverSpec): ProviderDriverSpec {
+    const settings = this.NotesGraphConfig?.headroom;
+    if (!settings?.copilot && !settings?.terseResponses) return spec;
+    const createBackendConfig: ProviderDriverSpec['createBackendConfig'] =
+      async execution =>
+        routeThroughHeadroom(
+          this.type,
+          await spec.createBackendConfig(execution),
+          settings
+        );
+    const chat = spec.chat;
+    return {
+      ...spec,
+      createBackendConfig,
+      chat:
+        chat === false
+          ? false
+          : {
+              ...chat,
+              prepareMessages: async context => {
+                const messages = chat?.prepareMessages
+                  ? await chat.prepareMessages(context)
+                  : context.input.messages;
+                return context.input.kind === 'streamObject'
+                  ? messages
+                  : steerTerse(messages, settings);
+              },
+            },
+    };
+  }
+
   protected createDriverSpec(
-    spec: ProviderDriverSpec
+    rawSpec: ProviderDriverSpec
   ): ProviderExecutionDrivers {
+    const spec = this.withHeadroom(rawSpec);
     return createNativeExecutionDriverSpec(spec, {
       createBackendConfig: spec.createBackendConfig,
       mapError: error => {

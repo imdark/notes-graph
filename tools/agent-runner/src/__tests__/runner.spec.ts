@@ -945,3 +945,69 @@ describe('signing in to Claude', () => {
     expect(seen.options!.env!.ANTHROPIC_API_KEY).toBeUndefined();
   });
 });
+
+describe('Headroom', () => {
+  const run = async (
+    over: Partial<Job>,
+    fetchImpl: typeof fetch,
+    headroomUrl?: string
+  ) => {
+    const seen: { options?: Options } = {};
+    const lines: string[] = [];
+    await runJob(job(over), {
+      api: api(),
+      workspaceId: 'ws-1',
+      settings: { ...settings(), headroomUrl },
+      query: fakeQuery([success('done')], seen),
+      say: line => lines.push(line),
+      signal: new AbortController().signal,
+      fetchImpl,
+    });
+    return { env: seen.options!.env!, lines };
+  };
+  const answering = (hits: string[]) =>
+    (async (url: string) => {
+      hits.push(url);
+      return new Response('ok');
+    }) as unknown as typeof fetch;
+
+  test('a profile asking for compression sends Claude Code through the proxy', async () => {
+    const hits: string[] = [];
+    const { env, lines } = await run(
+      { profile: profile({ headroom: { compressContext: true } }) },
+      answering(hits),
+      'http://headroom:8787/'
+    );
+    expect(hits).toEqual(['http://headroom:8787/health']);
+    expect(env.ANTHROPIC_BASE_URL).toBe('http://headroom:8787');
+    expect(lines.some(l => l.includes('Headroom: compressing'))).toBe(true);
+  });
+
+  test('the proxy defaults to localhost:8787', async () => {
+    const hits: string[] = [];
+    const { env } = await run(
+      { profile: profile({ headroom: { compressContext: true } }) },
+      answering(hits)
+    );
+    expect(env.ANTHROPIC_BASE_URL).toBe('http://127.0.0.1:8787');
+  });
+
+  test('a proxy that is down is skipped, and the run goes on', async () => {
+    const down = (async () => {
+      throw new Error('ECONNREFUSED');
+    }) as unknown as typeof fetch;
+    const { env, lines } = await run(
+      { profile: profile({ headroom: { compressContext: true } }) },
+      down
+    );
+    expect(env.ANTHROPIC_BASE_URL).toBeUndefined();
+    expect(lines.some(l => l.includes('not compressed'))).toBe(true);
+  });
+
+  test('without the profile asking, no proxy is tried', async () => {
+    const hits: string[] = [];
+    const { env } = await run({}, answering(hits));
+    expect(hits).toEqual([]);
+    expect(env.ANTHROPIC_BASE_URL).toBeUndefined();
+  });
+});

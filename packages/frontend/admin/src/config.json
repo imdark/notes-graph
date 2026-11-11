@@ -337,6 +337,28 @@
       "env": "NOTESGRAPH_AGENT_MEMORY"
     }
   },
+  "headroom": {
+    "copilot": {
+      "type": "Boolean",
+      "desc": "Send the AI assistant's Anthropic and OpenAI calls through the Headroom proxy at proxyUrl, which compresses their context. Providers set to a custom base URL are left alone.",
+      "env": "NOTESGRAPH_HEADROOM_COPILOT"
+    },
+    "proxyUrl": {
+      "type": "String",
+      "desc": "The Headroom proxy the server reaches, e.g. http://127.0.0.1:8787.",
+      "env": "NOTESGRAPH_HEADROOM_PROXY_URL"
+    },
+    "agentRuns": {
+      "type": "Boolean",
+      "desc": "Ask agent runners to send Claude Code through their own Headroom proxy (the runner's RUNNER_HEADROOM_URL). A runner with no proxy running goes on without it.",
+      "env": "NOTESGRAPH_HEADROOM_AGENT_RUNS"
+    },
+    "terseResponses": {
+      "type": "Boolean",
+      "desc": "Shorter answers: add a line to the end of the system prompt (AI assistant chat and agent runs) asking the model to skip preamble, recaps and restating its context.",
+      "env": "NOTESGRAPH_HEADROOM_TERSE"
+    }
+  },
   "calendar": {
     "google": {
       "type": "Object",
