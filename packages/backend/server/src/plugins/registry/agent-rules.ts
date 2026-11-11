@@ -1,10 +1,14 @@
 import { Injectable, Logger } from '@nestjs/common';
+import * as Y from 'yjs';
 
 import { DocReader } from '../../core/doc';
 import { PermissionAccess } from '../../core/permission';
 import { readAllDocIdsFromWorkspaceSnapshot } from '../../core/utils/blocksuite';
 import { Models } from '../../models';
 import type { AgentProfile } from './agent-profiles';
+import { type AgentRunContext, filterAgentRules } from './scoped-rules';
+
+export type { AgentRunContext } from './scoped-rules';
 
 /**
  * The user's own rules for agents, kept as a note in the workspace like an
@@ -25,19 +29,29 @@ export const AGENT_RULES_TITLE = 'Agent rules';
  */
 export const MAX_AGENT_RULES_CHARS = 8_000;
 
+/** Said when the note had a "For …" section that matched the run. */
+export const SCOPED_RULES_SENTENCE =
+  'Sections headed "For project/tag/agent: …" were included because they match this run; sections for other projects, tags or agents were left out.';
+
 /**
  * The rules as a system-prompt section, or null for a note with nothing in
- * it. They are said to win over any built-in conventions, since the point
- * of the note is to override them; an in-tab run may have none, so the
- * wording doesn't assume there are any.
+ * it for this run. The note's "For project/tag/agent: …" sections are kept
+ * only when they match `ctx` (see scoped-rules.ts), and the cap applies to
+ * what is left. They are said to win over any built-in conventions, since
+ * the point of the note is to override them; an in-tab run may have none,
+ * so the wording doesn't assume there are any.
  */
-export function agentRulesSection(markdown: string | null | undefined) {
-  const text = markdown?.trim();
+export function agentRulesSection(
+  markdown: string | null | undefined,
+  ctx: AgentRunContext = {}
+) {
+  const { text, keptScoped } = filterAgentRules(markdown ?? '', ctx);
   if (!text) return null;
   const clipped = text.length > MAX_AGENT_RULES_CHARS;
   return [
     `These rules are from the user's note titled "${AGENT_RULES_TITLE}". Follow them;`,
     'they take precedence over any built-in conventions you were given.',
+    ...(keptScoped ? [SCOPED_RULES_SENTENCE] : []),
     '',
     '<agent-rules>',
     clipped ? text.slice(0, MAX_AGENT_RULES_CHARS) : text,
@@ -49,9 +63,10 @@ export function agentRulesSection(markdown: string | null | undefined) {
 /** A profile with the rules appended to its system prompt; as is without. */
 export function withAgentRules(
   profile: AgentProfile,
-  markdown: string | null | undefined
+  markdown: string | null | undefined,
+  ctx: AgentRunContext = {}
 ): AgentProfile {
-  const section = agentRulesSection(markdown);
+  const section = agentRulesSection(markdown, ctx);
   if (!section) return profile;
   return { ...profile, systemPrompt: `${profile.systemPrompt}\n${section}\n` };
 }
@@ -108,6 +123,51 @@ export class AgentRules {
   }
 
   /**
+   * What a claimed job is about, for the note's "For …" sections: its
+   * agent (name and id); the project its note is in, and any project the
+   * page that queued it named in its context (a task under a project's
+   * heading in a journal); and its tags: inline #tags in the context the
+   * run was given (the item, or the whole note for a note run) and the
+   * tags on its note. Projects have no tags of their own here, nor agents.
+   * Never throws: what can't be read is left out.
+   */
+  async runContext(job: {
+    workspaceId: string;
+    agentId: string;
+    agentName: string;
+    docId?: string | null;
+    context?: string | null;
+  }): Promise<AgentRunContext> {
+    const agents = [job.agentName, job.agentId].filter(Boolean);
+    const projects = new Set(contextProjects(job.context ?? ''));
+    const tags = new Set(inlineTags(job.context ?? ''));
+    if (job.docId) {
+      try {
+        const link = await this.models.project.getDocProject(
+          job.workspaceId,
+          job.docId
+        );
+        const project = link
+          ? await this.models.project.get(link.projectId)
+          : null;
+        if (project) projects.add(project.name);
+        const root = await this.models.doc.getSnapshot(
+          job.workspaceId,
+          job.workspaceId
+        );
+        if (root) {
+          for (const tag of docTagNames(root.blob, job.docId)) tags.add(tag);
+        }
+      } catch (err) {
+        this.logger.warn(
+          `couldn't read the run context for the agent rules in ${job.workspaceId}: ${(err as Error).message}`
+        );
+      }
+    }
+    return { agents, projects: [...projects], tags: [...tags] };
+  }
+
+  /**
    * The workspace's docs outside the trash, from the pages list in its root
    * doc, which is where the trash flag lives (the doc metas the title lookup
    * reads don't have it). Null with no root doc to read, in which case
@@ -118,4 +178,46 @@ export class AgentRules {
     if (!root) return null;
     return new Set(readAllDocIdsFromWorkspaceSnapshot(root.blob));
   }
+}
+
+/** Inline `#tag`s in text (not `#key:value` properties), lowercased. */
+const HASHTAG_RE =
+  /(?<![\p{L}\p{N}_/&])#([\p{L}\p{N}_-]+)(?::([\p{L}\p{N}._-]+))?/gu;
+
+export function inlineTags(text: string): string[] {
+  const tags = new Set<string>();
+  for (const match of text.matchAll(HASHTAG_RE)) {
+    if (match[2] === undefined) tags.add(match[1].toLowerCase());
+  }
+  return [...tags];
+}
+
+/**
+ * Projects a run's context names: the page that queues a run on a block
+ * writes "Project: <name> (projectId: <id>)" for it (the frontend's
+ * agents/services/context.ts).
+ */
+export function contextProjects(text: string): string[] {
+  return [...text.matchAll(/^Project: (.+) \(projectId: [^)]*\)$/gm)].map(
+    match => match[1]
+  );
+}
+
+/**
+ * The names of the tags on a doc, from the workspace root doc: its page
+ * entry lists tag ids, and the workspace's tag property maps them to names.
+ */
+export function docTagNames(rootSnapshot: Uint8Array, docId: string) {
+  const doc = new Y.Doc();
+  Y.applyUpdate(doc, rootSnapshot);
+  const meta = doc.getMap('meta').toJSON() as {
+    pages?: { id?: string; tags?: unknown }[];
+    properties?: { tags?: { options?: { id?: string; value?: string }[] } };
+  };
+  const page = meta.pages?.find(entry => entry?.id === docId);
+  const ids = Array.isArray(page?.tags) ? page.tags : [];
+  const options = meta.properties?.tags?.options ?? [];
+  return ids
+    .map(id => options.find(option => option?.id === id)?.value)
+    .filter((name): name is string => typeof name === 'string' && !!name);
 }

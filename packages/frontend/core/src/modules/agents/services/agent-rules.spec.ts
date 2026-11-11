@@ -7,8 +7,10 @@ import {
   AGENT_RULES_TITLE,
   agentRulesSection,
   AgentRulesService,
+  inlineTags,
   isAgentRulesTitle,
   MAX_AGENT_RULES_CHARS,
+  SCOPED_RULES_SENTENCE,
 } from './agent-rules';
 
 const record = (id: string, title: string, trash = false) => ({
@@ -80,6 +82,54 @@ describe('agentRulesSection', () => {
       section.endsWith('[the rest of the note was cut]\n</agent-rules>')
     ).toBe(true);
   });
+
+  const scoped = [
+    '## Writing',
+    '* w1',
+    '## For project: notes-graph',
+    '* p1',
+    '## For tag: mobile',
+    '* m1',
+  ].join('\n');
+
+  test('keeps only the "For" sections that match the run, and says so', () => {
+    expect(agentRulesSection('* w1')).not.toContain(SCOPED_RULES_SENTENCE);
+
+    const none = agentRulesSection(scoped, {})!;
+    expect(none).not.toContain(SCOPED_RULES_SENTENCE);
+    expect(
+      none.endsWith('<agent-rules>\n## Writing\n* w1\n</agent-rules>')
+    ).toBe(true);
+
+    const mobile = agentRulesSection(scoped, { tags: ['Mobile'] })!;
+    expect(mobile).toContain(
+      `take precedence over any built-in conventions you were given.\n${SCOPED_RULES_SENTENCE}\n`
+    );
+    expect(mobile.endsWith('## For tag: mobile\n* m1\n</agent-rules>')).toBe(
+      true
+    );
+    expect(mobile).not.toContain('p1');
+
+    // Nothing left for this run is no rules at all.
+    expect(
+      agentRulesSection('## For agent: Other\n* o', { agents: ['Me'] })
+    ).toBeNull();
+  });
+
+  test('cuts what is left after filtering', () => {
+    const note = `## For agent: Other\n${'o'.repeat(MAX_AGENT_RULES_CHARS)}\n## Mine\nshort`;
+    expect(
+      agentRulesSection(note, { agents: ['Me'] })!.endsWith(
+        '<agent-rules>\n## Mine\nshort\n</agent-rules>'
+      )
+    ).toBe(true);
+  });
+
+  test('reads inline #tags, not properties or link fragments', () => {
+    expect(inlineTags('fix it #Android #status:done see a.com/x#frag')).toEqual(
+      ['android']
+    );
+  });
 });
 
 describe('AgentRulesService', () => {
@@ -126,6 +176,9 @@ describe('AgentRulesService', () => {
     expect(seed).toContain('Agent memory');
     expect(seed).toContain('(as of 2026-10-02)');
     expect(seed).toContain('[-] in progress');
+    expect(seed).toContain('## For project:');
+    expect(seed).toContain('## For tag:');
+    expect(seed).toContain('## For agent:');
     expect(released()).toBe(1);
   });
 });

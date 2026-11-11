@@ -1,7 +1,7 @@
 import type { BlockModel, Store } from '@blocksuite/notesgraph/store';
 import { describe, expect, test } from 'vitest';
 
-import { projectOf } from './context';
+import { noteTagNames, projectOf } from './context';
 
 /** Blocks by id, each with its text and parent. */
 const storeOf = (blocks: Record<string, { text: string; parent?: string }>) => {
@@ -59,5 +59,24 @@ describe('projectOf', () => {
   test('the heading it sits under wins over the note it is in', () => {
     const home = [projects[0], { ...projects[1], docIds: ['journal'] }];
     expect(projectOf(store, 'journal', model('task'), home)?.id).toBe('p-ai');
+  });
+});
+
+describe('noteTagNames', () => {
+  test("a note's tags by name; ids with no tag behind them are left out", () => {
+    const store = {
+      workspace: {
+        meta: {
+          getDocMeta: (id: string) =>
+            id === 'doc' ? { tags: ['t-mobile', 't-gone'] } : undefined,
+          properties: {
+            tags: { options: [{ id: 't-mobile', value: 'Mobile', color: '' }] },
+          },
+        },
+      },
+    } as unknown as Store;
+    expect(noteTagNames(store, 'doc')).toEqual(['Mobile']);
+    expect(noteTagNames(store, 'other')).toEqual([]);
+    expect(noteTagNames({} as Store, 'doc')).toEqual([]);
   });
 });

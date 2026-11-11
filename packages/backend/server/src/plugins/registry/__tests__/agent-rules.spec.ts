@@ -6,7 +6,11 @@ import {
   AGENT_RULES_TITLE,
   AgentRules,
   agentRulesSection,
+  contextProjects,
+  docTagNames,
+  inlineTags,
   MAX_AGENT_RULES_CHARS,
+  SCOPED_RULES_SENTENCE,
   withAgentRules,
 } from '../agent-rules';
 import { RegistryJobService } from '../jobs';
@@ -176,8 +180,11 @@ test('a claimed job gets the rules in its profile; a job of no Claude model gets
   const rules: any = {
     read: async (_ws: string, userId?: string | null) => {
       reads.push(userId);
-      return 'Name notes in sentence case.';
+      return 'Name notes in sentence case.\n## For agent: Other\n* not for Worker';
     },
+    runContext: async (claimed: { agentName: string }) => ({
+      agents: [claimed.agentName],
+    }),
   };
   const claimWith = (model: string | null) =>
     new RegistryJobService(
@@ -193,8 +200,129 @@ test('a claimed job gets the rules in its profile; a job of no Claude model gets
     claimed?.profile?.systemPrompt ?? '',
     /<agent-rules>\nName notes in sentence case\.\n<\/agent-rules>/
   );
+  t.false((claimed?.profile?.systemPrompt ?? '').includes('not for Worker'));
   t.deepEqual(reads, ['user-1']);
 
   t.is((await claimWith(null))?.profile, null);
   t.is(reads.length, 1);
+});
+
+const SCOPED_NOTE = [
+  '## Writing',
+  '* w1',
+  '## For project: notes-graph',
+  '* p1',
+  '## For tag: mobile',
+  '* m1',
+].join('\n');
+
+test('the section keeps only the "For" parts that match the run, and says so', t => {
+  const plain = agentRulesSection('* w1')!;
+  t.false(plain.includes(SCOPED_RULES_SENTENCE));
+
+  const none = agentRulesSection(SCOPED_NOTE, {})!;
+  t.false(none.includes(SCOPED_RULES_SENTENCE));
+  t.true(none.includes('<agent-rules>\n## Writing\n* w1\n</agent-rules>'));
+
+  const mobile = agentRulesSection(SCOPED_NOTE, { tags: ['Mobile'] })!;
+  t.true(
+    mobile.includes(
+      `take precedence over any built-in conventions you were given.\n${SCOPED_RULES_SENTENCE}\n`
+    )
+  );
+  t.true(mobile.includes('## For tag: mobile\n* m1\n</agent-rules>'));
+  t.false(mobile.includes('p1'));
+
+  // Nothing left for this run is no rules at all.
+  t.is(agentRulesSection('## For agent: Other\n* o', { agents: ['Me'] }), null);
+});
+
+test('the cap applies to what is left after filtering', t => {
+  const note = `## For agent: Other\n${'o'.repeat(MAX_AGENT_RULES_CHARS)}\n## Mine\nshort`;
+  const section = agentRulesSection(note, { agents: ['Me'] })!;
+  t.true(section.includes('<agent-rules>\n## Mine\nshort\n</agent-rules>'));
+});
+
+/** A root doc whose page `doc-1` carries tag ids, named by the tag property. */
+function taggedRootDoc() {
+  const doc = new Y.Doc();
+  const meta = doc.getMap('meta');
+  const pages = new Y.Array<Y.Map<unknown>>();
+  meta.set('pages', pages);
+  const page = new Y.Map<unknown>();
+  page.set('id', 'doc-1');
+  const tags = new Y.Array<string>();
+  tags.push(['t-mobile', 't-gone']);
+  page.set('tags', tags);
+  pages.push([page]);
+  const properties = new Y.Map<unknown>();
+  const tagProp = new Y.Map<unknown>();
+  const options = new Y.Array<Y.Map<unknown>>();
+  const option = new Y.Map<unknown>();
+  option.set('id', 't-mobile');
+  option.set('value', 'Mobile');
+  options.push([option]);
+  tagProp.set('options', options);
+  properties.set('tags', tagProp);
+  meta.set('properties', properties);
+  return Y.encodeStateAsUpdate(doc);
+}
+
+test('reads tags, projects and #tags for the run context', t => {
+  t.deepEqual(docTagNames(taggedRootDoc(), 'doc-1'), ['Mobile']);
+  t.deepEqual(docTagNames(taggedRootDoc(), 'other'), []);
+  t.deepEqual(inlineTags('fix it #Android #status:done see a.com/x#frag'), [
+    'android',
+  ]);
+  t.deepEqual(
+    contextProjects('Under: x\nProject: Notes Graph (projectId: p1)\n'),
+    ['Notes Graph']
+  );
+});
+
+test("a job's run context: its agent, its note's project and tags, and its #tags", async t => {
+  const models: any = {
+    doc: { getSnapshot: async () => ({ blob: taggedRootDoc() }) },
+    project: {
+      getDocProject: async (_ws: string, docId: string) =>
+        docId === 'doc-1' ? { projectId: 'p1' } : null,
+      get: async () => ({ id: 'p1', name: 'notes-graph' }),
+    },
+  };
+  const rules = new AgentRules(models, {} as any, {} as any);
+  const ctx = await rules.runContext({
+    workspaceId,
+    agentId: 'a1',
+    agentName: 'Researcher',
+    docId: 'doc-1',
+    context: 'Project: Side (projectId: p2)\n\n[ ] ship it #web',
+  });
+  t.deepEqual(ctx, {
+    agents: ['Researcher', 'a1'],
+    projects: ['Side', 'notes-graph'],
+    tags: ['web', 'Mobile'],
+  });
+
+  // A failing lookup leaves out what it would have added.
+  const broken = new AgentRules(
+    {
+      project: {
+        getDocProject: async () => {
+          throw new Error('db down');
+        },
+      },
+    } as any,
+    {} as any,
+    {} as any
+  );
+  t.deepEqual(
+    await broken.runContext({
+      workspaceId,
+      agentId: 'a1',
+      agentName: 'W',
+      docId: 'doc-1',
+      context: '',
+    }),
+    { agents: ['W', 'a1'], projects: [], tags: [] }
+  );
 });

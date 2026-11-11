@@ -10,6 +10,7 @@ import { Service } from '@notesgraph/infra';
 
 import type { DocsService } from '../../doc';
 import type { Project, ProjectsService } from '../../projects';
+import type { AgentRunContext } from './scoped-rules';
 import type { AgentTarget } from './target';
 import {
   QUEUED_STATUS,
@@ -52,6 +53,28 @@ export interface AgentContext {
    * Absent for a whole note, which isn't one task.
    */
   taskIds?: string[];
+  /**
+   * The projects the run is in and the tags on its note, for the "Agent
+   * rules" note's "For project/tag: …" sections. The run's inline #tags
+   * and its agent are added from the text and the agent when the rules
+   * are read (executor.ts).
+   */
+  scope?: Pick<AgentRunContext, 'projects' | 'tags'>;
+}
+
+/** Names of the tags set on a note (its doc meta), as the tag list shows them. */
+export function noteTagNames(store: Store, docId: string): string[] {
+  try {
+    const meta = store.workspace.meta;
+    const ids = meta.getDocMeta(docId)?.tags ?? [];
+    const options = meta.properties.tags?.options ?? [];
+    return ids
+      .map(id => options.find(option => option.id === id)?.value)
+      .filter((name): name is string => !!name);
+  } catch {
+    // Only for matching the rules note; a run goes on without them.
+    return [];
+  }
 }
 
 /**
@@ -123,6 +146,8 @@ export class AgentContextService extends Service {
       const title = doc.title$.value || 'Untitled';
 
       const taskList = this.taskList(store, target);
+      const projects = await this.projects();
+      const tags = noteTagNames(store, target.docId);
 
       if (target.kind === 'doc') {
         const markdown = await storeMarkdown(store);
@@ -130,6 +155,12 @@ export class AgentContextService extends Service {
         return {
           label: `note "${title}"`,
           title: clipTitle(title),
+          scope: {
+            projects: projects
+              .filter(project => project.docIds.includes(target.docId))
+              .map(project => project.name),
+            tags,
+          },
           text: [
             `# Note: ${title}`,
             '',
@@ -144,7 +175,6 @@ export class AgentContextService extends Service {
 
       const blockIds =
         target.kind === 'block' ? [target.blockId] : target.blockIds;
-      const projects = await this.projects();
       const parts = blockIds
         .map(id => this.describeBlock(store, target.docId, id, projects))
         .filter((part): part is string => !!part);
@@ -163,6 +193,20 @@ export class AgentContextService extends Service {
         label,
         title: first ? `${clipTitle(first)}${more}` : clipTitle(title),
         taskIds: targetTaskIds(store, target),
+        scope: {
+          projects: [
+            ...new Set(
+              blockIds
+                .map(id => store.getBlock(id)?.model)
+                .map(model =>
+                  model ? projectOf(store, target.docId, model, projects) : null
+                )
+                .filter(project => !!project)
+                .map(project => project.name)
+            ),
+          ],
+          tags,
+        },
         text: [
           `Note: ${title}`,
           '',

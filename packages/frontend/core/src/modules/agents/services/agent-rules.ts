@@ -3,6 +3,9 @@ import { Service } from '@notesgraph/infra';
 
 import type { DocRecord, DocsService } from '../../doc';
 import { storeMarkdown } from './context';
+import { type AgentRunContext, filterAgentRules } from './scoped-rules';
+
+export type { AgentRunContext } from './scoped-rules';
 
 /**
  * The user's own rules for agents, kept as a note in the workspace like an
@@ -27,27 +30,51 @@ export const MAX_AGENT_RULES_CHARS = 8_000;
 /** How long a run waits for the note to load before going without it. */
 const LOAD_WAIT_MS = 3_000;
 
+/** Said when the note had a "For …" section that matched the run. */
+export const SCOPED_RULES_SENTENCE =
+  'Sections headed "For project/tag/agent: …" were included because they match this run; sections for other projects, tags or agents were left out.';
+
 /**
  * The rules as a system-prompt section, or null for a note with nothing in
- * it. They are said to win over any built-in conventions, since overriding
- * those is what the note is for; an in-tab run's prompt may have none, so
- * the wording doesn't assume there are any.
+ * it for this run. The note's "For project/tag/agent: …" sections are kept
+ * only when they match `ctx` (see scoped-rules.ts), and the cap applies to
+ * what is left. They are said to win over any built-in conventions, since
+ * overriding those is what the note is for; an in-tab run's prompt may have
+ * none, so the wording doesn't assume there are any.
  */
 export function agentRulesSection(
-  markdown: string | null | undefined
+  markdown: string | null | undefined,
+  ctx: AgentRunContext = {}
 ): string | null {
-  const text = markdown?.trim();
+  const { text, keptScoped } = filterAgentRules(markdown ?? '', ctx);
   if (!text) return null;
   const clipped = text.length > MAX_AGENT_RULES_CHARS;
   return [
     `These rules are from the user's note titled "${AGENT_RULES_TITLE}". Follow them;`,
     'they take precedence over any built-in conventions you were given.',
+    ...(keptScoped ? [SCOPED_RULES_SENTENCE] : []),
     '',
     '<agent-rules>',
     clipped ? text.slice(0, MAX_AGENT_RULES_CHARS) : text,
     ...(clipped ? ['[the rest of the note was cut]'] : []),
     '</agent-rules>',
   ].join('\n');
+}
+
+/**
+ * Inline `#tag`s in text (not `#key:value` properties), lowercased: the
+ * tags a run's context carries, read the same way the server reads a
+ * device job's (registry/agent-rules.ts).
+ */
+const HASHTAG_RE =
+  /(?<![\p{L}\p{N}_/&])#([\p{L}\p{N}_-]+)(?::([\p{L}\p{N}._-]+))?/gu;
+
+export function inlineTags(text: string): string[] {
+  const tags = new Set<string>();
+  for (const match of text.matchAll(HASHTAG_RE)) {
+    if (match[2] === undefined) tags.add(match[1].toLowerCase());
+  }
+  return [...tags];
 }
 
 /** Whether a note is the rules note: its title, ignoring case and spaces. */
@@ -66,6 +93,7 @@ export const AGENT_RULES_SEED: { heading: string; items: string[] }[] = [
     items: [
       "Every agent run reads this note when it starts and follows it; where it differs from an agent's built-in habits, this note wins.",
       'Edit it freely. Changes apply from the next run on.',
+      'Rules under a heading "## For project: <name>", "## For tag: <tag>" or "## For agent: <name>" (several names may be comma-separated) apply only to runs in that project, on an item, note or project with that tag, or by that agent; everything else applies to every run.',
     ],
   },
   {
