@@ -202,6 +202,12 @@ export const CaptureView = ({
     save();
   }, [save, stop]);
 
+  const getBlockIds = useCallback(() => {
+    const store = noteRef.current?.store;
+    const [note] = store?.getModelsByFlavour('notesgraph:note') ?? [];
+    return note ? note.children.map(block => block.id) : [];
+  }, []);
+
   const handedOff = useCallback((agents: { name: string }[]) => {
     setHandingOff(false);
     setHandedTo(agents.map(agent => agent.name));
@@ -278,6 +284,7 @@ export const CaptureView = ({
       {handOffEnabled && handingOff && docId ? (
         <CaptureHandOff
           docId={docId}
+          getBlockIds={getBlockIds}
           onBeforeHandOff={flush}
           onHandedOff={handedOff}
           onCancel={() => setHandingOff(false)}

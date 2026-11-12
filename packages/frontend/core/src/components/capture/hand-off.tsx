@@ -1,4 +1,4 @@
-import { Button, Checkbox } from '@notesgraph/component';
+import { Button, Checkbox, notify } from '@notesgraph/component';
 import {
   type Agent,
   AgentIcon,
@@ -6,6 +6,7 @@ import {
   AgentsService,
   useAgentsDownLast,
 } from '@notesgraph/core/modules/agents';
+import { WorkspaceDialogService } from '@notesgraph/core/modules/dialogs';
 import { WorkbenchService } from '@notesgraph/core/modules/workbench';
 import { useService } from '@notesgraph/infra';
 import { useCallback, useMemo, useState } from 'react';
@@ -27,16 +28,22 @@ const readLastPicked = (): string[] => {
 };
 
 /**
- * Picks the agents a capture is handed to. Each one picked starts a run on
- * the whole note, the same as running it from the note's Agents panel.
+ * Picks the agents a capture is handed to, from the same list the agent pill
+ * in a note offers (every enabled agent that works on a block or the whole
+ * note), with the same "New agent…" way out. An agent that works on a whole
+ * note runs on the note; one that only works on blocks runs on each bullet.
+ * The Agents panel opens so the run can be followed, as from the pill.
  */
 export const CaptureHandOff = ({
   docId,
+  getBlockIds,
   onBeforeHandOff,
   onHandedOff,
   onCancel,
 }: {
   docId: string;
+  /** The capture's bullets, read after it has been written. */
+  getBlockIds: () => string[];
   /** Writes what is on screen, so the agents read all of it. */
   onBeforeHandOff: () => void;
   onHandedOff: (agents: Agent[]) => void;
@@ -45,8 +52,19 @@ export const CaptureHandOff = ({
   const agentsService = useService(AgentsService);
   const sessions = useService(AgentRunSessionService);
   const workbench = useService(WorkbenchService).workbench;
-  const agents = useAgentsDownLast(
+  const dialogs = useService(WorkspaceDialogService);
+  const blockAgents = useAgentsDownLast(
+    useMemo(() => agentsService.agentsFor$('block'), [agentsService])
+  );
+  const docAgents = useAgentsDownLast(
     useMemo(() => agentsService.agentsFor$('doc'), [agentsService])
+  );
+  const agents = useMemo(
+    () => [
+      ...blockAgents,
+      ...docAgents.filter(doc => !blockAgents.some(a => a.id === doc.id)),
+    ],
+    [blockAgents, docAgents]
   );
 
   const [picked, setPicked] = useState<string[]>(readLastPicked);
@@ -68,17 +86,49 @@ export const CaptureHandOff = ({
       JSON.stringify(pickedAgents.map(agent => agent.id))
     );
     onBeforeHandOff();
+    const blockIds = getBlockIds();
+    if (!BUILD_CONFIG.isMobileEdition) {
+      workbench.openSidebar();
+      workbench.activeView$.value.activeSidebarTab('agents');
+    }
+    const fail = (err: unknown) => {
+      console.error(err);
+      notify.error({
+        title: "Couldn't start the agent",
+        message: err instanceof Error ? err.message : String(err),
+      });
+    };
     for (const agent of pickedAgents) {
-      sessions.start(agent, { kind: 'doc', docId }).catch(console.error);
+      if (agent.targets.includes('doc') || !blockIds.length) {
+        sessions.start(agent, { kind: 'doc', docId }).catch(fail);
+        continue;
+      }
+      for (const blockId of blockIds) {
+        sessions.start(agent, { kind: 'block', docId, blockId }).catch(fail);
+      }
     }
     onHandedOff(pickedAgents);
-  }, [docId, onBeforeHandOff, onHandedOff, pickedAgents, sessions]);
+  }, [
+    docId,
+    getBlockIds,
+    onBeforeHandOff,
+    onHandedOff,
+    pickedAgents,
+    sessions,
+    workbench,
+  ]);
+
+  const newAgent = useCallback(() => {
+    dialogs.open('agent-editor', {}, agent => {
+      if (agent) setPicked(prev => [...prev, agent.id]);
+    });
+  }, [dialogs]);
 
   if (!agents.length) {
     return (
       <div className={styles.handOff} data-testid="capture-hand-off">
         <span className={styles.handOffHint}>
-          No agent works on a whole note yet. Set one up to hand captures to it.
+          No agent is set up yet. Set one up to hand captures to it.
         </span>
         <div className={styles.handOffActions}>
           <Button onClick={onCancel}>Cancel</Button>
@@ -114,6 +164,7 @@ export const CaptureHandOff = ({
         ))}
       </div>
       <div className={styles.handOffActions}>
+        <Button onClick={newAgent}>New agent…</Button>
         <Button onClick={onCancel}>Cancel</Button>
         <Button
           variant="primary"
