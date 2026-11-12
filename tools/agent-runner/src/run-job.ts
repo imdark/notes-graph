@@ -65,6 +65,11 @@ export interface RunnerSettings {
   claudeOauthToken?: string;
   anthropicApiKey?: string;
   ghToken?: string;
+  /**
+   * The Headroom proxy (`headroom proxy`) Claude Code goes through when the
+   * job's profile asks for compressed context. Defaults to localhost:8787.
+   */
+  headroomUrl?: string;
 }
 
 export interface RunDeps {
@@ -190,6 +195,38 @@ async function omniseek(settings: RunnerSettings, fetchImpl: typeof fetch) {
     );
   }
   return { url, token: settings.omniseekToken };
+}
+
+export const DEFAULT_HEADROOM_URL = 'http://127.0.0.1:8787';
+
+/**
+ * Where Claude Code is to send its API calls for this run: the Headroom proxy
+ * when the profile asks for it and the proxy answers, or null to call the API
+ * directly. A proxy that is down is not worth failing a run over; the
+ * transcript says it was skipped.
+ */
+export async function headroomBaseUrl(
+  job: Job,
+  settings: RunnerSettings,
+  fetchImpl: typeof fetch,
+  say: (line: string) => void
+): Promise<string | null> {
+  if (!job.profile?.headroom?.compressContext) return null;
+  const url = (settings.headroomUrl?.trim() || DEFAULT_HEADROOM_URL).replace(
+    /\/+$/,
+    ''
+  );
+  try {
+    // Any HTTP answer means the proxy is listening.
+    await fetchImpl(`${url}/health`, { signal: AbortSignal.timeout(3000) });
+  } catch (err) {
+    say(
+      `  Headroom: no proxy at ${url} (${err}), so this run's context is not compressed.`
+    );
+    return null;
+  }
+  say(`  Headroom: compressing this run's context through ${url}.`);
+  return url;
 }
 
 export async function runJob(job: Job, deps: RunDeps): Promise<RunOutcome> {
@@ -323,6 +360,8 @@ export async function runJob(job: Job, deps: RunDeps): Promise<RunOutcome> {
       allowedTools.push('mcp__automation');
     }
 
+    const headroom = await headroomBaseUrl(job, settings, fetchImpl, say);
+
     const abortController = new AbortController();
     deps.signal.addEventListener('abort', () => abortController.abort());
     const maxTurns = turnLimit(job);
@@ -353,6 +392,7 @@ export async function runJob(job: Job, deps: RunDeps): Promise<RunOutcome> {
         ...(settings.claudeOauthToken
           ? { CLAUDE_CODE_OAUTH_TOKEN: settings.claudeOauthToken }
           : { ANTHROPIC_API_KEY: settings.anthropicApiKey }),
+        ...(headroom ? { ANTHROPIC_BASE_URL: headroom } : {}),
         MCP_TOOL_TIMEOUT: String(profile.toolTimeoutMs),
       },
     };

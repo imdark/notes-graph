@@ -35,6 +35,8 @@ export interface AgentProfile {
   automation?: Automation;
   /** Claude Code skills to load, each a SKILL.md at a URL. */
   skills?: Array<{ name: string; url: string }>;
+  /** Set when the server's Headroom plugin asks for compressed context. */
+  headroom?: { compressContext?: boolean };
 }
 
 export interface Job {

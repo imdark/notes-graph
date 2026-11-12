@@ -10,6 +10,8 @@
  * on a Mac and on the compose network in the cloud).
  */
 
+import type { AgentHeadroom } from '../headroom';
+
 export type AgentMcpServer = 'notesgraph' | 'run' | 'omniseek';
 
 /**
@@ -72,6 +74,8 @@ export interface AgentProfile {
    * loads them as one Claude plugin.
    */
   skills: AgentSkill[];
+  /** Set by the Headroom plugin (plugins/headroom) when it is turned on. */
+  headroom?: AgentHeadroom;
 }
 
 export interface AgentSkill {

@@ -95,6 +95,31 @@ OMNISEEK_URL=http://omniseek:8765
 OMNISEEK_TOKEN=<from /opt/notesgraph/data/omniseek/credentials/omniseek_http.json>
 # Optional
 RUNNER_MAX_JOBS=2
+# The Headroom proxy Claude Code goes through when the server's Headroom
+# plugin has agentRuns on (see "Headroom" below). Default http://127.0.0.1:8787.
+# RUNNER_HEADROOM_URL=http://headroom:8787
+```
+
+## Headroom (optional)
+
+[Headroom](https://github.com/headroomlabs-ai/headroom) compresses what the
+model reads (tool output, logs, JSON) in a local proxy. The server's
+`headroom` settings (admin settings, or `NOTESGRAPH_HEADROOM_*` env) turn it on:
+
+- `copilot`: the AI assistant's Anthropic/OpenAI calls go to `proxyUrl`.
+  Providers with a custom base URL are skipped.
+- `agentRuns`: runs are told to send Claude Code to the runner's
+  `RUNNER_HEADROOM_URL`. If nothing answers there, the run goes on without it
+  and says so in its log.
+- `terseResponses`: adds a "be concise" line to the end of the system prompt,
+  for chat and for runs. Headroom does not have to be running for this one.
+
+Run the proxy with telemetry off. Its own response steering
+(`HEADROOM_OUTPUT_SHAPER`) is not needed: `terseResponses` does that job.
+
+```sh
+uv tool install --python 3.13 "headroom-ai[proxy]"
+HEADROOM_TELEMETRY=off headroom proxy --port 8787
 ```
 
 ## 3. Apply

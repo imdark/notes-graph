@@ -13,6 +13,7 @@ import type {
 import {
   ActionForbidden,
   BadRequest,
+  Config,
   EventBus,
   NotFound,
   OneMB,
@@ -26,6 +27,7 @@ import {
   type QuestionKind,
   STEER_KIND,
 } from '../../models/registry-job';
+import { withHeadroom } from '../headroom';
 import { AgentMemoryService } from './agent-memory';
 import {
   type AgentProfile,
@@ -598,7 +600,8 @@ export class RegistryJobService {
     @Optional() private readonly skillNotes?: SkillNoteService,
     @Optional() private readonly memory?: AgentMemoryService,
     @Optional() private readonly gates?: JobGates,
-    @Optional() private readonly blobStorage?: WorkspaceBlobStorage
+    @Optional() private readonly blobStorage?: WorkspaceBlobStorage,
+    @Optional() private readonly config?: Config
   ) {}
 
   /** Where a run's files go; absent only in tests built without storage. */
@@ -1092,11 +1095,13 @@ export class RegistryJobService {
     await this.tasks?.claimed(job);
     const profile = await this.profile(job);
     // What earlier runs learned about whoever started this one.
+    const recalled = this.memory
+      ? await this.memory.withRecall(job, profile)
+      : profile;
     return {
       ...toJobDto(job),
-      profile: this.memory
-        ? await this.memory.withRecall(job, profile)
-        : profile,
+      // Last, so the steering line ends the system prompt.
+      profile: recalled && withHeadroom(recalled, this.config?.headroom),
     };
   }
 
