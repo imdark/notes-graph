@@ -46,6 +46,30 @@ a clean pass/fail + error count, and it's allowlisted. Do **not** run raw
 `npx tsc --noEmit … | tee … | grep 'error TS'`: the pipe defeats the allowlist
 and triggers an approval prompt every time.
 
+`scripts/typecheck.sh --changed <dir>` fails only on errors in files the
+branch changed. Main carries a few errors of its own (e.g. one in
+`quicksearch/services/cmdk.ts`), so judge a branch by `--changed`.
+
+## Working in a git worktree
+
+Run `scripts/worktree-setup.sh` once in a fresh worktree (`wf start` does it
+when it creates one). Do **not** symlink main's `node_modules` into the
+worktree: workspace packages then resolve to main's sources, so vitest tests
+main's `@notesgraph/plugin-sdk`, tsc reports main's blocksuite exports, and
+`yarn notesgraph server genconfig` writes into main. The script gives every
+`node_modules` (root, `tools/agent-runner`, `packages/backend/server`, ...) its
+own directory with third-party packages linked to main and workspace packages
+pointing at the worktree. It also links main's built native addon and the
+generated edgeless templates, and copies the Android `local.properties` and
+`google-services.json`.
+
+- Run vitest from the repo root, e.g. `npx vitest run tools/agent-runner`;
+  the root config holds the setup files and aliases.
+- The first `scripts/typecheck.sh` builds the referenced projects' `dist`
+  (about a minute for core). Use `--changed`.
+- The native addon is main's build: rebuild it in the worktree if the branch
+  changes Rust code.
+
 ## Other allowlisted verify/loop scripts
 
 - `scripts/debug-local-web-dev.sh` — local web dev server + a scripted debug

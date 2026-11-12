@@ -10,6 +10,7 @@
       "Bash(node scripts/add-i18n.mjs *)",
       "Bash(scripts/debug-local-web-dev.sh*)",
       "Bash(scripts/typecheck.sh*)",
+      "Bash(scripts/worktree-setup.sh*)",
       "Bash(scripts/check-syntax.sh*)",
       "Bash(scripts/mobile-emulator.sh *)",
       "Bash(adb *)",
