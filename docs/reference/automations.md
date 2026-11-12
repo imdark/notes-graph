@@ -51,6 +51,8 @@ automations, and a run can do nothing its creator could not.
   (`q` empty for all), as `{docs: [{docId, title}]}`. `limit` up to 1000.
 - `GET /api/notes/workspaces/:id/docs/:docId/markdown`.
 - `PUT /api/notes/workspaces/:id/docs/:docId` with `{markdown?, title?}`.
+- `DELETE /api/notes/workspaces/:id/docs/:docId`: delete a doc permanently
+  (needs `Doc.Delete`).
 - `POST /api/notes/workspaces/:id/docs` with `{title, markdown, folder?: string[]}`.
 - `GET /api/registry/workspaces/:id/jobs?kind=agent&since=<iso>&limit=200`:
   runs, newest first; `GET .../jobs/:jobId?logFrom=0` for one run with its
@@ -63,8 +65,8 @@ automations, and a run can do nothing its creator could not.
 nightly passes live there as code the person can read and change:
 
 - **Title untitled notes nightly** (cron `0 3 * * *`): a title from the first
-  sentence of each untitled note's body; notes with no body are only
-  reported.
+  sentence of each untitled note's body; notes with no body either are
+  deleted for good (`DELETE /api/notes/workspaces/:id/docs/:docId`).
 - **Learn from agent runs nightly** (cron `0 4 * * *`): the counting half of
   `wf learn` (see `wf-learn.md`) over the last 14 days of runs, kept as
   to-dos in "Proposed harness changes" under `ai / proposals`. Proposals

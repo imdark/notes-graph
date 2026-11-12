@@ -79,7 +79,7 @@ test('the templates are offered with a cron trigger and a long timeout', t => {
   );
 });
 
-test('titling names untitled notes from their body and leaves empty ones', async t => {
+test('titling names untitled notes from their body and deletes empty ones', async t => {
   const bodies: Record<string, string> = {
     a: '# \nThe fastest drone simulator. Made for RL.\nmore',
     b: '',
@@ -101,7 +101,7 @@ test('titling names untitled notes from their body and leaves empty ones', async
       }
       const md = /\/docs\/([^/?]+)\/markdown$/.exec(path);
       if (md) return { markdown: bodies[md[1]] };
-      if (method === 'PUT') return { ok: true, body };
+      if (method === 'PUT' || method === 'DELETE') return { ok: true, body };
       throw new Error(`unexpected ${method} ${path}`);
     }
   );
@@ -116,8 +116,12 @@ test('titling names untitled notes from their body and leaves empty ones', async
       ['c', 'A very long first sentence that keeps going on and on well…'],
     ]
   );
+  t.deepEqual(
+    calls.filter(c => c.method === 'DELETE').map(c => c.path.split('/').pop()),
+    ['b']
+  );
   t.deepEqual(output, {
-    summary: '2 titled, 1 empty of 3 untitled',
+    summary: '2 titled, 1 empty deleted of 3 untitled',
     titled: [
       { docId: 'a', title: 'The fastest drone simulator' },
       {
@@ -125,9 +129,11 @@ test('titling names untitled notes from their body and leaves empty ones', async
         title: 'A very long first sentence that keeps going on and on well…',
       },
     ],
-    empty: ['b'],
+    deleted: ['b'],
   });
-  t.true(log.some(line => line.includes('2 titled, 1 empty of 3 untitled')));
+  t.true(
+    log.some(line => line.includes('2 titled, 1 empty deleted of 3 untitled'))
+  );
 });
 
 test('learn finds a stuck run and writes the proposals note under ai / proposals', async t => {

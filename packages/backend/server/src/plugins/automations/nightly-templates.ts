@@ -13,10 +13,10 @@
  * literals and backticks: it is embedded in String.raw below.
  */
 
-/** Titles untitled notes from their first sentence; reports empty ones. */
+/** Titles untitled notes from their first sentence; deletes empty ones. */
 export const TITLE_UNTITLED_NOTES_TEMPLATE = String.raw`// Every note with no title gets one from the first sentence of its body
-// (up to 60 characters, cut at a word). A note with no body either is only
-// reported: deleting it is a person's call.
+// (up to 60 characters, cut at a word). A note with no body either is empty
+// and is deleted.
 const MAX_TITLE = 60;
 const ws = notesgraph.workspaceId;
 
@@ -54,11 +54,18 @@ for (const doc of untitled) {
   titled.push({ docId: doc.docId, title });
   console.log('titled ' + doc.docId + ': ' + title);
 }
-for (const docId of empty) console.log('empty, left alone: ' + docId);
-const summary = titled.length + ' titled, ' + empty.length + ' empty of ' + untitled.length + ' untitled';
+const deleted = [];
+for (const docId of empty) {
+  await notesgraph.fetch('/api/notes/workspaces/' + ws + '/docs/' + encodeURIComponent(docId), {
+    method: 'DELETE',
+  });
+  deleted.push(docId);
+  console.log('deleted empty ' + docId);
+}
+const summary = titled.length + ' titled, ' + deleted.length + ' empty deleted of ' + untitled.length + ' untitled';
 console.log(summary);
 // summary is what a monitor running this records as its reading
-return { summary, titled, empty };
+return { summary, titled, deleted };
 `;
 
 /**
@@ -363,7 +370,7 @@ export const NIGHTLY_TEMPLATES = [
     id: 'title-untitled-notes',
     name: 'Title untitled notes nightly',
     description:
-      'Every night at 3am, give each untitled note a title from the first sentence of its body and report the ones with no body either.',
+      'Every night at 3am, give each untitled note a title from the first sentence of its body and delete the ones with no body either.',
     triggers: [{ type: 'cron', expr: '0 3 * * *' }],
     code: TITLE_UNTITLED_NOTES_TEMPLATE,
     timeoutSeconds: 10 * 60,

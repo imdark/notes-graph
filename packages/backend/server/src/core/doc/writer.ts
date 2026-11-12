@@ -1,5 +1,13 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { nanoid } from 'nanoid';
+import {
+  applyUpdate,
+  Array as YArray,
+  Doc as YDoc,
+  encodeStateAsUpdate,
+  encodeStateVector,
+  Map as YMap,
+} from 'yjs';
 
 import { BadRequest, EventBus } from '../../base';
 import {
@@ -646,6 +654,55 @@ export class DocWriter {
       editor: editorId,
     });
     return folderId;
+  }
+
+  /**
+   * Delete a doc for good: take its entry out of the root doc's page list
+   * (meta.pages) so no ghost row is left in the sidebar, then drop its stored
+   * content. Not the trash: nothing can bring it back.
+   */
+  async deleteDoc(
+    workspaceId: string,
+    docId: string,
+    editorId?: string
+  ): Promise<void> {
+    if (docId === workspaceId) {
+      throw new BadRequest('The workspace root doc cannot be deleted');
+    }
+    const rootDoc = await this.storage.getDoc(workspaceId, workspaceId);
+    if (rootDoc?.bin) {
+      const ydoc = new YDoc();
+      applyUpdate(ydoc, new Uint8Array(rootDoc.bin));
+      const before = encodeStateVector(ydoc);
+      const pages = ydoc.getMap('meta').get('pages');
+      if (pages instanceof YArray) {
+        ydoc.transact(() => {
+          for (let i = pages.length - 1; i >= 0; i--) {
+            const page = pages.get(i);
+            if (page instanceof YMap && page.get('id') === docId) {
+              pages.delete(i, 1);
+            }
+          }
+        });
+        const update = encodeStateAsUpdate(ydoc, before);
+        if (!this.storage.isEmptyBin(update)) {
+          const timestamp = await this.storage.pushDocUpdates(
+            workspaceId,
+            workspaceId,
+            [update],
+            editorId
+          );
+          this.emitDocUpdatesPushed({
+            spaceId: workspaceId,
+            docId: workspaceId,
+            updates: [update],
+            timestamp,
+            editor: editorId,
+          });
+        }
+      }
+    }
+    await this.storage.deleteDoc(workspaceId, docId);
   }
 
   private emitDocUpdatesPushed(payload: {

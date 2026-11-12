@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Delete,
   Get,
   Logger,
   Param,
@@ -303,6 +304,19 @@ export class NotesApiController {
       );
     }
     this.logger.log(`edited doc ${workspaceId}/${docId} by ${user.id}`);
+    return { ok: true };
+  }
+
+  /** Delete a doc for good. Needs the right to delete it, not just edit. */
+  @Delete('/workspaces/:workspaceId/docs/:docId')
+  async deleteDoc(
+    @CurrentUser() user: CurrentUserType,
+    @Param('workspaceId') workspaceId: string,
+    @Param('docId') docId: string
+  ) {
+    await this.ac.user(user.id).doc(workspaceId, docId).assert('Doc.Delete');
+    await this.docWriter.deleteDoc(workspaceId, docId, user.id);
+    this.logger.log(`deleted doc ${workspaceId}/${docId} by ${user.id}`);
     return { ok: true };
   }
 
