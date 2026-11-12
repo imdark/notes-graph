@@ -1348,6 +1348,23 @@ test('a job’s chosen skills replace the model’s defaults, catalog names only
   t.is(profileFor('some-other-model', ['antislop']), null);
 });
 
+test('ponytail’s skills are opt-in, pinned to a release', t => {
+  t.false(
+    profileFor('claude-code')!.skills.some(s => s.name.startsWith('ponytail'))
+  );
+  const chosen = profileFor('claude-code', ['ponytail', 'ponytail-review']);
+  t.deepEqual(
+    chosen?.skills.map(s => s.name),
+    ['ponytail', 'ponytail-review']
+  );
+  for (const skill of chosen?.skills ?? []) {
+    t.regex(
+      skill.url,
+      /^https:\/\/raw\.githubusercontent\.com\/DietrichGebert\/ponytail\/[0-9a-f]{40}\/skills\/ponytail(-review)?\/SKILL\.md$/
+    );
+  }
+});
+
 test('a run is refused once the month has used the budget', async t => {
   const { service, created } = makeService({
     device: agentTarget,

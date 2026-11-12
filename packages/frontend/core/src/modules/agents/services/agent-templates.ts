@@ -288,6 +288,44 @@ export const VIDEO_EDITOR_TEMPLATE: AgentTemplate = {
   },
 };
 
+export const PONYTAIL_REVIEW_INSTRUCTIONS = [
+  'You review a code change the way ponytail does: use the /ponytail-review',
+  'skill. The block or note you were started from names the change: a PR',
+  'link, a branch, a commit, or files. If it names none, review the last',
+  'commit in the repo. If it asks for the whole repo, use /ponytail-audit',
+  'instead; if it asks what was deferred, use /ponytail-debt.',
+  '',
+  'This is a report: change no code, commit nothing, push nothing.',
+  '',
+  'Post the report in the form the skill gives (What this change does,',
+  'numbered findings, Verdict). Then add it to the note you were started',
+  'from under a heading "Ponytail review (YYYY-MM-DD)" with today\'s date,',
+  'below what is there. Keep earlier reviews; they are the history.',
+].join('\n');
+
+/**
+ * A ponytail review of the change a note names, on a device with the repo
+ * checked out. No device is preset; the editor (or the plugin) picks one.
+ */
+export const PONYTAIL_REVIEW_TEMPLATE: AgentTemplate = {
+  id: 'ponytail-review',
+  label: 'Ponytail review',
+  draft: {
+    name: 'Ponytail review',
+    instructions: PONYTAIL_REVIEW_INSTRUCTIONS,
+    kind: 'worker',
+    harness: 'remote',
+    model: CLAUDE_CODE_MODEL,
+    deviceKey: undefined,
+    tools: [],
+    skills: ['ponytail-review', 'ponytail-audit', 'ponytail-debt'],
+    targets: ['block', 'doc'],
+    output: 'panel',
+    maxSteps: 40,
+    enabled: true,
+  },
+};
+
 export const AGENT_TEMPLATES: AgentTemplate[] = [
   DEAL_MONITOR_TEMPLATE,
   RESEARCH_TEMPLATE,
@@ -296,4 +334,5 @@ export const AGENT_TEMPLATES: AgentTemplate[] = [
   NOTES_HEALTH_TEMPLATE,
   FIX_AGENT_TEMPLATE,
   VIDEO_EDITOR_TEMPLATE,
+  PONYTAIL_REVIEW_TEMPLATE,
 ];

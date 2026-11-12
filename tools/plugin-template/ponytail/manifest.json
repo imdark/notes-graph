@@ -1,0 +1,18 @@
+{
+  "id": "com.notesgraph.ponytail",
+  "name": "Ponytail",
+  "version": "0.1.0",
+  "description": "Ponytail code reviews from a note: the Ponytail review agent reads the change the note names and writes a plain-English report back into it.",
+  "author": "NotesGraph",
+  "platforms": ["web", "desktop", "mobile"],
+  "permissions": ["ui", "docs", "agents"],
+  "entry": { "client": "index.js" },
+  "contributes": {
+    "commands": [
+      {
+        "id": "ponytail:review-current",
+        "title": "Ponytail: Review the change in this note"
+      }
+    ]
+  }
+}
