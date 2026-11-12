@@ -273,9 +273,12 @@ class MainActivity : BridgeActivity(), AIButtonPlugin.Callback, NotesGraphThemeP
     // Like a share, the web handler only exists once the bundle has booted and
     // a workspace is open, so keep asking until it says it opened the page.
     private fun deliverNotificationTarget(target: String, attempt: Int) {
+        // The target is also left on window so a cold start's index route can
+        // land on it directly instead of showing the home page first.
         val js =
-            "(function(){return !!(window.notesgraphOpenFromNotification&&" +
-                "window.notesgraphOpenFromNotification($target));})()"
+            "(function(){var t=$target;window.notesgraphLaunchTarget=t;" +
+                "return !!(window.notesgraphOpenFromNotification&&" +
+                "window.notesgraphOpenFromNotification(t));})()"
         bridge.webView.post {
             bridge.webView.evaluateJavascript(js) { result ->
                 if (result != "true" && attempt < 60) {
