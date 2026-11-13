@@ -1291,6 +1291,22 @@ export function productionTimes(state: ReleaseState): {
   };
 }
 
+/**
+ * The latest "Fix with Claude" run on a pull request, from the runs this
+ * workspace keeps: a merge brief (see shipBrief) that names its URL. Read
+ * from the run records rather than remembered by the screen, so a run
+ * started on the phone, or before a reload, still shows on its row.
+ */
+export const fixRunFor = (prUrl: string, runs: readonly AgentRun[]) =>
+  runs
+    .filter(
+      run =>
+        run.kind !== 'ask' &&
+        !!run.input?.startsWith('# Merge ') &&
+        run.input.includes(prUrl)
+    )
+    .sort((a, b) => b.startedAt - a.startedAt)[0];
+
 /** A task status that says someone checked it live and it works. */
 export const isCheckedStatus = (status: string | null | undefined) =>
   !!status && /^(done|closed|\[x\])$/i.test(status.trim());

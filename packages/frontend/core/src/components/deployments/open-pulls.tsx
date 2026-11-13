@@ -1,15 +1,95 @@
 import { Button } from '@notesgraph/component';
+import { AgentRunLogDialog } from '@notesgraph/core/desktop/pages/workspace/detail-page/tabs/agent-run-log';
 import {
   type Agent,
+  type AgentRun,
+  AgentRunsStore,
   canFixToMerge,
+  fixRunFor,
   mergesDirectly,
   readyPulls,
   type ReleasePull,
   type ReleaseState,
 } from '@notesgraph/core/modules/agents';
+import { useLiveData, useService } from '@notesgraph/infra';
+import { useMemo, useState } from 'react';
 
 import { badgeClass, READINESS, TaskLinks } from './shared';
 import * as styles from './styles.css';
+
+/** What a pull request's Fix with Claude run is doing, for its row. */
+const FIX_STATUS: Record<
+  AgentRun['status'],
+  { label: string; tone: 'good' | 'bad' | 'neutral' }
+> = {
+  running: { label: 'Claude is fixing it', tone: 'neutral' },
+  done: { label: 'Claude finished', tone: 'good' },
+  error: { label: 'Claude’s fix failed', tone: 'bad' },
+  cancelled: { label: 'Claude’s fix was stopped', tone: 'neutral' },
+};
+
+/**
+ * A pull request's Fix with Claude: the button, then, once a run is on it,
+ * where that run is and "Show agent", which opens its window (the log as it
+ * goes, its questions, a box to tell it more), as Monitoring's Fix it does.
+ */
+const FixAction = ({
+  pr,
+  run,
+  busy,
+  agent,
+  onFix,
+}: {
+  pr: ReleasePull;
+  run: AgentRun | undefined;
+  busy: boolean;
+  agent: Agent | undefined;
+  onFix: (pr: ReleasePull) => void;
+}) => {
+  const [open, setOpen] = useState(false);
+  const fixing = run?.status === 'running';
+  return (
+    <>
+      <Button
+        disabled={busy || !agent || fixing}
+        tooltip={
+          fixing
+            ? 'Claude is already on it: Show agent follows it.'
+            : agent
+              ? `${agent.name} on ${agent.deviceKey} fixes it and merges it`
+              : NO_FIX_AGENT
+        }
+        onClick={() => {
+          onFix(pr);
+          setOpen(true);
+        }}
+        data-testid="release-fix"
+      >
+        {fixing ? 'Fixing…' : run ? 'Fix again' : 'Fix with Claude'}
+      </Button>
+      {run ? (
+        <Button
+          variant="plain"
+          onClick={() => setOpen(true)}
+          tooltip={
+            fixing
+              ? 'Watch Claude fix it, answer its questions or tell it more.'
+              : 'What Claude found and did.'
+          }
+          data-testid="release-fix-show"
+        >
+          Show agent
+        </Button>
+      ) : null}
+      {run ? (
+        <AgentRunLogDialog
+          runId={open ? run.id : null}
+          onClose={() => setOpen(false)}
+        />
+      ) : null}
+    </>
+  );
+};
 
 /** Says where to add the agent "Fix with Claude" needs. */
 export const NO_FIX_AGENT =
@@ -37,6 +117,8 @@ export const OpenPulls = ({
 }) => {
   const base = state.settings?.baseBranch ?? 'stage';
   const ready = readyPulls(state.open);
+  const runsStore = useService(AgentRunsStore);
+  const runs = useLiveData(useMemo(() => runsStore.watchRuns(), [runsStore]));
   return (
     <section className={styles.section} data-testid="release-open">
       <div className={styles.sectionHead}>
@@ -63,6 +145,8 @@ export const OpenPulls = ({
         <div className={styles.rows}>
           {state.open.map(pr => {
             const { label, tone } = READINESS[pr.readiness];
+            const fixRun = fixRunFor(pr.url, runs ?? []);
+            const fixStatus = fixRun ? FIX_STATUS[fixRun.status] : null;
             return (
               <div
                 key={pr.number}
@@ -83,6 +167,14 @@ export const OpenPulls = ({
                   </span>
                   <span className={styles.rowMeta}>
                     <span className={badgeClass(tone)}>{label}</span>
+                    {fixStatus ? (
+                      <span
+                        className={badgeClass(fixStatus.tone)}
+                        data-testid="release-fix-status"
+                      >
+                        {fixStatus.label}
+                      </span>
+                    ) : null}
                     <span>{pr.branch}</span>
                     <span>{pr.author}</span>
                     <TaskLinks tasks={state.tasks[pr.number]} />
@@ -98,19 +190,14 @@ export const OpenPulls = ({
                       Merge
                     </Button>
                   ) : null}
-                  {canFixToMerge(pr.readiness) ? (
-                    <Button
-                      disabled={busy || !agent}
-                      tooltip={
-                        agent
-                          ? `${agent.name} on ${agent.deviceKey} fixes it and merges it`
-                          : NO_FIX_AGENT
-                      }
-                      onClick={() => onFix(pr)}
-                      data-testid="release-fix"
-                    >
-                      Fix with Claude
-                    </Button>
+                  {canFixToMerge(pr.readiness) || fixRun ? (
+                    <FixAction
+                      pr={pr}
+                      run={fixRun}
+                      busy={busy}
+                      agent={agent}
+                      onFix={onFix}
+                    />
                   ) : null}
                 </div>
               </div>

@@ -35,6 +35,7 @@ import {
   needsHelpToMerge,
   parseBranchChecks,
   parsePullRequests,
+  fixRunFor,
   productionPill,
   productionTimes,
   type PullRequest,
@@ -878,6 +879,42 @@ const production = (
 ): ReleaseState['production'] => ({
   ...releaseState().production,
   ...patch,
+});
+
+describe('fixRunFor', () => {
+  const url = 'https://github.com/imdark/notes-graph/pull/379';
+  const run = (id: string, startedAt: number, input: string, kind?: 'ask') =>
+    ({
+      id,
+      agentId: 'a',
+      agentName: 'Claude',
+      targetKind: 'selection',
+      docId: 'd',
+      status: 'running',
+      startedAt,
+      input,
+      kind,
+    }) as AgentRun;
+
+  test('picks the newest merge run that names the pull request', () => {
+    const brief = `# Merge 1 pull request\n\n- pull request: ${url}`;
+    const runs = [
+      run('old', 1, brief),
+      run('new', 2, brief),
+      run(
+        'other-pr',
+        3,
+        '# Merge 1 pull request\n\n- pull request: …/pull/378'
+      ),
+      run('deploy', 4, `# Deploy 1 feature\n\n- pull request: ${url}`),
+      run('chat', 5, brief, 'ask'),
+    ];
+    expect(fixRunFor(url, runs)?.id).toBe('new');
+  });
+
+  test('none when no run names it', () => {
+    expect(fixRunFor(url, [])).toBeUndefined();
+  });
 });
 
 describe('productionTimes', () => {
