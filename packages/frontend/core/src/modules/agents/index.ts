@@ -50,6 +50,7 @@ export {
   mergeReadiness,
   mergesDirectly,
   needsHelpToMerge,
+  fixRunFor,
   productionPill,
   productionTimes,
   type PullRequest,
