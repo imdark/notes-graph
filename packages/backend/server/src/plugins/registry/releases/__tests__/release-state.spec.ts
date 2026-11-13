@@ -76,7 +76,7 @@ test('readiness table', t => {
   const cases: [
     { draft?: boolean; mergeable_state?: string },
     ReturnType<typeof checksState>,
-    string,
+    ReturnType<typeof pullReadiness>,
   ][] = [
     [{ draft: true, mergeable_state: 'clean' }, 'pass', 'draft'],
     [{ mergeable_state: 'dirty' }, 'pass', 'conflicts'],
@@ -248,9 +248,13 @@ test('each run holds the pull requests since the previous release', async t => {
   const asked: string[] = [];
   const between = async (base: string, head: string) => {
     asked.push(`${base[0]}..${head[0]}`);
-    return { 'a..b': [1], 'b..c': [2], 'b..d': [2, 3], 'd..e': [4] }[
-      `${base[0]}..${head[0]}`
-    ]!;
+    const known: Record<string, number[]> = {
+      'a..b': [1],
+      'b..c': [2],
+      'b..d': [2, 3],
+      'd..e': [4],
+    };
+    return known[`${base[0]}..${head[0]}`];
   };
   const memo = new Map<string, number[]>();
   const ranges = await runRanges(runs, between, memo);
