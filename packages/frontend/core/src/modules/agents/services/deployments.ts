@@ -30,6 +30,11 @@ import {
   type DeployInfo,
   type DeployRepo,
   isDeviceClaudeModel,
+  type ReleasePull,
+  type ReleaseRun,
+  type ReleaseSettings,
+  type ReleaseState,
+  type ReleaseTask,
   type RemoteAgentRunnerService,
   type RemoteJob,
   RESEARCH_MODEL,
@@ -1014,6 +1019,314 @@ export const liveCheckNote = (check: LiveCheck, at: Date): string => {
   return `${when}: doesn't work.${problem ? ` ${problem}` : ''}`;
 };
 
+/**
+ * Where a pull request is on its way out, from the release state: still
+ * `open`, merged into the base branch (`on stage`), fast-forwarded onto the
+ * deploy branch by a release that isn't running in prod (`released`: the
+ * deploy is going, failed, or was rolled back), or in prod's build (`live`).
+ * Null when the state doesn't know it (merged long ago, or another repo).
+ */
+export type ReleaseStage = 'open' | 'on stage' | 'released' | 'live';
+
+export function releaseStageOf(
+  number: number,
+  state: ReleaseState | null | undefined
+): ReleaseStage | null {
+  if (!state) return null;
+  if (state.open.some(pr => pr.number === number)) return 'open';
+  if (state.next.prs.some(pr => pr.number === number)) return 'on stage';
+  const deployInfo = state.production.deployInfo;
+  // Prod's own record is the truth about what it runs, when it has one.
+  if (deployInfo?.pullRequests.includes(number)) return 'live';
+  const run = state.history.find(r => r.prs.includes(number));
+  if (!run) return null;
+  if (
+    !deployInfo &&
+    run.conclusion === 'success' &&
+    !run.rollbackTo &&
+    state.production.status === 'live'
+  ) {
+    return 'live';
+  }
+  return 'released';
+}
+
+const REPO_RE = /^[\w.-]+\/[\w.-]+$/;
+const WORKFLOW_RE = /^[\w.-]+\.ya?ml$/;
+
+/** A git branch name, by the same rule as the server (registry/jobs.ts). */
+export const isBranchName = (name: string) =>
+  /^\w[\w./-]*$/.test(name) &&
+  !name.includes('..') &&
+  !name.endsWith('/') &&
+  !name.endsWith('.lock') &&
+  name.length <= 200;
+
+/**
+ * The settings trimmed, or what is wrong with them (the first problem, as
+ * the dialog shows it next to Save).
+ */
+export function validateReleaseSettings(
+  input: ReleaseSettings
+): { ok: true; settings: ReleaseSettings } | { ok: false; error: string } {
+  const settings = {
+    repo: input.repo.trim(),
+    baseBranch: input.baseBranch.trim(),
+    deployBranch: input.deployBranch.trim(),
+    workflowFile: input.workflowFile.trim(),
+  };
+  if (!REPO_RE.test(settings.repo)) {
+    return { ok: false, error: 'Repo must be owner/name.' };
+  }
+  if (!isBranchName(settings.baseBranch)) {
+    return { ok: false, error: 'Base branch must be a branch name.' };
+  }
+  if (!isBranchName(settings.deployBranch)) {
+    return { ok: false, error: 'Deploy branch must be a branch name.' };
+  }
+  if (settings.baseBranch === settings.deployBranch) {
+    return {
+      ok: false,
+      error:
+        'Base and deploy branch must differ: a release moves one to the other.',
+    };
+  }
+  if (!WORKFLOW_RE.test(settings.workflowFile)) {
+    return {
+      ok: false,
+      error:
+        'Workflow file must be a .yml or .yaml file name, e.g. deploy-prod.yml.',
+    };
+  }
+  return { ok: true, settings };
+}
+
+/** What the settings dialog starts with when nothing is set yet. */
+export const defaultReleaseSettings = (
+  deployInfo: DeployInfo | null | undefined
+): ReleaseSettings => ({
+  repo: deployInfo?.repo ?? '',
+  baseBranch: 'stage',
+  deployBranch: 'main',
+  workflowFile: 'deploy-prod.yml',
+});
+
+/** A commit as the screen shows it. */
+export const sha7 = (sha: string | null | undefined) => (sha ?? '').slice(0, 7);
+
+/** How long to wait before reading the release state again. */
+export const releasePollMs = (state: ReleaseState | null | undefined) =>
+  state?.production.status === 'deploying' ? 15_000 : 60_000;
+
+/** The production card's pill: what prod is doing, and its colour. */
+export function productionPill(state: ReleaseState): {
+  label: string;
+  tone: 'good' | 'bad' | 'busy' | 'neutral';
+} {
+  const { status, run } = state.production;
+  switch (status) {
+    case 'live':
+      return { label: 'Live', tone: 'good' };
+    case 'deploying':
+      return {
+        label:
+          run?.status === 'waiting'
+            ? 'Deploying · waiting for approval'
+            : 'Deploying',
+        tone: 'busy',
+      };
+    case 'failed':
+      return { label: 'Failed', tone: 'bad' };
+    case 'rolled-back':
+      return {
+        label: `Rolled back to ${sha7(run?.rollbackTo)}`,
+        tone: 'neutral',
+      };
+    default:
+      return { label: 'Unknown', tone: 'neutral' };
+  }
+}
+
+/**
+ * The Release button: how many pull requests it takes out, and why it is
+ * off when it is. A failed deploy leaves it on, so a fix can go out.
+ */
+export function releaseAction(state: ReleaseState): {
+  label: string;
+  count: number;
+  disabled: boolean;
+  reason: string | null;
+} {
+  const count = state.next.prs.length;
+  const label = `Release (${count})`;
+  const deploy = state.settings?.deployBranch ?? 'main';
+  const base = state.settings?.baseBranch ?? 'stage';
+  const off = (reason: string) => ({ label, count, disabled: true, reason });
+  if (!state.settings) return off('Set up releases first.');
+  if (state.production.status === 'deploying') {
+    return off('A deploy is running.');
+  }
+  if (state.production.diverged) {
+    return off(
+      `${deploy} has commits ${base} lacks (a hotfix?). Merge ${deploy} into ${base} first, then release.`
+    );
+  }
+  if (!state.next.sha || state.next.commits === 0) {
+    return off(`${deploy} is at ${base}: nothing to release.`);
+  }
+  return { label, count, disabled: false, reason: null };
+}
+
+/** What the Release confirm says it does. */
+export function releaseConfirmText(state: ReleaseState): string {
+  const settings = state.settings;
+  const base = settings?.baseBranch ?? 'stage';
+  const deploy = settings?.deployBranch ?? 'main';
+  const workflow = settings?.workflowFile ?? 'deploy-prod.yml';
+  return `Fast-forwards ${deploy} to ${base} (${sha7(state.next.sha)}, ${plural(state.next.prs.length, 'PR')}) and starts ${workflow}.`;
+}
+
+/** What the Merge confirm says it does. */
+export const mergeConfirmText = (
+  pr: Pick<ReleasePull, 'number' | 'branch'>,
+  settings: ReleaseSettings | null
+) =>
+  `Merge #${pr.number} into ${settings?.baseBranch ?? 'stage'} with a merge commit and delete ${pr.branch}.`;
+
+/** What a rollback confirm says it does. */
+export const rollbackConfirmText = (imageSha: string) =>
+  `Rolls prod back to the image of ${sha7(imageSha)} without rebuilding.`;
+
+/** Pull requests "Merge all ready" takes: ready ones, oldest first. */
+export const readyPulls = (pulls: ReleasePull[]) =>
+  pulls
+    .filter(pr => pr.readiness === 'ready')
+    .sort((a, b) => a.number - b.number);
+
+/** A deploy run's outcome, as History shows it. */
+export function runOutcome(run: Pick<ReleaseRun, 'status' | 'conclusion'>): {
+  label: string;
+  tone: 'good' | 'bad' | 'busy' | 'neutral';
+} {
+  if (run.status !== 'completed') {
+    return {
+      label: run.status === 'waiting' ? 'waiting for approval' : 'in progress',
+      tone: 'busy',
+    };
+  }
+  if (run.conclusion === 'success') return { label: '✓', tone: 'good' };
+  if (run.conclusion === 'cancelled' || run.conclusion === 'skipped') {
+    return { label: 'cancelled', tone: 'neutral' };
+  }
+  return { label: '✗', tone: 'bad' };
+}
+
+/** A run's duration: "19 min", "45 s"; empty when unknown. */
+export const formatDuration = (ms: number | null | undefined) => {
+  if (ms === null || ms === undefined || ms < 0) return '';
+  if (ms < 60_000) return `${Math.max(1, Math.round(ms / 1000))} s`;
+  return `${Math.round(ms / 60_000)} min`;
+};
+
+/** A task status that says someone checked it live and it works. */
+export const isCheckedStatus = (status: string | null | undefined) =>
+  !!status && /^(done|closed|\[x\])$/i.test(status.trim());
+
+/**
+ * "checked k/n" for a release: of its n pull requests, the k whose linked
+ * tasks are all checked off. One with no task can't be checked here.
+ */
+export function checkedCount(
+  prs: number[],
+  tasks: ReleaseState['tasks']
+): { checked: number; total: number } {
+  const checked = prs.filter(number => {
+    const linked = tasks[number] ?? [];
+    return linked.length > 0 && linked.every(t => isCheckedStatus(t.status));
+  }).length;
+  return { checked, total: prs.length };
+}
+
+/**
+ * The earlier releases prod can go back to: successful runs other than the
+ * one running now, newest first, one per image.
+ */
+export function rollbackTargets(
+  state: ReleaseState
+): { imageSha: string; run: ReleaseRun }[] {
+  const live =
+    state.production.run?.rollbackTo ??
+    state.production.deployInfo?.commit ??
+    state.production.run?.sha;
+  const seen = new Set<string>();
+  const out: { imageSha: string; run: ReleaseRun }[] = [];
+  for (const run of state.history) {
+    if (run.status !== 'completed' || run.conclusion !== 'success') continue;
+    const imageSha = run.rollbackTo ?? run.sha;
+    if (!imageSha || imageSha === live || seen.has(imageSha)) continue;
+    seen.add(imageSha);
+    out.push({ imageSha, run });
+  }
+  return out;
+}
+
+/**
+ * What stands between the screen and GitHub, or null when nothing does:
+ * no repo set, or no token.
+ */
+export function releaseBlocker(
+  state: ReleaseState
+): 'no-settings' | 'no-token' | null {
+  if (!state.settings) return 'no-settings';
+  if (!state.token.source) return 'no-token';
+  return null;
+}
+
+/** What to do about a missing token; there is no Secrets page on the phone. */
+export const tokenMissingText = (mobile: boolean) =>
+  `GitHub can't be reached. Add a GITHUB_TOKEN secret (Contents, Actions, Pull requests: read and write) on ${mobile ? "the desktop app's Secrets page" : 'the Secrets page'}.`;
+
+/**
+ * A pull request as the briefs read one (see {@link shipBrief}): what the
+ * server read from GitHub, in the shape `gh` gave the old screen.
+ */
+export const briefPull = (pr: ReleasePull, repo: string): PullRequest => ({
+  repo,
+  number: pr.number,
+  title: pr.title,
+  url: pr.url,
+  branch: pr.branch,
+  author: pr.author,
+  state: pr.mergedAt ? 'merged' : 'open',
+  draft: pr.draft,
+  mergeable:
+    pr.readiness === 'conflicts'
+      ? 'CONFLICTING'
+      : pr.mergeableState === 'unknown' || pr.readiness === 'unknown'
+        ? 'UNKNOWN'
+        : 'MERGEABLE',
+  checks: pr.checks,
+  mergedAt: pr.mergedAt ? Date.parse(pr.mergedAt) : null,
+});
+
+/**
+ * Where a "Fix with Claude" run is filed: the pull request's task (the one
+ * given, else its first linked one), else the note of any linked task.
+ * Null when no task names any pull request.
+ */
+export function fixTarget(
+  pr: Pick<ReleasePull, 'number'>,
+  tasks: ReleaseState['tasks'],
+  task?: Pick<ReleaseTask, 'docId' | 'blockId'>
+): AgentTarget | null {
+  const own = task ?? tasks[pr.number]?.[0];
+  if (own) {
+    return { kind: 'selection', docId: own.docId, blockIds: [own.blockId] };
+  }
+  const any = Object.values(tasks).find(list => list.length > 0)?.[0];
+  return any ? { kind: 'doc', docId: any.docId } : null;
+}
+
 /** The status, task and note fields read off each indexed block. */
 const SEARCH_OPTIONS = {
   fields: ['docId', 'blockId', 'content', 'orgStatus'],
@@ -1109,6 +1422,163 @@ export class DeploymentsService extends Service {
       // An older server has no endpoint: same as no record.
       this.deployInfo$.setValue(null);
     }
+  }
+
+  /**
+   * What the Deployments screen shows, as the server read it from GitHub.
+   * Undefined until read; null when it couldn't be read at all (see
+   * {@link releaseError$}).
+   */
+  readonly release$ = new LiveData<ReleaseState | null | undefined>(undefined);
+
+  /** Why the last read of {@link release$} failed; null when it didn't. */
+  readonly releaseError$ = new LiveData<string | null>(null);
+
+  private setRelease(state: ReleaseState) {
+    this.release$.setValue(state);
+    this.releaseError$.setValue(null);
+    // The card's commit comes from here too; keep the flags page's in step.
+    this.deployInfo$.setValue(state.production.deployInfo);
+  }
+
+  /**
+   * Read the release state. A failure keeps what was shown and says why in
+   * {@link releaseError$}; with nothing shown yet, `release$` goes null.
+   */
+  async refreshRelease({ fresh = false }: { fresh?: boolean } = {}) {
+    try {
+      this.setRelease(await this.remote.releaseState(this.workspaceId, fresh));
+    } catch (err) {
+      this.releaseError$.setValue(
+        err instanceof Error ? err.message : String(err)
+      );
+      if (this.release$.value === undefined) this.release$.setValue(null);
+    }
+  }
+
+  /**
+   * Read the release state now and again while the screen is open: every
+   * minute, every 15 s while a deploy runs. Returns what stops it.
+   */
+  pollRelease(): () => void {
+    let stopped = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const tick = async () => {
+      await this.refreshRelease();
+      if (stopped) return;
+      timer = setTimeout(() => {
+        tick().catch(() => {});
+      }, releasePollMs(this.release$.value));
+    };
+    tick().catch(() => {});
+    return () => {
+      stopped = true;
+      if (timer) clearTimeout(timer);
+    };
+  }
+
+  /** Merge a pull request into the base branch; its branch is deleted. */
+  async merge(pr: Pick<ReleasePull, 'number' | 'headSha'>) {
+    const result = await this.remote.mergePull(this.workspaceId, {
+      number: pr.number,
+      headSha: pr.headSha,
+    });
+    this.setRelease(result.state);
+    return result;
+  }
+
+  /** Merge every ready one; the rest are skipped with why. */
+  async mergeAll(numbers: number[]) {
+    const result = await this.remote.mergeAllPulls(this.workspaceId, {
+      numbers,
+    });
+    this.setRelease(result.state);
+    return result;
+  }
+
+  /** Fast-forward the deploy branch to `sha` and start the deploy. */
+  async release(sha: string) {
+    const result = await this.remote.release(this.workspaceId, { sha });
+    this.setRelease(result.state);
+    return result;
+  }
+
+  async redeploy() {
+    const result = await this.remote.redeploy(this.workspaceId);
+    this.setRelease(result.state);
+    return result;
+  }
+
+  async rollback(imageSha: string) {
+    const result = await this.remote.rollback(this.workspaceId, { imageSha });
+    this.setRelease(result.state);
+    return result;
+  }
+
+  async retry(runId: number) {
+    const result = await this.remote.retryRun(this.workspaceId, { runId });
+    this.setRelease(result.state);
+    return result;
+  }
+
+  /** Save the repo settings, then read the state they give. */
+  async saveSettings(settings: ReleaseSettings) {
+    const result = await this.remote.setReleaseSettings(
+      this.workspaceId,
+      settings
+    );
+    await this.refreshRelease({ fresh: true });
+    return result;
+  }
+
+  /** Whether the server's token reaches the repo. */
+  async testToken() {
+    const result = await this.remote.testReleaseToken(this.workspaceId);
+    if (result.ok) await this.refreshRelease({ fresh: true });
+    return result;
+  }
+
+  /**
+   * Send a pull request that conflicts or fails its checks to `agent`
+   * (Claude Code on a device) to fix and merge. The run is filed on its task
+   * (see {@link fixTarget}); with no task anywhere it is refused. Resolves
+   * once it is under way; the run's own record carries how it ends.
+   */
+  async fixWithClaude(
+    agent: Agent,
+    pr: ReleasePull,
+    task?: Pick<ReleaseTask, 'docId' | 'blockId'>
+  ): Promise<AgentTarget> {
+    const state = this.release$.value;
+    const target = fixTarget(pr, state?.tasks ?? {}, task);
+    if (!target) {
+      throw new Error("Paste the PR's URL under a task first");
+    }
+    const settings = state?.settings;
+    const repo = settings?.repo ?? repoOf(pr.url) ?? '';
+    this.runSessions
+      .start(
+        agent,
+        target,
+        shipBrief(
+          [],
+          'merge',
+          { untracked: [briefPull(pr, repo)] },
+          settings
+            ? [
+                {
+                  repo: settings.repo,
+                  baseBranch: settings.baseBranch,
+                  deployBranch: settings.deployBranch,
+                },
+              ]
+            : undefined
+        )
+      )
+      .catch(() => {
+        // The run's own record carries any failure.
+      });
+    return target;
   }
 
   /**
@@ -1375,7 +1845,7 @@ export class DeploymentsService extends Service {
    * doesn't, which is the cue to hand it to Claude Code. The task it ships,
    * if any, goes to MERGED.
    */
-  async merge(
+  async mergeOnDevice(
     agent: Agent,
     pr: Pick<PullRequest, 'repo' | 'number' | 'url'>,
     task?: Pick<ShipTask, 'docId' | 'blockId'>,
@@ -1585,9 +2055,12 @@ export class DeploymentsService extends Service {
       }
       onProgress?.(`Merging ${repo}#${number}…`);
       try {
-        await this.merge(agent, { repo, number, url: task.pullRequest }, task, {
-          withAutomation: true,
-        });
+        await this.mergeOnDevice(
+          agent,
+          { repo, number, url: task.pullRequest },
+          task,
+          { withAutomation: true }
+        );
         merged.push({ ...task, stage: 'merged' });
       } catch (err) {
         leftOut.push({

@@ -3,6 +3,7 @@ import { Service } from '@notesgraph/infra';
 
 import { FetchService, type WorkspaceServerService } from '../../cloud';
 import type { AgentAccess } from '../stores/agents';
+import type { ChecksState, MergeReadiness } from './deployments';
 import type { RunChanges } from './run-changes';
 
 /**
@@ -383,6 +384,102 @@ export interface DeployInfo {
   featureFlags?: Record<string, string>;
 }
 
+/** The repo the Deployments screen releases, and how (one per workspace). */
+export interface ReleaseSettings {
+  /** owner/name */
+  repo: string;
+  /** Where pull requests merge (stage). */
+  baseBranch: string;
+  /** What prod deploys from (main). */
+  deployBranch: string;
+  /** The GitHub Actions workflow that deploys, e.g. deploy-prod.yml. */
+  workflowFile: string;
+}
+
+/** Where the server's GitHub token comes from; null when it has none. */
+export interface ReleaseToken {
+  source: 'secret' | 'env' | null;
+}
+
+/** An open or merged pull request, as the server read it from GitHub. */
+export interface ReleasePull {
+  number: number;
+  title: string;
+  url: string;
+  branch: string;
+  author: string;
+  draft: boolean;
+  /** GitHub's mergeable_state: clean, dirty, unstable, blocked, unknown… */
+  mergeableState: string;
+  headSha: string;
+  checks: ChecksState;
+  readiness: MergeReadiness;
+  mergedAt: string | null;
+}
+
+/** One run of the deploy workflow. */
+export interface ReleaseRun {
+  id: number;
+  url: string;
+  /** The commit it deployed (the deploy branch's head when it started). */
+  sha: string;
+  /** GitHub's status: queued, in_progress, waiting, completed… */
+  status: string;
+  /** success, failure, cancelled…; null until it ends. */
+  conclusion: string | null;
+  startedAt: string;
+  durationMs: number | null;
+  /** The image it rolled prod back to, for a rollback run. */
+  rollbackTo: string | null;
+  /** Pull requests this release took out (since the previous good one). */
+  prs: number[];
+}
+
+export type ReleaseStepName = 'Build image' | 'Roll the box' | 'Verify';
+export type ReleaseStepStatus =
+  | 'pending'
+  | 'running'
+  | 'done'
+  | 'failed'
+  | 'skipped';
+export type ProductionStatus =
+  | 'live'
+  | 'deploying'
+  | 'failed'
+  | 'rolled-back'
+  | 'unknown';
+
+/** A task block a pull request is linked to (its URL or ticket key). */
+export interface ReleaseTask {
+  docId: string;
+  blockId: string;
+  title: string;
+  status: string | null;
+}
+
+/** Everything the Deployments screen shows (GET /releases). */
+export interface ReleaseState {
+  settings: ReleaseSettings | null;
+  token: ReleaseToken;
+  production: {
+    deployInfo: DeployInfo | null;
+    run: ReleaseRun | null;
+    status: ProductionStatus;
+    steps: { name: ReleaseStepName; status: ReleaseStepStatus }[];
+    mainSha: string | null;
+    stageSha: string | null;
+    /** The deploy branch has commits the base branch lacks (a hotfix). */
+    diverged: boolean;
+  };
+  next: { sha: string | null; commits: number; prs: ReleasePull[] };
+  open: ReleasePull[];
+  history: ReleaseRun[];
+  /** Linked tasks by pull request number. */
+  tasks: Record<number, ReleaseTask[]>;
+  fetchedAt: string;
+  error: string | null;
+}
+
 export interface EnqueueRemoteJob {
   deviceKey: string;
   agentId: string;
@@ -564,7 +661,115 @@ export class RemoteAgentRunnerService extends Service {
     return data.repos;
   }
 
-  /** List the devices in this workspace that accept agent work. */
+  /**
+   * What the Deployments screen shows, read from GitHub by the server
+   * (plugins/registry/releases). `fresh` skips the server's cache.
+   */
+  async releaseState(
+    workspaceId: string,
+    fresh = false
+  ): Promise<ReleaseState> {
+    const data = await this.json<{ state: ReleaseState }>(
+      `${this.base(workspaceId)}/releases${fresh ? '?fresh=1' : ''}`
+    );
+    return data.state;
+  }
+
+  /** The repo the screen releases, and where its GitHub token comes from. */
+  async releaseSettings(
+    workspaceId: string
+  ): Promise<{ settings: ReleaseSettings | null; token: ReleaseToken }> {
+    return this.json(`${this.base(workspaceId)}/releases/settings`);
+  }
+
+  async setReleaseSettings(
+    workspaceId: string,
+    settings: ReleaseSettings
+  ): Promise<{ settings: ReleaseSettings | null; token: ReleaseToken }> {
+    return this.json(`${this.base(workspaceId)}/releases/settings`, {
+      method: 'POST',
+      body: JSON.stringify(settings),
+    });
+  }
+
+  /** Whether the token reaches the repo with the rights releases need. */
+  async testReleaseToken(
+    workspaceId: string
+  ): Promise<{ ok: boolean; error: string | null }> {
+    return this.json(`${this.base(workspaceId)}/releases/settings/test`, {
+      method: 'POST',
+    });
+  }
+
+  /**
+   * Merge a pull request into the base branch with a merge commit, and
+   * delete its branch. Refused when its head moved past `headSha`.
+   */
+  async mergePull(
+    workspaceId: string,
+    input: { number: number; headSha: string }
+  ): Promise<{ merged: boolean; sha: string; state: ReleaseState }> {
+    return this.json(`${this.base(workspaceId)}/releases/merge`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    });
+  }
+
+  /** Merge each ready one, oldest first; drafts and conflicts are skipped. */
+  async mergeAllPulls(
+    workspaceId: string,
+    input: { numbers: number[] }
+  ): Promise<{
+    merged: number[];
+    skipped: { number: number; why: string }[];
+    state: ReleaseState;
+  }> {
+    return this.json(`${this.base(workspaceId)}/releases/merge-all`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    });
+  }
+
+  /** Fast-forward the deploy branch to `sha` and start the deploy workflow. */
+  async release(
+    workspaceId: string,
+    input: { sha: string }
+  ): Promise<{ run: ReleaseRun | null; state: ReleaseState }> {
+    return this.json(`${this.base(workspaceId)}/releases/release`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    });
+  }
+
+  /** Deploy the deploy branch again as it is. */
+  async redeploy(workspaceId: string): Promise<{ state: ReleaseState }> {
+    return this.json(`${this.base(workspaceId)}/releases/redeploy`, {
+      method: 'POST',
+    });
+  }
+
+  /** Put prod back on the image of an earlier successful release. */
+  async rollback(
+    workspaceId: string,
+    input: { imageSha: string }
+  ): Promise<{ state: ReleaseState }> {
+    return this.json(`${this.base(workspaceId)}/releases/rollback`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    });
+  }
+
+  /** Re-run a failed deploy run. */
+  async retryRun(
+    workspaceId: string,
+    input: { runId: number }
+  ): Promise<{ state: ReleaseState }> {
+    return this.json(`${this.base(workspaceId)}/releases/retry`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    });
+  }
+
   /** What the server is running, for checking pull requests against. */
   async deployInfo(): Promise<DeployInfo | null> {
     const data = await this.json<{ deployInfo?: DeployInfo | null }>(

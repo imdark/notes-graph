@@ -188,3 +188,178 @@ export const githubBar = style({
   fontSize: 12,
   color: cssVarV2('text/tertiary'),
 });
+
+/** The header line: the page's title row with Repo settings on the right. */
+export const header = style({
+  display: 'flex',
+  flexWrap: 'wrap',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  gap: 8,
+});
+
+/** A section's title row, its action on the right; wraps on a phone. */
+export const sectionHead = style({
+  display: 'flex',
+  flexWrap: 'wrap',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  gap: 8,
+});
+
+/** The production card, and the set-up and no-token cards. */
+export const card = style({
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 8,
+  padding: 14,
+  borderRadius: 12,
+  border: `1px solid ${cssVarV2('layer/insideBorder/border')}`,
+  background: cssVarV2('layer/background/secondary'),
+  minWidth: 0,
+});
+
+export const cardLine = style({
+  display: 'flex',
+  flexWrap: 'wrap',
+  alignItems: 'center',
+  gap: '4px 10px',
+  fontSize: 13,
+  color: cssVarV2('text/secondary'),
+  minWidth: 0,
+});
+
+export const cardSubject = style({
+  fontSize: 14,
+  color: cssVarV2('text/primary'),
+  minWidth: 0,
+  overflowWrap: 'anywhere',
+});
+
+export const cardActions = style({
+  display: 'flex',
+  flexWrap: 'wrap',
+  justifyContent: 'flex-end',
+  gap: 6,
+  marginTop: 4,
+});
+
+export const sha = style({
+  fontFamily: 'var(--affine-font-mono-family, monospace)',
+  fontSize: 12,
+});
+
+export const pill = style({
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 5,
+  padding: '1px 8px',
+  borderRadius: 999,
+  fontSize: 12,
+  fontWeight: 500,
+  lineHeight: '18px',
+  whiteSpace: 'nowrap',
+  color: cssVarV2('text/secondary'),
+  background: cssVarV2('layer/background/tertiary'),
+  selectors: {
+    '&::before': {
+      content: '""',
+      width: 6,
+      height: 6,
+      borderRadius: '50%',
+      background: 'currentColor',
+    },
+  },
+});
+
+export const pillGood = style([pill, { color: cssVarV2('status/success') }]);
+
+export const pillBad = style([pill, { color: cssVarV2('status/error') }]);
+
+export const pillBusy = style([
+  pill,
+  { color: cssVarV2('edgeless/line/blue') },
+]);
+
+/** A deploy's steps: Build image → Roll the box → Verify. */
+export const steps = style({
+  display: 'flex',
+  flexWrap: 'wrap',
+  alignItems: 'center',
+  gap: 6,
+  fontSize: 12,
+});
+
+export const step = style({
+  color: cssVarV2('text/tertiary'),
+  selectors: {
+    '&[data-status="running"]': {
+      color: cssVarV2('edgeless/line/blue'),
+      fontWeight: 600,
+    },
+    '&[data-status="done"]': { color: cssVarV2('status/success') },
+    '&[data-status="failed"]': { color: cssVarV2('status/error') },
+    '&[data-status="skipped"]': { textDecoration: 'line-through' },
+  },
+});
+
+/** A History row's summary, a button that opens it. */
+export const historyToggle = style({
+  display: 'flex',
+  flexWrap: 'wrap',
+  alignItems: 'center',
+  gap: '4px 12px',
+  flex: 1,
+  minWidth: 0,
+  padding: 0,
+  border: 'none',
+  background: 'none',
+  font: 'inherit',
+  fontSize: 13,
+  color: cssVarV2('text/primary'),
+  textAlign: 'left',
+  cursor: 'pointer',
+});
+
+/** The pull requests of an opened History row. */
+export const historyBody = style({
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 10,
+  paddingLeft: 18,
+  width: '100%',
+});
+
+export const historyRow = style({
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 6,
+  padding: '10px 12px',
+  selectors: {
+    '& + &': {
+      borderTop: `1px solid ${cssVarV2('layer/insideBorder/border')}`,
+    },
+  },
+});
+
+/** A settings dialog field: label over input. */
+export const field = style({
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 4,
+  fontSize: 12,
+  color: cssVarV2('text/secondary'),
+});
+
+export const dialogBody = style({
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 12,
+});
+
+export const dialogActions = style({
+  display: 'flex',
+  flexWrap: 'wrap',
+  justifyContent: 'flex-end',
+  gap: 8,
+});

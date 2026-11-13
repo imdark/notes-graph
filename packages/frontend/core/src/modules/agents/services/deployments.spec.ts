@@ -7,8 +7,11 @@ import type { AgentRun } from '../stores/agent-runs';
 import type { Agent } from '../stores/agents';
 import {
   branchCheckCommand,
+  briefPull,
   canFixToMerge,
+  checkedCount,
   checksState,
+  defaultReleaseSettings,
   deleteBranchCommand,
   deletesBranch,
   deployableTasks,
@@ -17,21 +20,35 @@ import {
   deployReposFor,
   deployRunsFor,
   findPullRequest,
+  fixTarget,
   flagStage,
+  formatDuration,
+  isCheckedStatus,
   isShipStage,
   keptBranches,
   lastLogLine,
   liveCheckNote,
   mergeCommand,
+  mergeConfirmText,
   mergeReadiness,
   mergesDirectly,
   needsHelpToMerge,
   parseBranchChecks,
   parsePullRequests,
+  productionPill,
   type PullRequest,
   pullRequestNumber,
   pullRequestsCommand,
   pullRequestStage,
+  readyPulls,
+  releaseAction,
+  releaseBlocker,
+  releaseConfirmText,
+  releasePollMs,
+  releaseStageOf,
+  rollbackConfirmText,
+  rollbackTargets,
+  runOutcome,
   type RunTask,
   SHIP_AUTOMATIONS,
   shipAgents,
@@ -44,9 +61,12 @@ import {
   shownStage,
   stepResult,
   stuckReason,
+  tokenMissingText,
   unlistedPullRequests,
+  validateReleaseSettings,
   verifyBrief,
 } from './deployments';
+import type { ReleasePull, ReleaseRun, ReleaseState } from './remote-runner';
 
 const task = (blockId: string, stage: ShipStage, pullRequest?: string) => ({
   docId: 'd1',
@@ -789,5 +809,374 @@ describe('shipping with automations', () => {
         message: 'Nothing was merged to deploy.',
       }
     );
+  });
+});
+
+const releasePull = (
+  number: number,
+  patch: Partial<ReleasePull> = {}
+): ReleasePull => ({
+  number,
+  title: `PR ${number}`,
+  url: `https://github.com/imdark/notes-graph/pull/${number}`,
+  branch: `personal-${number}-x`,
+  author: 'mk',
+  draft: false,
+  mergeableState: 'clean',
+  headSha: 'h'.repeat(40),
+  checks: 'pass',
+  readiness: 'ready',
+  mergedAt: null,
+  ...patch,
+});
+
+const releaseRun = (
+  id: number,
+  patch: Partial<ReleaseRun> = {}
+): ReleaseRun => ({
+  id,
+  url: `https://github.com/imdark/notes-graph/actions/runs/${id}`,
+  sha: String(id).padEnd(40, '0'),
+  status: 'completed',
+  conclusion: 'success',
+  startedAt: '2026-11-12T07:04:00Z',
+  durationMs: 19 * 60_000,
+  rollbackTo: null,
+  prs: [],
+  ...patch,
+});
+
+const releaseState = (patch: Partial<ReleaseState> = {}): ReleaseState => ({
+  settings: {
+    repo: 'imdark/notes-graph',
+    baseBranch: 'stage',
+    deployBranch: 'main',
+    workflowFile: 'deploy-prod.yml',
+  },
+  token: { source: 'secret' },
+  production: {
+    deployInfo: null,
+    run: null,
+    status: 'live',
+    steps: [],
+    mainSha: 'm'.repeat(40),
+    stageSha: 's'.repeat(40),
+    diverged: false,
+  },
+  next: { sha: 's'.repeat(40), commits: 4, prs: [releasePull(371)] },
+  open: [releasePull(373)],
+  history: [],
+  tasks: {},
+  fetchedAt: '2026-11-12T08:00:00Z',
+  error: null,
+  ...patch,
+});
+
+const production = (
+  patch: Partial<ReleaseState['production']>
+): ReleaseState['production'] => ({
+  ...releaseState().production,
+  ...patch,
+});
+
+describe('releaseStageOf', () => {
+  const deployInfo = {
+    repo: 'imdark/notes-graph',
+    commit: 'c'.repeat(40),
+    branch: 'main',
+    subject: 'Merge pull request #368',
+    dirty: false,
+    deployedAt: '2026-11-12T07:24:00Z',
+    pullRequests: [368, 367],
+  };
+
+  test('open, on stage, then live by prod’s own record', () => {
+    const state = releaseState({
+      production: production({ deployInfo }),
+      history: [releaseRun(2, { prs: [368, 367] })],
+    });
+    expect(releaseStageOf(373, state)).toBe('open');
+    expect(releaseStageOf(371, state)).toBe('on stage');
+    expect(releaseStageOf(368, state)).toBe('live');
+  });
+
+  test('released but not in prod: a deploy going, failed, or rolled back', () => {
+    const state = releaseState({
+      production: production({ deployInfo, status: 'deploying' }),
+      history: [
+        releaseRun(3, { status: 'in_progress', conclusion: null, prs: [369] }),
+      ],
+    });
+    expect(releaseStageOf(369, state)).toBe('released');
+  });
+
+  test('without a deploy record, a good release that is still live counts', () => {
+    const history = [releaseRun(2, { prs: [369] })];
+    expect(releaseStageOf(369, releaseState({ history }))).toBe('live');
+    expect(
+      releaseStageOf(
+        369,
+        releaseState({ history, production: production({ status: 'failed' }) })
+      )
+    ).toBe('released');
+  });
+
+  test('unknown when the state has nothing on it', () => {
+    expect(releaseStageOf(1, releaseState())).toBeNull();
+    expect(releaseStageOf(373, null)).toBeNull();
+    expect(releaseStageOf(373, undefined)).toBeNull();
+  });
+});
+
+describe('validateReleaseSettings', () => {
+  const good = {
+    repo: ' imdark/notes-graph ',
+    baseBranch: 'stage',
+    deployBranch: 'main',
+    workflowFile: 'deploy-prod.yml',
+  };
+
+  test('trims and accepts what the server does', () => {
+    expect(validateReleaseSettings(good)).toEqual({
+      ok: true,
+      settings: { ...good, repo: 'imdark/notes-graph' },
+    });
+    expect(
+      validateReleaseSettings({ ...good, workflowFile: 'deploy.yaml' }).ok
+    ).toBe(true);
+  });
+
+  test('refuses a bad repo, branch or workflow, one problem at a time', () => {
+    const error = (patch: Partial<typeof good>) => {
+      const result = validateReleaseSettings({ ...good, ...patch });
+      return result.ok ? null : result.error;
+    };
+    expect(error({ repo: 'notes-graph' })).toMatch(/owner\/name/);
+    expect(error({ baseBranch: 'a..b' })).toMatch(/Base branch/);
+    expect(error({ deployBranch: 'main/' })).toMatch(/Deploy branch/);
+    expect(error({ deployBranch: 'stage' })).toMatch(/must differ/);
+    expect(error({ workflowFile: 'deploy-prod' })).toMatch(/\.yml/);
+    expect(error({ workflowFile: '../x.yml' })).toMatch(/\.yml/);
+  });
+
+  test('the dialog starts prefilled from the deploy record', () => {
+    expect(
+      defaultReleaseSettings({
+        repo: 'o/r',
+        commit: 'c',
+        branch: 'main',
+        subject: '',
+        dirty: false,
+        deployedAt: '',
+        pullRequests: [],
+      })
+    ).toEqual({
+      repo: 'o/r',
+      baseBranch: 'stage',
+      deployBranch: 'main',
+      workflowFile: 'deploy-prod.yml',
+    });
+    expect(defaultReleaseSettings(null).repo).toBe('');
+  });
+});
+
+describe('release copy', () => {
+  test('the pill says what prod is doing', () => {
+    expect(productionPill(releaseState())).toEqual({
+      label: 'Live',
+      tone: 'good',
+    });
+    expect(
+      productionPill(
+        releaseState({
+          production: production({
+            status: 'deploying',
+            run: releaseRun(5, { status: 'waiting', conclusion: null }),
+          }),
+        })
+      ).label
+    ).toBe('Deploying · waiting for approval');
+    expect(
+      productionPill(
+        releaseState({
+          production: production({
+            status: 'rolled-back',
+            run: releaseRun(6, { rollbackTo: 'abc1234def'.padEnd(40, '0') }),
+          }),
+        })
+      ).label
+    ).toBe('Rolled back to abc1234');
+    expect(
+      productionPill(
+        releaseState({ production: production({ status: 'failed' }) })
+      ).tone
+    ).toBe('bad');
+  });
+
+  test('Release counts the PRs and says why it is off', () => {
+    expect(releaseAction(releaseState())).toEqual({
+      label: 'Release (1)',
+      count: 1,
+      disabled: false,
+      reason: null,
+    });
+    expect(
+      releaseAction(
+        releaseState({ next: { sha: 'm'.repeat(40), commits: 0, prs: [] } })
+      ).reason
+    ).toBe('main is at stage: nothing to release.');
+    expect(
+      releaseAction(
+        releaseState({ production: production({ diverged: true }) })
+      ).reason
+    ).toMatch(/^main has commits stage lacks/);
+    expect(
+      releaseAction(
+        releaseState({ production: production({ status: 'deploying' }) })
+      ).disabled
+    ).toBe(true);
+    // A failed deploy leaves it on, so a fix can go out.
+    expect(
+      releaseAction(
+        releaseState({ production: production({ status: 'failed' }) })
+      ).disabled
+    ).toBe(false);
+  });
+
+  test('the confirms say what they do', () => {
+    const state = releaseState();
+    expect(releaseConfirmText(state)).toBe(
+      'Fast-forwards main to stage (sssssss, 1 PR) and starts deploy-prod.yml.'
+    );
+    expect(mergeConfirmText(releasePull(373), state.settings)).toBe(
+      'Merge #373 into stage with a merge commit and delete personal-373-x.'
+    );
+    expect(rollbackConfirmText('abcdef1234')).toBe(
+      'Rolls prod back to the image of abcdef1 without rebuilding.'
+    );
+  });
+
+  test('a token missing points at the Secrets page, the desktop one on a phone', () => {
+    expect(tokenMissingText(false)).toContain('on the Secrets page.');
+    expect(tokenMissingText(true)).toContain("the desktop app's Secrets page");
+    expect(tokenMissingText(false)).toContain('GITHUB_TOKEN');
+    expect(releaseBlocker(releaseState())).toBeNull();
+    expect(releaseBlocker(releaseState({ settings: null }))).toBe(
+      'no-settings'
+    );
+    expect(releaseBlocker(releaseState({ token: { source: null } }))).toBe(
+      'no-token'
+    );
+  });
+
+  test('History rows: outcome, duration, checked k/n', () => {
+    expect(runOutcome(releaseRun(1))).toEqual({ label: '✓', tone: 'good' });
+    expect(runOutcome(releaseRun(1, { conclusion: 'failure' })).label).toBe(
+      '✗'
+    );
+    expect(runOutcome(releaseRun(1, { conclusion: 'cancelled' })).label).toBe(
+      'cancelled'
+    );
+    expect(
+      runOutcome(releaseRun(1, { status: 'in_progress', conclusion: null }))
+        .label
+    ).toBe('in progress');
+    expect(formatDuration(19 * 60_000)).toBe('19 min');
+    expect(formatDuration(45_000)).toBe('45 s');
+    expect(formatDuration(null)).toBe('');
+    const task = (status: string | null) => ({
+      docId: 'd',
+      blockId: 'b',
+      title: 't',
+      status,
+    });
+    expect(
+      checkedCount([1, 2, 3], {
+        1: [task('done')],
+        2: [task('done'), task('deployed')],
+      })
+    ).toEqual({ checked: 1, total: 3 });
+    expect(isCheckedStatus('[X]')).toBe(true);
+    expect(isCheckedStatus('DEPLOYED')).toBe(false);
+  });
+
+  test('Merge all takes the ready ones, oldest first', () => {
+    expect(
+      readyPulls([
+        releasePull(9),
+        releasePull(3),
+        releasePull(4, { readiness: 'conflicts' }),
+        releasePull(5, { readiness: 'draft' }),
+      ]).map(pr => pr.number)
+    ).toEqual([3, 9]);
+  });
+
+  test('Roll back offers earlier good images, not the live one', () => {
+    const live = releaseRun(9);
+    const state = releaseState({
+      production: production({ run: live }),
+      history: [
+        live,
+        releaseRun(8, { conclusion: 'failure' }),
+        releaseRun(7),
+        releaseRun(6, { rollbackTo: releaseRun(7).sha }),
+        releaseRun(5),
+      ],
+    });
+    expect(rollbackTargets(state).map(t => t.run.id)).toEqual([7, 5]);
+  });
+
+  test('polls faster while a deploy runs', () => {
+    expect(releasePollMs(releaseState())).toBe(60_000);
+    expect(
+      releasePollMs(
+        releaseState({ production: production({ status: 'deploying' }) })
+      )
+    ).toBe(15_000);
+    expect(releasePollMs(undefined)).toBe(60_000);
+  });
+});
+
+describe('fixWithClaude', () => {
+  const linked = {
+    docId: 'd1',
+    blockId: 'b1',
+    title: 't',
+    status: 'committed',
+  };
+
+  test('files the run on the PR’s task, else any linked task’s note', () => {
+    expect(fixTarget({ number: 1 }, { 1: [linked] })).toEqual({
+      kind: 'selection',
+      docId: 'd1',
+      blockIds: ['b1'],
+    });
+    expect(
+      fixTarget({ number: 1 }, {}, { docId: 'd9', blockId: 'b9' })
+    ).toEqual({ kind: 'selection', docId: 'd9', blockIds: ['b9'] });
+    expect(fixTarget({ number: 1 }, { 2: [linked] })).toEqual({
+      kind: 'doc',
+      docId: 'd1',
+    });
+    expect(fixTarget({ number: 1 }, {})).toBeNull();
+  });
+
+  test('the brief is the existing merge brief, with the repo’s branches', () => {
+    const pr = briefPull(
+      releasePull(374, { readiness: 'conflicts', mergeableState: 'dirty' }),
+      'imdark/notes-graph'
+    );
+    expect(pr).toMatchObject({
+      repo: 'imdark/notes-graph',
+      number: 374,
+      state: 'open',
+      mergeable: 'CONFLICTING',
+    });
+    const brief = shipBrief([], 'merge', { untracked: [pr] }, [
+      { repo: 'imdark/notes-graph', baseBranch: 'stage', deployBranch: 'main' },
+    ]);
+    expect(brief.title).toBe('Merge 1 pull request');
+    expect(brief.text).toContain(pr.url);
+    expect(brief.text).toContain('merge into `stage`');
   });
 });
