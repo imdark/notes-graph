@@ -51,6 +51,7 @@ export {
   mergesDirectly,
   needsHelpToMerge,
   productionPill,
+  productionTimes,
   type PullRequest,
   pullRequestNumber,
   type PullRequestsState,

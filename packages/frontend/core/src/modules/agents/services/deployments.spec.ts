@@ -36,6 +36,7 @@ import {
   parseBranchChecks,
   parsePullRequests,
   productionPill,
+  productionTimes,
   type PullRequest,
   pullRequestNumber,
   pullRequestsCommand,
@@ -877,6 +878,73 @@ const production = (
 ): ReleaseState['production'] => ({
   ...releaseState().production,
   ...patch,
+});
+
+describe('productionTimes', () => {
+  const record = (commit: string) => ({
+    repo: 'imdark/notes-graph',
+    commit,
+    branch: 'main',
+    subject: 'Merge pull request #375',
+    dirty: false,
+    // Stamped when the image's build started, hours before it went live.
+    deployedAt: '2026-11-13T16:57:00Z',
+    pullRequests: [],
+  });
+
+  test('while deploying: live time is the old run’s end, the new run is separate', () => {
+    const live = releaseRun(1, {
+      sha: 'a'.repeat(40),
+      startedAt: '2026-11-13T16:57:00Z',
+      durationMs: 31 * 60_000,
+    });
+    const active = releaseRun(2, {
+      sha: 'b'.repeat(40),
+      status: 'in_progress',
+      conclusion: null as never,
+      startedAt: '2026-11-13T22:28:00Z',
+      durationMs: null,
+    });
+    const times = productionTimes(
+      releaseState({
+        production: production({
+          status: 'deploying',
+          run: active,
+          deployInfo: record('a'.repeat(40)),
+        }),
+        history: [active, live],
+      })
+    );
+    expect(times.live.at).toBe('2026-11-13T17:28:00.000Z');
+    expect(times.live.run?.id).toBe(1);
+    expect(times.deploying).toEqual({
+      sha: 'b'.repeat(40),
+      startedAt: '2026-11-13T22:28:00Z',
+      run: active,
+    });
+  });
+
+  test('after a rollback: live since the rollback run ended, not the old build', () => {
+    const rollback = releaseRun(3, {
+      sha: 'c'.repeat(40),
+      rollbackTo: 'a'.repeat(40),
+      startedAt: '2026-11-13T22:24:00Z',
+      durationMs: 3 * 60_000,
+    });
+    const times = productionTimes(
+      releaseState({
+        production: production({
+          status: 'rolled-back',
+          run: rollback,
+          deployInfo: record('a'.repeat(40)),
+        }),
+        history: [rollback, releaseRun(2, { sha: 'c'.repeat(40) })],
+      })
+    );
+    expect(times.live.at).toBe('2026-11-13T22:27:00.000Z');
+    expect(times.live.run?.id).toBe(3);
+    expect(times.deploying).toBeNull();
+  });
 });
 
 describe('releaseStageOf', () => {
