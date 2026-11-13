@@ -18,6 +18,11 @@ object NotificationTarget {
     private fun isCaptureLaunch(intent: Intent) =
         intent.component?.className?.endsWith(".CaptureLauncher") == true
 
+    /** Whether this intent is a not-yet-taken launch from the Capture icon. */
+    fun isPendingCaptureLaunch(intent: Intent?): Boolean =
+        intent != null && !intent.getBooleanExtra(EXTRA_HANDLED, false) &&
+            isCaptureLaunch(intent)
+
     /**
      * The app, on `docId` (at `blockId`) in `workspaceId`; the Agents page
      * without a doc; the journal page for `journal` (YYYY-MM-DD) when given;
