@@ -80,6 +80,8 @@ export interface AgentRunSession {
   running: boolean;
   /** On the tab's own model, so other on-device runs queue behind it. */
   onDevice: boolean;
+  /** The brief it was given, if any; part of what makes it one run. */
+  briefText?: string;
   /**
    * The block the run is on: the last one a tool call named, else the block
    * it was started on. What the run card's Show link jumps to.
@@ -119,6 +121,22 @@ const titledLabel = (target: AgentTarget, title: string): string => {
 
 const runKey = (agentId: string, target: AgentTarget) =>
   `${agentId}:${agentTargetKey(target)}`;
+
+/**
+ * What makes a run "the same run" for de-duplication: the agent, the
+ * target, and, for a run given a brief, the brief. A brief's target only
+ * files its record (see start), so two different briefs on one target are
+ * two runs: two "Fix with Claude" on pull requests with no task of their
+ * own both file under the same note, and must not collapse into one.
+ */
+const sessionKey = (
+  agentId: string,
+  target: AgentTarget,
+  briefText?: string
+) =>
+  briefText
+    ? `${runKey(agentId, target)}#${briefText}`
+    : runKey(agentId, target);
 
 /**
  * The agent runs the reader is looking at.
@@ -183,14 +201,21 @@ export class AgentRunSessionService extends Service {
     );
   }
 
-  private isPending(agent: Agent, target: AgentTarget): boolean {
-    const key = runKey(agent.id, target);
+  private isPending(
+    agent: Agent,
+    target: AgentTarget,
+    brief?: AgentContext
+  ): boolean {
+    const key = sessionKey(agent.id, target, brief?.text);
     return (
       this.sessions$.value.some(
         session =>
-          session.running && runKey(session.agentId, session.target) === key
+          session.running &&
+          sessionKey(session.agentId, session.target, session.briefText) === key
       ) ||
-      this.queue$.value.some(run => runKey(run.agent.id, run.target) === key)
+      this.queue$.value.some(
+        run => sessionKey(run.agent.id, run.target, run.brief?.text) === key
+      )
     );
   }
 
@@ -249,7 +274,7 @@ export class AgentRunSessionService extends Service {
     pass: number,
     brief?: AgentContext
   ): Promise<void> {
-    if (this.isPending(agent, target)) return;
+    if (this.isPending(agent, target, brief)) return;
     if (this.claimsHere(agent)) this.claim(target);
     this.name(agent, target, brief);
     if (this.queues(agent) && this.onDeviceBusy) {
@@ -375,10 +400,11 @@ export class AgentRunSessionService extends Service {
 
     // The last run of this agent on this target has ended; this one takes
     // its place rather than stacking up beside it.
-    const key = runKey(agent.id, target);
+    const key = sessionKey(agent.id, target, brief?.text);
     this.sessions$.setValue([
       ...this.sessions$.value.filter(
-        session => runKey(session.agentId, session.target) !== key
+        session =>
+          sessionKey(session.agentId, session.target, session.briefText) !== key
       ),
       {
         id,
@@ -396,6 +422,7 @@ export class AgentRunSessionService extends Service {
         error: null,
         running: true,
         onDevice,
+        briefText: brief?.text,
         focus: targetFocus(target),
       },
     ]);

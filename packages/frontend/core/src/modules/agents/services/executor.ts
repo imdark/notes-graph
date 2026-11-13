@@ -1171,6 +1171,8 @@ export class AgentExecutorService extends Service implements AgentExecutor {
     // Set while the job waits out the device's session limit, so it is said
     // once per wait rather than on every update.
     let heldUntil: number | null = null;
+    // Whether "waiting for a free slot" was said, so it is said once.
+    let saidWaiting = false;
     let title = job.title ?? context.title;
     for await (const { job: update, logDelta } of this.remoteRunner.watch(
       workspaceId,
@@ -1191,6 +1193,17 @@ export class AgentExecutorService extends Service implements AgentExecutor {
         jobId: job.id,
         questions: openQuestions(update),
       };
+      // Queued with no session-limit hold: every job slot on the device is
+      // taken. Said once in the log, and kept on the run so other screens
+      // (the Deployments rows, the run cards) can show it is waiting.
+      const waitingForSlot = update.status === 'queued' && !update.runAfter;
+      if (waitingForSlot && !saidWaiting) {
+        saidWaiting = true;
+        const waiting = `Waiting for a free job slot on ${agent.deviceKey}: every slot is taken, by other runs or runs waiting on you. Raise "Jobs at once" for ${agent.deviceKey} on the Monitoring page to run more at once.`;
+        yield logLine(`⏳ ${waiting}`);
+        yield { type: 'text', delta: `${waiting}\n` };
+      }
+      this.runsStore.setWaitingForSlot(runId, waitingForSlot);
       if (
         update.status === 'queued' &&
         update.runAfter &&

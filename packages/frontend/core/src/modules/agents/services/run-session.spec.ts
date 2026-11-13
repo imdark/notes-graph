@@ -355,6 +355,25 @@ describe('AgentRunSessionService', () => {
     expect(sessions.queue$.value).toHaveLength(1);
   });
 
+  test('two different briefs on one target are two runs, side by side', async () => {
+    const { runs, sessions } = fakeExecutor();
+    const doc = { kind: 'doc' as const, docId: 'doc' };
+    const brief = (n: number) => ({
+      title: 'Merge 1 pull request',
+      label: '1 pull request',
+      text: `# Merge 1 pull request\n\n- pull request: …/pull/${n}`,
+    });
+
+    void sessions.start(remote, doc, brief(378));
+    void sessions.start(remote, doc, brief(379));
+    // The same brief again is the same run, and still does nothing.
+    void sessions.start(remote, doc, brief(379));
+    await tick();
+
+    expect(runs).toHaveLength(2);
+    expect(sessions.sessions$.value.filter(s => s.running)).toHaveLength(2);
+  });
+
   test('stop ends the on-device run and the next queued one starts', async () => {
     const { runs, sessions } = fakeExecutor();
 

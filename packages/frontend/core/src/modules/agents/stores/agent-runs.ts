@@ -37,6 +37,8 @@ export interface AgentRun {
   tokens?: number;
   /** Finished, and waiting for the reader to approve it. */
   reviewPending?: boolean;
+  /** Queued on the server, waiting for a free job slot on its device. */
+  waitingForSlot?: boolean;
   /** 'ask': a chat about the run `parentRunId`, not a run of its own. */
   kind?: 'ask';
   parentRunId?: string;
@@ -225,6 +227,13 @@ export class AgentRunsStore extends Store {
     if (patch.costUsd === row.costUsd) delete patch.costUsd;
     if (patch.tokens === row.tokens) delete patch.tokens;
     if (Object.keys(patch).length) this.table.update(runId, patch);
+  }
+
+  /** Note whether a device run is waiting for a free job slot; see AgentRun. */
+  setWaitingForSlot(runId: string, waiting: boolean): void {
+    const row = this.table.get(runId);
+    if (!row || !!row.waitingForSlot === waiting) return;
+    this.table.update(runId, { waitingForSlot: waiting });
   }
 
   /** Rows that say they are running, whoever is (or was) running them. */
