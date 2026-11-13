@@ -7,6 +7,7 @@ import { DocStorageModule } from '../../core/doc';
 import { PermissionModule } from '../../core/permission';
 import { StorageModule } from '../../core/storage';
 import { WorkspaceModule } from '../../core/workspaces';
+import { IndexerModule } from '../indexer';
 import { AgentMemoryService } from './agent-memory';
 import { AgentRules } from './agent-rules';
 import { RegistryController } from './controller';
@@ -15,6 +16,9 @@ import { JobGates } from './job-gates';
 import { RegistryJobService } from './jobs';
 import { MonitoringAgentService } from './monitoring-agent';
 import { AgentPushService } from './push';
+import { ReleaseController } from './releases/controller';
+import { ReleaseCronJobs } from './releases/cron';
+import { ReleaseService } from './releases/service';
 import { RegistryService } from './service';
 import { RegistryJobShareController, RegistryJobShareService } from './share';
 import { SkillNoteService } from './skill-notes';
@@ -32,6 +36,7 @@ import { TerminalSessionService } from './terminal-sessions';
   imports: [
     AuthModule,
     DocStorageModule,
+    IndexerModule,
     PermissionModule,
     StorageModule,
     WorkspaceModule,
@@ -50,8 +55,14 @@ import { TerminalSessionService } from './terminal-sessions';
     JobGates,
     TerminalSessionService,
     TerminalGateway,
+    ReleaseService,
+    ReleaseCronJobs,
   ],
-  controllers: [RegistryController, RegistryJobShareController],
+  controllers: [
+    RegistryController,
+    RegistryJobShareController,
+    ReleaseController,
+  ],
   // Monitors queue device jobs and push alerts through these; automations
   // hold agent jobs through JobGates.
   exports: [RegistryJobService, AgentPushService, JobGates],

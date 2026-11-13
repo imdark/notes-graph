@@ -797,16 +797,42 @@ export class RegistryJobModel extends BaseModel {
     });
   }
 
+  /** Every workspace's repos, for the release sync that runs for all. */
+  async listAllDeployRepos() {
+    return this.db.registryDeployRepo.findMany({
+      orderBy: [{ workspaceId: 'asc' }, { updatedAt: 'desc' }],
+    });
+  }
+
   async setDeployRepo(
     workspaceId: string,
     repo: string,
-    branches: { baseBranch: string; deployBranch: string },
+    branches: {
+      baseBranch: string;
+      deployBranch: string;
+      workflowFile?: string;
+    },
     userId: string
   ): Promise<void> {
     await this.db.registryDeployRepo.upsert({
       where: { workspaceId_repo: { workspaceId, repo } },
       create: { workspaceId, repo, ...branches, updatedBy: userId },
       update: { ...branches, updatedBy: userId },
+    });
+  }
+
+  /**
+   * Move a repo's release-sync watermarks: the newest deploy run and the
+   * newest merge whose tasks have been brought up to date.
+   */
+  async setDeploySynced(
+    workspaceId: string,
+    repo: string,
+    synced: { syncedRunId?: bigint | null; syncedMergedAt?: Date | null }
+  ): Promise<void> {
+    await this.db.registryDeployRepo.updateMany({
+      where: { workspaceId, repo },
+      data: synced,
     });
   }
 

@@ -20,13 +20,13 @@ const TODO_STATUS = '[ ]';
 const ORG_STATUS_PREFIX_RE = /^(\[(?: |x|X|-)\]|[A-Z][A-Z_-]{1,24})(?=\s)/;
 const TODO_TEXTS = new Set(['[ ]', 'TODO']);
 
-interface TaskStatus {
+export interface TaskStatus {
   text: string;
   length: number;
   embedded: boolean;
 }
 
-function readStatus(block: Y.Map<unknown>): TaskStatus | null {
+export function readStatus(block: Y.Map<unknown>): TaskStatus | null {
   const text = block.get('prop:text');
   if (!(text instanceof Y.Text)) return null;
   const first = text.toDelta()[0] as
@@ -50,7 +50,11 @@ function readStatus(block: Y.Map<unknown>): TaskStatus | null {
   return null;
 }
 
-function writeStatus(block: Y.Map<unknown>, status: TaskStatus, next: string) {
+export function writeStatus(
+  block: Y.Map<unknown>,
+  status: TaskStatus,
+  next: string
+) {
   const text = block.get('prop:text') as Y.Text;
   if (status.embedded) {
     text.format(0, status.length, { orgStatus: next });

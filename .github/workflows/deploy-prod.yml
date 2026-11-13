@@ -12,9 +12,23 @@ name: Deploy prod
 # assume; see scripts/prod/setup-github-deploy-aws.sh.
 #
 # Run it from the Actions tab, or: gh workflow run deploy-prod.yml
+#
+# Rollback: give image_sha (a commit whose image is still in ECR) and the run
+# skips the build and rolls the box to that image, with that commit's
+# deploy-image.sh. The run is titled "Roll back to <sha>", which the
+# Deployments screen reads to tell a rollback from a deploy.
+#   gh workflow run deploy-prod.yml -f image_sha=<40-char sha>
+
+run-name: ${{ inputs.image_sha && format('Roll back to {0}', inputs.image_sha) || format('Deploy {0}', github.sha) }}
 
 on:
   workflow_dispatch:
+    inputs:
+      image_sha:
+        description: 'Roll back to the image of this commit (full sha); empty builds and deploys the branch'
+        required: false
+        default: ''
+        type: string
 
 permissions:
   contents: read
@@ -42,10 +56,12 @@ jobs:
           fetch-depth: 0
 
       - name: Deploy record
+        if: inputs.image_sha == ''
         run: node scripts/prod/deploy-info.mjs
 
       # The runner ships ~14 GB free; the build needs more.
       - name: Free disk
+        if: inputs.image_sha == ''
         run: |
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
             /opt/hostedtoolcache/CodeQL /usr/local/share/boost "$AGENT_TOOLSDIRECTORY"
@@ -59,9 +75,24 @@ jobs:
       - id: ecr
         uses: aws-actions/amazon-ecr-login@v2
 
+      # A rollback deploys an image already built: it has to still be there.
+      - name: Check image
+        if: inputs.image_sha != ''
+        env:
+          IMAGE_SHA: ${{ inputs.image_sha }}
+        run: |
+          if ! [[ "$IMAGE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "image_sha must be a full 40-character commit sha, got '$IMAGE_SHA'"
+            exit 1
+          fi
+          aws ecr describe-images --repository-name notesgraph \
+            --image-ids imageTag="$IMAGE_SHA" --query 'imageDetails[0].imagePushedAt' --output text
+
       - uses: docker/setup-buildx-action@v3
+        if: inputs.image_sha == ''
 
       - name: Build and push image
+        if: inputs.image_sha == ''
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -76,8 +107,8 @@ jobs:
 
       - name: Roll the box
         env:
-          IMAGE: ${{ steps.ecr.outputs.registry }}/notesgraph:${{ github.sha }}
-          SHA: ${{ github.sha }}
+          IMAGE: ${{ steps.ecr.outputs.registry }}/notesgraph:${{ inputs.image_sha || github.sha }}
+          SHA: ${{ inputs.image_sha || github.sha }}
         run: |
           # As ubuntu: bring the deploy checkout to this commit, then run its
           # deploy-image.sh. The repo is public, so the fetch needs no token.

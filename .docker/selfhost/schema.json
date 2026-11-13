@@ -971,6 +971,20 @@
             "version": 1,
             "vendor": "zod"
           }
+        },
+        "githubToken": {
+          "type": "string",
+          "description": "GitHub token (Contents, Actions and Pull requests: read and write) the Deployments screen uses to read and release a workspace's repo when the workspace has no GITHUB_TOKEN secret. Empty: the secret only.\n@default \"\"\n@environment `NOTESGRAPH_GITHUB_TOKEN`",
+          "_def": {
+            "checks": [],
+            "typeName": "ZodString",
+            "coerce": false
+          },
+          "default": "",
+          "~standard": {
+            "version": 1,
+            "vendor": "zod"
+          }
         }
       }
     },
