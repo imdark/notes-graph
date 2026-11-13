@@ -10,13 +10,14 @@ import {
   AgentRunSessionService,
   AgentsService,
   type AgentTarget,
+  useAgentsDownLast,
 } from '@notesgraph/core/modules/agents';
 import { WorkspaceDialogService } from '@notesgraph/core/modules/dialogs';
 import type { Editor } from '@notesgraph/core/modules/editor';
 import { QuickSearchService } from '@notesgraph/core/modules/quicksearch';
 import { WorkbenchService } from '@notesgraph/core/modules/workbench';
-import { useLiveData, useService } from '@notesgraph/infra';
-import { useEffect } from 'react';
+import { useService } from '@notesgraph/infra';
+import { useEffect, useMemo } from 'react';
 
 /**
  * The blocks the palette should run an agent on, captured when it opens —
@@ -49,7 +50,10 @@ export function useRegisterAgentCommands(editor: Editor, active: boolean) {
   const sessions = useService(AgentRunSessionService);
   const workbench = useService(WorkbenchService).workbench;
   const dialogs = useService(WorkspaceDialogService);
-  const agents = useLiveData(agentsService.agentsFor$('block'));
+  // Agents on a machine monitoring reports down are listed last.
+  const agents = useAgentsDownLast(
+    useMemo(() => agentsService.agentsFor$('block'), [agentsService])
+  );
 
   useEffect(() => {
     if (!active) return;

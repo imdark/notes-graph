@@ -21,6 +21,7 @@ import {
   RemoteAgentRunnerService,
   RESEARCH_MODEL,
   type SkillNote,
+  useAgentsDownLast,
   WEEK_MINUTES,
 } from '@notesgraph/core/modules/agents';
 import type { DialogComponentProps } from '@notesgraph/core/modules/dialogs';
@@ -157,7 +158,8 @@ export const MonitorEditorDialog = ({
     () => monitors.find(m => m.id === monitorId),
     [monitorId, monitors]
   );
-  const allAgents = useLiveData(agentsService.agents$);
+  // Agents on a machine monitoring reports down are listed last.
+  const allAgents = useAgentsDownLast(agentsService.agents$);
   // Only device Claude agents can run unattended on a schedule; a research
   // agent can too, as Claude Code with OmniSeek (see runAs).
   const deviceAgents = useMemo(
