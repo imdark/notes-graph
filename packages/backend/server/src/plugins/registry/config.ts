@@ -18,6 +18,11 @@ export interface RegistryConfig {
    * memory" notes, and hand those facts to the next run. Needs copilot.
    */
   agentMemory: boolean;
+  /**
+   * GitHub token the Deployments screen's releases use when a workspace has
+   * no GITHUB_TOKEN secret of its own. Empty: only the secret is used.
+   */
+  githubToken: string;
 }
 
 declare global {
@@ -27,6 +32,7 @@ declare global {
       maxDevicesPerWorkspace: ConfigItem<number>;
       fcmServiceAccount: ConfigItem<string>;
       agentMemory: ConfigItem<boolean>;
+      githubToken: ConfigItem<string>;
     };
   }
 }
@@ -74,5 +80,11 @@ defineModuleConfig('registry', {
     default: true,
     schema: z.boolean(),
     env: ['NOTESGRAPH_AGENT_MEMORY', 'boolean'],
+  },
+  githubToken: {
+    desc: "GitHub token (Contents, Actions and Pull requests: read and write) the Deployments screen uses to read and release a workspace's repo when the workspace has no GITHUB_TOKEN secret. Empty: the secret only.",
+    default: '',
+    schema: z.string(),
+    env: ['NOTESGRAPH_GITHUB_TOKEN', 'string'],
   },
 });

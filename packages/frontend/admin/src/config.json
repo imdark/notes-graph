@@ -335,6 +335,11 @@
       "type": "Boolean",
       "desc": "Save what agent runs learn about the user into the \"Agent memory\" notes, and recall it into later runs.",
       "env": "NOTESGRAPH_AGENT_MEMORY"
+    },
+    "githubToken": {
+      "type": "String",
+      "desc": "GitHub token (Contents, Actions and Pull requests: read and write) the Deployments screen uses to read and release a workspace's repo when the workspace has no GITHUB_TOKEN secret. Empty: the secret only.",
+      "env": "NOTESGRAPH_GITHUB_TOKEN"
     }
   },
   "headroom": {

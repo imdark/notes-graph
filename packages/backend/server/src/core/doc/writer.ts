@@ -257,6 +257,22 @@ export class DocWriter {
   }
 
   /**
+   * The doc's current binary, for a caller that reads it (pure yjs) before
+   * deciding on an {@link editDoc}. Null when the doc doesn't exist.
+   */
+  async readDocBinary(
+    workspaceId: string,
+    docId: string
+  ): Promise<Buffer | null> {
+    try {
+      return await this.docBinary(workspaceId, docId);
+    } catch (err) {
+      if (err instanceof NotFoundException) return null;
+      throw err;
+    }
+  }
+
+  /**
    * The query boards (virtual kanban/table scopes) defined in a doc:
    * database blocks with a queryTags/queryProps scope.
    */

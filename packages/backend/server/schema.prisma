@@ -1952,6 +1952,12 @@ model RegistryDeployRepo {
   repo         String   @db.VarChar
   baseBranch   String   @map("base_branch") @db.VarChar
   deployBranch String   @map("deploy_branch") @db.VarChar
+  /// The GitHub Actions workflow file that deploys prod (.github/workflows).
+  workflowFile   String    @default("deploy-prod.yml") @map("workflow_file") @db.VarChar
+  /// The newest deploy run whose pull requests' tasks were moved to DEPLOYED.
+  syncedRunId    BigInt?   @map("synced_run_id")
+  /// The newest merge into the base branch whose tasks were moved to MERGED.
+  syncedMergedAt DateTime? @map("synced_merged_at") @db.Timestamptz(3)
   updatedBy    String?  @map("updated_by") @db.VarChar
   updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
