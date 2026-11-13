@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Delete,
   Get,
   Logger,
   Param,
@@ -303,6 +304,22 @@ export class NotesApiController {
       );
     }
     this.logger.log(`edited doc ${workspaceId}/${docId} by ${user.id}`);
+    return { ok: true };
+  }
+
+  /** Moves a doc to the trash; it can be restored from there. */
+  @Delete('/workspaces/:workspaceId/docs/:docId')
+  async trashDoc(
+    @CurrentUser() user: CurrentUserType,
+    @Param('workspaceId') workspaceId: string,
+    @Param('docId') docId: string
+  ) {
+    if (docId === workspaceId) {
+      throw new BadRequestException('the workspace root cannot be trashed');
+    }
+    await this.ac.user(user.id).doc(workspaceId, docId).assert('Doc.Trash');
+    await this.docWriter.trashDoc(workspaceId, docId, user.id);
+    this.logger.log(`trashed doc ${workspaceId}/${docId} by ${user.id}`);
     return { ok: true };
   }
 

@@ -13,10 +13,10 @@
  * literals and backticks: it is embedded in String.raw below.
  */
 
-/** Titles untitled notes from their first sentence; reports empty ones. */
+/** Titles untitled notes from their first sentence; trashes empty ones. */
 export const TITLE_UNTITLED_NOTES_TEMPLATE = String.raw`// Every note with no title gets one from the first sentence of its body
-// (up to 60 characters, cut at a word). A note with no body either is only
-// reported: deleting it is a person's call.
+// (up to 60 characters, cut at a word). A note with no body either is moved
+// to the trash (restorable). A body with nothing to title it by is left alone.
 const MAX_TITLE = 60;
 const ws = notesgraph.workspaceId;
 
@@ -38,13 +38,26 @@ const { docs } = await notesgraph.fetch('/api/notes/workspaces/' + ws + '/docs?l
 const untitled = docs.filter(doc => !doc.title.trim() && doc.docId !== ws);
 const titled = [];
 const empty = [];
+const trashed = [];
+const unnamed = [];
 for (const doc of untitled) {
   const { markdown } = await notesgraph.fetch(
     '/api/notes/workspaces/' + ws + '/docs/' + encodeURIComponent(doc.docId) + '/markdown'
   );
   const title = generateTitle(markdown || '');
   if (!title) {
+    if ((markdown || '').trim()) {
+      // a body with no sentence to name it by (an image, say): not empty
+      unnamed.push(doc.docId);
+      console.log('has a body but no sentence to title it, left alone: ' + doc.docId);
+      continue;
+    }
     empty.push(doc.docId);
+    await notesgraph.fetch('/api/notes/workspaces/' + ws + '/docs/' + encodeURIComponent(doc.docId), {
+      method: 'DELETE',
+    });
+    trashed.push(doc.docId);
+    console.log('empty, moved to trash: ' + doc.docId);
     continue;
   }
   await notesgraph.fetch('/api/notes/workspaces/' + ws + '/docs/' + encodeURIComponent(doc.docId), {
@@ -54,11 +67,11 @@ for (const doc of untitled) {
   titled.push({ docId: doc.docId, title });
   console.log('titled ' + doc.docId + ': ' + title);
 }
-for (const docId of empty) console.log('empty, left alone: ' + docId);
-const summary = titled.length + ' titled, ' + empty.length + ' empty of ' + untitled.length + ' untitled';
+const summary =
+  titled.length + ' titled, ' + empty.length + ' empty trashed, ' + unnamed.length + ' left of ' + untitled.length + ' untitled';
 console.log(summary);
 // summary is what a monitor running this records as its reading
-return { summary, titled, empty };
+return { summary, titled, empty, trashed, unnamed };
 `;
 
 /**
@@ -363,7 +376,7 @@ export const NIGHTLY_TEMPLATES = [
     id: 'title-untitled-notes',
     name: 'Title untitled notes nightly',
     description:
-      'Every night at 3am, give each untitled note a title from the first sentence of its body and report the ones with no body either.',
+      'Every night at 3am, give each untitled note a title from the first sentence of its body and move the ones with no body either to the trash.',
     triggers: [{ type: 'cron', expr: '0 3 * * *' }],
     code: TITLE_UNTITLED_NOTES_TEMPLATE,
     timeoutSeconds: 10 * 60,

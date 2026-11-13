@@ -1,5 +1,6 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { nanoid } from 'nanoid';
+import * as Y from 'yjs';
 
 import { BadRequest, EventBus } from '../../base';
 import {
@@ -627,6 +628,58 @@ export class DocWriter {
     );
 
     return { success: true };
+  }
+
+  /**
+   * Moves a doc to the trash, the way the app's delete does: the page entry
+   * in the workspace root doc gets `trash` and `trashDate`. The doc can be
+   * restored from the trash. Returns false when it was already there.
+   */
+  async trashDoc(
+    workspaceId: string,
+    docId: string,
+    editorId?: string
+  ): Promise<boolean> {
+    const rootDoc = await this.storage.getDoc(workspaceId, workspaceId);
+    if (!rootDoc?.bin) {
+      throw new NotFoundException(
+        `Workspace ${workspaceId} not found or has no root document`
+      );
+    }
+    const ydoc = new Y.Doc();
+    Y.applyUpdate(ydoc, rootDoc.bin);
+    const pages = ydoc.getMap('meta').get('pages');
+    const page =
+      pages instanceof Y.Array
+        ? (pages
+            .toArray()
+            .find(
+              entry => entry instanceof Y.Map && entry.get('id') === docId
+            ) as Y.Map<unknown> | undefined)
+        : undefined;
+    if (!page) throw new NotFoundException(`Document ${docId} not found`);
+    if (page.get('trash') === true) return false;
+
+    const before = Y.encodeStateVector(ydoc);
+    ydoc.transact(() => {
+      page.set('trash', true);
+      page.set('trashDate', Date.now());
+    });
+    const update = Y.encodeStateAsUpdate(ydoc, before);
+    const timestamp = await this.storage.pushDocUpdates(
+      workspaceId,
+      workspaceId,
+      [update],
+      editorId
+    );
+    this.emitDocUpdatesPushed({
+      spaceId: workspaceId,
+      docId: workspaceId,
+      updates: [update],
+      timestamp,
+      editor: editorId,
+    });
+    return true;
   }
 
   /**
