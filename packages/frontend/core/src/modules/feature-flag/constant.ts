@@ -474,7 +474,7 @@ export const NOTESGRAPH_FLAGS = {
     defaultState: true,
   },
   enable_release_screen: {
-    commit: '',
+    commit: '7a00b4ac8a7a2aa08726fdc9b2b278a3e7cdb44c',
     category: 'notesgraph',
     displayName: 'Release-centric Deployments screen',
     description:
