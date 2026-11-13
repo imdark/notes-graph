@@ -1100,15 +1100,18 @@ describe('release copy', () => {
     expect(isCheckedStatus('DEPLOYED')).toBe(false);
   });
 
-  test('Merge all takes the ready ones, oldest first', () => {
+  test('Merge all takes clean merges, failing checks too, oldest first', () => {
     expect(
       readyPulls([
         releasePull(9),
         releasePull(3),
         releasePull(4, { readiness: 'conflicts' }),
         releasePull(5, { readiness: 'draft' }),
+        releasePull(6, { readiness: 'failing' }),
+        releasePull(7, { readiness: 'pending' }),
+        releasePull(8, { readiness: 'unknown' }),
       ]).map(pr => pr.number)
-    ).toEqual([3, 9]);
+    ).toEqual([3, 6, 8, 9]);
   });
 
   test('Roll back offers earlier good images, not the live one', () => {
