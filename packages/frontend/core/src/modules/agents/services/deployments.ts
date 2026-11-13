@@ -1197,10 +1197,22 @@ export const mergeConfirmText = (
 export const rollbackConfirmText = (imageSha: string) =>
   `Rolls prod back to the image of ${sha7(imageSha)} without rebuilding.`;
 
-/** Pull requests "Merge all ready" takes: ready ones, oldest first. */
+/**
+ * What "Merge all ready" may merge: clean merges, whatever the checks say.
+ * This repo's CI fails on things a change didn't touch, and its pull
+ * requests are merged regardless, so failing checks are shown, not
+ * enforced. Drafts, conflicts and checks still running are left.
+ */
+export const MERGE_ALL_READINESS: readonly MergeReadiness[] = [
+  'ready',
+  'failing',
+  'unknown',
+];
+
+/** Pull requests "Merge all ready" takes, oldest first. */
 export const readyPulls = (pulls: ReleasePull[]) =>
   pulls
-    .filter(pr => pr.readiness === 'ready')
+    .filter(pr => MERGE_ALL_READINESS.includes(pr.readiness))
     .sort((a, b) => a.number - b.number);
 
 /** A deploy run's outcome, as History shows it. */

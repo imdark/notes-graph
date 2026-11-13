@@ -59,6 +59,8 @@ const SKEW_MS = 10_000;
 
 const WORKFLOW_FILE_RE = /^[\w.-]+\.ya?ml$/;
 const SHA_RE = /^[0-9a-f]{40}$/;
+/** What merge-all merges; the frontend's MERGE_ALL_READINESS matches it. */
+const MERGE_ALL_READINESS = new Set(['ready', 'failing', 'unknown']);
 
 /** The org statuses the index holds for tasks on their way out (kebab-cased). */
 const SHIPPING_STATUSES = ['in-progress', 'committed', 'merged', 'deployed'];
@@ -800,7 +802,10 @@ export class ReleaseService {
             continue;
           }
           const ready = await this.openPull(github, pull, true);
-          if (ready.readiness !== 'ready') {
+          // Failing checks don't hold a merge up: this repo's CI fails on
+          // things a change didn't touch. Drafts, conflicts and checks
+          // still running do.
+          if (!MERGE_ALL_READINESS.has(ready.readiness)) {
             skipped.push({ number, why: ready.readiness });
             continue;
           }

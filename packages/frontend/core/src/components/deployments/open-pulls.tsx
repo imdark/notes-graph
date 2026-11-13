@@ -48,8 +48,8 @@ export const OpenPulls = ({
           disabled={busy || ready.length === 0}
           tooltip={
             ready.length === 0
-              ? 'None is ready: drafts, conflicts and failing checks are left'
-              : undefined
+              ? 'None is ready: drafts, conflicts and checks still running are left'
+              : 'Failing checks don’t hold a merge up; drafts, conflicts and checks still running are left'
           }
           onClick={() => onMergeAll(ready)}
           data-testid="release-merge-all"
