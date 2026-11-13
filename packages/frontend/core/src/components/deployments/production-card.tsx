@@ -3,6 +3,7 @@ import {
   flagStage,
   formatDuration,
   productionPill,
+  productionTimes,
   releaseAction,
   type ReleaseState,
   rollbackTargets,
@@ -76,11 +77,8 @@ export const ProductionCard = ({
     status === 'rolled-back'
       ? (run?.rollbackTo ?? deployInfo?.commit)
       : (deployInfo?.commit ?? run?.sha);
-  // A rollback restores the old build's record, so its time is the run's.
-  const deployedAt =
-    status === 'rolled-back' || !deployInfo
-      ? run?.startedAt
-      : deployInfo.deployedAt;
+  const times = productionTimes(state);
+  const liveRun = times.live.run ?? (deploying ? null : run);
   const off = busy || deploying;
 
   return (
@@ -102,20 +100,47 @@ export const ProductionCard = ({
         </div>
       )}
       <div className={styles.cardLine}>
-        {deployedAt ? <span>deployed {when(deployedAt)}</span> : null}
+        {times.live.at ? (
+          <span>
+            {deploying ? 'live since' : 'deployed'} {when(times.live.at)}
+          </span>
+        ) : null}
         {deployInfo?.dirty ? <span>with uncommitted changes</span> : null}
-        {run ? (
+        {liveRun ? (
           <a
             className={styles.link}
-            href={run.url}
+            href={liveRun.url}
             target="_blank"
             rel="noreferrer"
           >
-            run {run.id}
+            run {liveRun.id}
           </a>
         ) : null}
-        {run?.durationMs ? <span>{formatDuration(run.durationMs)}</span> : null}
+        {liveRun?.durationMs ? (
+          <span>{formatDuration(liveRun.durationMs)}</span>
+        ) : null}
       </div>
+      {times.deploying ? (
+        <div className={styles.cardLine} data-testid="release-deploying">
+          <span>
+            Deploying{' '}
+            <code className={styles.sha}>{sha7(times.deploying.sha)}</code>,
+            started {when(times.deploying.startedAt)} (
+            {formatDuration(
+              Date.now() - Date.parse(times.deploying.startedAt)
+            ) || 'just now'}{' '}
+            so far)
+          </span>
+          <a
+            className={styles.link}
+            href={times.deploying.run.url}
+            target="_blank"
+            rel="noreferrer"
+          >
+            run {times.deploying.run.id}
+          </a>
+        </div>
+      ) : null}
       {deploying && steps.length > 0 ? (
         <div className={styles.steps} data-testid="release-steps">
           {steps.map((step, i) => (

@@ -1240,6 +1240,57 @@ export const formatDuration = (ms: number | null | undefined) => {
   return `${Math.round(ms / 60_000)} min`;
 };
 
+/**
+ * The Production card's two times, kept apart: when what prod runs now went
+ * live, and when a deploy under way started. The deploy record's
+ * `deployedAt` is stamped when its image's build starts, and a rollback
+ * brings back the old build's record, so neither says when prod changed;
+ * the successful run that put the live commit there does (its end). While a
+ * deploy runs, `production.run` is that new run, not the live one.
+ */
+export function productionTimes(state: ReleaseState): {
+  live: { at: string | null; run: ReleaseRun | null };
+  deploying: { sha: string; startedAt: string; run: ReleaseRun } | null;
+} {
+  const { production, history } = state;
+  const active =
+    production.status === 'deploying' && production.run?.status !== 'completed'
+      ? production.run
+      : null;
+  const liveCommit =
+    production.status === 'rolled-back'
+      ? (history.find(r => r.rollbackTo && r.conclusion === 'success')
+          ?.rollbackTo ?? production.deployInfo?.commit)
+      : production.deployInfo?.commit;
+  const liveRun =
+    history.find(
+      r =>
+        r.id !== active?.id &&
+        r.status === 'completed' &&
+        r.conclusion === 'success' &&
+        (!liveCommit || (r.rollbackTo ?? r.sha) === liveCommit)
+    ) ?? null;
+  const end = (run: ReleaseRun) => {
+    const start = Date.parse(run.startedAt);
+    return Number.isFinite(start) && run.durationMs
+      ? new Date(start + run.durationMs).toISOString()
+      : run.startedAt;
+  };
+  return {
+    live: {
+      at: liveRun ? end(liveRun) : (production.deployInfo?.deployedAt ?? null),
+      run: liveRun,
+    },
+    deploying: active
+      ? {
+          sha: active.rollbackTo ?? active.sha,
+          startedAt: active.startedAt,
+          run: active,
+        }
+      : null,
+  };
+}
+
 /** A task status that says someone checked it live and it works. */
 export const isCheckedStatus = (status: string | null | undefined) =>
   !!status && /^(done|closed|\[x\])$/i.test(status.trim());
