@@ -51,6 +51,8 @@ automations, and a run can do nothing its creator could not.
   (`q` empty for all), as `{docs: [{docId, title}]}`. `limit` up to 1000.
 - `GET /api/notes/workspaces/:id/docs/:docId/markdown`.
 - `PUT /api/notes/workspaces/:id/docs/:docId` with `{markdown?, title?}`.
+- `DELETE /api/notes/workspaces/:id/docs/:docId`: moves the doc to the trash
+  (restorable).
 - `POST /api/notes/workspaces/:id/docs` with `{title, markdown, folder?: string[]}`.
 - `GET /api/registry/workspaces/:id/jobs?kind=agent&since=<iso>&limit=200`:
   runs, newest first; `GET .../jobs/:jobId?logFrom=0` for one run with its
