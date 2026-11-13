@@ -75,14 +75,13 @@ export class ReleaseController {
     @Body() body: Record<string, unknown>
   ) {
     await this.canAct(user, workspaceId);
-    const settings = await this.releases.setSettings(
-      workspaceId,
-      user.id,
-      body ?? {}
-    );
+    // The screen reads the state again itself.
     return {
-      settings,
-      state: await this.releases.state(workspaceId, { fresh: true }),
+      settings: await this.releases.setSettings(
+        workspaceId,
+        user.id,
+        body ?? {}
+      ),
     };
   }
 
