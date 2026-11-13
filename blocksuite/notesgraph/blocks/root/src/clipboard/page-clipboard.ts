@@ -34,7 +34,7 @@ import {
   SYNCED_BLOCK_FLAVOUR,
   type SyncedBlockClipboardPayload,
 } from '@blocksuite/notesgraph-shared/utils';
-import { TextSelection, type UIEventHandler } from '@blocksuite/std';
+import { BlockSelection, TextSelection, type UIEventHandler } from '@blocksuite/std';
 import type { BlockSnapshot, Store } from '@blocksuite/store';
 
 import { ReadOnlyClipboard } from './readonly-clipboard';
@@ -178,7 +178,10 @@ export class PageClipboard extends ReadOnlyClipboard {
    * text, mixed lines, or a URL on a non-empty line) keeps the normal paste.
    */
   private _pasteUrlsAsBookmarks(clipboardData: DataTransfer | null): boolean {
-    const text = clipboardData?.getData('text/plain');
+    // Some mobile webviews put a copied link only on text/uri-list.
+    const text =
+      clipboardData?.getData('text/plain') ||
+      clipboardData?.getData('text/uri-list');
     if (!text) {
       return false;
     }
@@ -202,11 +205,20 @@ export class PageClipboard extends ReadOnlyClipboard {
       return false;
     }
 
+    // Mobile webviews can leave an empty paragraph block-selected, with no
+    // caret, so fall back to a lone block selection.
     const textSelection = this.std.selection.find(TextSelection);
-    if (!textSelection?.isCollapsed()) {
+    if (textSelection && !textSelection.isCollapsed()) {
       return false;
     }
-    const model = this.std.store.getBlock(textSelection.from.blockId)?.model;
+    const blockSelections = this.std.selection.filter(BlockSelection);
+    const blockId =
+      textSelection?.from.blockId ??
+      (blockSelections.length === 1 ? blockSelections[0].blockId : undefined);
+    if (!blockId) {
+      return false;
+    }
+    const model = this.std.store.getBlock(blockId)?.model;
     if (
       !model ||
       model.flavour !== 'notesgraph:paragraph' ||
