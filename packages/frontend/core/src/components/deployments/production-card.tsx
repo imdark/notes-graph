@@ -157,7 +157,9 @@ export const ProductionCard = ({
             href={run.url}
             target="_blank"
             rel="noreferrer"
-            style={{ alignSelf: 'center' }}
+            // The actions row sets no size of its own, so `font: inherit`
+            // took the page's 16px default; match the buttons beside it.
+            style={{ alignSelf: 'center', fontSize: 12 }}
           >
             Open run
           </a>
