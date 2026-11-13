@@ -473,6 +473,15 @@ export const NOTESGRAPH_FLAGS = {
     configurable: true,
     defaultState: true,
   },
+  enable_release_screen: {
+    commit: '',
+    category: 'notesgraph',
+    displayName: 'Release-centric Deployments screen',
+    description:
+      'The Deployments page shows what prod runs, the next release (pull requests on the base branch, not yet on the deploy branch), open pull requests and past deploys, read from GitHub by the server. Merge, release, redeploy and roll back from there; a repo settings dialog replaces the inline Repos list.',
+    configurable: true,
+    defaultState: true,
+  },
 } satisfies { [key in string]: FlagInfo };
 
 // oxlint-disable-next-line no-redeclare
