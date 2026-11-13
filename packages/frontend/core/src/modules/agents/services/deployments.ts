@@ -30,12 +30,12 @@ import {
   type DeployInfo,
   type DeployRepo,
   isDeviceClaudeModel,
-  type RemoteAgentRunnerService,
   type ReleasePull,
   type ReleaseRun,
   type ReleaseSettings,
   type ReleaseState,
   type ReleaseTask,
+  type RemoteAgentRunnerService,
   type RemoteJob,
   RESEARCH_MODEL,
 } from './remote-runner';

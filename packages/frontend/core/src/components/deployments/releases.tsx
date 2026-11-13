@@ -4,9 +4,9 @@ import {
   defaultReleaseSettings,
   DeploymentsService,
   mergeConfirmText,
-  type ReleasePull,
   releaseBlocker,
   releaseConfirmText,
+  type ReleasePull,
   type ReleaseState,
   rollbackConfirmText,
   sha7,
@@ -83,7 +83,10 @@ export const ReleasesView = () => {
   const openSecrets = isMobile ? null : () => workbench.open('/secrets');
   const refresh = useCallback(() => {
     setBusy('refresh');
-    deployments.refreshRelease({ fresh: true }).finally(() => setBusy(null));
+    deployments
+      .refreshRelease({ fresh: true })
+      .catch(() => {})
+      .finally(() => setBusy(null));
   }, [deployments]);
 
   /** Run one of the screen's actions, saying how it went. */

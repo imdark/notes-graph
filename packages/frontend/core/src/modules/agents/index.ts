@@ -68,8 +68,6 @@ export {
   runOutcome,
   type RunTask,
   sha7,
-  tokenMissingText,
-  validateReleaseSettings,
   SHIP_STAGES,
   type ShipAction,
   shipAgents,
@@ -82,7 +80,9 @@ export {
   type ShipTaskDetails,
   shownStage,
   stuckReason,
+  tokenMissingText,
   unlistedPullRequests,
+  validateReleaseSettings,
   verifyBrief,
 } from './services/deployments';
 export {
