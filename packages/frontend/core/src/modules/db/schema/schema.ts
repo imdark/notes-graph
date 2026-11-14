@@ -374,6 +374,12 @@ export const NotesGraph_WORKSPACE_USERDATA_DB_SCHEMA = {
      */
     reviewPending: f.boolean().optional(),
     /**
+     * A device run whose job is queued on the server waiting for a free slot
+     * on its device ("Jobs at once"), so screens can say it is waiting rather
+     * than working. Cleared once the device takes it.
+     */
+    waitingForSlot: f.boolean().optional(),
+    /**
      * 'ask' for a chat about an ended run (its Ask tab), recorded beside the
      * runs so its turns and errors can be found again; absent for a run.
      */

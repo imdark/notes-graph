@@ -66,8 +66,11 @@ const setup = (
   const titles: { runId: string; title: string }[] = [];
   const described: Record<string, unknown>[] = [];
   const usages: { runId: string; usage: unknown }[] = [];
+  const waitingForSlot: { runId: string; waiting: boolean }[] = [];
   const runsStore = {
     setUsage: (runId: string, usage: unknown) => usages.push({ runId, usage }),
+    setWaitingForSlot: (runId: string, waiting: boolean) =>
+      waitingForSlot.push({ runId, waiting }),
     runningRuns: () => runs.filter(run => run.status === 'running'),
     start: () => 'run-1',
     describe: (_runId: string, details: Record<string, unknown>) =>
@@ -109,7 +112,7 @@ const setup = (
       AgentRulesService,
     ]);
   const executor = framework.provider().get(AgentExecutorService);
-  return { executor, finished, titles, described, usages };
+  return { executor, finished, titles, described, usages, waitingForSlot };
 };
 
 describe('AgentExecutorService device runs', () => {
@@ -159,6 +162,58 @@ describe('AgentExecutorService device runs', () => {
     expect(logs.join('')).toMatch(
       /⏸ Session limit reached on laptop; waiting to run again at/
     );
+  });
+
+  test('a job waiting for a free slot says so once and is marked on the run', async () => {
+    const { executor, waitingForSlot } = setup(
+      [],
+      {},
+      {
+        context: {
+          build: async () => ({ text: 'x', label: 'a block', title: 'x' }),
+        },
+        remoteRunner: {
+          enqueue: async () => job({ id: 'j8', status: 'queued' }),
+          agentTargets: async () => [],
+          watch: async function* () {
+            yield { job: job({ id: 'j8', status: 'queued' }), logDelta: '' };
+            yield { job: job({ id: 'j8', status: 'queued' }), logDelta: '' };
+            yield { job: job({ id: 'j8', status: 'running' }), logDelta: '' };
+            yield {
+              job: job({ id: 'j8', status: 'done', result: 'ok' }),
+              logDelta: '',
+            };
+          },
+        },
+      }
+    );
+    (executor as any).runsStore.attachRemote = () => {};
+    const logs: string[] = [];
+    for await (const event of executor.run(
+      {
+        id: 'a1',
+        name: 'W',
+        harness: 'remote',
+        deviceKey: 'laptop',
+        model: 'workflow',
+        tools: [],
+        instructions: 'go',
+        maxSteps: 4,
+      } as any,
+      { kind: 'block', docId: 'doc', blockId: 'b1' },
+      new AbortController().signal
+    )) {
+      if (event.type === 'log') logs.push(event.text);
+    }
+    expect(
+      logs.join('').match(/⏳ Waiting for a free job slot on laptop/g)
+    ).toHaveLength(1);
+    expect(waitingForSlot.map(w => w.waiting)).toEqual([
+      true,
+      true,
+      false,
+      false,
+    ]);
   });
 
   test('a device run is queued with its cost cap and permission level, and records its cost', async () => {

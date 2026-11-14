@@ -28,6 +28,38 @@ const FIX_STATUS: Record<
   cancelled: { label: 'Claude’s fix was stopped', tone: 'neutral' },
 };
 
+/** The badge for a fix run: queued for a slot, or what FIX_STATUS says. */
+const fixRunStatus = (run: AgentRun) =>
+  run.status === 'running' && run.waitingForSlot
+    ? {
+        label: `Queued: waiting for a free slot on ${run.deviceKey ?? 'its device'}`,
+        tone: 'neutral' as const,
+      }
+    : FIX_STATUS[run.status];
+
+/**
+ * How the fixes on the open pull requests stand, in a line: how many Claude
+ * is working on and how many wait for a free slot on their device, so a
+ * queue shows even before anyone opens a run.
+ */
+const FixSummary = ({ runs }: { runs: AgentRun[] }) => {
+  const going = runs.filter(run => run.status === 'running');
+  if (going.length === 0) return null;
+  const waiting = going.filter(run => run.waitingForSlot);
+  const devices = [
+    ...new Set(waiting.map(run => run.deviceKey).filter(Boolean)),
+  ].join(', ');
+  return (
+    <div className={styles.sectionHint} data-testid="release-fix-summary">
+      Claude: {going.length - waiting.length} fixing
+      {waiting.length > 0
+        ? `, ${waiting.length} queued for a free slot${devices ? ` on ${devices}` : ''} (raise “Jobs at once” on the Monitoring page to run more at once)`
+        : ''}
+      .
+    </div>
+  );
+};
+
 /**
  * A pull request's Fix with Claude: the button, then, once a run is on it,
  * where that run is and "Show agent", which opens its window (the log as it
@@ -139,6 +171,12 @@ export const OpenPulls = ({
           Merge all ready{ready.length > 0 ? ` (${ready.length})` : ''}
         </Button>
       </div>
+      <FixSummary
+        runs={state.open.flatMap(pr => {
+          const run = fixRunFor(pr.url, runs ?? []);
+          return run ? [run] : [];
+        })}
+      />
       {state.open.length === 0 ? (
         <div className={styles.empty}>No pull request is open into {base}.</div>
       ) : (
@@ -146,7 +184,7 @@ export const OpenPulls = ({
           {state.open.map(pr => {
             const { label, tone } = READINESS[pr.readiness];
             const fixRun = fixRunFor(pr.url, runs ?? []);
-            const fixStatus = fixRun ? FIX_STATUS[fixRun.status] : null;
+            const fixStatus = fixRun ? fixRunStatus(fixRun) : null;
             return (
               <div
                 key={pr.number}
