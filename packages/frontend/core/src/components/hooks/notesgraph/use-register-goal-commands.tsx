@@ -12,11 +12,14 @@ import {
 } from '@blocksuite/notesgraph/std';
 import type { BlockModel } from '@blocksuite/notesgraph/store';
 import { registerNotesGraphCommand } from '@notesgraph/core/commands';
-import { AgentsService } from '@notesgraph/core/modules/agents';
+import {
+  AgentsService,
+  useAgentsDownLast,
+} from '@notesgraph/core/modules/agents';
 import type { Editor } from '@notesgraph/core/modules/editor';
 import { QuickSearchService } from '@notesgraph/core/modules/quicksearch';
-import { useLiveData, useService } from '@notesgraph/infra';
-import { useEffect } from 'react';
+import { useService } from '@notesgraph/infra';
+import { useEffect, useMemo } from 'react';
 
 /**
  * The to-dos the palette acts on, captured when it opens: the palette's
@@ -58,7 +61,10 @@ export function useRegisterGoalCommands(editor: Editor, active: boolean) {
   // The palette lists commands in registration order, and these belong
   // under the agent commands. Those register again whenever the agent list
   // changes (it loads after the page opens), so register again with them.
-  const agents = useLiveData(useService(AgentsService).agentsFor$('block'));
+  const agentsService = useService(AgentsService);
+  const agents = useAgentsDownLast(
+    useMemo(() => agentsService.agentsFor$('block'), [agentsService])
+  );
 
   useEffect(() => {
     if (!active) return;

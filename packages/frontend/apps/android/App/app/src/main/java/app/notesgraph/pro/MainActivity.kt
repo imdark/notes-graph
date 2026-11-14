@@ -250,8 +250,18 @@ class MainActivity : BridgeActivity(), AIButtonPlugin.Callback, NotesGraphThemeP
         AuthInitializer.initialize(bridge)
         configureEditorWebView()
         bridge.addWebViewListener(renderProcessGoneListener)
+        // Lets the web app boot straight into capture on a cold start, rather
+        // than into the last note first (see mobile/pages/index.tsx).
+        if (NotificationTarget.isPendingCaptureLaunch(intent)) {
+            bridge.webView.addJavascriptInterface(CaptureLaunchFlag(), "NGLaunch")
+        }
         handleShareIntent(intent)
         handleNotificationTarget(intent)
+    }
+
+    private class CaptureLaunchFlag {
+        @android.webkit.JavascriptInterface
+        fun isCapture(): Boolean = true
     }
 
     override fun onNewIntent(intent: Intent) {
