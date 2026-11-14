@@ -50,7 +50,31 @@ You must be **signed in** to NotesGraph in that browser.
 node tools/clipper-extension/smoke-test.mjs
 ```
 
-## Video capture (LinkedIn / Facebook)
+## Video download (LinkedIn / Facebook / any plain `<video>` file)
+
+Clipping a video page first looks for the **page's own video file**
+(`video-source.js`) and downloads the whole thing, with audio, whether or not
+you played it:
+
+- **LinkedIn:** the player's `data-sources` and the
+  `dms.licdn.com/playlist/vid/…` progressive links in the page's data
+  (highest resolution up to 1080p first).
+- **Facebook:** the `playable_url_quality_hd` / `playable_url` /
+  `browser_native_*_url` fields, taking the ones next to the video id in the
+  address bar (`/videos/<id>`, `/reel/<id>`, `?v=<id>`) over suggested videos.
+- **Any site:** a `<video src>` / `<source>` that is a plain file (not
+  `blob:`, `.m3u8` or `.mpd`).
+
+The background worker fetches the file (falling back to a fetch inside the
+page, with its cookies), capped at 150 MB, and sends it to the app tab in
+16 MB pieces. The note says "Video downloaded". When no file comes through,
+the clip falls back to the playback capture below.
+
+**YouTube is not covered.** Its pages don't hand the browser a plain file, and
+fetching one means imitating YouTube's own apps to get around its download
+protection, which this extension doesn't do.
+
+## Video capture fallback (LinkedIn / Facebook)
 
 LinkedIn/Facebook stream video via **MSE** (a `<video>` playing a `blob:` URL fed
 JS-fetched HLS/DASH segments) — there's no file URL to download, and DASH streams

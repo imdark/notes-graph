@@ -18,6 +18,11 @@ const DEFAULT_APP_BASE = 'https://app.notesgraph.com';
 const READ_PAGE_MS = 15_000;
 const IMAGE_MS = 8_000;
 const VIDEO_MS = 20_000;
+// A whole video file can take a while on a slow connection.
+const DOWNLOAD_MS = 120_000;
+// Base64 makes it ~1.33x on its way to the app tab, and the workspace's file
+// limit applies when it's stored, so stay well under both.
+const MAX_VIDEO_BYTES = 150 * 1024 * 1024;
 
 function withTimeout(promise, ms, message) {
   let timer;
@@ -82,17 +87,29 @@ async function captureInPage(imageMs) {
  * the first copy it gets; later ones only replace the port it answers on.
  */
 function deliverToApp(payload) {
+  const decode = b64 => {
+    const bin = atob(b64);
+    const arr = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+    return arr;
+  };
   const attachments = {};
   for (const [key, dataUrl] of Object.entries(payload.attachmentsData || {})) {
     const comma = dataUrl.indexOf(',');
     const header = dataUrl.slice(0, comma);
-    const b64 = dataUrl.slice(comma + 1);
     const mime =
       (header.match(/data:([^;]+)/) || [])[1] || 'application/octet-stream';
-    const bin = atob(b64);
-    const arr = new Uint8Array(bin.length);
-    for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
-    attachments[key] = new Blob([arr], { type: mime });
+    attachments[key] = new Blob([decode(dataUrl.slice(comma + 1))], {
+      type: mime,
+    });
+  }
+  // Large attachments arrived earlier in pieces (stashAttachmentPart).
+  const stash = globalThis.__ngClipParts || {};
+  for (const key of payload.partedKeys || []) {
+    const entry = stash[key];
+    if (!entry) continue;
+    attachments[key] = new Blob(entry.parts.map(decode), { type: entry.mime });
+    delete stash[key];
   }
   const clipperInput = {
     title: payload.title,
@@ -162,6 +179,161 @@ async function assembleCapturedVideo(tabId) {
   }
 }
 
+/**
+ * Read a response body into bytes, giving up past `maxBytes` (a size the
+ * server announced, or the bytes read so far). Null when it isn't a video.
+ */
+async function readVideoBody(res, maxBytes) {
+  if (!res.ok) return null;
+  const type = (res.headers.get('content-type') || '').split(';')[0].trim();
+  if (type && !/^video\/|^application\/octet-stream$/i.test(type)) return null;
+  const announced = Number(res.headers.get('content-length') || 0);
+  if (announced > maxBytes) return null;
+  const reader = res.body.getReader();
+  const chunks = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.length;
+    if (total > maxBytes) {
+      await reader.cancel();
+      return null;
+    }
+    chunks.push(value);
+  }
+  if (total === 0) return null;
+  const bytes = new Uint8Array(total);
+  let off = 0;
+  for (const c of chunks) {
+    bytes.set(c, off);
+    off += c.length;
+  }
+  return {
+    bytes,
+    mime: type && type !== 'application/octet-stream' ? type : 'video/mp4',
+  };
+}
+
+function bytesToDataUrl(bytes, mime) {
+  // btoa per slice; a multiple of 3 so the pieces join without padding.
+  const SLICE = 3 * 8 * 1024;
+  let b64 = '';
+  for (let i = 0; i < bytes.length; i += SLICE) {
+    b64 += btoa(String.fromCharCode.apply(null, bytes.subarray(i, i + SLICE)));
+  }
+  return `data:${mime};base64,${b64}`;
+}
+
+/**
+ * Runs IN the clipped page: fetch the video with the page's cookies and
+ * referer, for a host that refuses the extension's own request.
+ */
+async function fetchVideoInPage(url, maxBytes, timeoutMs) {
+  try {
+    const res = await fetch(url, {
+      credentials: 'include',
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    if (!res.ok) return null;
+    const type = (res.headers.get('content-type') || '').split(';')[0].trim();
+    if (type && !/^video\/|^application\/octet-stream$/i.test(type))
+      return null;
+    if (Number(res.headers.get('content-length') || 0) > maxBytes) return null;
+    const blob = await res.blob();
+    if (!blob.size || blob.size > maxBytes) return null;
+    const mime =
+      type && type !== 'application/octet-stream' ? type : 'video/mp4';
+    return await new Promise(resolve => {
+      const fr = new FileReader();
+      fr.onload = () =>
+        resolve({
+          dataUrl: String(fr.result).replace(/^data:[^;,]*/, `data:${mime}`),
+          mime,
+          size: blob.size,
+        });
+      fr.onerror = () => resolve(null);
+      fr.readAsDataURL(blob);
+    });
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Download the page's own video file (see video-source.js): the whole video
+ * with its audio, whether or not it was played. Null when the page has no
+ * file to download or none came through, so the caller can fall back to the
+ * recorded playback.
+ */
+async function downloadPageVideo(tabId) {
+  let sources = [];
+  try {
+    const [{ result }] = await withTimeout(
+      chrome.scripting
+        .executeScript({ target: { tabId }, files: ['video-source.js'] })
+        .then(() =>
+          chrome.scripting.executeScript({
+            target: { tabId },
+            func: () => findVideoSources(), // eslint-disable-line no-undef
+          })
+        ),
+      READ_PAGE_MS,
+      'finding the video timed out'
+    );
+    sources = Array.isArray(result) ? result : [];
+  } catch {
+    return null;
+  }
+  const deadline = Date.now() + DOWNLOAD_MS;
+  for (const source of sources) {
+    const left = deadline - Date.now();
+    if (left <= 0) break;
+    // The extension's own request first: no CORS, and the bytes stay here.
+    try {
+      const res = await fetch(source.url, {
+        credentials: 'include',
+        signal: AbortSignal.timeout(left),
+      });
+      const body = await readVideoBody(res, MAX_VIDEO_BYTES);
+      if (body) {
+        return {
+          ext: /webm/.test(body.mime) ? 'webm' : 'mp4',
+          mime: body.mime,
+          hasAudio: true,
+          downloaded: true,
+          dataUrl: bytesToDataUrl(body.bytes, body.mime),
+        };
+      }
+    } catch {
+      /* refused or too slow: try from the page */
+    }
+    try {
+      const [{ result }] = await chrome.scripting.executeScript({
+        target: { tabId },
+        func: fetchVideoInPage,
+        args: [
+          source.url,
+          MAX_VIDEO_BYTES,
+          Math.max(1000, deadline - Date.now()),
+        ],
+      });
+      if (result && result.dataUrl) {
+        return {
+          ext: /webm/.test(result.mime) ? 'webm' : 'mp4',
+          mime: result.mime,
+          hasAudio: true,
+          downloaded: true,
+          dataUrl: result.dataUrl,
+        };
+      }
+    } catch {
+      /* next source */
+    }
+  }
+  return null;
+}
+
 function waitForTabComplete(tabId) {
   return new Promise(resolve => {
     const listener = (id, info) => {
@@ -174,15 +346,22 @@ function waitForTabComplete(tabId) {
   });
 }
 
-function buildMarkdown(clip, imageKeys, videoKey, hasAudio) {
+function buildMarkdown(clip, imageKeys, videoKey, video) {
   const parts = [`# ${clip.title || clip.siteName || 'Clipped page'}`, ''];
   parts.push(`[Original](${clip.url})`, '');
   // Captured video: the app turns non-image attachments into an attachment
   // block (openable/plays), so we DON'T image-ref it here (that'd be a broken
   // thumbnail). Just leave a note; the blob rides in attachments.
-  if (videoKey) {
-    const audioNote = hasAudio ? ' (with audio)' : ' (video only)';
-    parts.push(`> 📹 Captured video${audioNote} — attached below.`, '');
+  if (videoKey && video) {
+    if (video.downloaded) {
+      parts.push('> 📹 Video downloaded — attached below.', '');
+    } else {
+      const audioNote = video.hasAudio ? ' (with audio)' : ' (video only)';
+      parts.push(
+        `> 📹 Recorded the played part of the video${audioNote} — attached below.`,
+        ''
+      );
+    }
   }
   for (const key of imageKeys) parts.push(`![](${key})`, '');
   // Direct-src (non-MSE) videos we can only link to.
@@ -191,10 +370,47 @@ function buildMarkdown(clip, imageKeys, videoKey, hasAudio) {
   return parts.join('\n');
 }
 
-function sendToAppTab(tabId, payload) {
-  return chrome.scripting
-    .executeScript({ target: { tabId }, func: deliverToApp, args: [payload] })
-    .then(([r]) => !!(r && r.result));
+// One call's arguments stay well under Chrome's message size limit. A
+// multiple of 4, so each piece of base64 decodes on its own.
+const PART_CHARS = 16 * 1024 * 1024;
+
+/** Runs IN the app tab: keep one piece of a large attachment for later. */
+function stashAttachmentPart(key, mime, part, first) {
+  const store = (globalThis.__ngClipParts = globalThis.__ngClipParts || {});
+  if (first || !store[key]) store[key] = { mime, parts: [] };
+  store[key].parts.push(part);
+}
+
+async function sendToAppTab(tabId, payload) {
+  // A video can be far larger than one message, so large attachments go
+  // ahead in pieces and deliverToApp joins them.
+  const attachmentsData = {};
+  const partedKeys = [];
+  for (const [key, dataUrl] of Object.entries(payload.attachmentsData || {})) {
+    if (dataUrl.length <= PART_CHARS) {
+      attachmentsData[key] = dataUrl;
+      continue;
+    }
+    const comma = dataUrl.indexOf(',');
+    const mime =
+      (dataUrl.slice(0, comma).match(/data:([^;]+)/) || [])[1] ||
+      'application/octet-stream';
+    const b64 = dataUrl.slice(comma + 1);
+    for (let i = 0; i < b64.length; i += PART_CHARS) {
+      await chrome.scripting.executeScript({
+        target: { tabId },
+        func: stashAttachmentPart,
+        args: [key, mime, b64.slice(i, i + PART_CHARS), i === 0],
+      });
+    }
+    partedKeys.push(key);
+  }
+  const [r] = await chrome.scripting.executeScript({
+    target: { tabId },
+    func: deliverToApp,
+    args: [{ ...payload, attachmentsData, partedKeys }],
+  });
+  return !!(r && r.result);
 }
 
 /**
@@ -269,10 +485,13 @@ async function readClip(tab) {
     imageKeys.push(key);
   });
 
-  // Captured streamed video (LinkedIn/Facebook), with audio when the element
-  // was recorded via captureStream; webm (recorder) or mp4 (segment fallback).
+  // The page's own video file when it has one (the whole video, with audio);
+  // otherwise the captured playback (LinkedIn/Facebook), with audio when the
+  // element was recorded via captureStream; webm (recorder) or mp4 (segment
+  // fallback).
   let videoKey = null;
-  const video = await assembleCapturedVideo(tab.id);
+  const video =
+    (await downloadPageVideo(tab.id)) || (await assembleCapturedVideo(tab.id));
   if (video && video.dataUrl) {
     videoKey = `video-0.${video.ext || 'webm'}`;
     attachmentsData[videoKey] = video.dataUrl;
@@ -280,12 +499,7 @@ async function readClip(tab) {
 
   return {
     title: clip.title || clip.siteName || 'Clipped page',
-    contentMarkdown: buildMarkdown(
-      clip,
-      imageKeys,
-      videoKey,
-      video && video.hasAudio
-    ),
+    contentMarkdown: buildMarkdown(clip, imageKeys, videoKey, video),
     contentHtml: '',
     attachmentsData,
     videos: clip.videos,
