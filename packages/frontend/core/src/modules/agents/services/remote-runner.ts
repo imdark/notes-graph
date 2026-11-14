@@ -476,7 +476,45 @@ export interface ReleaseState {
   history: ReleaseRun[];
   /** Linked tasks by pull request number. */
   tasks: Record<number, ReleaseTask[]>;
+  /** The Android APK's builds; absent or null from older servers. */
+  android?: AndroidApkState | null;
   fetchedAt: string;
+  error: string | null;
+}
+
+/** One run of build-apk.yml. */
+export interface ApkRun {
+  id: number;
+  url: string;
+  /** The branch or commit it was asked to build; null if untitled. */
+  ref: string | null;
+  forced: boolean;
+  status: string;
+  conclusion: string | null;
+  startedAt: string;
+  durationMs: number | null;
+  /** It ended without building: no app changes since the published APK. */
+  skipped: boolean;
+}
+
+/** The APK the download page serves. */
+export interface ApkPublished {
+  /** The commit it was built from. */
+  sha: string;
+  ref: string | null;
+  builtAt: string | null;
+  runUrl: string | null;
+  source: 'manifest' | 'release';
+}
+
+/** The Android APK on the Deployments screen (state.android). */
+export interface AndroidApkState {
+  workflowFile: string;
+  run: ApkRun | null;
+  building: boolean;
+  published: ApkPublished | null;
+  /** App-affecting files the deploy branch changed since the published APK. */
+  pendingChanges: number | null;
   error: string | null;
 }
 
@@ -754,6 +792,17 @@ export class RemoteAgentRunnerService extends Service {
     input: { imageSha: string }
   ): Promise<{ state: ReleaseState }> {
     return this.json(`${this.base(workspaceId)}/releases/rollback`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    });
+  }
+
+  /** Build the Android APK from `ref` (build-apk.yml), forced or if changed. */
+  async buildApk(
+    workspaceId: string,
+    input: { ref: string; force: boolean }
+  ): Promise<{ run: ApkRun | null; state: ReleaseState }> {
+    return this.json(`${this.base(workspaceId)}/releases/apk`, {
       method: 'POST',
       body: JSON.stringify(input),
     });

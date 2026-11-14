@@ -1,6 +1,7 @@
 import test from 'ava';
 import * as Y from 'yjs';
 
+import { APK_MANIFEST_URL } from '../android';
 import type { Fetch, GhPull, GhRun } from '../github';
 import { ReleaseService } from '../service';
 
@@ -89,7 +90,16 @@ function setup(
     syncedMergedAt?: Date | null;
     runs?: GhRun[];
     closed?: GhPull[];
-    compare?: Record<string, { sha: string; message: string; parents: string[] }[]>;
+    compare?: Record<
+      string,
+      { sha: string; message: string; parents: string[] }[]
+    >;
+    /** build-apk.yml's runs; a function sees the dispatches so far. */
+    apkRuns?: GhRun[] | ((dispatched: number) => GhRun[]);
+    apkJobs?: { name: string; status: string; conclusion: string | null }[];
+    /** What the download manifest URL answers; null is a 404. */
+    manifest?: string | null;
+    compareFiles?: { filename: string; previous_filename?: string }[];
   } = {}
 ) {
   const row = {
@@ -98,8 +108,7 @@ function setup(
     baseBranch: 'stage',
     deployBranch: 'main',
     workflowFile: 'deploy-prod.yml',
-    syncedRunId:
-      options.syncedRunId === undefined ? 10n : options.syncedRunId,
+    syncedRunId: options.syncedRunId === undefined ? 10n : options.syncedRunId,
     syncedMergedAt:
       options.syncedMergedAt === undefined
         ? new Date('2026-11-11T00:00:00Z')
@@ -164,11 +173,40 @@ function setup(
   const config: any = { registry: { githubToken: '' } };
 
   const asked: string[] = [];
-  const fetcher: Fetch = async url => {
+  const dispatches: { path: string; body: unknown }[] = [];
+  const fetcher: Fetch = async (url, init) => {
+    if (url === APK_MANIFEST_URL) {
+      const found = options.manifest !== undefined && options.manifest !== null;
+      return {
+        ok: found,
+        status: found ? 200 : 404,
+        headers: { get: () => null },
+        text: async () => (found ? options.manifest! : '<html>404</html>'),
+      };
+    }
     const path = url.replace(`https://api.github.com/repos/${REPO}`, '');
     asked.push(path);
     let body: unknown = {};
-    if (path.startsWith('/actions/workflows/deploy-prod.yml/runs')) {
+    if (init?.method === 'POST' && path.endsWith('/dispatches')) {
+      dispatches.push({ path, body: JSON.parse(init.body ?? '{}') });
+      return {
+        ok: true,
+        status: 204,
+        headers: { get: () => null },
+        text: async () => '',
+      };
+    }
+    if (path.startsWith('/actions/workflows/build-apk.yml/runs')) {
+      const runs =
+        typeof options.apkRuns === 'function'
+          ? options.apkRuns(dispatches.length)
+          : (options.apkRuns ?? []);
+      body = { workflow_runs: runs };
+    } else if (path.startsWith('/releases?')) {
+      body = [];
+    } else if (/^\/actions\/runs\/\d+\/jobs/.test(path)) {
+      body = { jobs: options.apkJobs ?? [] };
+    } else if (path.startsWith('/actions/workflows/deploy-prod.yml/runs')) {
       body = { workflow_runs: options.runs ?? [] };
     } else if (path.startsWith('/git/ref/heads/')) {
       body = { object: { sha: sha('c') } };
@@ -186,6 +224,7 @@ function setup(
           commit: { message: c.message },
           parents: c.parents.map(p => ({ sha: p })),
         })),
+        files: options.compareFiles ?? [],
       };
     }
     return {
@@ -199,7 +238,8 @@ function setup(
   const service = new ReleaseService(config, models, writer, ac, indexer);
   service.fetcher = fetcher;
   service.deployInfo = async () => null;
-  return { service, row, synced, asked, edits, doc };
+  service.wait = async () => {};
+  return { service, row, synced, asked, edits, doc, dispatches };
 }
 
 test('no token: no GitHub call, and the state says so', async t => {
@@ -235,10 +275,7 @@ test('a new deploy moves its tasks to DEPLOYED, a merge to MERGED, and the water
         },
       ],
     },
-    closed: [
-      pull(6, '2026-11-12T08:00:00Z'),
-      pull(5, '2026-11-10T08:00:00Z'),
-    ],
+    closed: [pull(6, '2026-11-12T08:00:00Z'), pull(5, '2026-11-10T08:00:00Z')],
   });
   await service.syncRepo(row as any);
 
@@ -297,4 +334,160 @@ test('a run still going holds the run watermark back and refreshes the state', a
   t.deepEqual(synced, []);
   // the state was read fresh: branches were asked for
   t.true(asked.some(path => path.startsWith('/git/ref/heads/')));
+});
+
+// ── the Android APK ────────────────────────────────────────────────────────
+
+const apkRun = (
+  id: number,
+  title: string,
+  options: {
+    status?: string;
+    conclusion?: string | null;
+    created?: string;
+  } = {}
+): GhRun => ({
+  id,
+  html_url: `https://github.com/${REPO}/actions/runs/${id}`,
+  head_sha: sha('c'),
+  head_branch: 'main',
+  display_title: title,
+  status: options.status ?? 'completed',
+  conclusion: options.conclusion === undefined ? 'success' : options.conclusion,
+  created_at: options.created ?? '2026-11-13T10:00:00Z',
+  updated_at: '2026-11-13T10:25:00Z',
+});
+
+test('android state: a skipped run, the manifest, and the app changes since it', async t => {
+  const { service } = setup({
+    apkRuns: [apkRun(30, `APK from ${sha('c')}`)],
+    apkJobs: [
+      {
+        name: 'Check for app changes',
+        status: 'completed',
+        conclusion: 'success',
+      },
+      { name: 'Build APK', status: 'completed', conclusion: 'skipped' },
+      { name: 'Publish', status: 'completed', conclusion: 'skipped' },
+    ],
+    manifest: JSON.stringify({
+      sha: sha('a'),
+      ref: 'main',
+      builtAt: '2026-11-12T09:00:00Z',
+      runUrl: `https://github.com/${REPO}/actions/runs/29`,
+    }),
+    compareFiles: [
+      { filename: 'packages/backend/server/src/a.ts' },
+      { filename: 'packages/frontend/core/src/b.ts' },
+      {
+        filename: 'docs/c.md',
+        previous_filename: 'blocksuite/c.md',
+      },
+    ],
+  });
+  const state = await service.state(WS);
+  const android = state.android!;
+  t.is(android.error, null);
+  t.false(android.building);
+  t.is(android.run?.id, 30);
+  t.is(android.run?.ref, sha('c'));
+  t.true(android.run?.skipped);
+  t.deepEqual(android.published, {
+    sha: sha('a'),
+    ref: 'main',
+    builtAt: '2026-11-12T09:00:00Z',
+    runUrl: `https://github.com/${REPO}/actions/runs/29`,
+    source: 'manifest',
+  });
+  // the frontend file and the rename out of blocksuite
+  t.is(android.pendingChanges, 2);
+});
+
+test('android state: a build going, no manifest, no workflow errors', async t => {
+  const { service } = setup({
+    apkRuns: [
+      apkRun(31, 'APK from stage (forced)', {
+        status: 'in_progress',
+        conclusion: null,
+      }),
+      apkRun(30, 'APK from main'),
+    ],
+    manifest: null,
+  });
+  const android = (await service.state(WS)).android!;
+  t.true(android.building);
+  t.is(android.run?.id, 31);
+  t.true(android.run?.forced);
+  t.false(android.run?.skipped);
+  t.is(android.published, null);
+  t.is(android.pendingChanges, null);
+});
+
+test('buildApk dispatches build-apk.yml on the deploy branch with ref and force', async t => {
+  const now = new Date().toISOString();
+  const { service, dispatches } = setup({
+    apkRuns: dispatched =>
+      dispatched
+        ? [
+            apkRun(40, 'APK from personal-9/x (forced)', {
+              status: 'queued',
+              conclusion: null,
+              created: now,
+            }),
+          ]
+        : [],
+  });
+  const result = await service.buildApk(WS, {
+    ref: 'personal-9/x',
+    force: true,
+  });
+  t.deepEqual(dispatches, [
+    {
+      path: '/actions/workflows/build-apk.yml/dispatches',
+      body: { ref: 'main', inputs: { ref: 'personal-9/x', force: 'true' } },
+    },
+  ]);
+  t.is(result.run?.id, 40);
+  t.true(result.run?.forced);
+});
+
+test('buildApk defaults to the deploy branch, unforced', async t => {
+  const now = new Date().toISOString();
+  const { service, dispatches } = setup({
+    apkRuns: dispatched =>
+      dispatched
+        ? [
+            apkRun(42, 'APK from main', {
+              status: 'queued',
+              conclusion: null,
+              created: now,
+            }),
+          ]
+        : [],
+  });
+  const result = await service.buildApk(WS, {});
+  t.is(result.run?.ref, 'main');
+  t.false(result.run?.forced);
+  t.deepEqual(dispatches[0].body, {
+    ref: 'main',
+    inputs: { ref: 'main', force: 'false' },
+  });
+});
+
+test('buildApk refuses a bad ref, a bad force, and a build already going', async t => {
+  const { service, dispatches } = setup({
+    apkRuns: [
+      apkRun(41, 'APK from main', { status: 'in_progress', conclusion: null }),
+    ],
+  });
+  await t.throwsAsync(service.buildApk(WS, { ref: 'main; reboot' }), {
+    message: /ref must be/,
+  });
+  await t.throwsAsync(service.buildApk(WS, { ref: 'main', force: 'yes' }), {
+    message: /force must be/,
+  });
+  await t.throwsAsync(service.buildApk(WS, { ref: 'main' }), {
+    message: /APK build is running/,
+  });
+  t.deepEqual(dispatches, []);
 });

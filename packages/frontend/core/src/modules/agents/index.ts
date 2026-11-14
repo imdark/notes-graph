@@ -32,6 +32,11 @@ export {
 } from './services/cloud-runner';
 export { AgentContextService } from './services/context';
 export {
+  apkConfirmText,
+  apkPendingText,
+  apkRefError,
+  type ApkRunLine,
+  apkRunLine,
   type BranchCheck,
   canFixToMerge,
   checkedCount,
@@ -173,6 +178,9 @@ export {
 export {
   AGENT_SKILLS,
   type AgentBudget,
+  type AndroidApkState,
+  type ApkPublished,
+  type ApkRun,
   attachmentKind,
   attachmentName,
   CLAUDE_CODE_MODEL,

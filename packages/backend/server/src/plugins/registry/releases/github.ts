@@ -130,6 +130,19 @@ export interface GhCompare {
   behind_by: number;
   total_commits: number;
   commits: GhCommit[];
+  /** The files changed (up to 300). */
+  files?: { filename: string; previous_filename?: string }[];
+}
+
+export interface GhRelease {
+  tag_name: string;
+  /** The commit (or branch) the tag was made on. */
+  target_commitish: string;
+  draft: boolean;
+  prerelease: boolean;
+  created_at: string;
+  published_at: string | null;
+  html_url: string;
 }
 
 export interface GhCheckRun {
@@ -187,8 +200,7 @@ export type Fetch = (
 
 const segment = (value: string) => encodeURIComponent(value);
 /** A branch in a ref path keeps its slashes: refs/heads/release/2026. */
-const branchPath = (branch: string) =>
-  branch.split('/').map(segment).join('/');
+const branchPath = (branch: string) => branch.split('/').map(segment).join('/');
 
 /** One repo's GitHub, as a token sees it. */
 export class GitHubClient {
@@ -392,6 +404,16 @@ export class GitHubClient {
       `jobs of run ${runId}`
     );
     return result?.jobs ?? [];
+  }
+
+  /** The repo's releases, newest first. */
+  async releases(perPage = 30): Promise<GhRelease[]> {
+    const result = await this.request<GhRelease[]>(
+      'GET',
+      `/releases?per_page=${perPage}`,
+      'releases'
+    );
+    return result ?? [];
   }
 
   async rerunFailed(runId: number): Promise<void> {

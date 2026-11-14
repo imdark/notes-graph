@@ -25,6 +25,8 @@ import type {
 import { runTargetsBlock } from './block-runs';
 import type { AgentContext } from './context';
 import {
+  type AndroidApkState,
+  type ApkRun,
   CLOUD_DEVICE_KEY,
   COMMAND_MODEL,
   type DeployInfo,
@@ -1116,7 +1118,9 @@ export const sha7 = (sha: string | null | undefined) => (sha ?? '').slice(0, 7);
 
 /** How long to wait before reading the release state again. */
 export const releasePollMs = (state: ReleaseState | null | undefined) =>
-  state?.production.status === 'deploying' ? 15_000 : 60_000;
+  state?.production.status === 'deploying' || state?.android?.building
+    ? 15_000
+    : 60_000;
 
 /** The production card's pill: what prod is doing, and its colour. */
 export function productionPill(state: ReleaseState): {
@@ -1196,6 +1200,63 @@ export const mergeConfirmText = (
 /** What a rollback confirm says it does. */
 export const rollbackConfirmText = (imageSha: string) =>
   `Rolls prod back to the image of ${sha7(imageSha)} without rebuilding.`;
+
+// ── the Android APK ────────────────────────────────────────────────────────
+
+/** The newest APK run, as the Android app line shows it. */
+export type ApkRunLine =
+  | { kind: 'building'; ref: string; run: ApkRun }
+  | { kind: 'failed'; ref: string; run: ApkRun }
+  | { kind: 'skipped'; since: string | null; run: ApkRun }
+  | { kind: 'built'; ref: string; run: ApkRun };
+
+/** What the newest APK run says, or null when there is none. */
+export function apkRunLine(
+  android: AndroidApkState | null | undefined
+): ApkRunLine | null {
+  const run = android?.run;
+  if (!run) return null;
+  const ref = run.ref ?? 'the branch';
+  if (run.status !== 'completed') return { kind: 'building', ref, run };
+  if (run.conclusion !== 'success') return { kind: 'failed', ref, run };
+  if (run.skipped) {
+    return { kind: 'skipped', since: android?.published?.sha ?? null, run };
+  }
+  return { kind: 'built', ref, run };
+}
+
+/** "3 app changes on main since", or null when it isn't known. */
+export function apkPendingText(
+  android: AndroidApkState | null | undefined,
+  deployBranch: string
+): string | null {
+  const count = android?.pendingChanges;
+  if (count === null || count === undefined || !android?.published) {
+    return null;
+  }
+  return count === 0
+    ? `No app changes on ${deployBranch} since`
+    : `${plural(count, 'app-affecting file')} changed on ${deployBranch} since`;
+}
+
+/**
+ * Why a ref typed into "Force from branch…" can't be built (a branch name
+ * or a 7-40 digit commit, as the server takes), or null when it can.
+ */
+export function apkRefError(ref: string): string | null {
+  const value = ref.trim();
+  if (!value) return 'Name a branch or a commit.';
+  if (/^[0-9a-f]{7,40}$/.test(value) || isBranchName(value)) return null;
+  return 'That is not a branch name or a commit sha.';
+}
+
+/** What a Build APK confirm says it does. */
+export function apkConfirmText(ref: string, force: boolean): string {
+  const what = force
+    ? `Builds the Android APK from ${ref}`
+    : `Builds the Android APK from ${ref} if it changed the app since the published APK (else it stops there)`;
+  return `${what}, then replaces the download at notesgraph.com/download with it. It takes about 25 minutes.`;
+}
 
 /**
  * What "Merge all ready" may merge: clean merges, whatever the checks say.
@@ -1596,6 +1657,16 @@ export class DeploymentsService extends Service {
 
   async retry(runId: number) {
     const result = await this.remote.retryRun(this.workspaceId, { runId });
+    this.setRelease(result.state);
+    return result;
+  }
+
+  /** Build the Android APK from `ref`, forced or only if the app changed. */
+  async buildApk(ref: string, force: boolean) {
+    const result = await this.remote.buildApk(this.workspaceId, {
+      ref,
+      force,
+    });
     this.setRelease(result.state);
     return result;
   }
