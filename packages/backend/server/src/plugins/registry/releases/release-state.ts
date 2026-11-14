@@ -1,4 +1,5 @@
 import type { DeployInfo } from '../../../core/config/deploy-info';
+import type { AndroidState } from './android';
 import type {
   GhCheckRun,
   GhCombinedStatus,
@@ -97,6 +98,8 @@ export interface ReleaseState {
   open: Pull[];
   history: Run[];
   tasks: Record<number, LinkedTask[]>;
+  /** The Android APK's builds (build-apk.yml); absent from older servers. */
+  android?: AndroidState | null;
   fetchedAt: string;
   error: string | null;
 }

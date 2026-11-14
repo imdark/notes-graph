@@ -143,6 +143,17 @@ export class ReleaseController {
     return this.releases.rollback(workspaceId, body ?? {});
   }
 
+  /** Build the Android APK from `ref` ({ref?, force?}) and publish it. */
+  @Post('/apk')
+  async buildApk(
+    @CurrentUser() user: CurrentUserType,
+    @Param('workspaceId') workspaceId: string,
+    @Body() body: Record<string, unknown>
+  ) {
+    await this.canAct(user, workspaceId);
+    return this.releases.buildApk(workspaceId, body ?? {});
+  }
+
   @Post('/retry')
   async retry(
     @CurrentUser() user: CurrentUserType,

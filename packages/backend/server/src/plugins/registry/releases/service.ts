@@ -2,7 +2,10 @@ import { Injectable, Logger } from '@nestjs/common';
 import type { RegistryDeployRepo } from '@prisma/client';
 
 import { BadRequest, Config, TooManyRequest } from '../../../base';
-import { type DeployInfo, readDeployInfo } from '../../../core/config/deploy-info';
+import {
+  type DeployInfo,
+  readDeployInfo,
+} from '../../../core/config/deploy-info';
 import { DocWriter } from '../../../core/doc';
 import { PermissionAccess } from '../../../core/permission';
 import { Models } from '../../../models';
@@ -10,6 +13,19 @@ import { IndexerService } from '../../indexer';
 import { SearchTable } from '../../indexer/tables';
 import { SearchQueryOccur, SearchQueryType } from '../../indexer/types';
 import { parseBranchName, parseRepoName } from '../jobs';
+import {
+  type AndroidState,
+  APK_MANIFEST_URL,
+  APK_WORKFLOW_FILE,
+  type ApkPublished,
+  apkRunSkipped,
+  appChanges,
+  emptyAndroidState,
+  labelApkRun,
+  parseApkManifest,
+  publishedFromReleases,
+  toApkRun,
+} from './android';
 import {
   type Fetch,
   GitHubClient,
@@ -59,6 +75,17 @@ const SKEW_MS = 10_000;
 
 const WORKFLOW_FILE_RE = /^[\w.-]+\.ya?ml$/;
 const SHA_RE = /^[0-9a-f]{40}$/;
+const SHA_REF_RE = /^[0-9a-f]{7,40}$/;
+
+/**
+ * What an APK build may be asked for: a commit (7 to 40 hex digits) or a
+ * branch name (parseBranchName's rule). Null when it is neither.
+ */
+export function parseApkRef(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const ref = value.trim();
+  return SHA_REF_RE.test(ref) ? ref : parseBranchName(ref);
+}
 /** What merge-all merges; the frontend's MERGE_ALL_READINESS matches it. */
 const MERGE_ALL_READINESS = new Set(['ready', 'failing', 'unknown']);
 
@@ -131,6 +158,10 @@ export class ReleaseService {
   private readonly ranges = new Map<string, number[]>();
   /** Merged pull requests, by repo#number (they never change). */
   private readonly mergedPulls = new Map<string, GhPull>();
+  /** Whether a finished APK run skipped its build, by run id. */
+  private readonly apkSkips = new Map<number, boolean>();
+  /** App-affecting changes between two commits, by `base...head`. */
+  private readonly appChangeCounts = new Map<string, number>();
 
   /** How GitHub is reached; a test swaps it. */
   fetcher: Fetch = (input, init) => fetch(input, init) as never;
@@ -249,7 +280,8 @@ export class ReleaseService {
     const cached = this.cache.get(workspaceId);
     if (!options.fresh && cached) {
       const ttl =
-        cached.state.production.status === 'deploying'
+        cached.state.production.status === 'deploying' ||
+        cached.state.android?.building
           ? CACHE_DEPLOYING_MS
           : CACHE_MS;
       if (Date.now() - cached.at < ttl) return cached.state;
@@ -277,15 +309,14 @@ export class ReleaseService {
       return this.keep(workspaceId, state);
     }
     try {
-      const closed = await this.read(
-        this.client(token, settings),
-        settings,
-        state
-      );
-      state.tasks = await this.taskMap(workspaceId, settings, [
-        ...state.open,
-        ...closed,
+      const github = this.client(token, settings);
+      const closed = await this.read(github, settings, state);
+      const [tasks, android] = await Promise.all([
+        this.taskMap(workspaceId, settings, [...state.open, ...closed]),
+        this.androidState(github, state.production.mainSha),
       ]);
+      state.tasks = tasks;
+      state.android = android;
     } catch (err) {
       if (!(err instanceof GitHubError)) throw err;
       state.error = err.message;
@@ -419,6 +450,104 @@ export class ReleaseService {
     );
   }
 
+  // ── the Android APK ──────────────────────────────────────────────────────
+
+  /**
+   * The APK's side of the screen: the newest build-apk.yml run (and whether
+   * it skipped for want of app changes), the commit the published APK was
+   * built from, and how many app-affecting files `mainSha` changed since.
+   * Never throws: what can't be read is left empty, with why in `error`.
+   */
+  async androidState(
+    github: GitHubClient,
+    mainSha: string | null
+  ): Promise<AndroidState> {
+    const android = emptyAndroidState();
+    const [runs, published] = await Promise.all([
+      github.runs(APK_WORKFLOW_FILE, 5).catch(err => {
+        android.error =
+          err instanceof GitHubError && err.code === 'not-found'
+            ? `GitHub has no ${APK_WORKFLOW_FILE} yet; it is listed once it is on the default branch.`
+            : (err as Error).message;
+        return [] as GhRun[];
+      }),
+      this.publishedApk(github),
+    ]);
+    android.published = published;
+    android.building = runs.some(isActive);
+    const latest = runs.find(isActive) ?? runs[0];
+    if (latest) {
+      android.run = toApkRun(latest, await this.apkSkipped(github, latest));
+    }
+    if (published && mainSha) {
+      android.pendingChanges = await this.pendingAppChanges(
+        github,
+        published.sha,
+        mainSha
+      );
+    }
+    return android;
+  }
+
+  /** The download manifest, else the newest android-* release; else null. */
+  private async publishedApk(
+    github: GitHubClient
+  ): Promise<ApkPublished | null> {
+    try {
+      const response = await this.fetcher(APK_MANIFEST_URL, {
+        headers: { 'user-agent': 'notesgraph-releases' },
+      });
+      if (response.ok) {
+        const manifest = parseApkManifest(await response.text());
+        if (manifest) return manifest;
+      }
+    } catch {
+      // unreachable: try the releases
+    }
+    return github
+      .releases()
+      .then(publishedFromReleases)
+      .catch(() => null);
+  }
+
+  private async apkSkipped(github: GitHubClient, run: GhRun) {
+    if (run.status !== 'completed' || run.conclusion !== 'success') {
+      return false;
+    }
+    let skipped = this.apkSkips.get(run.id);
+    if (skipped === undefined) {
+      const jobs = await github.jobs(run.id).catch(() => null);
+      if (!jobs) return false;
+      skipped = apkRunSkipped(run, jobs);
+      this.apkSkips.set(run.id, skipped);
+    }
+    return skipped;
+  }
+
+  private async pendingAppChanges(
+    github: GitHubClient,
+    base: string,
+    head: string
+  ): Promise<number | null> {
+    if (base === head) return 0;
+    const key = `${base}...${head}`;
+    const known = this.appChangeCounts.get(key);
+    if (known !== undefined) return known;
+    try {
+      const compare = await github.compare(base, head);
+      const files = (compare.files ?? []).flatMap(file =>
+        file.previous_filename
+          ? [file.filename, file.previous_filename]
+          : [file.filename]
+      );
+      const count = appChanges(files).length;
+      this.appChangeCounts.set(key, count);
+      return count;
+    } catch {
+      return null;
+    }
+  }
+
   // ── linked tasks ─────────────────────────────────────────────────────────
 
   /**
@@ -513,7 +642,10 @@ export class ReleaseService {
     row: RegistryDeployRepo,
     numbers: number[],
     pulls: PullKey[],
-    edit: (binary: Uint8Array, blockIds: string[]) => {
+    edit: (
+      binary: Uint8Array,
+      blockIds: string[]
+    ) => {
       update: Uint8Array | null;
       changed: string[];
     }
@@ -594,9 +726,7 @@ export class ReleaseService {
       ...runs.filter(isActive).map(run => run.id),
       Number.POSITIVE_INFINITY
     );
-    const ended = runs.filter(
-      run => !isActive(run) && run.id < oldestActive
-    );
+    const ended = runs.filter(run => !isActive(run) && run.id < oldestActive);
     if (!ended.length) return;
     const newest = Math.max(...ended.map(run => run.id));
     if (row.syncedRunId === null) {
@@ -835,7 +965,8 @@ export class ReleaseService {
    */
   async release(workspaceId: string, body: Record<string, unknown>) {
     const sha = typeof body.sha === 'string' ? body.sha.trim() : '';
-    if (!SHA_RE.test(sha)) throw new BadRequest('sha must be a full commit sha');
+    if (!SHA_RE.test(sha))
+      throw new BadRequest('sha must be a full commit sha');
     const { settings, github } = await this.ready(workspaceId);
     const run = await this.act(workspaceId, async () => {
       const [stageSha, mainSha, runs] = await Promise.all([
@@ -860,7 +991,11 @@ export class ReleaseService {
         }
         await github.fastForward(settings.deployBranch, sha);
       }
-      return this.dispatchAndFind(github, settings, run => run.head_sha === sha);
+      return this.dispatchAndFind(
+        github,
+        settings,
+        run => run.head_sha === sha
+      );
     });
     return { run, state: await this.state(workspaceId, { fresh: true }) };
   }
@@ -945,27 +1080,86 @@ export class ReleaseService {
   }
 
   /**
-   * Start the workflow on the deploy branch and find the run it made:
-   * GitHub's dispatch returns none, so the newest run created since that
-   * `matches` is it, looked for up to 20 seconds. Null if it hasn't shown.
+   * Build the Android APK from `ref` (a branch or commit; the deploy branch
+   * when empty) with build-apk.yml, which publishes it to the download page.
+   * Unless `force`, the build is skipped when nothing app-affecting changed
+   * since the published APK. The workflow is started on the deploy branch,
+   * the only one its publish job's environment admits; it checks out `ref`.
    */
+  async buildApk(workspaceId: string, body: Record<string, unknown>) {
+    const { settings, github } = await this.ready(workspaceId);
+    const ref =
+      body.ref === undefined || body.ref === null || body.ref === ''
+        ? settings.deployBranch
+        : parseApkRef(body.ref);
+    if (!ref) {
+      throw new BadRequest(
+        'ref must be a branch name or a commit sha (7 to 40 hex digits)'
+      );
+    }
+    if (body.force !== undefined && typeof body.force !== 'boolean') {
+      throw new BadRequest('force must be true or false');
+    }
+    const force = body.force === true;
+    const run = await this.act(workspaceId, async () => {
+      const runs = await github.runs(APK_WORKFLOW_FILE, 5);
+      if (runs.some(isActive)) {
+        throw conflict('An APK build is running; wait for it to end');
+      }
+      return this.dispatchAndWait(
+        github,
+        APK_WORKFLOW_FILE,
+        settings.deployBranch,
+        candidate => labelApkRun(candidate).ref === ref,
+        { ref, force: String(force) }
+      );
+    });
+    return {
+      run: run ? toApkRun(run) : null,
+      state: await this.state(workspaceId, { fresh: true }),
+    };
+  }
+
+  /** {@link dispatchAndWait} for the deploy workflow on the deploy branch. */
   private async dispatchAndFind(
     github: GitHubClient,
     settings: ReleaseSettings,
     matches: (run: GhRun) => boolean,
     inputs?: Record<string, string>
   ): Promise<Run | null> {
+    const run = await this.dispatchAndWait(
+      github,
+      settings.workflowFile,
+      settings.deployBranch,
+      matches,
+      inputs
+    );
+    return run ? toRun(run) : null;
+  }
+
+  /**
+   * Start a workflow on `branch` and find the run it made: GitHub's
+   * dispatch returns none, so the newest run created since that `matches`
+   * is it, looked for up to 20 seconds. Null if it hasn't shown.
+   */
+  private async dispatchAndWait(
+    github: GitHubClient,
+    file: string,
+    branch: string,
+    matches: (run: GhRun) => boolean,
+    inputs?: Record<string, string>
+  ): Promise<GhRun | null> {
     const started = Date.now();
-    await github.dispatch(settings.workflowFile, settings.deployBranch, inputs);
+    await github.dispatch(file, branch, inputs);
     while (Date.now() - started < RUN_WAIT_MS) {
       await this.wait(RUN_POLL_MS);
-      const runs = await github.runs(settings.workflowFile, 5);
+      const runs = await github.runs(file, 5);
       const run = runs.find(
         candidate =>
           Date.parse(candidate.created_at) >= started - SKEW_MS &&
           matches(candidate)
       );
-      if (run) return toRun(run);
+      if (run) return run;
     }
     return null;
   }
@@ -1008,6 +1202,7 @@ function emptyState(
     open: [],
     history: [],
     tasks: {},
+    android: null,
     fetchedAt: new Date().toISOString(),
     error: null,
   };
