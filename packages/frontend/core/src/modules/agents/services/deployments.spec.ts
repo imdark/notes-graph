@@ -6,6 +6,10 @@ import { describe, expect, test } from 'vitest';
 import type { AgentRun } from '../stores/agent-runs';
 import type { Agent } from '../stores/agents';
 import {
+  apkConfirmText,
+  apkPendingText,
+  apkRefError,
+  apkRunLine,
   branchCheckCommand,
   briefPull,
   canFixToMerge,
@@ -68,7 +72,13 @@ import {
   validateReleaseSettings,
   verifyBrief,
 } from './deployments';
-import type { ReleasePull, ReleaseRun, ReleaseState } from './remote-runner';
+import type {
+  AndroidApkState,
+  ApkRun,
+  ReleasePull,
+  ReleaseRun,
+  ReleaseState,
+} from './remote-runner';
 
 const task = (blockId: string, stage: ShipStage, pullRequest?: string) => ({
   docId: 'd1',
@@ -1242,6 +1252,100 @@ describe('release copy', () => {
       )
     ).toBe(15_000);
     expect(releasePollMs(undefined)).toBe(60_000);
+  });
+
+  test('polls faster while an APK builds', () => {
+    expect(
+      releasePollMs(releaseState({ android: android({ building: true }) }))
+    ).toBe(15_000);
+  });
+});
+
+const apkRun = (patch: Partial<ApkRun> = {}): ApkRun => ({
+  id: 90,
+  url: 'https://github.com/imdark/notes-graph/actions/runs/90',
+  ref: 'main',
+  forced: false,
+  status: 'completed',
+  conclusion: 'success',
+  startedAt: '2026-11-13T15:40:00Z',
+  durationMs: 24 * 60_000,
+  skipped: false,
+  ...patch,
+});
+
+const android = (patch: Partial<AndroidApkState> = {}): AndroidApkState => ({
+  workflowFile: 'build-apk.yml',
+  run: null,
+  building: false,
+  published: {
+    sha: 'a'.repeat(40),
+    ref: 'main',
+    builtAt: '2026-11-13T16:04:00Z',
+    runUrl: 'https://github.com/imdark/notes-graph/actions/runs/89',
+    source: 'manifest',
+  },
+  pendingChanges: null,
+  error: null,
+  ...patch,
+});
+
+describe('the Android APK', () => {
+  test('apkRunLine: building, failed, skipped, built, none', () => {
+    expect(apkRunLine(undefined)).toBeNull();
+    expect(apkRunLine(android())).toBeNull();
+    expect(
+      apkRunLine(
+        android({ run: apkRun({ status: 'in_progress', conclusion: null }) })
+      )?.kind
+    ).toBe('building');
+    expect(
+      apkRunLine(android({ run: apkRun({ conclusion: 'failure', ref: 'x' }) }))
+    ).toMatchObject({ kind: 'failed', ref: 'x' });
+    expect(
+      apkRunLine(android({ run: apkRun({ skipped: true }) }))
+    ).toMatchObject({ kind: 'skipped', since: 'a'.repeat(40) });
+    expect(
+      apkRunLine(android({ run: apkRun({ skipped: true }), published: null }))
+    ).toMatchObject({ kind: 'skipped', since: null });
+    expect(apkRunLine(android({ run: apkRun({ ref: null }) }))).toMatchObject({
+      kind: 'built',
+      ref: 'the branch',
+    });
+  });
+
+  test('apkPendingText counts app changes since the published APK', () => {
+    expect(apkPendingText(android(), 'main')).toBeNull();
+    expect(apkPendingText(android({ pendingChanges: 0 }), 'main')).toBe(
+      'No app changes on main since'
+    );
+    expect(apkPendingText(android({ pendingChanges: 1 }), 'main')).toBe(
+      '1 app-affecting file changed on main since'
+    );
+    expect(apkPendingText(android({ pendingChanges: 12 }), 'main')).toBe(
+      '12 app-affecting files changed on main since'
+    );
+    expect(
+      apkPendingText(android({ pendingChanges: 3, published: null }), 'main')
+    ).toBeNull();
+  });
+
+  test('apkRefError takes branches and commits only', () => {
+    expect(apkRefError('stage')).toBeNull();
+    expect(apkRefError(' personal-5/fix ')).toBeNull();
+    expect(apkRefError('abc1234')).toBeNull();
+    expect(apkRefError('')).toMatch(/Name a branch/);
+    expect(apkRefError('main; reboot')).toMatch(/not a branch/);
+    expect(apkRefError('a..b')).toMatch(/not a branch/);
+  });
+
+  test('apkConfirmText says what it replaces and how long it takes', () => {
+    expect(apkConfirmText('stage', true)).toBe(
+      'Builds the Android APK from stage, then replaces the download at notesgraph.com/download with it. It takes about 25 minutes.'
+    );
+    expect(apkConfirmText('main', false)).toMatch(
+      /if it changed the app since the published APK/
+    );
   });
 });
 

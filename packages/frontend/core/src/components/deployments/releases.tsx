@@ -1,6 +1,7 @@
 import { Button, notify, useConfirmModal } from '@notesgraph/component';
 import {
   AgentsService,
+  apkConfirmText,
   defaultReleaseSettings,
   DeploymentsService,
   mergeConfirmText,
@@ -23,6 +24,7 @@ import {
   useState,
 } from 'react';
 
+import { AndroidCard } from './android-card';
 import { NextRelease } from './next-release';
 import { OpenPulls } from './open-pulls';
 import { ProductionCard } from './production-card';
@@ -183,6 +185,28 @@ export const ReleasesView = () => {
         notify.success({ title: `Retrying run ${runId}` });
       }),
     [act, deployments]
+  );
+
+  const buildApk = useCallback(
+    (ref: string, force: boolean) =>
+      confirm({
+        title: force
+          ? `Build the APK from ${ref}?`
+          : `Build the APK from ${ref} if it changed?`,
+        description: apkConfirmText(ref, force),
+        confirmText: 'Build APK',
+        onConfirm: () =>
+          act('apk', "Couldn't start the APK build", async () => {
+            const { run } = await deployments.buildApk(ref, force);
+            notify.success({
+              title: `Building the APK from ${ref}`,
+              message: run
+                ? `Run ${run.id} started.`
+                : 'The build was started; its run shows here once GitHub lists it.',
+            });
+          }),
+      }),
+    [act, confirm, deployments]
   );
 
   const merge = useCallback(
@@ -368,6 +392,7 @@ export const ReleasesView = () => {
             onRetry={id => void retry(id)}
             onOpenFlags={() => workbench.open('/feature-flags')}
           />
+          <AndroidCard state={state} busy={isBusy} onBuild={buildApk} />
           <NextRelease
             state={state}
             busy={isBusy}
