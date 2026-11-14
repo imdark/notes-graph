@@ -147,3 +147,26 @@ jobs:
           code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 https://app.notesgraph.com)
           echo "app.notesgraph.com -> HTTP $code"
           [ "$code" -lt 400 ]
+
+  # A release also rebuilds the Android APK, if the deployed commit changed
+  # the app since the published one (build-apk.yml checks). It is started as
+  # its own run rather than called here, so this run (and the deploy-prod
+  # concurrency group) doesn't wait ~25 minutes on it, and so an APK failure
+  # doesn't read as a failed deploy. A rollback builds nothing.
+  android:
+    name: Start the APK build
+    needs: deploy
+    if: inputs.image_sha == ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    continue-on-error: true
+    permissions:
+      actions: write
+    steps:
+      - name: Start build-apk.yml
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh workflow run build-apk.yml --repo "$GITHUB_REPOSITORY" --ref "$GITHUB_REF_NAME" \
+            -f ref="$GITHUB_SHA" -f force=false
+          echo "Started build-apk.yml for $GITHUB_SHA (force=false)" >> "$GITHUB_STEP_SUMMARY"

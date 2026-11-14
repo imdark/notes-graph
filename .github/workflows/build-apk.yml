@@ -1,0 +1,379 @@
+name: Build APK
+
+# Builds the Android APK (stable channel, app.notesgraph.com) and publishes
+# it to https://notesgraph.com/download/notesgraph-0.26.3-android.apk:
+#   1. Check for app changes: resolves `ref` and, unless `force`, compares it
+#      with the commit the published APK was built from (the sha in
+#      notesgraph.com/download/notesgraph-android.json). With nothing
+#      app-affecting changed (scripts/android/app-changed.mjs) it ends there,
+#      successfully, and the Build APK job reads as skipped.
+#   2. Build APK: scripts/build-android.sh on `ref`, then the channel gate
+#      (the bundled JS names app.notesgraph.com and never canary).
+#   3. Publish: a GitHub release android-<sha7> carrying the APK (the newest
+#      five are kept), then, over SSM as the deploy role, the box downloads
+#      it into /opt/notesgraph/landing/download (keeping a .prev, swapping
+#      atomically) and writes the manifest; then the served size is checked.
+#
+# Start it on main: the publish job's `production` environment admits main
+# only. It builds `ref`, which can be any branch or commit.
+#   gh workflow run build-apk.yml --ref main -f ref=stage -f force=true
+# Deploy prod starts it after every deploy (not a rollback) with the deployed
+# commit and force=false. The Deployments screen starts it too, and reads its
+# runs by their title, "APK from <ref>[ (forced)]".
+#
+# Needs the repo secret GOOGLE_SERVICES_JSON_B64 (the base64 of
+# packages/frontend/apps/android/App/app/google-services.json).
+
+run-name: ${{ format('APK from {0}{1}', inputs.ref, inputs.force && ' (forced)' || '') }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Branch or commit to build the APK from'
+        required: true
+        default: 'main'
+        type: string
+      force:
+        description: 'Build even if nothing app-affecting changed since the published APK'
+        required: false
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-apk
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: us-east-2
+  INSTANCE_ID: i-025bea042bd6b9b1d
+  APK_NAME: notesgraph-0.26.3-android.apk
+  APK_URL: https://notesgraph.com/download/notesgraph-0.26.3-android.apk
+  MANIFEST_URL: https://notesgraph.com/download/notesgraph-android.json
+  APK_PATH: packages/frontend/apps/android/App/app/build/outputs/apk/stable/debug/app-stable-debug.apk
+
+jobs:
+  check:
+    # The screen reads a skip from the Build APK job's conclusion; keep the
+    # job names in step with plugins/registry/releases/android.ts.
+    name: Check for app changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      sha: ${{ steps.resolve.outputs.sha }}
+      build: ${{ steps.changes.outputs.build }}
+    steps:
+      - name: Started on main
+        if: github.ref != 'refs/heads/main'
+        run: |
+          echo "::error::Start build-apk.yml on main (gh workflow run build-apk.yml --ref main -f ref=$GITHUB_REF_NAME): its publish job's production environment admits main only. It builds the ref input, whatever branch that is."
+          exit 1
+
+      # This workflow's own commit, for the change matcher; the build checks
+      # out `ref` itself.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+
+      - name: Resolve the ref
+        id: resolve
+        env:
+          REF: ${{ inputs.ref }}
+        run: |
+          set -euo pipefail
+          if ! [[ "$REF" =~ ^[A-Za-z0-9_][A-Za-z0-9_./-]*$ ]] || [[ "$REF" == *..* ]]; then
+            echo "::error::ref must be a branch name or a commit sha, got '$REF'"
+            exit 1
+          fi
+          sha=$(git rev-parse --verify --quiet "refs/remotes/origin/$REF^{commit}" \
+            || git rev-parse --verify --quiet "$REF^{commit}" || true)
+          if [ -z "$sha" ]; then
+            # A commit no branch holds any more.
+            git fetch --quiet origin "$REF" 2>/dev/null || true
+            sha=$(git rev-parse --verify --quiet "$REF^{commit}" || true)
+          fi
+          if [ -z "$sha" ]; then
+            echo "::error::$GITHUB_REPOSITORY has no branch or commit '$REF'"
+            exit 1
+          fi
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "$REF is $sha"
+
+      - name: Look for app changes
+        id: changes
+        env:
+          FORCE: ${{ inputs.force }}
+          SHA: ${{ steps.resolve.outputs.sha }}
+        run: |
+          set -uo pipefail
+          build() {
+            echo "build=true" >> "$GITHUB_OUTPUT"
+            echo "$1" | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          }
+          skip() {
+            echo "build=false" >> "$GITHUB_OUTPUT"
+            echo "$1" | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          }
+          [ "$FORCE" = true ] && build "Forced: building ${SHA:0:7}."
+
+          prev=$(curl -fsS --max-time 30 "$MANIFEST_URL?v=$GITHUB_RUN_ID" | jq -r '.sha // empty' 2>/dev/null || true)
+          [ -n "$prev" ] || build "No published APK manifest at $MANIFEST_URL: building ${SHA:0:7}."
+          git cat-file -e "$prev^{commit}" 2>/dev/null \
+            || build "The published APK's commit ${prev:0:7} isn't in the repo: building ${SHA:0:7}."
+          [ "$prev" = "$SHA" ] && skip "skipped: the published APK is already built from ${SHA:0:7}."
+
+          if ! files=$(git diff --name-only "$prev" "$SHA"); then
+            echo "::error::git diff $prev $SHA failed"
+            exit 1
+          fi
+          changed=$(printf '%s\n' "$files" | node scripts/android/app-changed.mjs)
+          case $? in
+            0)
+              echo "App changes since ${prev:0:7}:"
+              echo "$changed"
+              build "Building ${SHA:0:7}: $(echo "$changed" | wc -l) app-affecting file(s) changed since ${prev:0:7}."
+              ;;
+            1) skip "skipped: no app changes since ${prev:0:7}." ;;
+            *) echo "::error::The change check failed"; exit 1 ;;
+          esac
+
+  build:
+    name: Build APK
+    needs: check
+    if: needs.check.outputs.build == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    outputs:
+      size: ${{ steps.verify.outputs.size }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.check.outputs.sha }}
+
+      # First, so a missing secret fails in seconds, not after the toolchains.
+      - name: Android config files
+        env:
+          GOOGLE_SERVICES_JSON_B64: ${{ secrets.GOOGLE_SERVICES_JSON_B64 }}
+        run: |
+          set -euo pipefail
+          if [ -z "$GOOGLE_SERVICES_JSON_B64" ]; then
+            echo "::error::The repo secret GOOGLE_SERVICES_JSON_B64 is missing. Set it once from a checkout that has the file: base64 -i packages/frontend/apps/android/App/app/google-services.json | gh secret set GOOGLE_SERVICES_JSON_B64 --repo $GITHUB_REPOSITORY"
+            exit 1
+          fi
+          A=packages/frontend/apps/android/App
+          printf '%s' "$GOOGLE_SERVICES_JSON_B64" | base64 -d > "$A/app/google-services.json"
+          if ! jq -e '.project_info.project_id' "$A/app/google-services.json" > /dev/null; then
+            echo "::error::GOOGLE_SERVICES_JSON_B64 doesn't decode to a google-services.json"
+            exit 1
+          fi
+          printf 'sdk.dir=%s\n' "$ANDROID_HOME" > "$A/local.properties"
+
+      # The runner ships ~14 GB free; Rust, Gradle and node_modules take more.
+      # The Android SDK (/usr/local/lib/android) stays: the build uses it.
+      - name: Free disk
+        run: sudo rm -rf /usr/share/dotnet /opt/ghc /opt/hostedtoolcache/CodeQL /usr/local/share/boost
+
+      - name: Setup Node.js
+        uses: ./.github/actions/setup-node
+        with:
+          electron-install: false
+          playwright-install: false
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+          cache: 'gradle'
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Rust toolchain version
+        run: echo "RUST_TOOLCHAIN=$(grep channel rust-toolchain.toml | head -1 | awk -F '"' '{print $2}')" >> "$GITHUB_ENV"
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          targets: aarch64-linux-android
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: android-apk
+
+      # The same build the deploy-android-apk skill runs by hand; the step's
+      # env exports BUILD_TYPE (an inline prefix doesn't reach the bundler).
+      - name: Build
+        env:
+          BUILD_TYPE: stable
+          PUBLIC_PATH: /
+        run: bash scripts/build-android.sh
+
+      # The gate: a canary build points the app at canary.notesgraph.com.
+      - name: Verify the channel
+        id: verify
+        run: |
+          set -euo pipefail
+          urls=$(unzip -p "$APK_PATH" 'assets/public/js/*.js' | grep -o 'baseUrl:"https://[a-z.]*notesgraph.com"' | sort -u || true)
+          canary=$(unzip -p "$APK_PATH" 'assets/public/js/*.js' | grep -c 'baseUrl:"https://canary.notesgraph.com"' || true)
+          echo "server baseUrls: ${urls:-none}"
+          echo "canary baseUrls: $canary"
+          if [ "$urls" != 'baseUrl:"https://app.notesgraph.com"' ]; then
+            echo "::error::The APK's server isn't app.notesgraph.com alone (got: ${urls:-none})"
+            exit 1
+          fi
+          if [ "$canary" != 0 ]; then
+            echo "::error::The APK names canary.notesgraph.com $canary time(s)"
+            exit 1
+          fi
+          size=$(stat -c %s "$APK_PATH")
+          if [ "$size" -le 52428800 ]; then
+            echo "::error::The APK is only $size bytes"
+            exit 1
+          fi
+          echo "size=$size" >> "$GITHUB_OUTPUT"
+          echo "APK: $size bytes, app.notesgraph.com"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: apk
+          path: ${{ env.APK_PATH }}
+          retention-days: 3
+          if-no-files-found: error
+
+  publish:
+    name: Publish
+    needs: [check, build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment:
+      name: production
+      url: https://notesgraph.com/download/notesgraph-0.26.3-android.apk
+    permissions:
+      contents: write # the GitHub release
+      id-token: write # the AWS OIDC session
+    env:
+      SHA: ${{ needs.check.outputs.sha }}
+      REF: ${{ inputs.ref }}
+      SIZE: ${{ needs.build.outputs.size }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: apk
+          path: out
+
+      - name: GitHub release
+        id: release
+        run: |
+          set -euo pipefail
+          tag="android-${SHA:0:7}"
+          asset="notesgraph-android-${SHA:0:7}.apk"
+          mv out/app-stable-debug.apk "out/$asset"
+          notes="Android APK (stable channel) built from $SHA ($REF) by $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID. The download page serves it at $APK_URL."
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            gh release upload "$tag" "out/$asset" --clobber --repo "$GITHUB_REPOSITORY"
+            gh release edit "$tag" --notes "$notes" --repo "$GITHUB_REPOSITORY"
+          else
+            gh release create "$tag" "out/$asset" --repo "$GITHUB_REPOSITORY" \
+              --target "$SHA" --title "Android APK ${SHA:0:7}" --notes "$notes" \
+              --prerelease --latest=false
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "url=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/$tag/$asset" >> "$GITHUB_OUTPUT"
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::726029337107:role/notesgraph-github-deploy
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Put it on the download page
+        env:
+          ASSET_URL: ${{ steps.release.outputs.url }}
+        run: |
+          set -euo pipefail
+          manifest=$(jq -cn --arg sha "$SHA" --arg ref "$REF" \
+            --arg builtAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --arg runUrl "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
+            --arg release "$ASSET_URL" --argjson size "$SIZE" \
+            '{sha: $sha, ref: $ref, builtAt: $builtAt, runUrl: $runUrl, release: $release, size: $size}')
+          manifest_b64=$(printf '%s' "$manifest" | base64 -w0)
+          # As ubuntu, who owns the download directory. The APK lands beside
+          # the live one, is checked, and replaces it in one rename; the old
+          # one stays as .prev (a hard link, so no copy of 170 MB).
+          script=$(cat <<EOF
+          set -euo pipefail
+          D=/opt/notesgraph/landing/download
+          F=$APK_NAME
+          curl -fsSL --retry 3 --max-time 900 -o "\$D/\$F.new" "$ASSET_URL"
+          size=\$(stat -c %s "\$D/\$F.new")
+          if [ "\$size" -le 52428800 ] || [ "\$size" -ne $SIZE ]; then
+            echo "downloaded \$size bytes, expected $SIZE" >&2
+            rm -f "\$D/\$F.new"
+            exit 1
+          fi
+          chmod 644 "\$D/\$F.new"
+          if [ -f "\$D/\$F" ]; then ln -f "\$D/\$F" "\$D/\$F.prev"; fi
+          mv -f "\$D/\$F.new" "\$D/\$F"
+          echo "$manifest_b64" | base64 -d > "\$D/notesgraph-android.json.new"
+          chmod 644 "\$D/notesgraph-android.json.new"
+          mv -f "\$D/notesgraph-android.json.new" "\$D/notesgraph-android.json"
+          echo "published \$F: \$size bytes from ${SHA:0:7}"
+          EOF
+          )
+          params=$(jq -n --arg s "$script" \
+            '{commands: ["sudo -u ubuntu -H bash -c " + ($s | @sh)], executionTimeout: ["1200"]}')
+          id=$(aws ssm send-command --instance-ids "$INSTANCE_ID" \
+            --document-name AWS-RunShellScript --comment "apk ${SHA:0:7}" \
+            --parameters "$params" --query Command.CommandId --output text)
+          echo "SSM command $id"
+          for _ in $(seq 1 120); do
+            status=$(aws ssm get-command-invocation --command-id "$id" \
+              --instance-id "$INSTANCE_ID" --query Status --output text 2>/dev/null || echo Pending)
+            case "$status" in
+              Pending|InProgress|Delayed) sleep 10 ;;
+              *) break ;;
+            esac
+          done
+          aws ssm get-command-invocation --command-id "$id" --instance-id "$INSTANCE_ID" \
+            --query '[StandardOutputContent, StandardErrorContent]' --output text
+          echo "status: $status"
+          [ "$status" = Success ]
+
+      - name: Verify
+        run: |
+          set -euo pipefail
+          length=$(curl -sSI --max-time 30 "$APK_URL?v=$GITHUB_RUN_ID" | tr -d '\r' \
+            | awk 'tolower($1) == "content-length:" { print $2 }' | tail -1)
+          served=$(curl -fsS --max-time 30 "$MANIFEST_URL?v=$GITHUB_RUN_ID" | jq -r '.sha')
+          echo "$APK_URL: ${length:-no} bytes (built $SIZE); manifest sha $served"
+          if [ "$length" != "$SIZE" ]; then
+            echo "::error::The download serves ${length:-no} bytes, not the $SIZE built"
+            exit 1
+          fi
+          if [ "$served" != "$SHA" ]; then
+            echo "::error::The manifest says $served, not $SHA"
+            exit 1
+          fi
+          echo "Published the APK built from ${SHA:0:7} ($REF): $APK_URL" >> "$GITHUB_STEP_SUMMARY"
+
+      # The newest five APK releases stay; the one just published always does.
+      - name: Prune old APK releases
+        continue-on-error: true
+        env:
+          TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          set -euo pipefail
+          gh release list --repo "$GITHUB_REPOSITORY" --limit 200 --json tagName,createdAt \
+            --jq "[.[] | select((.tagName | startswith(\"android-\")) and .tagName != \"$TAG\")] | sort_by(.createdAt) | reverse | .[4:] | .[].tagName" \
+            | while read -r old; do
+                echo "deleting $old"
+                gh release delete "$old" --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag
+              done
