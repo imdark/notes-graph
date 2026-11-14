@@ -10,7 +10,7 @@ import {
 } from '@notesgraph/core/modules/editor-setting';
 import { WorkbenchService } from '@notesgraph/core/modules/workbench';
 import { getNotesGraphWorkspaceSchema } from '@notesgraph/core/modules/workspace';
-import { LiveData, useLiveData, useServices } from '@notesgraph/infra';
+import { useServices } from '@notesgraph/infra';
 import { useCallback, useMemo } from 'react';
 
 export const usePageHelper = (docCollection: Workspace) => {
@@ -28,25 +28,22 @@ export const usePageHelper = (docCollection: Workspace) => {
   const workbench = workbenchService.workbench;
   const docRecordList = docsService.list;
   const appSidebar = appSidebarService.sidebar;
-  const settings = useLiveData(editorSettingService.editorSetting.settings$);
-  const allDocTitles = useLiveData(
-    useMemo(() => LiveData.from(docsService.allDocTitle$(), []), [docsService])
-  );
-
+  // Settings and titles are read when a doc is created, not subscribed to.
+  // Every notes-tree row calls this hook, and a subscription to every doc's
+  // title per row made mounting the mobile Home tree rows x docs work.
   const createBlankDoc = useCallback(() => {
+    const settings = editorSettingService.editorSetting.settings$.value;
     const title = resolveNewDocTitle({
       autoTitleEnabled: settings.autoTitleNewDocWithCurrentDate,
-      existingTitles: allDocTitles.map(doc => doc.title).filter(Boolean),
+      existingTitles: docsService
+        .allDocTitles()
+        .map(doc => doc.title)
+        .filter(Boolean),
       format: settings.newDocDateTitleFormat,
     });
 
     return docsService.createDoc(title ? { title } : undefined);
-  }, [
-    allDocTitles,
-    docsService,
-    settings.autoTitleNewDocWithCurrentDate,
-    settings.newDocDateTitleFormat,
-  ]);
+  }, [docsService, editorSettingService]);
 
   const createPageAndOpen = useCallback(
     (

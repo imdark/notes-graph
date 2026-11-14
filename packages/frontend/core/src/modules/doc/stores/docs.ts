@@ -142,6 +142,23 @@ export class DocsStore extends Store {
     );
   }
 
+  /** A one-off read of watchAllDocTitle's value, with no observers. */
+  getAllDocTitles() {
+    const pages = this.workspaceService.workspace.rootYDoc
+      .getMap('meta')
+      .get('pages');
+    if (!(pages instanceof YArray)) {
+      return [];
+    }
+    return pages.toArray().map(v => {
+      const page = v as YMap<unknown>;
+      return {
+        id: page.get('id') as string,
+        title: (page.get('title') ?? '') as string,
+      };
+    });
+  }
+
   watchAllDocTitle() {
     return yjsGetPath(
       this.workspaceService.workspace.rootYDoc.getMap('meta'),

@@ -195,13 +195,35 @@ export const useNavigationPanelDocNodeOperations = (
   );
 };
 
-export const useNavigationPanelDocNodeOperationsMenu = (
-  docId: string,
-  options: {
-    openInfoModal: () => void;
-    openNodeCollapsed: () => void;
-  }
-): NodeOperation[] => {
+type DocNodeMenuOptions = {
+  openInfoModal: () => void;
+  openNodeCollapsed: () => void;
+};
+
+type DocNodeMenuItemKind =
+  | 'rename'
+  | 'info'
+  | 'add-linked-page'
+  | 'duplicate'
+  | 'open-in-new-tab'
+  | 'favorite'
+  | 'trash';
+
+/**
+ * One entry of a doc row's menu. The operations hook runs here, so it costs
+ * nothing until the menu opens: MobileMenu only mounts its items inside the
+ * open sheet. Running it in every row (twice, with a subscription to every
+ * doc's title) was most of the cost of mounting the Home tree.
+ */
+const DocNodeMenuItem = ({
+  docId,
+  options,
+  kind,
+}: {
+  docId: string;
+  options: DocNodeMenuOptions;
+  kind: DocNodeMenuItemKind;
+}) => {
   const t = useI18n();
   const {
     favorite,
@@ -217,123 +239,109 @@ export const useNavigationPanelDocNodeOperationsMenu = (
   const docRecord = useLiveData(docService.list.doc$(docId));
   const title = useLiveData(docRecord?.title$);
 
-  return useMemo(
-    () => [
-      {
-        index: 10,
-        view: (
-          <Guard docId={docId} permission="Doc_Update">
-            {canEdit => (
-              <DocRenameSubMenu
-                onConfirm={handleRename}
-                initialName={title}
-                disabled={!canEdit}
-              />
-            )}
-          </Guard>
-        ),
-      },
-      {
-        index: 11,
-        view: <MenuSeparator />,
-      },
-      {
-        index: 50,
-        view: (
-          <MenuSub
-            triggerOptions={{
-              prefixIcon: <InformationIcon />,
-              onClick: preventDefault,
-            }}
-            title={title ?? t['unnamed']()}
-            items={
-              <DocFrameScope docId={docId}>
-                <DocInfoSheet docId={docId} />
-              </DocFrameScope>
-            }
-          >
-            <span>{t['com.notesgraph.page-properties.page-info.view']()}</span>
-          </MenuSub>
-        ),
-      },
-      {
-        index: 97,
-        view: (
-          <Guard docId={docId} permission="Doc_Update">
-            {canEdit => (
-              <MenuItem
-                prefixIcon={<LinkedPageIcon />}
-                onClick={handleAddLinkedPage}
-                disabled={!canEdit}
-              >
-                {t['com.notesgraph.page-operation.add-linked-page']()}
-              </MenuItem>
-            )}
-          </Guard>
-        ),
-      },
-      {
-        index: 98,
-        view: (
-          <MenuItem prefixIcon={<DuplicateIcon />} onClick={handleDuplicate}>
-            {t['com.notesgraph.header.option.duplicate']()}
-          </MenuItem>
-        ),
-      },
-      {
-        index: 99,
-        view: (
-          <MenuItem prefixIcon={<OpenInNewIcon />} onClick={handleOpenInNewTab}>
-            {t['com.notesgraph.workbench.tab.page-menu-open']()}
-          </MenuItem>
-        ),
-      },
-      {
-        index: 199,
-        view: (
-          <MenuItem
-            prefixIcon={<IsFavoriteIcon favorite={favorite} />}
-            onClick={handleToggleFavoriteDoc}
-          >
-            {favorite
-              ? t['com.notesgraph.favoritePageOperation.remove']()
-              : t['com.notesgraph.favoritePageOperation.add']()}
-          </MenuItem>
-        ),
-      },
-      {
-        index: 9999,
-        view: <MenuSeparator key="menu-separator" />,
-      },
-      {
-        index: 10000,
-        view: (
-          <Guard docId={docId} permission="Doc_Trash">
-            {canMoveToTrash => (
-              <MenuItem
-                type={'danger'}
-                prefixIcon={<DeleteIcon />}
-                onClick={handleMoveToTrash}
-                disabled={!canMoveToTrash}
-              >
-                {t['com.notesgraph.moveToTrash.title']()}
-              </MenuItem>
-            )}
-          </Guard>
-        ),
-      },
-    ],
-    [
-      docId,
-      favorite,
-      handleAddLinkedPage,
-      handleDuplicate,
-      handleMoveToTrash,
-      handleOpenInNewTab,
-      handleRename,
-      handleToggleFavoriteDoc,
-      t,
-      title,
-    ]
-  );
+  switch (kind) {
+    case 'rename':
+      return (
+        <Guard docId={docId} permission="Doc_Update">
+          {canEdit => (
+            <DocRenameSubMenu
+              onConfirm={handleRename}
+              initialName={title}
+              disabled={!canEdit}
+            />
+          )}
+        </Guard>
+      );
+    case 'info':
+      return (
+        <MenuSub
+          triggerOptions={{
+            prefixIcon: <InformationIcon />,
+            onClick: preventDefault,
+          }}
+          title={title ?? t['unnamed']()}
+          items={
+            <DocFrameScope docId={docId}>
+              <DocInfoSheet docId={docId} />
+            </DocFrameScope>
+          }
+        >
+          <span>{t['com.notesgraph.page-properties.page-info.view']()}</span>
+        </MenuSub>
+      );
+    case 'add-linked-page':
+      return (
+        <Guard docId={docId} permission="Doc_Update">
+          {canEdit => (
+            <MenuItem
+              prefixIcon={<LinkedPageIcon />}
+              onClick={handleAddLinkedPage}
+              disabled={!canEdit}
+            >
+              {t['com.notesgraph.page-operation.add-linked-page']()}
+            </MenuItem>
+          )}
+        </Guard>
+      );
+    case 'duplicate':
+      return (
+        <MenuItem prefixIcon={<DuplicateIcon />} onClick={handleDuplicate}>
+          {t['com.notesgraph.header.option.duplicate']()}
+        </MenuItem>
+      );
+    case 'open-in-new-tab':
+      return (
+        <MenuItem prefixIcon={<OpenInNewIcon />} onClick={handleOpenInNewTab}>
+          {t['com.notesgraph.workbench.tab.page-menu-open']()}
+        </MenuItem>
+      );
+    case 'favorite':
+      return (
+        <MenuItem
+          prefixIcon={<IsFavoriteIcon favorite={favorite} />}
+          onClick={handleToggleFavoriteDoc}
+        >
+          {favorite
+            ? t['com.notesgraph.favoritePageOperation.remove']()
+            : t['com.notesgraph.favoritePageOperation.add']()}
+        </MenuItem>
+      );
+    case 'trash':
+      return (
+        <Guard docId={docId} permission="Doc_Trash">
+          {canMoveToTrash => (
+            <MenuItem
+              type={'danger'}
+              prefixIcon={<DeleteIcon />}
+              onClick={handleMoveToTrash}
+              disabled={!canMoveToTrash}
+            >
+              {t['com.notesgraph.moveToTrash.title']()}
+            </MenuItem>
+          )}
+        </Guard>
+      );
+  }
+};
+
+export const useNavigationPanelDocNodeOperationsMenu = (
+  docId: string,
+  options: DocNodeMenuOptions
+): NodeOperation[] => {
+  return useMemo(() => {
+    const item = (kind: DocNodeMenuItemKind) => (
+      <DocNodeMenuItem docId={docId} options={options} kind={kind} />
+    );
+    return [
+      { index: 10, view: item('rename') },
+      { index: 11, view: <MenuSeparator /> },
+      { index: 50, view: item('info') },
+      { index: 97, view: item('add-linked-page') },
+      { index: 98, view: item('duplicate') },
+      { index: 99, view: item('open-in-new-tab') },
+      { index: 199, view: item('favorite') },
+      { index: 9999, view: <MenuSeparator key="menu-separator" /> },
+      { index: 10000, view: item('trash') },
+    ];
+  }, [docId, options]);
 };
