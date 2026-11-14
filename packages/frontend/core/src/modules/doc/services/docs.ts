@@ -98,6 +98,10 @@ export class DocsService extends Service {
     return this.store.watchAllDocTitle();
   }
 
+  allDocTitles() {
+    return this.store.getAllDocTitles();
+  }
+
   constructor(
     private readonly store: DocsStore,
     private readonly docPropertiesStore: DocPropertiesStore,

@@ -58,7 +58,6 @@ const NavigationPanelDocNodeImpl = ({
   /** Accepted for parity with the desktop row; mobile always nests children. */
   alwaysShowChildren?: boolean;
 }) => {
-  const t = useI18n();
   const {
     docsSearchService,
     docsService,
@@ -167,10 +166,6 @@ const NavigationPanelDocNodeImpl = ({
     [docId, setCollapsed, workspaceDialogService]
   );
   const operations = useNavigationPanelDocNodeOperationsMenu(docId, option);
-  const { handleAddLinkedPage } = useNavigationPanelDocNodeOperations(
-    docId,
-    option
-  );
 
   const finalOperations = useMemo(() => {
     if (additionalOperations) {
@@ -226,16 +221,33 @@ const NavigationPanelDocNodeImpl = ({
       <Guard docId={docId} permission="Doc_Update">
         {canEdit =>
           canEdit ? (
-            <AddItemPlaceholder
-              label={t[
-                'com.notesgraph.rootAppSidebar.explorer.doc-add-tooltip'
-              ]()}
-              onClick={handleAddLinkedPage}
-            />
+            <AddLinkedDocPlaceholder docId={docId} options={option} />
           ) : null
         }
       </Guard>
     </NavigationPanelTreeNode>
+  );
+};
+
+// Its own component so the operations hook only runs for expanded rows (the
+// tree node renders children only when expanded).
+const AddLinkedDocPlaceholder = ({
+  docId,
+  options,
+}: {
+  docId: string;
+  options: { openNodeCollapsed: () => void };
+}) => {
+  const t = useI18n();
+  const { handleAddLinkedPage } = useNavigationPanelDocNodeOperations(
+    docId,
+    options
+  );
+  return (
+    <AddItemPlaceholder
+      label={t['com.notesgraph.rootAppSidebar.explorer.doc-add-tooltip']()}
+      onClick={handleAddLinkedPage}
+    />
   );
 };
 

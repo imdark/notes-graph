@@ -200,15 +200,20 @@ export const NavigationPanelTreeNode = ({
           )}
         </div>
       </SwipeMenu>
-      <Collapsible.Content>
-        {/* For lastInGroup check, the placeholder must be placed above all children in the dom */}
-        <div className={styles.collapseContentPlaceholder}>
-          {childCount === 0 && !collapsed && childrenPlaceholder}
-        </div>
-        <NavigationPanelTreeContext.Provider value={contextValue}>
-          {collapsed ? null : children}
-        </NavigationPanelTreeContext.Provider>
-      </Collapsible.Content>
+      {/* Not mounted while collapsed: Collapsible.Content always renders a
+          hidden div and measures it in a layout effect after writing inline
+          styles, so every collapsed row forced its own layout on mount. */}
+      {collapsed ? null : (
+        <Collapsible.Content>
+          {/* For lastInGroup check, the placeholder must be placed above all children in the dom */}
+          <div className={styles.collapseContentPlaceholder}>
+            {childCount === 0 && childrenPlaceholder}
+          </div>
+          <NavigationPanelTreeContext.Provider value={contextValue}>
+            {children}
+          </NavigationPanelTreeContext.Provider>
+        </Collapsible.Content>
+      )}
     </Collapsible.Root>
   );
 };
