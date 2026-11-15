@@ -69,11 +69,10 @@ function findVideoSources() {
       // LinkedIn puts the sources on the video or a wrapper around it.
       let holder = v;
       for (let i = 0; holder && i < 4; i++) {
-        if (holder.getAttribute && holder.getAttribute('data-sources')) break;
+        if (holder.dataset && holder.dataset.sources) break;
         holder = holder.parentElement;
       }
-      const raw =
-        holder && holder.getAttribute && holder.getAttribute('data-sources');
+      const raw = holder && holder.dataset && holder.dataset.sources;
       if (raw) {
         try {
           const list = JSON.parse(raw);
@@ -94,7 +93,7 @@ function findVideoSources() {
       });
       srcs.forEach(function (s) {
         // blob: is a stream (MSE), not a file; .m3u8/.mpd are manifests.
-        if (!s || /^blob:/.test(s) || /\.(m3u8|mpd)(\?|$)/i.test(s)) return;
+        if (!s || s.startsWith('blob:') || /\.(m3u8|mpd)(\?|$)/i.test(s)) return;
         push(s, heightFromUrl(s), 'page', 10 + entry.order);
       });
     });
@@ -145,8 +144,8 @@ function findVideoSources() {
     }
     const distance = function (pos) {
       let best = Infinity;
-      for (let i = 0; i < idPositions.length; i++) {
-        const d = Math.abs(idPositions[i] - pos);
+      for (const at of idPositions) {
+        const d = Math.abs(at - pos);
         if (d < best) best = d;
       }
       return best;
