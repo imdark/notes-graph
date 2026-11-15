@@ -5,6 +5,7 @@ export const EXCLUDING_COPY_ACTIONS = [
   'createSlides',
   'createImage',
   'findActions',
+  'generateTodoList',
   'filterImage',
   'processImage',
 ];

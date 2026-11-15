@@ -373,6 +373,13 @@ const GenerateFromTextAIGroup: AIItemGroupConfig = {
       handler: actionToHandler('findActions', AIStarIconWithAnimation),
       beta: true,
     },
+    {
+      name: 'Generate to-do list',
+      testId: 'action-generate-todo-list',
+      icon: DoneIcon(),
+      showWhen: textBlockShowWhen,
+      handler: actionToHandler('generateTodoList', AIStarIconWithAnimation),
+    },
   ],
 };
 

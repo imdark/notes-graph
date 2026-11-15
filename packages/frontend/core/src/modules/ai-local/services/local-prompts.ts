@@ -47,6 +47,8 @@ const LOCAL_PROMPT_INSTRUCTIONS: Record<string, string> = {
     'Fix the spelling of the following text. Output only the corrected text.',
   'Find action items from it':
     'Extract a checklist of action items from the following content.',
+  'Generate to-do list':
+    'Break the following task or idea into a concrete, ordered checklist of to-do items. Output only the checklist, one "* [ ] item" per line.',
   'Check code error':
     'Find and explain any errors in the following code, and suggest fixes.',
   'Create headings': 'Add clear section headings to the following content.',

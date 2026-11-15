@@ -45,6 +45,7 @@ const icons: Record<string, TemplateResult<1>> = {
   'Continue writing': PenIcon(),
   'Make it real': MakeItRealIcon(),
   'Find action items from it': SearchIcon(),
+  'Generate to-do list': DoneIcon(),
   Summary: PenIcon(),
   'Create headings': PenIcon(),
   'Write outline': PenIcon(),

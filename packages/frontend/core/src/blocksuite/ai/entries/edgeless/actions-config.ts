@@ -1,5 +1,6 @@
 import {
   CommentIcon,
+  DoneIcon,
   ExplainIcon,
   ImageIcon,
   ImproveWritingIcon,
@@ -566,6 +567,13 @@ const generateFromTextGroup: AIItemGroupConfig = {
       showWhen: noteBlockOrTextShowWhen,
       handler: actionToHandler('findActions', AIStarIconWithAnimation),
       beta: true,
+    },
+    {
+      name: 'Generate to-do list',
+      icon: DoneIcon(),
+      testId: 'action-generate-todo-list',
+      showWhen: noteBlockOrTextShowWhen,
+      handler: actionToHandler('generateTodoList', AIStarIconWithAnimation),
     },
   ],
 };
