@@ -195,6 +195,11 @@ jobs:
           cache: 'gradle'
 
       - uses: android-actions/setup-android@v3
+        with:
+          # The default also asks for the retired 'tools' package, which the
+          # runner's cmdline-tools (16.0) no longer has, failing the step.
+          # Gradle fetches the platform and build tools it needs.
+          packages: 'platform-tools'
 
       - name: Rust toolchain version
         run: echo "RUST_TOOLCHAIN=$(grep channel rust-toolchain.toml | head -1 | awk -F '"' '{print $2}')" >> "$GITHUB_ENV"
