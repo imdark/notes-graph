@@ -23,6 +23,7 @@ export const promptKeys = [
   'Improve grammar for it',
   'Fix spelling for it',
   'Find action items from it',
+  'Generate to-do list',
   'Check code error',
   'Create headings',
   'Make it real',

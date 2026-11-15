@@ -103,6 +103,7 @@ export const actionDefinitions = {
   writeBlogPost: textAction('writeBlogPost', 'Write a blog post about this'),
   brainstorm: textAction('brainstorm', 'Brainstorm ideas about this'),
   findActions: textAction('findActions', 'Find action items from it'),
+  generateTodoList: textAction('generateTodoList', 'Generate to-do list'),
   brainstormMindmap: {
     id: 'brainstormMindmap',
     promptName: 'mindmap.generate',
