@@ -88,6 +88,20 @@ test('merge sends a merge commit pinned to the head sha', async t => {
   t.is(calls[0].auth, 'Bearer tok');
 });
 
+test('close patches the pull request to closed', async t => {
+  const { calls, fetcher } = stubFetch([
+    { status: 200, body: { number: 371, state: 'closed' } },
+  ]);
+  const github = new GitHubClient('tok', 'imdark/notes-graph', fetcher);
+  await github.close(371);
+  t.is(
+    calls[0].url,
+    'https://api.github.com/repos/imdark/notes-graph/pulls/371'
+  );
+  t.is(calls[0].method, 'PATCH');
+  t.deepEqual(calls[0].body, { state: 'closed' });
+});
+
 test('a merge GitHub refuses is not-mergeable', async t => {
   const { fetcher } = stubFetch([
     { status: 405, body: { message: 'Pull Request is not mergeable' } },

@@ -344,6 +344,16 @@ export class GitHubClient {
     );
   }
 
+  /** Close without merging; the branch stays, so it can be reopened. */
+  close(number: number) {
+    return this.request<GhPull>(
+      'PATCH',
+      `/pulls/${number}`,
+      `close pull request #${number}`,
+      { body: { state: 'closed' } }
+    );
+  }
+
   async deleteBranch(branch: string): Promise<void> {
     try {
       await this.request<void>(

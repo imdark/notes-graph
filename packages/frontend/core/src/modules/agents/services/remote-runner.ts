@@ -753,6 +753,17 @@ export class RemoteAgentRunnerService extends Service {
     });
   }
 
+  /** Close a pull request without merging it; its branch is kept. */
+  async closePull(
+    workspaceId: string,
+    input: { number: number }
+  ): Promise<{ closed: boolean; state: ReleaseState }> {
+    return this.json(`${this.base(workspaceId)}/releases/close`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    });
+  }
+
   /** Merge each ready one, oldest first; drafts and conflicts are skipped. */
   async mergeAllPulls(
     workspaceId: string,

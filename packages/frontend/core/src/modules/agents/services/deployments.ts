@@ -1627,6 +1627,15 @@ export class DeploymentsService extends Service {
     return result;
   }
 
+  /** Close a pull request without merging it; its branch is kept. */
+  async close(pr: Pick<ReleasePull, 'number'>) {
+    const result = await this.remote.closePull(this.workspaceId, {
+      number: pr.number,
+    });
+    this.setRelease(result.state);
+    return result;
+  }
+
   /** Merge every ready one; the rest are skipped with why. */
   async mergeAll(numbers: number[]) {
     const result = await this.remote.mergeAllPulls(this.workspaceId, {
