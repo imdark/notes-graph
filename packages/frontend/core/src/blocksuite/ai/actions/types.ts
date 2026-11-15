@@ -231,6 +231,10 @@ declare global {
         options: T
       ): Promise<AIActionTextResponse<T>>;
 
+      generateTodoList<T extends AITextActionOptions>(
+        options: T
+      ): Promise<AIActionTextResponse<T>>;
+
       // mindmap
       brainstormMindmap<T extends BrainstormMindMap>(
         options: T
