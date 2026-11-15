@@ -52,6 +52,11 @@ branch changed. Main carries a few errors of its own (e.g. one in
 
 ## Working in a git worktree
 
+Start a task with `wf start <KEY> --base stage --worktree`. PRs go into
+`stage`, and the main checkout often has uncommitted files (e.g.
+`i18n-completenesses.json`), so leave its branch alone. `wf start` fetches
+`stage` first, and from an agent's shell it makes a worktree anyway.
+
 Run `scripts/worktree-setup.sh` once in a fresh worktree (`wf start` does it
 when it creates one). Do **not** symlink main's `node_modules` into the
 worktree: workspace packages then resolve to main's sources, so vitest tests
