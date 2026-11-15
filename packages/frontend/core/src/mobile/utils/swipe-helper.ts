@@ -101,6 +101,12 @@ export class SwipeHelper {
   }
 
   private _handleTouchStart(e: TouchEvent) {
+    // A swipe that ended without a touchend reaching the scope (a
+    // touchcancel, a second finger, the touched node unmounted) would leave
+    // its listeners behind, and the cleanups below only know the newest
+    // pair. Left on <body>, a preventScroll helper's touchmove then cancelled
+    // every drag on the page, so the note couldn't be scrolled.
+    this._clearDrag();
     const touch = e.touches[0];
     this._startPos = {
       x: touch.clientX,
@@ -117,11 +123,18 @@ export class SwipeHelper {
     this.scopeElement.addEventListener('touchend', endHandler, {
       passive: !this._options.preventScroll,
     });
+    // A cancelled touch never sends touchend; end the drag without firing
+    // onTap/onSwipeEnd, since the gesture didn't finish.
+    const cancelHandler = this._clearDrag.bind(this);
+    this.scopeElement.addEventListener('touchcancel', cancelHandler);
+    // Removed from the element they were added to, even if the scope changes.
+    const scope = this.scopeElement;
     this._dragMoveCleanup = () => {
-      this.scopeElement.removeEventListener('touchmove', moveHandler);
+      scope.removeEventListener('touchmove', moveHandler);
     };
     this._dragEndCleanup = () => {
-      this.scopeElement.removeEventListener('touchend', endHandler);
+      scope.removeEventListener('touchend', endHandler);
+      scope.removeEventListener('touchcancel', cancelHandler);
     };
   }
 
@@ -203,7 +216,10 @@ export class SwipeHelper {
     this._lastTime = 0;
     this._startTime = 0;
     this._direction = null;
+    this._isFirst = true;
     this._dragMoveCleanup();
     this._dragEndCleanup();
+    this._dragMoveCleanup = () => {};
+    this._dragEndCleanup = () => {};
   }
 }
