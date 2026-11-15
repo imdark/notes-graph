@@ -1,6 +1,7 @@
 import {
   DeleteIcon,
   EdgelessIcon,
+  FolderIcon,
   InformationIcon,
   MicrophoneIcon,
   MoreHorizontalIcon,
@@ -28,6 +29,7 @@ import {
   SetParentMenuSection,
 } from '@notesgraph/core/mobile/components';
 import { MobileTocMenu } from '@notesgraph/core/mobile/components/toc-menu';
+import { WorkspaceDialogService } from '@notesgraph/core/modules/dialogs';
 import { DocService } from '@notesgraph/core/modules/doc';
 import { DocModeRegistryService } from '@notesgraph/core/modules/doc-mode-registry';
 import { EditorService } from '@notesgraph/core/modules/editor';
@@ -111,6 +113,12 @@ export const PageHeaderMenuButton = () => {
     voiceTasks.open({ docId, anchorBlockId });
   }, [docId, editorContainer, voiceTasks]);
 
+  const workspaceDialogService = useService(WorkspaceDialogService);
+  const handleConvertToProject = useCallback(() => {
+    if (!docId) return;
+    workspaceDialogService.open('convert-to-project', { docId });
+  }, [docId, workspaceDialogService]);
+
   const handleToggleFavorite = useCallback(() => {
     track.$.header.docOptions.toggleFavorite();
     toggleFavorite();
@@ -177,6 +185,14 @@ export const PageHeaderMenuButton = () => {
           : t['com.notesgraph.favoritePageOperation.add']()}
       </MobileMenuItem>
       <SetParentMenuSection docId={docId} />
+      <MobileMenuItem
+        prefixIcon={<FolderIcon />}
+        data-testid="editor-option-menu-convert-to-project"
+        onSelect={handleConvertToProject}
+        disabled={!canEdit}
+      >
+        {t['com.notesgraph.projects.convert-to-project.menu-item']()}
+      </MobileMenuItem>
       <MenuSeparator />
       <MenuSub
         triggerOptions={{

@@ -1,4 +1,5 @@
 import { AgentEditorDialog } from '@notesgraph/core/desktop/dialogs/agent-editor';
+import { ConvertToProjectDialog } from '@notesgraph/core/desktop/dialogs/convert-to-project';
 import { MonitorEditorDialog } from '@notesgraph/core/desktop/dialogs/monitor-editor';
 import { MonitorViewDialog } from '@notesgraph/core/desktop/dialogs/monitor-view';
 import {
@@ -39,6 +40,7 @@ const WORKSPACE_DIALOGS = {
   'date-selector': DateSelectorDialog,
   'agent-block-runs': AgentBlockRunsDialog,
   'agent-editor': AgentEditorDialog,
+  'convert-to-project': ConvertToProjectDialog,
   'monitor-editor': MonitorEditorDialog,
   'monitor-view': MonitorViewDialog,
   setting: SettingDialog,
