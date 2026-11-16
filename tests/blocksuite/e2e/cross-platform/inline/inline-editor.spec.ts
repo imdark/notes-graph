@@ -1175,7 +1175,9 @@ test('delete embed when pressing backspace after embed', async ({ page }) => {
   ]);
 });
 
-test('triple click to select line', async ({ page }) => {
+test('triple click to select the whole text, every line', async ({
+  page,
+}) => {
   await enterInlineEditorPlayground(page);
   await focusInlineRichText(page);
 
@@ -1193,15 +1195,11 @@ test('triple click to select line', async ({ page }) => {
   await page.mouse.click(rect.x, rect.y, {
     clickCount: 3,
   });
-  await assertSelection(page, 0, 4, 11);
+  // A block, not the clicked line (code blocks opt into line selection).
+  await assertSelection(page, 0, 0, 19);
 
   await pressBackspace(page);
-  await expect(editorA).toHaveText(
-    'abc\n' + ZERO_WIDTH_FOR_EMPTY_LINE + '\nabc',
-    {
-      useInnerText: true, // for multi-line text
-    }
-  );
+  await expect(editorA).toHaveText(ZERO_WIDTH_FOR_EMPTY_LINE);
 });
 
 test('caret should move correctly when inline elements are exist', async ({

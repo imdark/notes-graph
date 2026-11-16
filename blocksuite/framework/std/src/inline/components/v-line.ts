@@ -62,10 +62,17 @@ export class VLine extends LitElement {
 
       if (e.detail >= 3) {
         e.preventDefault();
-        this.inlineEditor.setInlineRange({
-          index: this.startOffset,
-          length: this.endOffset - this.startOffset,
-        });
+        // The whole block's text, or only this line where the editor asks
+        // for it (code blocks). The native triple-click would run on into
+        // the next block, so it is replaced either way.
+        this.inlineEditor.setInlineRange(
+          this.inlineEditor.tripleClickSelectsLine
+            ? {
+                index: this.startOffset,
+                length: this.endOffset - this.startOffset,
+              }
+            : { index: 0, length: this.inlineEditor.yTextLength }
+        );
       }
     });
   }
