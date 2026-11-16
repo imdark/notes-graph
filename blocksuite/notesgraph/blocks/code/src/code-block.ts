@@ -452,6 +452,7 @@ export class CodeBlockComponent extends CaptionedBlockComponent<CodeBlockModel> 
           .enableUndoRedo=${false}
           .wrapText=${this.model.props.wrap}
           .verticalScrollContainerGetter=${() => getViewportElement(this.host)}
+          .tripleClickSelectsLine=${true}
           .vLineRenderer=${(vLine: VLine) => {
             return html`
               <span contenteditable="false" class="line-number"

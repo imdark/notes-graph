@@ -199,6 +199,7 @@ export class RichText extends WithDisposable(ShadowlessElement) {
         },
         inlineRangeProvider: this.inlineRangeProvider,
         vLineRenderer: this.vLineRenderer,
+        tripleClickSelectsLine: this.tripleClickSelectsLine,
       }
     );
     const inlineEditor = this._inlineEditor$.value;
@@ -538,6 +539,10 @@ export class RichText extends WithDisposable(ShadowlessElement) {
 
   @property({ attribute: false })
   accessor vLineRenderer: ((vLine: VLine) => TemplateResult) | undefined;
+
+  /** Triple-click selects the clicked line instead of the whole text. */
+  @property({ attribute: false })
+  accessor tripleClickSelectsLine = false;
 
   @property({ attribute: false })
   accessor wrapText = true;

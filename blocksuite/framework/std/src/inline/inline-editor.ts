@@ -176,6 +176,13 @@ export class InlineEditor<
 
   readonly vLineRenderer: ((vLine: VLine) => TemplateResult) | null;
 
+  /**
+   * Triple-click selects the clicked line (text between line breaks) instead
+   * of the whole text. Off by default: in a note, a block is the unit people
+   * expect a triple-click to select. Code blocks turn it on.
+   */
+  readonly tripleClickSelectsLine: boolean;
+
   readonly yText: Y.Text;
   get yTextDeltas() {
     return this.yText.toDelta();
@@ -196,6 +203,7 @@ export class InlineEditor<
       hooks?: InlineHookService<TextAttributes>['hooks'];
       inlineRangeProvider?: InlineRangeProvider;
       vLineRenderer?: (vLine: VLine) => TemplateResult;
+      tripleClickSelectsLine?: boolean;
     } = {}
   ) {
     if (!yText.doc) {
@@ -217,11 +225,13 @@ export class InlineEditor<
       hooks = {},
       inlineRangeProvider,
       vLineRenderer = null,
+      tripleClickSelectsLine = false,
     } = ops;
     this._inlineRangeProviderOverride = false;
     this.yText = yText;
     this.isEmbed = isEmbed;
     this.vLineRenderer = vLineRenderer;
+    this.tripleClickSelectsLine = tripleClickSelectsLine;
     this.hooksService = new InlineHookService(this, hooks);
     if (inlineRangeProvider) {
       this.inlineRangeProvider = inlineRangeProvider;
