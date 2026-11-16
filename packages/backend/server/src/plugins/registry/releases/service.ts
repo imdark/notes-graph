@@ -906,6 +906,34 @@ export class ReleaseService {
   }
 
   /**
+   * Close an open pull request into the base branch without merging it. Its
+   * branch is kept, so it can be reopened on GitHub.
+   */
+  async close(workspaceId: string, body: Record<string, unknown>) {
+    const number = Number(body.number);
+    if (!Number.isInteger(number) || number <= 0) {
+      throw new BadRequest('number is required');
+    }
+    const { settings, github } = await this.ready(workspaceId);
+    await this.act(workspaceId, async () => {
+      const pull = await github.pull(number);
+      if (pull.state !== 'open') {
+        throw conflict(`#${number} is not open any more`);
+      }
+      if (pull.base.ref !== settings.baseBranch) {
+        throw new BadRequest(
+          `#${number} goes into ${pull.base.ref}, not ${settings.baseBranch}`
+        );
+      }
+      await github.close(number);
+    });
+    return {
+      closed: true,
+      state: await this.state(workspaceId, { fresh: true }),
+    };
+  }
+
+  /**
    * Merge each of `numbers` that is ready, oldest first, reading each again
    * first; the others are skipped, with why.
    */

@@ -227,6 +227,21 @@ export const ReleasesView = () => {
     [act, confirm, deployments]
   );
 
+  const close = useCallback(
+    (pr: ReleasePull) =>
+      confirm({
+        title: `Close #${pr.number}?`,
+        description: `Closes it on GitHub without merging. ${pr.branch} is kept, so it can be reopened there.`,
+        confirmText: 'Close',
+        onConfirm: () =>
+          act('close', `Couldn't close #${pr.number}`, async () => {
+            await deployments.close(pr);
+            notify.success({ title: `Closed #${pr.number}` });
+          }),
+      }),
+    [act, confirm, deployments]
+  );
+
   const mergeAll = useCallback(
     (current: ReleaseState, prs: ReleasePull[]) =>
       confirm({
@@ -404,6 +419,7 @@ export const ReleasesView = () => {
             agent={agent}
             onMerge={pr => merge(state, pr)}
             onMergeAll={prs => mergeAll(state, prs)}
+            onClose={close}
             onFix={pr => fix(state, pr)}
           />
           <ReleaseHistory

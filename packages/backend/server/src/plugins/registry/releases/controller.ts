@@ -104,6 +104,16 @@ export class ReleaseController {
     return this.releases.merge(workspaceId, body ?? {});
   }
 
+  @Post('/close')
+  async close(
+    @CurrentUser() user: CurrentUserType,
+    @Param('workspaceId') workspaceId: string,
+    @Body() body: Record<string, unknown>
+  ) {
+    await this.canAct(user, workspaceId);
+    return this.releases.close(workspaceId, body ?? {});
+  }
+
   @Post('/merge-all')
   async mergeAll(
     @CurrentUser() user: CurrentUserType,

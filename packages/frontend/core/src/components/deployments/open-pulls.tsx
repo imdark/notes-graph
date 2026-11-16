@@ -129,7 +129,7 @@ export const NO_FIX_AGENT =
 
 /**
  * Pull requests open into the base branch, each with whether it merges, and
- * Merge or Fix with Claude.
+ * Merge or Fix with Claude, and Close.
  */
 export const OpenPulls = ({
   state,
@@ -137,6 +137,7 @@ export const OpenPulls = ({
   agent,
   onMerge,
   onMergeAll,
+  onClose,
   onFix,
 }: {
   state: ReleaseState;
@@ -145,6 +146,7 @@ export const OpenPulls = ({
   agent: Agent | undefined;
   onMerge: (pr: ReleasePull) => void;
   onMergeAll: (prs: ReleasePull[]) => void;
+  onClose: (pr: ReleasePull) => void;
   onFix: (pr: ReleasePull) => void;
 }) => {
   const base = state.settings?.baseBranch ?? 'stage';
@@ -237,6 +239,15 @@ export const OpenPulls = ({
                       onFix={onFix}
                     />
                   ) : null}
+                  <Button
+                    variant="plain"
+                    disabled={busy}
+                    tooltip="Close it on GitHub without merging; its branch is kept."
+                    onClick={() => onClose(pr)}
+                    data-testid="release-close"
+                  >
+                    Close
+                  </Button>
                 </div>
               </div>
             );
