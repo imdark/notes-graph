@@ -391,6 +391,15 @@ export const NOTESGRAPH_FLAGS = {
     configurable: true,
     defaultState: true,
   },
+  enable_mobile_toolbar_line_actions: {
+    commit: '',
+    category: 'notesgraph',
+    displayName: 'Line actions on the mobile keyboard toolbar',
+    description:
+      'Two buttons at the end of the toolbar above the phone keyboard: assign the current line to an agent, and add an empty line of the same kind after it.',
+    configurable: true,
+    defaultState: true,
+  },
   enable_add_row_pill: {
     commit: '859df954157f254bc185d6eca6c7b3bc9a64ef1f',
     category: 'notesgraph',
