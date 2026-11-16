@@ -392,7 +392,7 @@ export const NOTESGRAPH_FLAGS = {
     defaultState: true,
   },
   enable_mobile_toolbar_line_actions: {
-    commit: '',
+    commit: '1d976f725c869631fa51fb6892342d11f72b9f2e',
     category: 'notesgraph',
     displayName: 'Line actions on the mobile keyboard toolbar',
     description:
