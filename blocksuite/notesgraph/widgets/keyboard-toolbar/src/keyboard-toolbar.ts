@@ -12,6 +12,7 @@ import { INLINE_ROOT_ATTR } from '@blocksuite/std/inline';
 import { effect, type Signal, signal } from '@preact/signals-core';
 import { html } from 'lit';
 import { property } from 'lit/decorators.js';
+import { ifDefined } from 'lit/directives/if-defined.js';
 import { repeat } from 'lit/directives/repeat.js';
 import { styleMap } from 'lit/directives/style-map.js';
 import { when } from 'lit/directives/when.js';
@@ -331,9 +332,14 @@ export class NotesGraphKeyboardToolbar extends SignalWatcher(
         style = styleMap({ background: activeBackground });
     }
 
+    // Icon-only buttons: give an action its name so it can be told apart
+    // (screen readers, tests).
+    const label = isKeyboardToolBarActionItem(item) ? item.name : undefined;
+
     return html`<icon-button
       size="36px"
       style=${style}
+      aria-label=${ifDefined(label)}
       ?disabled=${disabled}
       @click=${() => {
         this._handleItemClick(item, index);
