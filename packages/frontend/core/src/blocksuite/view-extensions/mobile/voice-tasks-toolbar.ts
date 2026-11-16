@@ -9,6 +9,7 @@ import {
 import { VoiceTasksService } from '@notesgraph/core/modules/voice-tasks';
 import type { FrameworkProvider } from '@notesgraph/infra';
 
+import { lineToolbarItems } from './block-toolbar-items';
 import { markGoalToolbarItem } from './goal-toolbar-item';
 
 /**
@@ -38,6 +39,12 @@ export function VoiceTasksKeyboardToolbarExtension(
 
   const [first, ...rest] = defaultKeyboardToolbarConfig.items;
   return KeyboardToolbarConfigExtension({
-    items: [first, dictateTasks, markGoalToolbarItem, ...rest],
+    items: [
+      first,
+      dictateTasks,
+      markGoalToolbarItem,
+      ...rest,
+      ...lineToolbarItems(framework),
+    ],
   });
 }

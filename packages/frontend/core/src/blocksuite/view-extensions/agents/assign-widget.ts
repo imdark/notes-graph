@@ -1,11 +1,5 @@
 import { AiIcon, PlusIcon } from '@blocksuite/icons/lit';
-import {
-  menu,
-  popMenu,
-  popupTargetFromElement,
-} from '@blocksuite/notesgraph/components/context-menu';
 import { EnterIcon } from '@blocksuite/notesgraph/components/icons';
-import { focusTextModel } from '@blocksuite/notesgraph/rich-text';
 import {
   BLOCK_ID_ATTR,
   TextSelection,
@@ -13,60 +7,36 @@ import {
   WidgetViewExtension,
 } from '@blocksuite/notesgraph/std';
 import type { ExtensionType } from '@blocksuite/notesgraph/store';
-import { IconType } from '@notesgraph/component';
 import {
-  type Agent,
   type AgentRun,
   AgentRunSessionService,
   AgentRunsStore,
-  AgentsService,
   type AgentTarget,
-  FleetService,
   isOpenTask,
   isPlainBlock,
   runsForModel,
 } from '@notesgraph/core/modules/agents';
-import { WorkspaceDialogService } from '@notesgraph/core/modules/dialogs';
 import { FeatureFlagService } from '@notesgraph/core/modules/feature-flag';
-import { WorkbenchService } from '@notesgraph/core/modules/workbench';
 import type { FrameworkProvider } from '@notesgraph/infra';
 import { css, html, nothing } from 'lit';
 import { state } from 'lit/decorators.js';
 import { literal, unsafeStatic } from 'lit/static-html.js';
 
-import { addRowAfter } from './add-row';
+import {
+  addRowAfterAndFocus,
+  blockTarget,
+  openAssignToAgentMenu,
+} from './block-actions';
 import { AgentsFrameworkIdentifier } from './framework';
 import { lineTextRects } from './line-text-rects';
 
 const WIDGET_TAG = 'notesgraph-agent-assign-widget';
-
-/**
- * The agent's own icon for the menu: its emoji or generated image. Built-in
- * named icons have no lit renderer here, so those keep the generic one.
- */
-const agentMenuIcon = (agent: Agent) => {
-  const icon = agent.icon;
-  if (icon?.type === IconType.Emoji && icon.unicode) {
-    return html`<span>${icon.unicode}</span>`;
-  }
-  if (icon?.type === IconType.Blob && icon.url) {
-    return html`<img
-      src=${icon.url}
-      alt=""
-      style="width:1em;height:1em;border-radius:0.15em;object-fit:cover"
-    />`;
-  }
-  return agent.emoji ? html`<span>${agent.emoji}</span>` : AiIcon();
-};
 
 /** Gap between the bottom of the line's text and the button. */
 const GAP_PX = 2;
 
 /** Least room kept between the end of the line's text and the button. */
 const END_GAP_PX = 8;
-
-/** Longest the menu waits for the machines' health before opening. */
-const FLEET_WAIT_MS = 800;
 
 /**
  * A small button at the end of a to-do line that no agent is on yet,
@@ -146,11 +116,7 @@ export class AgentAssignWidget extends WidgetComponent {
   private _docRuns: AgentRun[] = [];
 
   private get _target(): AgentTarget {
-    return {
-      kind: 'block',
-      docId: this.std.store.id,
-      blockId: this.model.id,
-    };
+    return blockTarget(this.std, this.model);
   }
 
   override connectedCallback() {
@@ -366,111 +332,22 @@ export class AgentAssignWidget extends WidgetComponent {
     e.stopPropagation();
     const framework = this._framework;
     if (!framework || this._menuOpen) return;
-    const anchor = e.currentTarget as HTMLElement;
     this._menuOpen = true;
-
-    // Agents on a machine monitoring reports down go last. Nothing may have
-    // fetched the machines yet this session; wait a moment for them, but
-    // open unsorted rather than keep the menu waiting on a slow server.
-    const fleet = framework.get(FleetService);
-    Promise.race([
-      fleet.ensureLoaded(),
-      new Promise(resolve => setTimeout(resolve, FLEET_WAIT_MS)),
-    ])
-      .then(() => {
-        if (!anchor.isConnected) {
-          this._menuOpen = false;
-          return;
-        }
-        this._popMenu(
-          anchor,
-          fleet.downLastNow(
-            framework.get(AgentsService).agentsFor$('block').value
-          )
-        );
-      })
-      .catch(err => {
+    openAssignToAgentMenu({
+      framework,
+      std: this.std,
+      model: this.model,
+      anchor: e.currentTarget as HTMLElement,
+      onClose: () => {
         this._menuOpen = false;
-        console.error(err);
-      });
-  };
-
-  private _popMenu(anchor: HTMLElement, agents: Agent[]) {
-    popMenu(popupTargetFromElement(anchor), {
-      options: {
-        title: { text: 'Assign to agent' },
-        onClose: () => {
-          this._menuOpen = false;
-        },
-        items: [
-          menu.group({
-            items: agents.map(agent =>
-              menu.action({
-                name: agent.name,
-                prefix: agentMenuIcon(agent),
-                select: () => this._assign(agent),
-              })
-            ),
-          }),
-          menu.group({
-            items: [
-              menu.action({
-                name: 'New agent…',
-                prefix: PlusIcon(),
-                select: () => this._createAndAssign(),
-              }),
-              menu.action({
-                name: 'Monitor…',
-                prefix: html`<span>📡</span>`,
-                select: () => this._monitor(),
-              }),
-            ],
-          }),
-        ],
       },
     });
-  }
-
-  private _assign(agent: Agent) {
-    const framework = this._framework;
-    if (!framework) return;
-    // The side panel is where a run shows its progress; the phone has none,
-    // and there the task's QUEUED chip is the sign it was taken.
-    if (!BUILD_CONFIG.isMobileEdition) {
-      const workbench = framework.get(WorkbenchService).workbench;
-      workbench.openSidebar();
-      workbench.activeView$.value.activeSidebarTab('agents');
-    }
-    framework
-      .get(AgentRunSessionService)
-      .start(agent, this._target)
-      .catch(console.error);
-  }
-
-  private _monitor() {
-    this._framework?.get(WorkspaceDialogService).open('monitor-editor', {
-      docId: this.std.store.id,
-      blockId: this.model.id,
-      text: this.model.text?.toString() ?? '',
-    });
-  }
-
-  private _createAndAssign() {
-    const framework = this._framework;
-    if (!framework) return;
-    framework.get(WorkspaceDialogService).open('agent-editor', {}, agent => {
-      if (agent) this._assign(agent);
-    });
-  }
+  };
 
   private readonly _addRow = (e: MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    if (this.store.readonly) return;
-    const id = addRowAfter(this.store, this.model);
-    if (!id) return;
-    const text = this.store.getBlock(id)?.model.text;
-    focusTextModel(this.std, id, text?.length ?? 0);
+    addRowAfterAndFocus(this.std, this.model);
   };
 
   override render() {
