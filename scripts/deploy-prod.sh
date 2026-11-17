@@ -29,6 +29,32 @@ if [[ -f "$REPO_ROOT/.git" && " $* " != *" --landing "* && " $* " != *" --downlo
   exit 1
 fi
 
+# Prod runs what is merged to main, nothing else. This script ships the
+# working tree, so on a task branch, with uncommitted edits, or behind/ahead
+# of origin it would put code on prod that never went through a PR and that
+# the next release silently takes back out. Merge first (PR into stage, then
+# scripts/release.sh, which also deploys), then run this from main if a
+# laptop deploy is still needed. NOTESGRAPH_DEPLOY_UNMERGED=1 overrides it,
+# for an emergency the user asked for by name.
+if [[ "${NOTESGRAPH_DEPLOY_UNMERGED:-}" != "1" ]]; then
+  refuse() {
+    echo "!! $1" >&2
+    echo "!! Deploys ship only what is merged to main: merge the PR into stage, then scripts/release.sh." >&2
+    echo "!! (Emergency override, only when the user asks: NOTESGRAPH_DEPLOY_UNMERGED=1)" >&2
+    exit 1
+  }
+  branch="$(git -C "$REPO_ROOT" rev-parse --abbrev-ref HEAD)"
+  [[ "$branch" == "main" ]] || refuse "on branch '$branch', not main"
+  # The i18n build rewrites its completeness file every run; that's not an edit.
+  dirty="$(git -C "$REPO_ROOT" status --porcelain --untracked-files=no -- . \
+    ':(exclude)packages/frontend/i18n/src/i18n-completenesses.json')"
+  [[ -z "$dirty" ]] || refuse "uncommitted changes would ship:
+$dirty"
+  git -C "$REPO_ROOT" fetch -q origin main || refuse "couldn't fetch origin/main to compare"
+  [[ "$(git -C "$REPO_ROOT" rev-parse HEAD)" == "$(git -C "$REPO_ROOT" rev-parse origin/main)" ]] \
+    || refuse "HEAD isn't origin/main (pull, or push what's missing through a PR)"
+fi
+
 # HOST / SSH_KEY / SSH plus ssh_probe, ensure_aws_auth, open_ssh_ingress and
 # ensure_ssh_access. Shared with scripts/prod-exec.sh so there is one
 # implementation of "get me onto the box" rather than two that drift.

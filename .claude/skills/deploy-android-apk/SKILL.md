@@ -24,6 +24,15 @@ so you almost always want a **stable** build.
 4. **SSH IP rotates** (cellular/CGNAT). If SSH times out, re-authorize:
    `MYIP=$(curl -s https://checkip.amazonaws.com); aws ec2 authorize-security-group-ingress --group-id sg-0802d2901b2f1a5b6 --protocol tcp --port 22 --cidr "$MYIP/32" --region us-east-2`
 
+## Ship only what's merged to main
+
+After each prod deploy, CI (`build-apk.yml`) builds and publishes the APK from
+the deployed `main` commit, so a release normally needs nothing here. When an
+APK has to go up by hand, build it from the main checkout on `main`, clean and
+equal to `origin/main`. An APK built from a task branch puts unmerged code on
+every phone that installs it. A debug build from a branch is fine on the
+emulator, never on the download page.
+
 ## Steps
 
 ```bash

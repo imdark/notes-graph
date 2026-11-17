@@ -1,5 +1,12 @@
 # Working in this repo
 
+## Deploys ship only what is merged to main
+
+Merge first: PR into `stage`, then `scripts/release.sh` fast-forwards `main`
+and deploys it. Deploy nothing from a task branch, a worktree or an
+uncommitted tree (prod and APK alike); the `deploy-prod` and
+`deploy-android-apk` skills have the details.
+
 ## One command, one operation
 
 Run each script or meaningful operation as its **own** Bash invocation. Do

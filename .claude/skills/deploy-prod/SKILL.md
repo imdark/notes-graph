@@ -5,6 +5,12 @@ description: Deploy NotesGraph server/web/landing changes to the production EC2 
 
 # Deploy to production
 
+**Prod runs only what is merged to `main`.** Merge the PR into `stage`, then
+release (below), which fast-forwards `main` and deploys it. A deploy from a
+task branch, a worktree or an uncommitted tree ships code no PR reviewed, and
+the next release quietly takes it back out. `scripts/deploy-prod.sh` refuses
+unless it is on `main`, clean, and equal to `origin/main`.
+
 Prod is a single EC2 box (`18.225.203.37`, Ubuntu) running a docker-compose stack
 (caddy, notesgraph server, postgres, redis, linkcard) behind Caddy. DNS for
 `notesgraph.com` + `app.notesgraph.com` is GoDaddy → the box (no CDN).
@@ -35,8 +41,11 @@ Watch it with `gh run watch <id> --exit-status`; the run id is in
 ./scripts/deploy-prod.sh --download    # download page + built binaries (apk/dmg)
 ```
 
-It rsyncs the **working tree** (uncommitted changes included), builds on the box, and
-rolls the stack. A full deploy is ~8–15 min (it rebuilds web/admin/mobile/server
+It rsyncs the working tree, builds on the box, and rolls the stack, so it runs
+only from the main checkout on `main`, with no uncommitted changes and in step
+with `origin/main` (it checks and stops otherwise). `NOTESGRAPH_DEPLOY_UNMERGED=1`
+skips that check: use it only when the user asks for an unmerged emergency deploy
+by name. A full deploy is ~8–15 min (it rebuilds web/admin/mobile/server
 bundles + a fresh docker image **every time**, even for a one-line backend change).
 
 ## Gotchas
