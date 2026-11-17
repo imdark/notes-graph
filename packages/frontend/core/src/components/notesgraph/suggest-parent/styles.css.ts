@@ -1,5 +1,11 @@
 import { cssVarV2 } from '@toeverything/theme/v2';
-import { style } from '@vanilla-extract/css';
+import { fallbackVar, style } from '@vanilla-extract/css';
+
+import { globalVars } from '../../../mobile/styles/variables.css';
+
+// The phone keyboard's height (0 when it's closed, and on desktop, which
+// never sets it).
+const keyboard = fallbackVar(globalVars.appKeyboardHeight, '0px');
 
 export const banner = style({
   display: 'flex',
@@ -142,12 +148,18 @@ export const topicChipIcon = style({
 });
 
 // Parent picker (inside the more-menu sub-sheet)
+// On a phone the picker is a bottom sheet and its search box opens the
+// keyboard, which covers the bottom of the screen without resizing it: pad
+// the sheet by the keyboard's height so the box and results sit above it,
+// and cap it so it still fits on screen.
 export const pickerRoot = style({
   display: 'flex',
   flexDirection: 'column',
   gap: 8,
   minWidth: 260,
-  maxHeight: '50vh',
+  maxHeight: `min(50vh, calc(100dvh - ${keyboard} - 120px))`,
+  paddingBottom: keyboard,
+  boxSizing: 'content-box',
 });
 
 export const pickerInput = style({
