@@ -730,7 +730,13 @@ const hideDoneFilter = () => ({
 export const addProjectTaskListBlock = (
   store: Store,
   parentId: string,
-  opts: { projectId?: string; noProject?: boolean; name?: string } = {}
+  opts: {
+    projectId?: string;
+    noProject?: boolean;
+    name?: string;
+    /** Position among the parent's children; appended when omitted. */
+    index?: number;
+  } = {}
 ): string | null => {
   const view = {
     id: nanoid(),
@@ -753,7 +759,8 @@ export const addProjectTaskListBlock = (
         declarativeTaskColumns() as DatabaseBlockModel['props']['columns'],
       views: [view],
     },
-    parentId
+    parentId,
+    opts.index
   );
   return id ?? null;
 };
