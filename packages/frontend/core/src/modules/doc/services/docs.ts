@@ -1,4 +1,3 @@
-import { addProjectTaskListBlock } from '@blocksuite/notesgraph/blocks/database';
 import { replaceIdMiddleware } from '@blocksuite/notesgraph/shared/adapters';
 import type { NotesGraphTextAttributes } from '@blocksuite/notesgraph/shared/types';
 import type { DeltaInsert } from '@blocksuite/notesgraph/store';
@@ -9,6 +8,7 @@ import { ObjectPool, Service } from '@notesgraph/infra';
 import { combineLatest, map } from 'rxjs';
 
 import { initDocFromProps } from '../../../blocksuite/initialization';
+import { scaffoldJournalSections } from '../utils/journal-sections';
 import type { DocProperties } from '../../db/schema/schema';
 import { getNotesGraphWorkspaceSchema } from '../../workspace/global-schema';
 import type { Doc } from '../entities/doc';
@@ -301,14 +301,9 @@ export class DocsService extends Service {
   }
 
   /**
-   * Scaffold a freshly-created journal day with one section per project: an
-   * `H2` heading (the project name), that project's Task List (a query database
-   * rendered as the list view, titled "todos:", scoped to that project's open
-   * tasks), and an empty checklist item to jot a new task under. A final
-   * "Inbox" section collects open tasks in docs that belong to no project, and
-   * is added unconditionally — even when `sections` is empty (e.g. the
-   * caller's project list hadn't loaded yet), the journal should still get a
-   * Task List.
+   * Give a journal day its section per project and Inbox, each with its
+   * "todos:" Task List, merged with what the page already has (an agent's
+   * page for the day). See scaffoldJournalSections.
    */
   async addJournalProjectSections(
     docId: string,
@@ -324,48 +319,7 @@ export class DocsService extends Service {
       if (!note) {
         return;
       }
-      const addHeading = (text: string) =>
-        bsDoc.addBlock(
-          'notesgraph:paragraph' as never, // TODO(eyhn): fix type
-          { type: 'h2', text: new Text(text) },
-          note.id
-        );
-      /**
-       * The empty checkbox goes *under* its heading, not beside it.
-       *
-       * This is what makes the section mean something. A project scope claims
-       * tasks whose ancestor trail names it (see BlockTaskFilter.sectionName),
-       * and the indexer builds that trail by walking parents — so a checkbox
-       * that is a sibling of the "Ai" heading has an empty trail and belongs
-       * to nothing, while a child of it belongs to Ai wherever it was written.
-       * Scoping the journal by doc instead can't work: it has a section per
-       * project, so it belongs to all of them and none.
-       */
-      const addEmptyChecklistItem = (parentId: string) =>
-        bsDoc.addBlock(
-          'notesgraph:list' as never, // TODO(eyhn): fix type
-          { type: 'todo', text: new Text('') },
-          parentId
-        );
-
-      for (const section of sections) {
-        const headingId = addHeading(section.name);
-        addProjectTaskListBlock(bsDoc, note.id, {
-          projectId: section.id,
-          name: 'todos:',
-        });
-        addEmptyChecklistItem(headingId);
-      }
-
-      // Everything not owned by a project. Nested for the same reason, so the
-      // Inbox board can tell "written under Inbox" from "written under a
-      // project" in the same journal.
-      const inboxHeadingId = addHeading('Inbox');
-      addProjectTaskListBlock(bsDoc, note.id, {
-        noProject: true,
-        name: 'todos:',
-      });
-      addEmptyChecklistItem(inboxHeadingId);
+      scaffoldJournalSections(bsDoc, note.id, sections);
     } finally {
       release();
     }

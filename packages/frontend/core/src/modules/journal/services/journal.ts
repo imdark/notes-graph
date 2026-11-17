@@ -141,6 +141,36 @@ export class JournalService extends Service {
     const title = day.format(JOURNAL_DATE_FORMAT);
     const docs = this.journalsByDate$(title).value;
     if (docs.length) return docs[0];
-    return this.createJournal(maybeDate);
+    return this.adoptTitledPage(title) ?? this.createJournal(maybeDate);
+  }
+
+  /**
+   * A page titled with the day that isn't a journal yet: one an agent made
+   * when it filed a task before the app had a journal for that day (the
+   * server's ensure_journal, or `wf task create` before it). Making a second
+   * page for the day would split it in two, so that page becomes the
+   * journal: marked with the date, and given the sections a new day gets,
+   * merged with what it already has (see addJournalProjectSections).
+   */
+  private adoptTitledPage(title: string) {
+    const page = this.docsService.list.docs$.value.find(
+      doc => doc.title$.value === title && !doc.trash$.value
+    );
+    if (!page || this.journalDate$(page.id).value) return null;
+    this.setJournalDate(page.id, title);
+    if (this.usesProjectSections()) {
+      this.applyProjectSections(page.id).catch(console.error);
+    }
+    return page;
+  }
+
+  /** New days get a section per project only when no template is set. */
+  private usesProjectSections() {
+    const setting = this.templateDocService.setting;
+    if (setting.journalTemplateDocId$.value) return false;
+    if (setting.enablePageTemplate$.value && setting.pageTemplateDocId$.value) {
+      return false;
+    }
+    return !!setting.enableJournalProjectSections$.value;
   }
 }

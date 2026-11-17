@@ -41,6 +41,7 @@ import {
 } from './canvas';
 import { commentText, replyContent } from './comments';
 import { deployInfoAnswer } from './deploy-info';
+import { JOURNAL_DATE_RE, journalScaffold, todayDate } from './journal';
 import {
   DEFAULT_STALE_DAYS,
   DEFAULT_STUB_CHARS,
@@ -1593,6 +1594,72 @@ export class WorkspaceMcpProvider {
         },
       });
 
+      const ensureJournal = defineTool({
+        name: 'ensure_journal',
+        title: 'Ensure Journal',
+        description:
+          "Get the journal page for a day (title YYYY-MM-DD), creating it first when the day has none: a '## <project>' heading with an empty to-do per project, then '## Inbox', the outline the app gives a new day (the app adds each section's todos: list when it next opens that day). Call this before adding a task to a day's journal, then add it with update_document. Returns {docId, title, created}.",
+        parser: z.object({
+          date: z.string().regex(JOURNAL_DATE_RE).optional(),
+          agent: z.string().optional(),
+        }),
+        inputSchema: {
+          type: 'object',
+          properties: {
+            date: {
+              type: 'string',
+              description: 'The day, YYYY-MM-DD (default: today, UTC)',
+            },
+            agent: agentInputSchema,
+          },
+          additionalProperties: false,
+        },
+        execute: async ({ date, agent }, options) => {
+          const title = date ?? todayDate();
+          try {
+            for (const docId of await this.models.doc.findIdsByExactTitle(
+              workspaceId,
+              title
+            )) {
+              const readable = await this.ac
+                .user(userId)
+                .doc(workspaceId, docId)
+                .can('Doc.Read');
+              if (readable) {
+                return toolText(
+                  JSON.stringify({ docId, title, created: false })
+                );
+              }
+            }
+
+            await this.ac
+              .user(userId)
+              .workspace(workspaceId)
+              .assert('Workspace.CreateDoc');
+            const aborted = abortIfNeeded(options.signal);
+            if (aborted) return aborted;
+
+            const projects = await this.models.project.list(workspaceId);
+            const result = await this.writer.createDoc(
+              workspaceId,
+              title,
+              stampAttribution(
+                journalScaffold(projects.map(p => p.name)),
+                agent
+              ),
+              userId
+            );
+            return toolText(
+              JSON.stringify({ docId: result.docId, title, created: true })
+            );
+          } catch (error) {
+            return toolError(
+              `Failed to get or create the journal: ${error instanceof Error ? error.message : 'Unknown error'}`
+            );
+          }
+        },
+      });
+
       const updateDocument = defineTool({
         name: 'update_document',
         title: 'Update Document',
@@ -2612,6 +2679,7 @@ export class WorkspaceMcpProvider {
         createWidget,
         createFlashcards,
         createDocument,
+        ensureJournal,
         updateDocument,
         updateDocumentMeta,
         linkDocument,
