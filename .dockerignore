@@ -24,3 +24,6 @@
 # Sourcemaps (keep server sourcemap for backend stacktraces)
 **/*.map
 !packages/backend/server/dist/main.js.map
+
+# Workspace node_modules from the host would overwrite the image's own
+**/node_modules

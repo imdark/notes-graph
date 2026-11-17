@@ -15,52 +15,103 @@
 #
 # Produces the same runtime layer as .github/deployment/node/Dockerfile.
 
-FROM node:22-trixie-slim AS builder
-WORKDIR /app
+# Stage graph (BuildKit runs independent stages concurrently):
+#
+#   manifests -> deps -> prepared -+-> web -----------+
+#                                  +-> frontends ----+--> assets -> final
+#   native (Rust, parallel) -------+-> server --------+
+#
+# `deps` only sees package manifests, so the yarn download layer is reused
+# until a dependency changes; a source edit re-runs only what it touches.
 
-# Build toolchains: Rust (napi native addon) + node-gyp deps.
+FROM node:22-trixie-slim AS toolchain
+WORKDIR /app
+# node-gyp deps for native npm modules.
 RUN apt-get update && apt-get install -y --no-install-recommends \
       curl ca-certificates build-essential python3 pkg-config libssl-dev git \
  && rm -rf /var/lib/apt/lists/*
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal
-ENV PATH="/root/.cargo/bin:${PATH}"
 # Match the box's node heap ceiling for the bundlers.
 ENV NODE_OPTIONS="--max-old-space-size=6144"
+
+# ---- manifests: just the files `yarn install` resolves from ----
+FROM toolchain AS manifests-src
+COPY . /src
+RUN mkdir /out \
+ && cd /src \
+ && find . \( -name node_modules -o -name target \) -prune -o \
+      \( -name package.json -o -name yarn.lock -o -name .yarnrc.yml \) -print0 \
+    | xargs -0 -I{} cp --parents {} /out/ \
+ && cp -r --parents .yarn /out/
+
+FROM scratch AS manifests
+COPY --from=manifests-src /out /
+
+# ---- deps: download + link packages, no lifecycle scripts yet ----
+FROM toolchain AS deps
+COPY --from=manifests / .
+RUN --mount=type=cache,target=/root/.yarn/berry/cache,sharing=locked \
+    corepack enable && yarn install --immutable --mode=skip-build
+
+# ---- prepared: full source, then run the postinstall scripts ----
+# (`notesgraph init`, prisma generate, templates build need the sources.)
+FROM deps AS prepared
+COPY . .
+RUN --mount=type=cache,target=/root/.yarn/berry/cache,sharing=locked \
+    yarn install --immutable
+
+# ---- native: Rust addon, independent of the JS stages ----
+# Compiles natively for linux/amd64 (emulated when the host is arm64). Only
+# the Rust workspace is copied, so JS edits never rebuild it. The loader wants
+# arch-suffixed filenames (CI artifact naming).
+FROM toolchain AS native
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal
+ENV PATH="/root/.cargo/bin:${PATH}"
 # Under emulation, libgit2's vendored TLS throws "SSL error: syscall failure"
 # on cargo's index/git fetches — use the git CLI + the sparse index instead.
 ENV CARGO_NET_GIT_FETCH_WITH_CLI=true \
     CARGO_REGISTRIES_CRATES_IO_PROTOCOL=sparse
-
-COPY . .
-
-RUN corepack enable && yarn install --immutable
-
-# Native addon — inside linux/amd64 this compiles natively for the target
-# (no cross-compile), just emulated when the host is arm64. The loader wants
-# arch-suffixed filenames (CI artifact naming).
-RUN yarn workspace @notesgraph/server-native build \
- && cd packages/backend/native \
+RUN corepack enable && npm install -g @napi-rs/cli@3.5.0
+COPY Cargo.toml Cargo.lock rust-toolchain.toml ./
+COPY packages/backend/native packages/backend/native
+COPY packages/common/native packages/common/native
+COPY packages/frontend/mobile-native packages/frontend/mobile-native
+COPY packages/frontend/native packages/frontend/native
+RUN --mount=type=cache,target=/root/.cargo/registry,sharing=locked \
+    --mount=type=cache,target=/root/.cargo/git,sharing=locked \
+    cd packages/backend/native \
+ && napi build --release --strip --no-const-enum \
  && cp -f server-native.node server-native.x64.node \
  && cp -f server-native.node server-native.arm64.node \
  && cp -f server-native.node server-native.armv7.node
 
-# Front-end + server bundles (stable, self-hosted). The HTML plugin stamps the
-# commit; .git is not in the build context, so it reads GITHUB_SHA instead.
+# The bundler exits 0 even on compile errors, so each stage below verifies
+# its outputs. The HTML plugin stamps the commit; .git is not in the build
+# context, so it reads GITHUB_SHA instead.
+ARG GITHUB_SHA
+
+# ---- web bundle (the heaviest; runs beside the stages below) ----
+FROM prepared AS web
 ARG GITHUB_SHA
 RUN test -n "$GITHUB_SHA" || { echo "pass --build-arg GITHUB_SHA=\$(git rev-parse HEAD)"; exit 1; } \
  && BUILD_TYPE=stable SELF_HOSTED=true yarn notesgraph bundle -p @notesgraph/web \
+ && test -f packages/frontend/apps/web/dist/selfhost.html
+
+# ---- admin + mobile bundles ----
+FROM prepared AS frontends
+ARG GITHUB_SHA
+RUN test -n "$GITHUB_SHA" || { echo "pass --build-arg GITHUB_SHA=\$(git rev-parse HEAD)"; exit 1; } \
  && BUILD_TYPE=stable SELF_HOSTED=true yarn notesgraph bundle -p @notesgraph/admin \
  && BUILD_TYPE=stable SELF_HOSTED=true yarn notesgraph bundle -p @notesgraph/mobile \
- && yarn workspace @notesgraph/server build
-
-# The bundler exits 0 even on compile errors — verify the outputs exist.
-RUN test -f packages/backend/server/dist/main.js \
- && test -f packages/frontend/apps/web/dist/selfhost.html \
  && test -d packages/frontend/admin/dist \
  && test -d packages/frontend/apps/mobile/dist
 
-# Prod-only server deps staged into the server package (mirror image-build.sh).
-RUN yarn workspaces focus @notesgraph/server --production \
+# ---- server bundle + prod-only deps (mirror image-build.sh) ----
+FROM prepared AS server
+COPY --from=native /app/packages/backend/native/server-native.*.node packages/backend/native/
+RUN yarn workspace @notesgraph/server build \
+ && test -f packages/backend/server/dist/main.js
+RUN --mount=type=cache,target=/root/.yarn/berry/cache,sharing=locked \
+    yarn workspaces focus @notesgraph/server --production \
  && yarn workspace @notesgraph/server prisma generate \
  && rm -rf packages/backend/server/node_modules \
  && mv node_modules packages/backend/server/node_modules
@@ -68,10 +119,10 @@ RUN yarn workspaces focus @notesgraph/server --production \
 # ---- assets stage: identical shape to .github/deployment/node/Dockerfile ----
 FROM node:22-trixie-slim AS assets
 WORKDIR /app
-COPY --from=builder /app/packages/backend/server /app
-COPY --from=builder /app/packages/frontend/apps/web/dist /app/static
-COPY --from=builder /app/packages/frontend/admin/dist /app/static/admin
-COPY --from=builder /app/packages/frontend/apps/mobile/dist /app/static/mobile
+COPY --from=server /app/packages/backend/server /app
+COPY --from=web /app/packages/frontend/apps/web/dist /app/static
+COPY --from=frontends /app/packages/frontend/admin/dist /app/static/admin
+COPY --from=frontends /app/packages/frontend/apps/mobile/dist /app/static/mobile
 ARG TARGETARCH
 ARG TARGETVARIANT
 RUN apt-get update && \
