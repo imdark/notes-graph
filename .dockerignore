@@ -27,3 +27,7 @@
 
 # Workspace node_modules from the host would overwrite the image's own
 **/node_modules
+
+# The Rust addon deploy-prod.yml restores; it goes in through its own build
+# context (native-prebuilt-files), never through COPY . .
+native-prebuilt

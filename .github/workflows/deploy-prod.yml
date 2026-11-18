@@ -91,6 +91,22 @@ jobs:
       - uses: docker/setup-buildx-action@v3
         if: inputs.image_sha == ''
 
+      # The Rust addon is ~10 of the build's ~15 min (it compiles from
+      # scratch on every runner) and its sources rarely change. Keep the
+      # compiled file keyed on everything the Dockerfile's `native` stage
+      # reads; on a hit the build takes it instead and never runs `native`.
+      - name: Restore the Rust addon
+        id: native
+        if: inputs.image_sha == ''
+        uses: actions/cache/restore@v4
+        with:
+          path: native-prebuilt
+          key: server-native-${{ hashFiles('Cargo.toml', 'Cargo.lock', 'rust-toolchain.toml', 'packages/backend/native/**', 'packages/common/native/**', 'packages/frontend/mobile-native/**', 'packages/frontend/native/**', '.github/deployment/node/Dockerfile.selfhost') }}
+
+      - name: Addon context
+        if: inputs.image_sha == ''
+        run: mkdir -p native-prebuilt
+
       - name: Build and push image
         if: inputs.image_sha == ''
         uses: docker/build-push-action@v6
@@ -98,12 +114,35 @@ jobs:
           context: .
           file: .github/deployment/node/Dockerfile.selfhost
           platforms: linux/amd64
-          build-args: GITHUB_SHA=${{ github.sha }}
+          build-args: |
+            GITHUB_SHA=${{ github.sha }}
+            NATIVE_STAGE=${{ steps.native.outputs.cache-hit == 'true' && 'native-prebuilt' || 'native' }}
+          # Always given (empty on a miss), so the unused stage that names it
+          # can't make BuildKit look for an image of that name.
+          build-contexts: native-prebuilt-files=native-prebuilt
           tags: ${{ steps.ecr.outputs.registry }}/notesgraph:${{ github.sha }}
           push: true
           # No layer cache: `COPY . .` comes before yarn install, so a new
           # commit rebuilds every expensive layer anyway, and exporting the
-          # cache cost 14 min to save ~25 s.
+          # cache cost 14 min to save ~25 s. The Rust addon is kept on its
+          # own instead (above and below).
+
+      # A miss compiled the addon in the build above; take it from this
+      # builder's layers (seconds, nothing recompiles) and keep it.
+      - name: Export the Rust addon
+        if: inputs.image_sha == '' && steps.native.outputs.cache-hit != 'true'
+        run: |
+          docker buildx build --platform linux/amd64 \
+            -f .github/deployment/node/Dockerfile.selfhost \
+            --target native-export --output type=local,dest=native-prebuilt .
+          test -s native-prebuilt/server-native.node
+
+      - name: Save the Rust addon
+        if: inputs.image_sha == '' && steps.native.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: native-prebuilt
+          key: ${{ steps.native.outputs.cache-primary-key }}
 
       - name: Roll the box
         env:
