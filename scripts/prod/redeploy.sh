@@ -239,8 +239,17 @@ if [ "$BK_NEED" = "1" ]; then
   BK_USER=$(grep -E '^DB_USERNAME=' .env | cut -d= -f2- | tr -d '"')
   BK_DB=$(grep -E '^DB_DATABASE=' .env | cut -d= -f2- | tr -d '"')
   BK_DB=${BK_DB:-notesgraph}
-  BK_FILE="backups/db-${BK_TS}.sql.gz"
-  if docker exec notesgraph_postgres pg_dump -U "$BK_USER" -d "$BK_DB" | gzip > "$BK_FILE"; then
+  # zstd on both cores: on this box gzip -6 was ~122 s of a 2 GB dump and
+  # zstd -3 -T0 ~10 s, 30% smaller (restore: zstd -dc <file> | psql ...).
+  # gzip stays the fallback if zstd is ever missing.
+  if command -v zstd >/dev/null 2>&1; then
+    BK_FILE="backups/db-${BK_TS}.sql.zst"
+    BK_COMPRESS=(zstd -3 -T0 -q)
+  else
+    BK_FILE="backups/db-${BK_TS}.sql.gz"
+    BK_COMPRESS=(gzip)
+  fi
+  if docker exec notesgraph_postgres pg_dump -U "$BK_USER" -d "$BK_DB" | "${BK_COMPRESS[@]}" > "$BK_FILE"; then
     echo "backup: $BK_FILE ($(du -h "$BK_FILE" | cut -f1))"
   else
     rm -f "$BK_FILE"
@@ -258,7 +267,9 @@ if [ "$BK_NEED" = "1" ]; then
   # is taken every deploy, so 10 held ~1.5 GB on a 58 GB disk that is already
   # mostly images; 5 still reaches back a few days of deploys.
   BACKUPS_KEEP=${BACKUPS_KEEP:-5}
-  ls -1t backups/db-*.sql.gz 2>/dev/null | tail -n +$((BACKUPS_KEEP + 1)) | xargs -r rm -f || true
+  # Both formats count toward the newest BACKUPS_KEEP, so older .sql.gz
+  # dumps age out as .sql.zst ones arrive.
+  ls -1t backups/db-*.sql.zst backups/db-*.sql.gz 2>/dev/null | tail -n +$((BACKUPS_KEEP + 1)) | xargs -r rm -f || true
   ls -1t backups/config-*.tar.gz 2>/dev/null | tail -n +$((BACKUPS_KEEP + 1)) | xargs -r rm -f || true
 else
   step "db backup skipped (${BK_WHY})"
