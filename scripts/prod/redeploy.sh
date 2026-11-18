@@ -223,33 +223,46 @@ echo "BUILD-ALL-DONE"
 cd /opt/notesgraph
 
 # --- backup BEFORE the migration, so a bad migration is recoverable ----------
-step "db backup (pre-migration)"
-mkdir -p backups
-BK_TS=$(date +%Y%m%d-%H%M%S)
-BK_USER=$(grep -E '^DB_USERNAME=' .env | cut -d= -f2- | tr -d '"')
-BK_DB=$(grep -E '^DB_DATABASE=' .env | cut -d= -f2- | tr -d '"')
-BK_DB=${BK_DB:-notesgraph}
-BK_FILE="backups/db-${BK_TS}.sql.gz"
-if docker exec notesgraph_postgres pg_dump -U "$BK_USER" -d "$BK_DB" | gzip > "$BK_FILE"; then
-  echo "backup: $BK_FILE ($(du -h "$BK_FILE" | cut -f1))"
-else
-  rm -f "$BK_FILE"
-  if [ "${SKIP_DB_BACKUP:-0}" = "1" ]; then
-    echo "WARN db backup failed — continuing because SKIP_DB_BACKUP=1"
-  else
-    echo "FATAL: db backup FAILED — aborting before migration (set SKIP_DB_BACKUP=1 to override)"
-    exit 1
-  fi
+# Only when this deploy brings a migration the database hasn't had: most
+# don't, and the dump was ~2 min of every deploy. migrations-changed.sh
+# answers "yes" whenever it can't tell. FORCE_DB_BACKUP=1 always backs up.
+MIGRATED_RECORD=/opt/notesgraph/migrated-commit
+BK_WHY="$(bash "$SRC/scripts/prod/migrations-changed.sh" "$SRC" "$MIGRATED_RECORD")" && BK_NEED=1 || BK_NEED=0
+if [ "${FORCE_DB_BACKUP:-0}" = "1" ]; then
+  BK_NEED=1
+  BK_WHY="FORCE_DB_BACKUP=1"
 fi
-# Snapshot the config dir too — losing private.key would sign everyone out.
-tar czf "backups/config-${BK_TS}.tar.gz" -C /opt/notesgraph/data config 2>/dev/null \
-  || echo "WARN config snapshot failed"
-# Retention: keep the newest BACKUPS_KEEP of each. A dump is ~150 MB and one
-# is taken every deploy, so 10 held ~1.5 GB on a 58 GB disk that is already
-# mostly images; 5 still reaches back a few days of deploys.
-BACKUPS_KEEP=${BACKUPS_KEEP:-5}
-ls -1t backups/db-*.sql.gz 2>/dev/null | tail -n +$((BACKUPS_KEEP + 1)) | xargs -r rm -f || true
-ls -1t backups/config-*.tar.gz 2>/dev/null | tail -n +$((BACKUPS_KEEP + 1)) | xargs -r rm -f || true
+if [ "$BK_NEED" = "1" ]; then
+  step "db backup (pre-migration: ${BK_WHY})"
+  mkdir -p backups
+  BK_TS=$(date +%Y%m%d-%H%M%S)
+  BK_USER=$(grep -E '^DB_USERNAME=' .env | cut -d= -f2- | tr -d '"')
+  BK_DB=$(grep -E '^DB_DATABASE=' .env | cut -d= -f2- | tr -d '"')
+  BK_DB=${BK_DB:-notesgraph}
+  BK_FILE="backups/db-${BK_TS}.sql.gz"
+  if docker exec notesgraph_postgres pg_dump -U "$BK_USER" -d "$BK_DB" | gzip > "$BK_FILE"; then
+    echo "backup: $BK_FILE ($(du -h "$BK_FILE" | cut -f1))"
+  else
+    rm -f "$BK_FILE"
+    if [ "${SKIP_DB_BACKUP:-0}" = "1" ]; then
+      echo "WARN db backup failed — continuing because SKIP_DB_BACKUP=1"
+    else
+      echo "FATAL: db backup FAILED — aborting before migration (set SKIP_DB_BACKUP=1 to override)"
+      exit 1
+    fi
+  fi
+  # Snapshot the config dir too — losing private.key would sign everyone out.
+  tar czf "backups/config-${BK_TS}.tar.gz" -C /opt/notesgraph/data config 2>/dev/null \
+    || echo "WARN config snapshot failed"
+  # Retention: keep the newest BACKUPS_KEEP of each. A dump is ~150 MB and one
+  # is taken every deploy, so 10 held ~1.5 GB on a 58 GB disk that is already
+  # mostly images; 5 still reaches back a few days of deploys.
+  BACKUPS_KEEP=${BACKUPS_KEEP:-5}
+  ls -1t backups/db-*.sql.gz 2>/dev/null | tail -n +$((BACKUPS_KEEP + 1)) | xargs -r rm -f || true
+  ls -1t backups/config-*.tar.gz 2>/dev/null | tail -n +$((BACKUPS_KEEP + 1)) | xargs -r rm -f || true
+else
+  step "db backup skipped (${BK_WHY})"
+fi
 # -----------------------------------------------------------------------------
 
 # The migration runs on its own, attached, before the server is touched. It
@@ -262,6 +275,9 @@ ls -1t backups/config-*.tar.gz 2>/dev/null | tail -n +$((BACKUPS_KEEP + 1)) | xa
 step "migration (the running server stays up until it passes)"
 docker compose -f compose.yml --env-file .env up --force-recreate --exit-code-from notesgraph_migration notesgraph_migration
 step_end
+# The database now has this commit's migrations: the next deploy compares
+# against it to decide whether it needs a backup.
+git -C "$SRC" rev-parse HEAD > "$MIGRATED_RECORD" 2>/dev/null || rm -f "$MIGRATED_RECORD"
 step "rolling stack"
 docker compose -f compose.yml --env-file .env up -d --force-recreate notesgraph
 docker compose -f compose.yml --env-file .env up -d
