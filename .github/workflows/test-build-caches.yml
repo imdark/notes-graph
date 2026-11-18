@@ -109,7 +109,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: A typical change (one frontend line)
-        run: echo "export const __buildCacheProbe = '${{ github.run_id }}';" >> packages/frontend/core/src/index.ts
+        # A side effect, so the bundler keeps it and that chunk's hash changes.
+        run: |
+          test -f packages/frontend/apps/web/src/app.tsx
+          echo "(globalThis as any).__buildCacheProbe = '${{ github.run_id }}';" >> packages/frontend/apps/web/src/app.tsx
       - *free
       - uses: docker/setup-buildx-action@v3
       - *restore_native
