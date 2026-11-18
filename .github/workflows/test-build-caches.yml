@@ -9,6 +9,7 @@ name: Test build caches (temporary)
 on:
   push:
     branches: [deploy-reuse-compressed-assets]
+    paths-ignore: ['.github/workflows/test-disk-bench.yml']
 
 permissions:
   contents: read
