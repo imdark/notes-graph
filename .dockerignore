@@ -31,3 +31,5 @@
 # The Rust addon deploy-prod.yml restores; it goes in through its own build
 # context (native-prebuilt-files), never through COPY . .
 native-prebuilt
+compress-cache
+compress-cache-new

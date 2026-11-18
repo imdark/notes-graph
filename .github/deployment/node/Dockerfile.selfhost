@@ -150,8 +150,20 @@ ARG TARGETVARIANT
 RUN apt-get update && \
     apt-get install -y --no-install-recommends openssl ca-certificates && \
     rm -rf /var/lib/apt/lists/*
+# Compressed .br/.gz from earlier deploys, by content hash (deploy-prod.yml
+# passes them as the compress-cache-files context, empty when it has none).
+# docker-clean reuses what matches and writes this build's set to
+# /compress-cache-out for the next deploy. Both live outside /app, so the
+# final image (COPY --from=assets /app) never carries them.
+COPY --from=compress-cache-files / /compress-cache-in
 RUN NOTESGRAPH_DOCKER_CLEAN=1 TARGETARCH="${TARGETARCH}" TARGETVARIANT="${TARGETVARIANT}" \
+    NOTESGRAPH_COMPRESS_CACHE_IN=/compress-cache-in \
+    NOTESGRAPH_COMPRESS_CACHE_OUT=/compress-cache-out \
     node ./scripts/docker-clean.mjs
+
+# ---- only this build's compressed assets, for deploy-prod.yml to keep ----
+FROM scratch AS compress-cache-export
+COPY --from=assets /compress-cache-out /
 
 FROM node:22-trixie-slim
 WORKDIR /app

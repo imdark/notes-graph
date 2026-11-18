@@ -1,4 +1,5 @@
 import { spawnSync } from 'node:child_process';
+import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -48,6 +49,17 @@ const BROTLI_QUALITY = Number(process.env.NOTESGRAPH_BROTLI_QUALITY) || 10;
 const COMPRESS_CONCURRENCY =
   Number(process.env.NOTESGRAPH_COMPRESS_CONCURRENCY) ||
   Math.max(1, os.cpus().length);
+
+/**
+ * A cache of earlier .br/.gz outputs, named by a hash of the source bytes and
+ * the settings. Bundles are content-hashed, so most of a deploy's files are
+ * byte-identical to the last one's; copying their compressed forms back is
+ * cheap where re-running brotli q10 on them is most of this step. CACHE_IN is
+ * read (may be empty or missing); CACHE_OUT gets this build's full set, so the
+ * kept cache is exactly the files in use and doesn't grow forever.
+ */
+const CACHE_IN = process.env.NOTESGRAPH_COMPRESS_CACHE_IN || '';
+const CACHE_OUT = process.env.NOTESGRAPH_COMPRESS_CACHE_OUT || '';
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_APP_ROOT = path.resolve(SCRIPT_DIR, '..');
@@ -211,9 +223,28 @@ async function alreadyCompressed(fullPath) {
   }
 }
 
+function cacheKey(buf) {
+  const hash = crypto.createHash('sha256').update(buf).digest('hex');
+  return `${hash}-br${BROTLI_QUALITY}-gz9`;
+}
+
+async function writeOutputs(fullPath, key, br, gz) {
+  await Promise.all([
+    fs.writeFile(`${fullPath}.br`, br),
+    fs.writeFile(`${fullPath}.gz`, gz),
+  ]);
+  if (key && CACHE_OUT) {
+    await Promise.all([
+      fs.writeFile(path.join(CACHE_OUT, `${key}.br`), br),
+      fs.writeFile(path.join(CACHE_OUT, `${key}.gz`), gz),
+    ]);
+  }
+}
+
+/** 'compressed', 'reused' (from the cache), or null when skipped. */
 async function compressOne(fullPath) {
   if (await alreadyCompressed(fullPath)) {
-    return false;
+    return null;
   }
 
   let buf;
@@ -221,10 +252,26 @@ async function compressOne(fullPath) {
     buf = await fs.readFile(fullPath);
   } catch (err) {
     debug(`failed to read ${fullPath}: ${err?.message ?? String(err)}`);
-    return false;
+    return null;
   }
   if (buf.length < MIN_COMPRESS_BYTES) {
-    return false;
+    return null;
+  }
+
+  const key = CACHE_IN || CACHE_OUT ? cacheKey(buf) : null;
+  if (key && CACHE_IN) {
+    try {
+      const [br, gz] = await Promise.all([
+        fs.readFile(path.join(CACHE_IN, `${key}.br`)),
+        fs.readFile(path.join(CACHE_IN, `${key}.gz`)),
+      ]);
+      if (br.length && gz.length) {
+        await writeOutputs(fullPath, key, br, gz);
+        return 'reused';
+      }
+    } catch {
+      // Not cached (or unreadable): compress it below.
+    }
   }
 
   try {
@@ -237,14 +284,11 @@ async function compressOne(fullPath) {
       }),
       gzipCompress(buf, { level: 9 }),
     ]);
-    await Promise.all([
-      fs.writeFile(`${fullPath}.br`, br),
-      fs.writeFile(`${fullPath}.gz`, gz),
-    ]);
-    return true;
+    await writeOutputs(fullPath, key, br, gz);
+    return 'compressed';
   } catch (err) {
     debug(`failed to compress ${fullPath}: ${err?.message ?? String(err)}`);
-    return false;
+    return null;
   }
 }
 
@@ -268,16 +312,21 @@ async function precompressStatic(rootDir) {
   );
   sized.sort((a, b) => b.size - a.size);
 
+  if (CACHE_OUT) {
+    await fs.mkdir(CACHE_OUT, { recursive: true });
+  }
+
   const started = Date.now();
   let compressed = 0;
+  let reused = 0;
   let next = 0;
 
   const worker = async () => {
     while (next < sized.length) {
       const { file } = sized[next++];
-      if (await compressOne(file)) {
-        compressed += 1;
-      }
+      const result = await compressOne(file);
+      if (result === 'compressed') compressed += 1;
+      if (result === 'reused') reused += 1;
     }
   };
 
@@ -285,12 +334,12 @@ async function precompressStatic(rootDir) {
   await Promise.all(Array.from({ length: workers }, worker));
 
   log(
-    `precompressed ${compressed} files (brotli q${BROTLI_QUALITY}, ${workers} workers) in ${Math.round(
+    `precompressed ${compressed} files, reused ${reused} from the cache (brotli q${BROTLI_QUALITY}, ${workers} workers) in ${Math.round(
       (Date.now() - started) / 1000
     )}s`
   );
 
-  return compressed;
+  return compressed + reused;
 }
 
 function normalizeTargetKey(arch, variant) {
