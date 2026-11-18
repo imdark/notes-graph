@@ -20,11 +20,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - &free
-        name: Free disk
-        run: |
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
-            /opt/hostedtoolcache/CodeQL /usr/local/share/boost "$AGENT_TOOLSDIRECTORY"
-          sudo docker image prune -af
+        name: Disk for Docker
+        run: scripts/ci/docker-disk.sh
       - uses: docker/setup-buildx-action@v3
       - &restore_native
         name: Restore the Rust addon

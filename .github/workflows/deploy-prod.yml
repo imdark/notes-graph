@@ -59,13 +59,11 @@ jobs:
         if: inputs.image_sha == ''
         run: node scripts/prod/deploy-info.mjs
 
-      # The runner ships ~14 GB free; the build needs more.
-      - name: Free disk
+      # The runner ships ~14 GB free on / and the build needs more: put
+      # Docker's data on the runner's second disk (see the script).
+      - name: Disk for Docker
         if: inputs.image_sha == ''
-        run: |
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
-            /opt/hostedtoolcache/CodeQL /usr/local/share/boost "$AGENT_TOOLSDIRECTORY"
-          sudo docker image prune -af
+        run: scripts/ci/docker-disk.sh
 
       - uses: aws-actions/configure-aws-credentials@v4
         with:
