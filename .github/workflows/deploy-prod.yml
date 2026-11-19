@@ -59,13 +59,11 @@ jobs:
         if: inputs.image_sha == ''
         run: node scripts/prod/deploy-info.mjs
 
-      # The runner ships ~14 GB free; the build needs more.
-      - name: Free disk
+      # The runner ships ~14 GB free on / and the build needs more: put
+      # Docker's data on the runner's second disk (see the script).
+      - name: Disk for Docker
         if: inputs.image_sha == ''
-        run: |
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
-            /opt/hostedtoolcache/CodeQL /usr/local/share/boost "$AGENT_TOOLSDIRECTORY"
-          sudo docker image prune -af
+        run: scripts/ci/docker-disk.sh
 
       - uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -91,6 +89,33 @@ jobs:
       - uses: docker/setup-buildx-action@v3
         if: inputs.image_sha == ''
 
+      # The Rust addon is ~10 of the build's ~15 min (it compiles from
+      # scratch on every runner) and its sources rarely change. Keep the
+      # compiled file keyed on everything the Dockerfile's `native` stage
+      # reads; on a hit the build takes it instead and never runs `native`.
+      - name: Restore the Rust addon
+        id: native
+        if: inputs.image_sha == ''
+        uses: actions/cache/restore@v4
+        with:
+          path: native-prebuilt
+          key: server-native-${{ hashFiles('Cargo.toml', 'Cargo.lock', 'rust-toolchain.toml', 'packages/backend/native/**', 'packages/common/native/**', 'packages/frontend/mobile-native/**', 'packages/frontend/native/**', '.github/deployment/node/Dockerfile.selfhost') }}
+
+      # The .br/.gz of the last deploy's static assets, by content hash: most
+      # files are byte-identical between deploys, so docker-clean copies their
+      # compressed forms back instead of re-running brotli on them.
+      - name: Restore compressed assets
+        if: inputs.image_sha == ''
+        uses: actions/cache/restore@v4
+        with:
+          path: compress-cache
+          key: compressed-assets-${{ github.sha }}
+          restore-keys: compressed-assets-
+
+      - name: Build contexts
+        if: inputs.image_sha == ''
+        run: mkdir -p native-prebuilt compress-cache
+
       - name: Build and push image
         if: inputs.image_sha == ''
         uses: docker/build-push-action@v6
@@ -98,12 +123,63 @@ jobs:
           context: .
           file: .github/deployment/node/Dockerfile.selfhost
           platforms: linux/amd64
-          build-args: GITHUB_SHA=${{ github.sha }}
+          build-args: |
+            GITHUB_SHA=${{ github.sha }}
+            NATIVE_STAGE=${{ steps.native.outputs.cache-hit == 'true' && 'native-prebuilt' || 'native' }}
+          # Always given (empty on a miss), so the unused stage that names it
+          # can't make BuildKit look for an image of that name.
+          build-contexts: |
+            native-prebuilt-files=native-prebuilt
+            compress-cache-files=compress-cache
           tags: ${{ steps.ecr.outputs.registry }}/notesgraph:${{ github.sha }}
           push: true
           # No layer cache: `COPY . .` comes before yarn install, so a new
           # commit rebuilds every expensive layer anyway, and exporting the
-          # cache cost 14 min to save ~25 s.
+          # cache cost 14 min to save ~25 s. The Rust addon is kept on its
+          # own instead (above and below).
+
+      # A miss compiled the addon in the build above; take it from this
+      # builder's layers (seconds, nothing recompiles) and keep it.
+      - name: Export the Rust addon
+        if: inputs.image_sha == '' && steps.native.outputs.cache-hit != 'true'
+        run: |
+          docker buildx build --platform linux/amd64 \
+            -f .github/deployment/node/Dockerfile.selfhost \
+            --target native-export --output type=local,dest=native-prebuilt .
+          test -s native-prebuilt/server-native.node
+
+      - name: Save the Rust addon
+        if: inputs.image_sha == '' && steps.native.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: native-prebuilt
+          key: ${{ steps.native.outputs.cache-primary-key }}
+
+      # This build's compressed assets, from the builder's layers: the same
+      # args and contexts as the build above, so nothing re-runs. Written
+      # beside the restored cache and swapped in, since changing that folder
+      # first would change the build's inputs.
+      - name: Export compressed assets
+        if: inputs.image_sha == ''
+        env:
+          NATIVE_STAGE: ${{ steps.native.outputs.cache-hit == 'true' && 'native-prebuilt' || 'native' }}
+        run: |
+          docker buildx build --platform linux/amd64 \
+            -f .github/deployment/node/Dockerfile.selfhost \
+            --build-arg GITHUB_SHA=${{ github.sha }} \
+            --build-arg NATIVE_STAGE="$NATIVE_STAGE" \
+            --build-context native-prebuilt-files=native-prebuilt \
+            --build-context compress-cache-files=compress-cache \
+            --target compress-cache-export --output type=local,dest=compress-cache-new .
+          rm -rf compress-cache && mv compress-cache-new compress-cache
+          echo "$(ls compress-cache | wc -l) files, $(du -sh compress-cache | cut -f1)"
+
+      - name: Save compressed assets
+        if: inputs.image_sha == ''
+        uses: actions/cache/save@v4
+        with:
+          path: compress-cache
+          key: compressed-assets-${{ github.sha }}
 
       - name: Roll the box
         env:

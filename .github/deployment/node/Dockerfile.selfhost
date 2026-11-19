@@ -20,9 +20,17 @@
 #   manifests -> deps -> prepared -+-> web -----------+
 #                                  +-> frontends ----+--> assets -> final
 #   native (Rust, parallel) -------+-> server --------+
+#     (or native-prebuilt: the addon kept from a deploy with the same Rust sources)
 #
 # `deps` only sees package manifests, so the yarn download layer is reused
 # until a dependency changes; a source edit re-runs only what it touches.
+
+# Which stage supplies the server's Rust addon. `native` compiles it (~10 min
+# on a CI runner, from scratch: its cargo cache mounts don't outlive the
+# runner). deploy-prod.yml passes `native-prebuilt` when the Rust sources are
+# unchanged since a deploy that kept its addon, plus that file as the
+# `native-prebuilt-files` build context; BuildKit then never runs `native`.
+ARG NATIVE_STAGE=native
 
 FROM node:22-trixie-slim AS toolchain
 WORKDIR /app
@@ -84,6 +92,20 @@ RUN --mount=type=cache,target=/root/.cargo/registry,sharing=locked \
  && cp -f server-native.node server-native.arm64.node \
  && cp -f server-native.node server-native.armv7.node
 
+# ---- the addon an earlier deploy built from the same Rust sources ----
+FROM toolchain AS native-prebuilt
+COPY --from=native-prebuilt-files server-native.node packages/backend/native/
+RUN cd packages/backend/native \
+ && cp -f server-native.node server-native.x64.node \
+ && cp -f server-native.node server-native.arm64.node \
+ && cp -f server-native.node server-native.armv7.node
+
+# ---- only the compiled addon, for deploy-prod.yml to keep for later deploys ----
+FROM scratch AS native-export
+COPY --from=native /app/packages/backend/native/server-native.node /
+
+FROM ${NATIVE_STAGE} AS native-out
+
 # The bundler exits 0 even on compile errors, so each stage below verifies
 # its outputs. The HTML plugin stamps the commit; .git is not in the build
 # context, so it reads GITHUB_SHA instead.
@@ -107,7 +129,7 @@ RUN test -n "$GITHUB_SHA" || { echo "pass --build-arg GITHUB_SHA=\$(git rev-pars
 
 # ---- server bundle + prod-only deps (mirror image-build.sh) ----
 FROM prepared AS server
-COPY --from=native /app/packages/backend/native/server-native.*.node packages/backend/native/
+COPY --from=native-out /app/packages/backend/native/server-native.*.node packages/backend/native/
 RUN yarn workspace @notesgraph/server build \
  && test -f packages/backend/server/dist/main.js
 RUN --mount=type=cache,target=/root/.yarn/berry/cache,sharing=locked \
@@ -128,8 +150,20 @@ ARG TARGETVARIANT
 RUN apt-get update && \
     apt-get install -y --no-install-recommends openssl ca-certificates && \
     rm -rf /var/lib/apt/lists/*
+# Compressed .br/.gz from earlier deploys, by content hash (deploy-prod.yml
+# passes them as the compress-cache-files context, empty when it has none).
+# docker-clean reuses what matches and writes this build's set to
+# /compress-cache-out for the next deploy. Both live outside /app, so the
+# final image (COPY --from=assets /app) never carries them.
+COPY --from=compress-cache-files / /compress-cache-in
 RUN NOTESGRAPH_DOCKER_CLEAN=1 TARGETARCH="${TARGETARCH}" TARGETVARIANT="${TARGETVARIANT}" \
+    NOTESGRAPH_COMPRESS_CACHE_IN=/compress-cache-in \
+    NOTESGRAPH_COMPRESS_CACHE_OUT=/compress-cache-out \
     node ./scripts/docker-clean.mjs
+
+# ---- only this build's compressed assets, for deploy-prod.yml to keep ----
+FROM scratch AS compress-cache-export
+COPY --from=assets /compress-cache-out /
 
 FROM node:22-trixie-slim
 WORKDIR /app
