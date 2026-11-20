@@ -1011,3 +1011,46 @@ describe('Headroom', () => {
     expect(env.ANTHROPIC_BASE_URL).toBeUndefined();
   });
 });
+
+describe('model routing', () => {
+  const run = async (over: Partial<Job>) => {
+    const seen: { options?: Options } = {};
+    const lines: string[] = [];
+    await runJob(job(over), {
+      api: api(),
+      workspaceId: 'ws-1',
+      settings: settings(),
+      query: fakeQuery([success('done')], seen),
+      say: line => lines.push(line),
+      signal: new AbortController().signal,
+    });
+    return { options: seen.options!, lines };
+  };
+
+  test("the server's pick sets the model, effort and fallback, and is said", async () => {
+    const { options, lines } = await run({
+      profile: profile({
+        routing: {
+          model: 'opus',
+          effort: 'xhigh',
+          fallbackModel: 'sonnet',
+          reasons: ['code task that says refactor'],
+        },
+      }),
+    });
+    expect(options.model).toBe('opus');
+    expect(options.effort).toBe('xhigh');
+    expect(options.fallbackModel).toBe('sonnet');
+    expect(
+      lines.some(l =>
+        l.includes('Model: opus, effort xhigh (code task that says refactor)')
+      )
+    ).toBe(true);
+  });
+
+  test('a profile from an older server leaves Claude Code its defaults', async () => {
+    const { options } = await run({});
+    expect(options.model).toBeUndefined();
+    expect(options.effort).toBeUndefined();
+  });
+});
