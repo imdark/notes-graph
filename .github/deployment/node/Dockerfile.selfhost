@@ -57,15 +57,24 @@ COPY --from=manifests-src /out /
 # ---- deps: download + link packages, no lifecycle scripts yet ----
 FROM toolchain AS deps
 COPY --from=manifests / .
-RUN --mount=type=cache,target=/root/.yarn/berry/cache,sharing=locked \
-    corepack enable && yarn install --immutable --mode=skip-build
+# yarn's download cache, kept by deploy-prod.yml from an earlier deploy with
+# the same yarn.lock (empty when it has none). It goes in as a layer, not a
+# cache mount: a mount seeded from a context came out empty when exported,
+# so the next deploy downloaded every package again (~95 s). The stages
+# below build on this one and so find the full cache; the final image copies
+# only /app, so none of it ships.
+COPY --from=yarn-cache-files / /root/.yarn/berry/cache/
+RUN corepack enable && yarn install --immutable --mode=skip-build
+
+# ---- yarn's download cache after install, for deploy-prod.yml to keep ----
+FROM scratch AS yarn-cache-export
+COPY --from=deps /root/.yarn/berry/cache /
 
 # ---- prepared: full source, then run the postinstall scripts ----
 # (`notesgraph init`, prisma generate, templates build need the sources.)
 FROM deps AS prepared
 COPY . .
-RUN --mount=type=cache,target=/root/.yarn/berry/cache,sharing=locked \
-    yarn install --immutable
+RUN yarn install --immutable
 
 # ---- native: Rust addon, independent of the JS stages ----
 # Compiles natively for linux/amd64 (emulated when the host is arm64). Only
@@ -132,8 +141,7 @@ FROM prepared AS server
 COPY --from=native-out /app/packages/backend/native/server-native.*.node packages/backend/native/
 RUN yarn workspace @notesgraph/server build \
  && test -f packages/backend/server/dist/main.js
-RUN --mount=type=cache,target=/root/.yarn/berry/cache,sharing=locked \
-    yarn workspaces focus @notesgraph/server --production \
+RUN yarn workspaces focus @notesgraph/server --production \
  && yarn workspace @notesgraph/server prisma generate \
  && rm -rf packages/backend/server/node_modules \
  && mv node_modules packages/backend/server/node_modules
