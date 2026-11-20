@@ -492,7 +492,7 @@ export const NOTESGRAPH_FLAGS = {
     defaultState: true,
   },
   enable_agent_plugins: {
-    commit: '',
+    commit: 'cfcdd8d607d9e3a8b299d0920724a3c7eff740a5',
     category: 'notesgraph',
     displayName: 'Plugins made by agents',
     description:
