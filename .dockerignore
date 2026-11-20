@@ -33,3 +33,5 @@
 native-prebuilt
 compress-cache
 compress-cache-new
+yarn-cache
+yarn-cache-new

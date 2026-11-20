@@ -57,14 +57,27 @@ COPY --from=manifests-src /out /
 # ---- deps: download + link packages, no lifecycle scripts yet ----
 FROM toolchain AS deps
 COPY --from=manifests / .
-RUN --mount=type=cache,target=/root/.yarn/berry/cache,sharing=locked \
+RUN --mount=type=cache,target=/root/.yarn/berry/cache,sharing=locked,from=yarn-cache-files,source=/ \
     corepack enable && yarn install --immutable --mode=skip-build
+
+# The cache mounts above start from the yarn-cache-files context: the
+# download cache deploy-prod.yml kept from an earlier deploy with the same
+# yarn.lock (empty when it has none). Without it the fetch step is ~95 s of
+# every deploy, downloading the same packages again.
+
+# ---- the yarn download cache after install, for deploy-prod.yml to keep ----
+FROM deps AS yarn-cache-collect
+RUN --mount=type=cache,target=/root/.yarn/berry/cache,sharing=locked,from=yarn-cache-files,source=/ \
+    mkdir /yarn-cache-out && cp -a /root/.yarn/berry/cache/. /yarn-cache-out/
+
+FROM scratch AS yarn-cache-export
+COPY --from=yarn-cache-collect /yarn-cache-out /
 
 # ---- prepared: full source, then run the postinstall scripts ----
 # (`notesgraph init`, prisma generate, templates build need the sources.)
 FROM deps AS prepared
 COPY . .
-RUN --mount=type=cache,target=/root/.yarn/berry/cache,sharing=locked \
+RUN --mount=type=cache,target=/root/.yarn/berry/cache,sharing=locked,from=yarn-cache-files,source=/ \
     yarn install --immutable
 
 # ---- native: Rust addon, independent of the JS stages ----
@@ -132,7 +145,7 @@ FROM prepared AS server
 COPY --from=native-out /app/packages/backend/native/server-native.*.node packages/backend/native/
 RUN yarn workspace @notesgraph/server build \
  && test -f packages/backend/server/dist/main.js
-RUN --mount=type=cache,target=/root/.yarn/berry/cache,sharing=locked \
+RUN --mount=type=cache,target=/root/.yarn/berry/cache,sharing=locked,from=yarn-cache-files,source=/ \
     yarn workspaces focus @notesgraph/server --production \
  && yarn workspace @notesgraph/server prisma generate \
  && rm -rf packages/backend/server/node_modules \
