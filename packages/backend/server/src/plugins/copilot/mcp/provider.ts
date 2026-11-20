@@ -68,6 +68,32 @@ const HYBRID_DEFAULT_CHARS = 6000;
 /** A widget is stored in the doc and synced to every device. */
 const MAX_WIDGET_HTML = 100_000;
 const MAX_FLASHCARDS = 200;
+/** An agent plugin's client code, served from the database on every load. */
+const MAX_PLUGIN_CODE = 200_000;
+/**
+ * What an agent plugin may ask for: the parts of @notesgraph/plugin-sdk's
+ * capability list a single client file can use. `editor`, `docModes`,
+ * `native` and `backend` need a bundled build, the host's BlockSuite or a
+ * server bundle, which one agent-written file can't bring.
+ */
+const AGENT_PLUGIN_PERMISSIONS = [
+  'docs',
+  'workspace',
+  'ui',
+  'hooks',
+  'commands',
+  'storage',
+  'net',
+  'agents',
+] as const;
+const AGENT_PLUGIN_ID_RE = /^[a-z0-9][a-z0-9-]*(\.[a-z0-9][a-z0-9-]*)+$/;
+const AGENT_PLUGIN_GUIDE = [
+  'The code is one plain ES module with no build step: `export default { activate(ctx) { ... }, deactivate() { ... } }`. The only import that resolves is `react` (the host React, e.g. `import { createElement as h, useState } from "react"`); there is no JSX.',
+  'The host passes only the capabilities named in permissions:',
+  'ui: ctx.ui.addCommand({id, label, run}), addSidebarPanel({id, title, component}), addToolbarItem({id, tooltip, icon, run}), addSlashMenuItem({id, title, run({docId})}), addSettingsPage({id, title, component}), notify({title, message?, theme?: info|success|warning|error}). Contributions are removed when the plugin is turned off. A component is a React function component; one returning a string is fine too.',
+  'docs: ctx.docs.list(), get(id), getCurrent(), create({title}), getBlocks(docId) -> [{id, flavour, props, children}], insertBlock(docId, {flavour, props, parent?, index?}) -> blockId, updateBlock(docId, blockId, props), deleteBlock(docId, blockId). Flavours include notesgraph:note (the page body, parent of text blocks), notesgraph:paragraph (props.text), notesgraph:list, notesgraph:code.',
+  'storage: ctx.storage.get/set/delete/keys, kept per plugin on the device. hooks: ctx.hooks.on("app.open"|"doc.open"|"doc.close"|"doc.save"|"selection.change"|"navigate"|"sync", handler). commands: ctx.commands.register(id, fn), run(id, ...args). net: ctx.net.fetch(url, init). workspace: ctx.workspace.getCurrent() -> {id} | null. agents: ctx.agents.list(), listTemplates(), installTemplate(templateId), start(agentId, {kind: "doc", docId}).',
+].join('\n');
 
 type McpTextContent = {
   type: 'text';
@@ -2675,9 +2701,164 @@ export class WorkspaceMcpProvider {
         },
       });
 
+      const createPlugin = defineTool({
+        name: 'create_plugin',
+        title: 'Create Plugin',
+        description: [
+          'Create or update a plugin for the NotesGraph app itself: code that runs inside the app and adds commands, sidebar panels, slash-menu items or toolbar buttons, and can read and edit notes. Use create_widget instead for something that only lives inside one note.',
+          'Saving the same id again replaces the code and bumps the version. The plugin is not turned on by itself: the user installs it once from Settings → Plugins → Made by agents, and after that each update loads when the app starts, or at once with Update there. Read an existing one with list_plugins before changing it.',
+          AGENT_PLUGIN_GUIDE,
+        ].join('\n\n'),
+        parser: z.object({
+          id: z
+            .string()
+            .regex(
+              AGENT_PLUGIN_ID_RE,
+              'id must be reverse-DNS, e.g. agent.word-count'
+            )
+            .max(100),
+          name: z.string().trim().min(1).max(100),
+          description: z.string().max(500).optional(),
+          permissions: z.array(z.enum(AGENT_PLUGIN_PERMISSIONS)).default([]),
+          code: z.string().min(1).max(MAX_PLUGIN_CODE),
+          agent: z.string().optional(),
+        }),
+        inputSchema: {
+          type: 'object',
+          properties: {
+            id: {
+              type: 'string',
+              description:
+                'Reverse-DNS plugin id, e.g. "agent.word-count". The same id updates the plugin.',
+            },
+            name: {
+              type: 'string',
+              description: 'Name shown in Settings → Plugins.',
+            },
+            description: {
+              type: 'string',
+              description: 'One line on what it does.',
+            },
+            permissions: {
+              type: 'array',
+              items: { type: 'string', enum: [...AGENT_PLUGIN_PERMISSIONS] },
+              description:
+                'Capabilities the code uses; the host withholds the rest.',
+            },
+            code: {
+              type: 'string',
+              description: `The client ES module, at most ${MAX_PLUGIN_CODE} characters.`,
+            },
+            agent: agentInputSchema,
+          },
+          required: ['id', 'name', 'code'],
+          additionalProperties: false,
+        },
+        execute: async (
+          { id, name, description, permissions, code, agent },
+          options
+        ) => {
+          const secret = guardSecrets(code, name, description);
+          if (secret) return toolError(secret);
+          const allowed = await this.ac
+            .user(userId)
+            .workspace(workspaceId)
+            .can('Workspace.Settings.Update');
+          if (!allowed) {
+            return toolError(
+              'Only a workspace owner or admin can add plugins to this workspace.'
+            );
+          }
+          if (!/\bexport\s+default\b/.test(code)) {
+            return toolError(
+              'The code needs a default export: `export default { activate(ctx) { ... } }`.'
+            );
+          }
+          const aborted = abortIfNeeded(options.signal);
+          if (aborted) return aborted;
+          try {
+            const saved = await this.models.agentPlugin.save({
+              workspaceId,
+              pluginId: id,
+              name: name.replace(/[\r\n]+/g, ' '),
+              description: description?.replace(/[\r\n]+/g, ' ').trim(),
+              permissions: [...new Set(permissions)],
+              code,
+              userId,
+              agent,
+            });
+            return toolText(
+              JSON.stringify({
+                success: true,
+                id,
+                version: saved.version,
+                message:
+                  saved.version === '1.0.0'
+                    ? 'Plugin saved. Tell the user to install it from Settings → Plugins → Made by agents.'
+                    : 'Plugin updated. If the user already installed it, the new version loads when the app next starts, or now with Update in Settings → Plugins → Made by agents.',
+              })
+            );
+          } catch (error) {
+            return toolError(
+              `Failed to save plugin: ${error instanceof Error ? error.message : 'Unknown error'}`
+            );
+          }
+        },
+      });
+
+      const listPlugins = defineTool({
+        name: 'list_plugins',
+        title: 'List Plugins',
+        description:
+          'List the plugins agents made for this workspace with create_plugin. Pass an id to get that plugin with its code, to change it.',
+        parser: z.object({ id: z.string().optional() }),
+        inputSchema: {
+          type: 'object',
+          properties: {
+            id: {
+              type: 'string',
+              description: 'A plugin id, to include its code.',
+            },
+          },
+          additionalProperties: false,
+        },
+        execute: async ({ id }) => {
+          try {
+            if (id) {
+              const plugin = await this.models.agentPlugin.get(workspaceId, id);
+              if (!plugin) return toolError(`No plugin with id ${id}.`);
+              return toolText(
+                JSON.stringify({
+                  manifest: plugin.manifest,
+                  agent: plugin.agent,
+                  updatedAt: plugin.updatedAt,
+                  code: plugin.code,
+                })
+              );
+            }
+            const plugins = await this.models.agentPlugin.list(workspaceId);
+            return toolText(
+              JSON.stringify({
+                plugins: plugins.map(p => ({
+                  manifest: p.manifest,
+                  agent: p.agent,
+                  updatedAt: p.updatedAt,
+                })),
+              })
+            );
+          } catch (error) {
+            return toolError(
+              `Failed to list plugins: ${error instanceof Error ? error.message : 'Unknown error'}`
+            );
+          }
+        },
+      });
+
       tools.push(
         replyToComment,
         createWidget,
+        createPlugin,
+        listPlugins,
         createFlashcards,
         createDocument,
         ensureJournal,
