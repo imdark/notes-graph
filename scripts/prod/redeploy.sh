@@ -290,8 +290,15 @@ step_end
 # against it to decide whether it needs a backup.
 git -C "$SRC" rev-parse HEAD > "$MIGRATED_RECORD" 2>/dev/null || rm -f "$MIGRATED_RECORD"
 step "rolling stack"
-docker compose -f compose.yml --env-file .env up -d --force-recreate notesgraph
-docker compose -f compose.yml --env-file .env up -d
+# The migration passed above. The server lists it in depends_on
+# (service_completed_successfully), so without --no-deps recreating the
+# server ran it again, and the plain `up -d` below a third time, each time
+# waiting on postgres/redis/manticore health: most of this step's ~34 s.
+docker compose -f compose.yml --env-file .env up -d --no-deps --force-recreate notesgraph
+# Start whatever else isn't running (a new sidecar, or after a reboot), by
+# name and without deps, so the one-shot migration job stays done.
+mapfile -t ROLL_SERVICES < <(docker compose -f compose.yml --env-file .env config --services | grep -vx notesgraph_migration)
+docker compose -f compose.yml --env-file .env up -d --no-deps "${ROLL_SERVICES[@]}"
 docker image prune -f > /dev/null
 step_end
 echo "DEPLOY-DONE"
