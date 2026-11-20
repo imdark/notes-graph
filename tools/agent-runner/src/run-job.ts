@@ -20,7 +20,7 @@ import type {
   query as sdkQuery,
 } from '@anthropic-ai/claude-agent-sdk';
 
-import type { Job, NotesGraphApi } from './api';
+import type { Job, ModelRoute, NotesGraphApi } from './api';
 import {
   automationServer,
   emptyAutomation,
@@ -197,6 +197,12 @@ async function omniseek(settings: RunnerSettings, fetchImpl: typeof fetch) {
   return { url, token: settings.omniseekToken };
 }
 
+/** The transcript line that says which model the run is on, and why. */
+export const routeLine = (route: ModelRoute) =>
+  `  Model: ${route.model}, effort ${route.effort}` +
+  (route.reasons?.length ? ` (${route.reasons.join('; ')})` : '') +
+  '. Put #model:<name> or #effort:<level> in the note to choose.';
+
 export const DEFAULT_HEADROOM_URL = 'http://127.0.0.1:8787';
 
 /**
@@ -361,6 +367,8 @@ export async function runJob(job: Job, deps: RunDeps): Promise<RunOutcome> {
     }
 
     const headroom = await headroomBaseUrl(job, settings, fetchImpl, say);
+    const route = profile.routing;
+    if (route) say(routeLine(route));
 
     const abortController = new AbortController();
     deps.signal.addEventListener('abort', () => abortController.abort());
@@ -368,6 +376,15 @@ export async function runJob(job: Job, deps: RunDeps): Promise<RunOutcome> {
     const options: Options = {
       cwd,
       ...(maxTurns ? { maxTurns } : {}),
+      ...(route
+        ? {
+            model: route.model,
+            effort: route.effort,
+            ...(route.fallbackModel
+              ? { fallbackModel: route.fallbackModel }
+              : {}),
+          }
+        : {}),
       systemPrompt: {
         type: 'preset',
         preset: 'claude_code',

@@ -11,6 +11,7 @@
  */
 
 import type { AgentHeadroom } from '../headroom';
+import type { ModelRoute } from './model-router';
 
 export type AgentMcpServer = 'notesgraph' | 'run' | 'omniseek';
 
@@ -76,6 +77,11 @@ export interface AgentProfile {
   skills: AgentSkill[];
   /** Set by the Headroom plugin (plugins/headroom) when it is turned on. */
   headroom?: AgentHeadroom;
+  /**
+   * The model and effort the run starts on, picked from the job when it is
+   * claimed (model-router.ts). A runner that predates it uses its default.
+   */
+  routing?: ModelRoute;
 }
 
 export interface AgentSkill {
