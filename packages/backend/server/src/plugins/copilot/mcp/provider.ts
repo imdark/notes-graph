@@ -2705,7 +2705,7 @@ export class WorkspaceMcpProvider {
         title: 'Create Plugin',
         description: [
           'Create or update a plugin for the NotesGraph app itself: code that runs inside the app and adds commands, sidebar panels, slash-menu items or toolbar buttons, and can read and edit notes. Use create_widget instead for something that only lives inside one note.',
-          'Saving the same id again replaces the code and bumps the version. The plugin is not turned on by itself: the user installs it once from Settings → Plugins → Made by agents, and after that every update loads the next time they open or reload it. Read an existing one with list_plugins before changing it.',
+          'Saving the same id again replaces the code and bumps the version. The plugin is not turned on by itself: the user installs it once from Settings → Plugins → Made by agents, and after that each update loads when the app starts, or at once with Update there. Read an existing one with list_plugins before changing it.',
           AGENT_PLUGIN_GUIDE,
         ].join('\n\n'),
         parser: z.object({
@@ -2794,7 +2794,7 @@ export class WorkspaceMcpProvider {
                 message:
                   saved.version === '1.0.0'
                     ? 'Plugin saved. Tell the user to install it from Settings → Plugins → Made by agents.'
-                    : 'Plugin updated. If the user already installed it, it loads the new version on their next reload of the plugin or the app.',
+                    : 'Plugin updated. If the user already installed it, the new version loads when the app next starts, or now with Update in Settings → Plugins → Made by agents.',
               })
             );
           } catch (error) {

@@ -491,6 +491,15 @@ export const NOTESGRAPH_FLAGS = {
     configurable: true,
     defaultState: true,
   },
+  enable_agent_plugins: {
+    commit: '',
+    category: 'notesgraph',
+    displayName: 'Plugins made by agents',
+    description:
+      'A Made by agents section in Settings → Plugins lists the plugins agents wrote for this workspace with the create_plugin tool. Install one to run it; it reloads with the agent’s latest version each time the app starts.',
+    configurable: true,
+    defaultState: true,
+  },
 } satisfies { [key in string]: FlagInfo };
 
 // oxlint-disable-next-line no-redeclare

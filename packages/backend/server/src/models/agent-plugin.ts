@@ -42,7 +42,7 @@ const metadata = {
   updatedAt: true,
 } as const;
 
-/** 1.0.0 → 1.0.1: each save is a new version, so a reload is never served a stale copy. */
+/** 1.0.0 → 1.0.1: each save is a new version, which also gives index.js a new URL. */
 export function nextPatchVersion(version: string | undefined): string {
   const match = version?.match(/^(\d+)\.(\d+)\.(\d+)$/);
   if (!match) return '1.0.0';
@@ -93,7 +93,9 @@ export class AgentPluginModel extends BaseModel {
       ...(input.agent ? { author: input.agent } : {}),
       platforms: ['web', 'desktop', 'mobile'],
       permissions: input.permissions,
-      entry: { client: 'index.js' },
+      // The browser caches an import() by URL for the life of the page, so
+      // a new version needs a new URL to load without a full reload.
+      entry: { client: `index.js?v=${version}` },
     };
     return await this.db.agentPlugin.upsert({
       where: {

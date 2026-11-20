@@ -13,6 +13,11 @@ import { PluginContributionRegistry } from './services/contribution-registry';
 import { PluginMarketplaceService } from './services/marketplace';
 import { PluginService } from './services/plugin';
 
+export {
+  type AgentPluginEntry,
+  agentPluginUrl,
+  listAgentPlugins,
+} from './agent-plugins';
 export type { MarketplaceEntry } from './marketplace';
 export { PluginContextFactory } from './services/context-factory';
 export { PluginContributionRegistry } from './services/contribution-registry';
