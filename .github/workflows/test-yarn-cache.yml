@@ -66,6 +66,21 @@ jobs:
             yarn-cache-files=yarn-cache
           tags: notesgraph:test
           load: true
+      - &export_native
+        name: Export the Rust addon
+        if: steps.native.outputs.cache-hit != 'true'
+        run: |
+          docker buildx build --platform linux/amd64 \
+            -f .github/deployment/node/Dockerfile.selfhost \
+            --target native-export --output type=local,dest=native-prebuilt .
+          test -s native-prebuilt/server-native.node
+      - &save_native
+        name: Save the Rust addon
+        if: steps.native.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: native-prebuilt
+          key: ${{ steps.native.outputs.cache-primary-key }}
       - &export_yarn
         name: Export the yarn cache
         if: steps.yarn.outputs.cache-hit != 'true'
@@ -106,6 +121,8 @@ jobs:
       - *restore_yarn
       - *contexts
       - *build
+      - *export_native
+      - *save_native
       - *export_yarn
       - *save_yarn
       - *check
