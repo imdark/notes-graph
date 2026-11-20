@@ -1,0 +1,109 @@
+name: Test bundler cache + gzip level (temporary)
+
+# TEMPORARY: measure rspack's persistent cache in the image build, and gzip
+# level 1 for the image's layers. Delete before merging. `first` builds with
+# cold caches and keeps all four (Rust addon, compressed assets, yarn,
+# rspack); `second` restores them after a one-line web edit, then exports the
+# same layers at gzip's default level and at level 1.
+
+on:
+  push:
+    branches: [deploy-bundler-cache-faster-gzip]
+
+permissions:
+  contents: read
+
+env:
+  RUN: ${{ github.run_id }}
+
+jobs:
+  first:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - &disk
+        name: Disk for Docker
+        run: scripts/ci/docker-disk.sh
+      - &buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          cleanup: false
+      - &restore
+        name: Restore caches
+        id: restore
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            native-prebuilt
+            compress-cache
+            yarn-cache
+            rspack-cache
+          key: test-caches-${{ env.RUN }}-${{ github.job }}
+          restore-keys: test-caches-${{ env.RUN }}-
+      - &build
+        name: Build
+        run: |
+          mkdir -p native-prebuilt compress-cache yarn-cache rspack-cache
+          for d in native-prebuilt compress-cache yarn-cache rspack-cache; do echo "$d in: $(du -sh $d | cut -f1)"; done
+          stage=native; [ -s native-prebuilt/server-native.node ] && stage=native-prebuilt
+          echo "ARGS=--platform linux/amd64 -f .github/deployment/node/Dockerfile.selfhost --build-arg GITHUB_SHA=${{ github.sha }} --build-arg NATIVE_STAGE=$stage --build-context native-prebuilt-files=native-prebuilt --build-context compress-cache-files=compress-cache --build-context yarn-cache-files=yarn-cache --build-context rspack-cache-files=rspack-cache ." >> "$GITHUB_ENV"
+          s=$(date +%s)
+          docker buildx build --platform linux/amd64 -f .github/deployment/node/Dockerfile.selfhost \
+            --build-arg GITHUB_SHA=${{ github.sha }} --build-arg NATIVE_STAGE=$stage \
+            --build-context native-prebuilt-files=native-prebuilt \
+            --build-context compress-cache-files=compress-cache \
+            --build-context yarn-cache-files=yarn-cache \
+            --build-context rspack-cache-files=rspack-cache \
+            --progress=plain --output type=cacheonly . 2>&1 | tee build.log | grep -E "compiled .* in [0-9.]+ m?s|reused .* from the cache|Fetch step|└ Completed|DONE [0-9]{2,}" || true
+          echo "build: $(( $(date +%s) - s )) s"
+      - &keep
+        name: Keep the caches (as a deploy would)
+        run: |
+          s=$(date +%s)
+          if [ ! -s native-prebuilt/server-native.node ]; then
+            docker buildx build $ARGS --target native-export --output type=local,dest=native-new
+            rm -rf native-prebuilt && mv native-new native-prebuilt
+          fi
+          for t in compress-cache yarn-cache rspack-cache; do
+            docker buildx build $ARGS --target $t-export --output type=local,dest=$t-new
+          done
+          for t in compress-cache yarn-cache rspack-cache; do rm -rf $t && mv $t-new $t; done
+          for d in native-prebuilt compress-cache yarn-cache rspack-cache; do echo "$d out: $(du -sh $d | cut -f1)"; done
+          echo "export caches: $(( $(date +%s) - s )) s"
+      - &save
+        name: Save caches
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            native-prebuilt
+            compress-cache
+            yarn-cache
+            rspack-cache
+          key: test-caches-${{ env.RUN }}-${{ github.job }}
+
+  second:
+    needs: first
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: A typical change (one frontend line)
+        run: echo "(globalThis as any).__buildCacheProbe = '${{ github.run_id }}';" >> packages/frontend/apps/web/src/app.tsx
+      - *disk
+      - *buildx
+      - *restore
+      - *build
+      - name: Export the image, gzip default vs level 1
+        run: |
+          for lvl in default 1; do
+            opt=""; [ "$lvl" = 1 ] && opt=",compression-level=1"
+            s=$(date +%s.%N)
+            docker buildx build $ARGS --output type=oci,dest=img-$lvl.tar,compression=gzip,force-compression=true$opt
+            e=$(date +%s.%N)
+            echo "gzip $lvl: $(echo "$e - $s" | bc) s, $(du -h img-$lvl.tar | cut -f1)"
+          done
+      - name: The level-1 image runs
+        run: |
+          img=$(docker load -i img-1.tar | sed -nE 's/^Loaded image( ID)?: //p' | tail -1)
+          docker run --rm --entrypoint sh "$img" -c 'test -f /app/dist/main.js && test -n "$(ls /app/static/*.html)" && echo "image ok"'

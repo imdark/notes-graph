@@ -1,5 +1,8 @@
-import { rmSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { readdirSync, readFileSync, rmSync } from 'node:fs';
 import { cpus } from 'node:os';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { Logger } from '@notesgraph-tools/utils/logger';
 import { Package } from '@notesgraph-tools/utils/workspace';
@@ -19,6 +22,7 @@ import {
   createHTMLTargetConfig as createRspackHTMLTargetConfig,
   createNodeTargetConfig as createRspackNodeTargetConfig,
   createWorkerTargetConfig as createRspackWorkerTargetConfig,
+  getBuildConfigFromEnv,
 } from './rspack';
 import {
   shouldUploadReleaseAssets,
@@ -96,6 +100,64 @@ function getBaseWorkerConfigs(
   }
 
   return workerConfigs;
+}
+
+const SRC_DIR = dirname(fileURLToPath(import.meta.url));
+const ROOT_DIR = join(SRC_DIR, '..', '..', '..');
+
+/**
+ * Keep rspack's module cache between production builds, in
+ * NOTESGRAPH_RSPACK_CACHE_DIR (deploy-prod.yml restores and saves it; unset,
+ * nothing changes). Each config of the multi-build gets its own folder.
+ *
+ * Invalidation: `version` hashes the package, NODE_ENV, the whole build
+ * config (the values DefinePlugin bakes into modules, BUILD_CONFIG.*) and the
+ * contents of the bundler config code and yarn.lock, so any of those
+ * changing starts a separate cache instead of reusing modules compiled the
+ * old way. That is done here rather than with buildDependencies, which
+ * follows imports and can't resolve these TS sources' `.js` specifiers.
+ * `portable` keeps the cache valid at another checkout path.
+ *
+ * Measured locally on @notesgraph/web: 11.5 s compile cold, 1.5 s warm, and
+ * the warm build's 1094 files identical to an uncached build's.
+ */
+function usePersistentCache(pkg: Package, configs: MultiRspackOptions) {
+  const dir = process.env.NOTESGRAPH_RSPACK_CACHE_DIR;
+  if (!dir) return;
+  const sharedDir = join(SRC_DIR, 'rspack-shared');
+  const toolFiles = [
+    join(SRC_DIR, 'bundle.ts'),
+    join(SRC_DIR, 'rspack', 'index.ts'),
+    ...readdirSync(sharedDir)
+      .sort()
+      .map(file => join(sharedDir, file)),
+    join(ROOT_DIR, 'yarn.lock'),
+  ];
+  const hash = createHash('sha256').update(
+    JSON.stringify({
+      pkg: pkg.name,
+      env: process.env.NODE_ENV,
+      build: getBuildConfigFromEnv(pkg),
+    })
+  );
+  for (const file of toolFiles) hash.update(readFileSync(file));
+  const version = hash.digest('hex').slice(0, 16);
+  configs.forEach((config, i) => {
+    // Config names are entry paths: keep them relative, so the folder is the
+    // same in any checkout.
+    const name = String(config.name ?? i)
+      .replace(ROOT_DIR, '')
+      .replace(/[^A-Za-z0-9._-]+/g, '_');
+    config.cache = {
+      type: 'persistent',
+      version,
+      portable: true,
+      storage: {
+        type: 'filesystem',
+        directory: join(dir, pkg.name.replace('@notesgraph/', ''), name),
+      },
+    };
+  });
 }
 
 function getRspackBundleConfigs(pkg: Package): MultiRspackOptions {
@@ -277,6 +339,7 @@ export class BundleCommand extends PackageCommand {
 
     const config = getRspackBundleConfigs(pkg);
     config.parallelism = cpus().length;
+    usePersistentCache(pkg, config);
 
     const compiler = rspack(config);
     if (!compiler) {

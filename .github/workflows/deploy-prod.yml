@@ -128,9 +128,20 @@ jobs:
           key: yarn-cache-${{ hashFiles('yarn.lock', '.yarnrc.yml') }}
           restore-keys: yarn-cache-
 
+      # rspack's module caches for the web, admin and mobile bundles: a warm
+      # web build compiles in ~1.5 s instead of ~11 s. Changes every deploy,
+      # so like the compressed assets it's kept per commit, newest restored.
+      - name: Restore the bundler cache
+        if: inputs.image_sha == ''
+        uses: actions/cache/restore@v4
+        with:
+          path: rspack-cache
+          key: rspack-cache-${{ github.sha }}
+          restore-keys: rspack-cache-
+
       - name: Build contexts
         if: inputs.image_sha == ''
-        run: mkdir -p native-prebuilt compress-cache yarn-cache
+        run: mkdir -p native-prebuilt compress-cache yarn-cache rspack-cache
 
       - name: Build and push image
         if: inputs.image_sha == ''
@@ -148,8 +159,10 @@ jobs:
             native-prebuilt-files=native-prebuilt
             compress-cache-files=compress-cache
             yarn-cache-files=yarn-cache
-          tags: ${{ steps.ecr.outputs.registry }}/notesgraph:${{ github.sha }}
-          push: true
+            rspack-cache-files=rspack-cache
+          # gzip level 1: compressing the ~1.2 GB of new layers at the default
+          # level was ~32 s of every push.
+          outputs: type=image,name=${{ steps.ecr.outputs.registry }}/notesgraph:${{ github.sha }},push=true,compression=gzip,compression-level=1
           # No layer cache: `COPY . .` comes before yarn install, so a new
           # commit rebuilds every expensive layer anyway, and exporting the
           # cache cost 14 min to save ~25 s. The Rust addon is kept on its
@@ -188,6 +201,7 @@ jobs:
             --build-context native-prebuilt-files=native-prebuilt \
             --build-context compress-cache-files=compress-cache \
             --build-context yarn-cache-files=yarn-cache \
+            --build-context rspack-cache-files=rspack-cache \
             --target compress-cache-export --output type=local,dest=compress-cache-new .
           rm -rf compress-cache && mv compress-cache-new compress-cache
           echo "$(ls compress-cache | wc -l) files, $(du -sh compress-cache | cut -f1)"
@@ -198,6 +212,30 @@ jobs:
         with:
           path: compress-cache
           key: compressed-assets-${{ github.sha }}
+
+      - name: Export the bundler cache
+        if: inputs.image_sha == ''
+        env:
+          NATIVE_STAGE: ${{ steps.native.outputs.cache-hit == 'true' && 'native-prebuilt' || 'native' }}
+        run: |
+          docker buildx build --platform linux/amd64 \
+            -f .github/deployment/node/Dockerfile.selfhost \
+            --build-arg GITHUB_SHA=${{ github.sha }} \
+            --build-arg NATIVE_STAGE="$NATIVE_STAGE" \
+            --build-context native-prebuilt-files=native-prebuilt \
+            --build-context compress-cache-files=compress-cache \
+            --build-context yarn-cache-files=yarn-cache \
+            --build-context rspack-cache-files=rspack-cache \
+            --target rspack-cache-export --output type=local,dest=rspack-cache-new .
+          rm -rf rspack-cache && mv rspack-cache-new rspack-cache
+          echo "$(du -sh rspack-cache | cut -f1)"
+
+      - name: Save the bundler cache
+        if: inputs.image_sha == ''
+        uses: actions/cache/save@v4
+        with:
+          path: rspack-cache
+          key: rspack-cache-${{ github.sha }}
 
       # Only when yarn.lock changed (no exact cache): the cache after this
       # build's install, from the builder's cache mount.
@@ -213,6 +251,7 @@ jobs:
             --build-context native-prebuilt-files=native-prebuilt \
             --build-context compress-cache-files=compress-cache \
             --build-context yarn-cache-files=yarn-cache \
+            --build-context rspack-cache-files=rspack-cache \
             --target yarn-cache-export --output type=local,dest=yarn-cache-new .
           rm -rf yarn-cache && mv yarn-cache-new yarn-cache
           echo "$(ls yarn-cache | wc -l) files, $(du -sh yarn-cache | cut -f1)"
