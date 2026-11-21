@@ -97,13 +97,20 @@ jobs:
       # scratch on every runner) and its sources rarely change. Keep the
       # compiled file keyed on everything the Dockerfile's `native` stage
       # reads; on a hit the build takes it instead and never runs `native`.
+      # Only the Dockerfile stages that build the addon count: hashing the
+      # whole file made any Dockerfile edit recompile it (~10 min).
+      - name: Rust addon stages
+        id: native_stages
+        if: inputs.image_sha == ''
+        run: echo "hash=$(scripts/ci/native-stage-hash.sh)" >> "$GITHUB_OUTPUT"
+
       - name: Restore the Rust addon
         id: native
         if: inputs.image_sha == ''
         uses: actions/cache/restore@v4
         with:
           path: native-prebuilt
-          key: server-native-${{ hashFiles('Cargo.toml', 'Cargo.lock', 'rust-toolchain.toml', 'packages/backend/native/**', 'packages/common/native/**', 'packages/frontend/mobile-native/**', 'packages/frontend/native/**', '.github/deployment/node/Dockerfile.selfhost') }}
+          key: server-native-${{ hashFiles('Cargo.toml', 'Cargo.lock', 'rust-toolchain.toml', 'packages/backend/native/**', 'packages/common/native/**', 'packages/frontend/mobile-native/**', 'packages/frontend/native/**') }}-${{ steps.native_stages.outputs.hash }}
 
       # The .br/.gz of the last deploy's static assets, by content hash: most
       # files are byte-identical between deploys, so docker-clean copies their
@@ -160,9 +167,8 @@ jobs:
             compress-cache-files=compress-cache
             yarn-cache-files=yarn-cache
             rspack-cache-files=rspack-cache
-          # gzip level 1: compressing the ~1.2 GB of new layers at the default
-          # level was ~32 s of every push.
-          outputs: type=image,name=${{ steps.ecr.outputs.registry }}/notesgraph:${{ github.sha }},push=true,compression=gzip,compression-level=1
+          tags: ${{ steps.ecr.outputs.registry }}/notesgraph:${{ github.sha }}
+          push: true
           # No layer cache: `COPY . .` comes before yarn install, so a new
           # commit rebuilds every expensive layer anyway, and exporting the
           # cache cost 14 min to save ~25 s. The Rust addon is kept on its
