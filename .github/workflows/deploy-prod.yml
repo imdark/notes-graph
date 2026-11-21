@@ -261,11 +261,18 @@ jobs:
           echo "status: $status"
           [ "$status" = Success ]
 
+      # The server is a few seconds old when the roll ends (the roll stopped
+      # re-running the migration, which used to give it ~30 s to boot), so
+      # wait for it: up to 2 min, then fail as before.
       - name: Verify
         run: |
-          code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 https://app.notesgraph.com)
-          echo "app.notesgraph.com -> HTTP $code"
-          [ "$code" -lt 400 ]
+          for i in $(seq 1 24); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 https://app.notesgraph.com || echo 000)
+            echo "app.notesgraph.com -> HTTP $code (try $i)"
+            [ "$code" -ge 200 ] && [ "$code" -lt 400 ] && exit 0
+            sleep 5
+          done
+          exit 1
 
   # A release also rebuilds the Android APK, if the deployed commit changed
   # the app since the published one (build-apk.yml checks). It is started as
