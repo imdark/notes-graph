@@ -107,21 +107,16 @@ jobs:
       - name: Restore the Rust addon
         id: native
         if: inputs.image_sha == ''
-        uses: actions/cache/restore@v4
-        with:
-          path: native-prebuilt
-          key: server-native-${{ hashFiles('Cargo.toml', 'Cargo.lock', 'rust-toolchain.toml', 'packages/backend/native/**', 'packages/common/native/**', 'packages/frontend/mobile-native/**', 'packages/frontend/native/**') }}-${{ steps.native_stages.outputs.hash }}
+        env:
+          KEY: server-native-${{ hashFiles('Cargo.toml', 'Cargo.lock', 'rust-toolchain.toml', 'packages/backend/native/**', 'packages/common/native/**', 'packages/frontend/mobile-native/**', 'packages/frontend/native/**') }}-${{ steps.native_stages.outputs.hash }}
+        run: scripts/ci/s3-cache.sh restore native-prebuilt "$KEY"
 
       # The .br/.gz of the last deploy's static assets, by content hash: most
       # files are byte-identical between deploys, so docker-clean copies their
       # compressed forms back instead of re-running brotli on them.
       - name: Restore compressed assets
         if: inputs.image_sha == ''
-        uses: actions/cache/restore@v4
-        with:
-          path: compress-cache
-          key: compressed-assets-${{ github.sha }}
-          restore-keys: compressed-assets-
+        run: scripts/ci/s3-cache.sh restore compress-cache compressed-assets-${{ github.sha }} compressed-assets-
 
       # yarn's download cache, keyed on the lockfile: with the same yarn.lock
       # it holds every package, so the fetch step (~95 s) has nothing to
@@ -129,22 +124,16 @@ jobs:
       - name: Restore the yarn cache
         id: yarn
         if: inputs.image_sha == ''
-        uses: actions/cache/restore@v4
-        with:
-          path: yarn-cache
-          key: yarn-cache-${{ hashFiles('yarn.lock', '.yarnrc.yml') }}
-          restore-keys: yarn-cache-
+        env:
+          KEY: yarn-cache-${{ hashFiles('yarn.lock', '.yarnrc.yml') }}
+        run: scripts/ci/s3-cache.sh restore yarn-cache "$KEY" yarn-cache-
 
       # rspack's module caches for the web, admin and mobile bundles: a warm
       # web build compiles in ~1.5 s instead of ~11 s. Changes every deploy,
       # so like the compressed assets it's kept per commit, newest restored.
       - name: Restore the bundler cache
         if: inputs.image_sha == ''
-        uses: actions/cache/restore@v4
-        with:
-          path: rspack-cache
-          key: rspack-cache-${{ github.sha }}
-          restore-keys: rspack-cache-
+        run: scripts/ci/s3-cache.sh restore rspack-cache rspack-cache-${{ github.sha }} rspack-cache-
 
       - name: Build contexts
         if: inputs.image_sha == ''
@@ -159,7 +148,7 @@ jobs:
           platforms: linux/amd64
           build-args: |
             GITHUB_SHA=${{ github.sha }}
-            NATIVE_STAGE=${{ steps.native.outputs.cache-hit == 'true' && 'native-prebuilt' || 'native' }}
+            NATIVE_STAGE=${{ steps.native.outputs.hit == 'true' && 'native-prebuilt' || 'native' }}
           # Always given (empty on a miss), so the unused stage that names it
           # can't make BuildKit look for an image of that name.
           build-contexts: |
@@ -177,7 +166,7 @@ jobs:
       # A miss compiled the addon in the build above; take it from this
       # builder's layers (seconds, nothing recompiles) and keep it.
       - name: Export the Rust addon
-        if: inputs.image_sha == '' && steps.native.outputs.cache-hit != 'true'
+        if: inputs.image_sha == '' && steps.native.outputs.hit != 'true'
         run: |
           docker buildx build --platform linux/amd64 \
             -f .github/deployment/node/Dockerfile.selfhost \
@@ -185,11 +174,10 @@ jobs:
           test -s native-prebuilt/server-native.node
 
       - name: Save the Rust addon
-        if: inputs.image_sha == '' && steps.native.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
-        with:
-          path: native-prebuilt
-          key: ${{ steps.native.outputs.cache-primary-key }}
+        if: inputs.image_sha == '' && steps.native.outputs.hit != 'true'
+        env:
+          KEY: server-native-${{ hashFiles('Cargo.toml', 'Cargo.lock', 'rust-toolchain.toml', 'packages/backend/native/**', 'packages/common/native/**', 'packages/frontend/mobile-native/**', 'packages/frontend/native/**') }}-${{ steps.native_stages.outputs.hash }}
+        run: scripts/ci/s3-cache.sh save native-prebuilt "$KEY"
 
       # This build's compressed assets, from the builder's layers: the same
       # args and contexts as the build above, so nothing re-runs. Written
@@ -198,7 +186,7 @@ jobs:
       - name: Export compressed assets
         if: inputs.image_sha == ''
         env:
-          NATIVE_STAGE: ${{ steps.native.outputs.cache-hit == 'true' && 'native-prebuilt' || 'native' }}
+          NATIVE_STAGE: ${{ steps.native.outputs.hit == 'true' && 'native-prebuilt' || 'native' }}
         run: |
           docker buildx build --platform linux/amd64 \
             -f .github/deployment/node/Dockerfile.selfhost \
@@ -214,15 +202,12 @@ jobs:
 
       - name: Save compressed assets
         if: inputs.image_sha == ''
-        uses: actions/cache/save@v4
-        with:
-          path: compress-cache
-          key: compressed-assets-${{ github.sha }}
+        run: scripts/ci/s3-cache.sh save compress-cache compressed-assets-${{ github.sha }}
 
       - name: Export the bundler cache
         if: inputs.image_sha == ''
         env:
-          NATIVE_STAGE: ${{ steps.native.outputs.cache-hit == 'true' && 'native-prebuilt' || 'native' }}
+          NATIVE_STAGE: ${{ steps.native.outputs.hit == 'true' && 'native-prebuilt' || 'native' }}
         run: |
           docker buildx build --platform linux/amd64 \
             -f .github/deployment/node/Dockerfile.selfhost \
@@ -238,17 +223,14 @@ jobs:
 
       - name: Save the bundler cache
         if: inputs.image_sha == ''
-        uses: actions/cache/save@v4
-        with:
-          path: rspack-cache
-          key: rspack-cache-${{ github.sha }}
+        run: scripts/ci/s3-cache.sh save rspack-cache rspack-cache-${{ github.sha }}
 
       # Only when yarn.lock changed (no exact cache): the cache after this
       # build's install, from the builder's cache mount.
       - name: Export the yarn cache
-        if: inputs.image_sha == '' && steps.yarn.outputs.cache-hit != 'true'
+        if: inputs.image_sha == '' && steps.yarn.outputs.hit != 'true'
         env:
-          NATIVE_STAGE: ${{ steps.native.outputs.cache-hit == 'true' && 'native-prebuilt' || 'native' }}
+          NATIVE_STAGE: ${{ steps.native.outputs.hit == 'true' && 'native-prebuilt' || 'native' }}
         run: |
           docker buildx build --platform linux/amd64 \
             -f .github/deployment/node/Dockerfile.selfhost \
@@ -263,11 +245,10 @@ jobs:
           echo "$(ls yarn-cache | wc -l) files, $(du -sh yarn-cache | cut -f1)"
 
       - name: Save the yarn cache
-        if: inputs.image_sha == '' && steps.yarn.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
-        with:
-          path: yarn-cache
-          key: ${{ steps.yarn.outputs.cache-primary-key }}
+        if: inputs.image_sha == '' && steps.yarn.outputs.hit != 'true'
+        env:
+          KEY: yarn-cache-${{ hashFiles('yarn.lock', '.yarnrc.yml') }}
+        run: scripts/ci/s3-cache.sh save yarn-cache "$KEY"
 
       - name: Roll the box
         env:
