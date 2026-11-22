@@ -32,6 +32,9 @@ BOX_ROLE=notesgraph-prod-box
 DEPLOY_ROLE=notesgraph-github-deploy
 OIDC_ARN="arn:aws:iam::$ACCOUNT:oidc-provider/token.actions.githubusercontent.com"
 ECR_ARN="arn:aws:ecr:$REGION:$ACCOUNT:repository/$REPO"
+# The deploy's build caches (scripts/ci/s3-cache.sh). Not the Actions cache:
+# PR test runs fill its 10 GB and evicted them between deploys.
+CACHE_BUCKET="notesgraph-deploy-cache-$ACCOUNT"
 
 log() { printf '\033[36m==>\033[0m %s\n' "$*"; }
 
@@ -122,8 +125,31 @@ aws iam put-role-policy --role-name "$DEPLOY_ROLE" --policy-name deploy \
       {"Effect": "Allow", "Action": "ssm:SendCommand",
        "Resource": ["arn:aws:ec2:'"$REGION:$ACCOUNT"':instance/'"$INSTANCE"'",
                     "arn:aws:ssm:'"$REGION"'::document/AWS-RunShellScript"]},
-      {"Effect": "Allow", "Action": ["ssm:GetCommandInvocation", "ssm:ListCommandInvocations"], "Resource": "*"}
+      {"Effect": "Allow", "Action": ["ssm:GetCommandInvocation", "ssm:ListCommandInvocations"], "Resource": "*"},
+      {"Effect": "Allow", "Action": ["s3:GetObject", "s3:PutObject"],
+       "Resource": "arn:aws:s3:::'"$CACHE_BUCKET"'/*"},
+      {"Effect": "Allow", "Action": "s3:ListBucket",
+       "Resource": "arn:aws:s3:::'"$CACHE_BUCKET"'"}
     ]
+  }'
+
+# --- build cache bucket --------------------------------------------------------
+
+if ! aws s3api head-bucket --bucket "$CACHE_BUCKET" 2>/dev/null; then
+  log "creating bucket $CACHE_BUCKET"
+  aws s3api create-bucket --bucket "$CACHE_BUCKET" --region "$REGION" \
+    --create-bucket-configuration LocationConstraint="$REGION" >/dev/null
+fi
+aws s3api put-public-access-block --bucket "$CACHE_BUCKET" \
+  --public-access-block-configuration \
+  BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true
+# Caches are rebuilt from scratch when missing, so two weeks is plenty, and
+# keeps the per-commit ones (compressed assets, rspack) from piling up.
+aws s3api put-bucket-lifecycle-configuration --bucket "$CACHE_BUCKET" \
+  --lifecycle-configuration '{
+    "Rules": [{"ID": "expire-caches", "Status": "Enabled", "Filter": {"Prefix": ""},
+               "Expiration": {"Days": 14},
+               "AbortIncompleteMultipartUpload": {"DaysAfterInitiation": 1}}]
   }'
 
 # --- ECR -----------------------------------------------------------------------

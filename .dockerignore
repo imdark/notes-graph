@@ -35,3 +35,5 @@ compress-cache
 compress-cache-new
 yarn-cache
 yarn-cache-new
+rspack-cache
+rspack-cache-new
