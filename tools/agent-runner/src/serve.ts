@@ -120,7 +120,13 @@ async function runAutomation(
         timeoutSeconds: job.payload.timeoutSeconds,
         // The server mints NOTESGRAPH_TOKEN on claim for a run with a creator.
         notesgraph: secrets.NOTESGRAPH_TOKEN
-          ? { url: api.url, workspaceId, token: secrets.NOTESGRAPH_TOKEN }
+          ? {
+              url: api.url,
+              workspaceId,
+              token: secrets.NOTESGRAPH_TOKEN,
+              automationId: job.payload.automationId,
+              runId: job.payload.runId,
+            }
           : undefined,
       },
       { say: line => reporter.append(`${line}\n`), signal: stop.signal }

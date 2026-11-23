@@ -96,7 +96,13 @@ export interface AutomationRun {
   id: string;
   versionId: string;
   target: string;
-  trigger: { type: AutomationTriggerType; event?: string; hook?: string };
+  trigger: {
+    /** 'call': another automation's run started this one. */
+    type: AutomationTriggerType | 'call';
+    event?: string;
+    hook?: string;
+    callerAutomationId?: string;
+  };
   status: AutomationRunStatus;
   attempt: number;
   output: unknown;
