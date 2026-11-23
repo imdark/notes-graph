@@ -492,7 +492,7 @@ export const NOTESGRAPH_FLAGS = {
     defaultState: true,
   },
   enable_calendar_event_details: {
-    commit: '',
+    commit: 'b6b1a53c90ab3f830e5648c7eeb61178bb8a7e6b',
     category: 'notesgraph',
     displayName: 'Meeting links and details on calendar events',
     description:
