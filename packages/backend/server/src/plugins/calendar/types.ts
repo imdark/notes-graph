@@ -134,6 +134,24 @@ export class WorkspaceCalendarObjectType {
 }
 
 @ObjectType()
+export class CalendarEventPersonObjectType {
+  @Field(() => String, { nullable: true })
+  email?: string | null;
+
+  @Field(() => String, { nullable: true })
+  name?: string | null;
+
+  @Field(() => String, {
+    nullable: true,
+    description: 'accepted | declined | tentative | needsAction',
+  })
+  responseStatus?: string | null;
+
+  @Field(() => Boolean, { nullable: true })
+  organizer?: boolean | null;
+}
+
+@ObjectType()
 export class CalendarEventObjectType {
   @Field()
   id!: string;
@@ -170,6 +188,24 @@ export class CalendarEventObjectType {
 
   @Field()
   allDay!: boolean;
+
+  @Field(() => String, {
+    nullable: true,
+    description: 'Video-call link (Meet, Zoom, Teams, ...) for the event',
+  })
+  meetingUrl?: string | null;
+
+  @Field(() => String, {
+    nullable: true,
+    description: "The event in the calendar provider's own UI",
+  })
+  eventUrl?: string | null;
+
+  @Field(() => CalendarEventPersonObjectType, { nullable: true })
+  organizer?: CalendarEventPersonObjectType | null;
+
+  @Field(() => [CalendarEventPersonObjectType])
+  attendees!: CalendarEventPersonObjectType[];
 }
 
 @InputType()

@@ -15,6 +15,18 @@ query calendarEvents($workspaceId: String!, $from: DateTime!, $to: DateTime!) {
         endAtUtc
         originalTimezone
         allDay
+        meetingUrl
+        eventUrl
+        organizer {
+          email
+          name
+        }
+        attendees {
+          email
+          name
+          responseStatus
+          organizer
+        }
       }
     }
   }

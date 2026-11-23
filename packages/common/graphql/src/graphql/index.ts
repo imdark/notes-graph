@@ -664,6 +664,18 @@ export const calendarEventsQuery = {
         endAtUtc
         originalTimezone
         allDay
+        meetingUrl
+        eventUrl
+        organizer {
+          email
+          name
+        }
+        attendees {
+          email
+          name
+          responseStatus
+          organizer
+        }
       }
     }
   }

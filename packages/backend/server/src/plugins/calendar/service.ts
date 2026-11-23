@@ -15,6 +15,7 @@ import {
 } from '../../base';
 import { Models } from '../../models';
 import type { CalendarCalDAVProviderPreset } from './config';
+import { extractEventMetadata } from './event-metadata';
 import {
   CalendarProvider,
   CalendarProviderEvent,
@@ -476,7 +477,7 @@ export class CalendarService {
       this.logger.warn('Calendar on-demand sync failed', error as Error);
     });
 
-    return events;
+    return events.map(event => ({ ...event, ...extractEventMetadata(event) }));
   }
 
   @Transactional()

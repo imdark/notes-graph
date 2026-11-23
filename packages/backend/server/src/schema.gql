@@ -343,17 +343,34 @@ type CalendarCalDAVProviderPresetObjectType {
 
 type CalendarEventObjectType {
   allDay: Boolean!
+  attendees: [CalendarEventPersonObjectType!]!
   description: String
   endAtUtc: DateTime!
+
+  """The event in the calendar provider's own UI"""
+  eventUrl: String
   externalEventId: String!
   id: String!
   location: String
+
+  """Video-call link (Meet, Zoom, Teams, ...) for the event"""
+  meetingUrl: String
+  organizer: CalendarEventPersonObjectType
   originalTimezone: String
   recurrenceId: String
   startAtUtc: DateTime!
   status: String
   subscriptionId: String!
   title: String
+}
+
+type CalendarEventPersonObjectType {
+  email: String
+  name: String
+  organizer: Boolean
+
+  """accepted | declined | tentative | needsAction"""
+  responseStatus: String
 }
 
 type CalendarProviderRequestErrorDataType {
