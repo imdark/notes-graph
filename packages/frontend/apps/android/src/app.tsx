@@ -14,7 +14,11 @@ import { NotesGraphContext } from '@notesgraph/core/components/context';
 import { AppFallback } from '@notesgraph/core/mobile/components/app-fallback';
 import { DebugConsole } from '@notesgraph/core/mobile/components/debug-console';
 import { configureMobileModules } from '@notesgraph/core/mobile/modules';
-import { VirtualKeyboardProvider } from '@notesgraph/core/mobile/modules/virtual-keyboard';
+import {
+  createKeyboardChanges,
+  type KeyboardChange,
+  VirtualKeyboardProvider,
+} from '@notesgraph/core/mobile/modules/virtual-keyboard';
 import { router } from '@notesgraph/core/mobile/router';
 import { configureCommonModules } from '@notesgraph/core/modules';
 import { configureTerminalSocketAuth } from '@notesgraph/core/modules/agents';
@@ -192,7 +196,6 @@ framework.impl(ClientSchemeProvider, {
   },
 });
 
-type KeyboardChange = { visible: boolean; height: number };
 const keyboardSubscribers = new Set<(change: KeyboardChange) => void>();
 let listeningToKeyboard = false;
 
@@ -203,22 +206,31 @@ let listeningToKeyboard = false;
 function listenToKeyboard() {
   if (listeningToKeyboard) return;
   listeningToKeyboard = true;
-  const emit = (change: KeyboardChange) =>
-    keyboardSubscribers.forEach(subscriber => subscriber(change));
+  const changes = createKeyboardChanges(change =>
+    keyboardSubscribers.forEach(subscriber => subscriber(change))
+  );
   Keyboard.addListener('keyboardWillShow', info => {
-    (async () => {
-      const navBarHeight = (await NotesGraphTheme.getSystemNavBarHeight())
-        .height;
-      emit({
-        // When an physical keyboard is connected, the virtual keyboard height is 0,
-        // even though the `keyboardWillShow` event is still triggered.
-        visible: info.keyboardHeight !== 0,
-        height: info.keyboardHeight - navBarHeight,
-      });
-    })().catch(console.error);
+    changes
+      .show(async () => {
+        const navBarHeight = (await NotesGraphTheme.getSystemNavBarHeight())
+          .height;
+        return {
+          // When an physical keyboard is connected, the virtual keyboard height is 0,
+          // even though the `keyboardWillShow` event is still triggered.
+          visible: info.keyboardHeight !== 0,
+          height: info.keyboardHeight - navBarHeight,
+        };
+      })
+      .catch(console.error);
   }).catch(console.error);
   Keyboard.addListener('keyboardWillHide', () => {
-    emit({ visible: false, height: 0 });
+    changes.hide();
+  }).catch(console.error);
+  // Android closes the keyboard when the app goes to the background, but the
+  // paused WebView can miss `keyboardWillHide`. If the keyboard comes back on
+  // resume, `keyboardWillShow` fires again.
+  CapacitorApp.addListener('pause', () => {
+    changes.hide();
   }).catch(console.error);
 }
 
