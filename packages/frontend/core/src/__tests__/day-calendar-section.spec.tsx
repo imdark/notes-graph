@@ -21,11 +21,15 @@ const state = vi.hoisted(() => ({
   peeked: [] as string[],
   goals: [] as Array<{ docId: string; blockId: string; text: string }>,
   peekedBlocks: [] as string[][],
+  detailsEnabled: true,
+  ensuredWithLabels: [] as boolean[],
 }));
 
 vi.mock('@notesgraph/core/modules/integration', () => ({
   IntegrationService: tokens.IntegrationService,
   CalendarEventNoteService: tokens.CalendarEventNoteService,
+  useCalendarEventDetailLabels: () =>
+    state.detailsEnabled ? { when: 'When' } : undefined,
 }));
 
 vi.mock('@notesgraph/core/modules/docs-search', () => ({
@@ -43,7 +47,12 @@ vi.mock('@notesgraph/infra', () => ({
         // eslint-disable-next-line rxjs/finnish -- stubs CalendarEventNoteService.note$
         note$: (id: string) =>
           state.notes.has(id) ? { id: state.notes.get(id) } : null,
-        ensureNote: (event: { externalEventId: string }) => {
+        ensureNote: (
+          event: { externalEventId: string },
+          _untitled: string,
+          labels?: unknown
+        ) => {
+          state.ensuredWithLabels.push(!!labels);
           let id = state.notes.get(event.externalEventId);
           if (!id) {
             id = `note-${event.externalEventId}`;
@@ -95,6 +104,8 @@ vi.mock('@notesgraph/i18n', () => {
     'com.notesgraph.integration.calendar.add-note': 'Add note',
     'com.notesgraph.integration.calendar.open-note': 'Open note',
     'com.notesgraph.integration.calendar.goals': 'Goals',
+    'com.notesgraph.integration.calendar.join': 'Join',
+    'com.notesgraph.integration.calendar.join-meeting': 'Join the meeting',
     Untitled: 'Untitled',
   };
   return {
@@ -130,6 +141,8 @@ beforeEach(() => {
   state.peeked = [];
   state.goals = [];
   state.peekedBlocks = [];
+  state.detailsEnabled = true;
+  state.ensuredWithLabels = [];
 });
 afterEach(cleanup);
 
@@ -207,6 +220,40 @@ describe('DayCalendarSection', () => {
 
     expect(state.created).toEqual([]);
     expect(state.peeked).toEqual(['existing']);
+  });
+
+  it('offers a Join link for an event with a meeting link', () => {
+    state.events = [event({ meetingUrl: 'https://meet.google.com/abc' })];
+    render(<DayCalendarSection date="2026-09-29" />);
+
+    const join = screen.getByRole('link', { name: 'Join the meeting' });
+    expect(join.getAttribute('href')).toBe('https://meet.google.com/abc');
+    expect(join.getAttribute('target')).toBe('_blank');
+  });
+
+  it('shows no Join link without a meeting link or with the flag off', () => {
+    state.events = [event()];
+    const { unmount } = render(<DayCalendarSection date="2026-09-29" />);
+    expect(screen.queryByRole('link')).toBeNull();
+    unmount();
+
+    state.detailsEnabled = false;
+    state.events = [event({ meetingUrl: 'https://meet.google.com/abc' })];
+    render(<DayCalendarSection date="2026-09-29" />);
+    expect(screen.queryByRole('link')).toBeNull();
+  });
+
+  it('asks for event details in a new note only while the flag is on', () => {
+    state.events = [event()];
+    const { unmount } = render(<DayCalendarSection date="2026-09-29" />);
+    fireEvent.click(screen.getByRole('button', { name: /Standup/ }));
+    unmount();
+
+    state.detailsEnabled = false;
+    render(<DayCalendarSection date="2026-09-29" />);
+    fireEvent.click(screen.getByRole('button', { name: /Standup/ }));
+
+    expect(state.ensuredWithLabels).toEqual([true, false]);
   });
 
   it('lists active goals after the events', () => {

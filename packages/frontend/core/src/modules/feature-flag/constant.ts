@@ -491,6 +491,15 @@ export const NOTESGRAPH_FLAGS = {
     configurable: true,
     defaultState: true,
   },
+  enable_calendar_event_details: {
+    commit: '',
+    category: 'notesgraph',
+    displayName: 'Meeting links and details on calendar events',
+    description:
+      'Calendar events on a journal page get a Join button when they have a video-call link (Meet, Zoom, Teams and others). A new note for an event starts with its time, place, meeting link, organizer, attendees, a link back to the event in the calendar, and its description.',
+    configurable: true,
+    defaultState: true,
+  },
 } satisfies { [key in string]: FlagInfo };
 
 // oxlint-disable-next-line no-redeclare

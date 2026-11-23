@@ -49,6 +49,7 @@ export const row = style({
   alignItems: 'center',
   gap: '8px',
   width: '100%',
+  minWidth: 0,
   padding: '6px 8px',
   border: 'none',
   borderRadius: '6px',
@@ -72,6 +73,46 @@ export const row = style({
     [narrow]: {
       flexWrap: 'wrap',
       rowGap: '2px',
+    },
+  },
+});
+
+/** An event's row button with its Join link beside it (links can't nest in buttons). */
+export const eventRow = style({
+  display: 'flex',
+  alignItems: 'center',
+  gap: '4px',
+});
+
+/**
+ * Join the event's video call. Always visible: on a meeting day it is the
+ * thing you reach for at the start time, and it is only there when the event
+ * has a call.
+ */
+export const join = style({
+  display: 'flex',
+  alignItems: 'center',
+  gap: '4px',
+  flexShrink: 0,
+  minHeight: '28px',
+  padding: '0 8px',
+  borderRadius: '6px',
+  fontSize: cssVar('fontXs'),
+  fontWeight: 500,
+  color: cssVar('primaryColor'),
+  textDecoration: 'none',
+  selectors: {
+    '&:hover': {
+      background: cssVar('hoverColor'),
+    },
+    '&:focus-visible': {
+      outline: `2px solid ${cssVar('primaryColor')}`,
+      outlineOffset: '-2px',
+    },
+  },
+  '@media': {
+    '(hover: none)': {
+      minHeight: '44px',
     },
   },
 });
