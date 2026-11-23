@@ -434,19 +434,42 @@ export class AutomationController {
     return { deleted: true };
   }
 
-  /** "Run now": a manual run, with optional input. */
+  /**
+   * "Run now": a manual run, with optional input. With `caller` (the
+   * automation and run making the call), a run that one automation starts
+   * of another: see AutomationService.callTrigger.
+   */
   @Post('/:id/run')
   async runNow(
     @CurrentUser() user: CurrentUserType,
     @Param('workspaceId') workspaceId: string,
     @Param('id') id: string,
-    @Body() body: { input?: unknown; target?: unknown }
+    @Body()
+    body: {
+      input?: unknown;
+      target?: unknown;
+      caller?: { automationId?: unknown; runId?: unknown };
+    }
   ) {
     await this.assertManage(user, workspaceId);
     const automation = await this.automations.getOwned(workspaceId, id);
+    const caller = body?.caller;
+    if (caller && (!caller.automationId || !caller.runId)) {
+      throw new BadRequest('caller needs automationId and runId');
+    }
+    const trigger = caller
+      ? await this.automations.callTrigger(
+          workspaceId,
+          {
+            automationId: String(caller.automationId),
+            runId: String(caller.runId),
+          },
+          automation.id
+        )
+      : { type: 'manual' as const, by: user.id };
     const run = await this.automations.start(
       automation,
-      { type: 'manual', by: user.id },
+      trigger,
       body?.input ?? null,
       { target: body?.target ? String(body.target) : undefined }
     );

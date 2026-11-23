@@ -3,6 +3,7 @@ import test from 'ava';
 import {
   AutomationService,
   DOC_UPDATED_DEBOUNCE_MS,
+  MAX_CALL_DEPTH,
   parseOutput,
   runStatus,
 } from '../service';
@@ -226,6 +227,86 @@ test('doc.updated starts a run at most once a minute', async t => {
   t.is(idle.queued.length, 0);
   await idle.service.onDocUpdated({ workspaceId: 'ws', docId: 'd1' });
   t.is(idle.queued.length, 1);
+});
+
+function callSetup(callerRun: any) {
+  const models: any = {
+    automation: {
+      get: async (_: string, id: string) =>
+        id === 'gone' ? null : automationRow({ id }),
+      getRun: async () => callerRun,
+    },
+  };
+  return new AutomationService(models, {} as any);
+}
+
+test('a call from a running automation starts a chain', async t => {
+  const service = callSetup({ status: 'running', trigger: { type: 'cron' } });
+  const trigger = await service.callTrigger(
+    'ws',
+    { automationId: 'a1', runId: 'r1' },
+    'a2'
+  );
+  t.deepEqual(trigger, {
+    type: 'call',
+    callerAutomationId: 'a1',
+    callerRunId: 'r1',
+    chain: ['a1', 'a2'],
+  });
+});
+
+test('a call down a chain carries the chain on', async t => {
+  const service = callSetup({
+    status: 'running',
+    trigger: { type: 'call', chain: ['a1', 'a2'] },
+  });
+  const trigger = await service.callTrigger(
+    'ws',
+    { automationId: 'a2', runId: 'r2' },
+    'a3'
+  );
+  t.deepEqual(trigger.chain, ['a1', 'a2', 'a3']);
+});
+
+test('a call that closes a cycle is refused', async t => {
+  const service = callSetup({
+    status: 'running',
+    trigger: { type: 'call', chain: ['a1', 'a2'] },
+  });
+  await t.throwsAsync(
+    service.callTrigger('ws', { automationId: 'a2', runId: 'r2' }, 'a1'),
+    { message: /cycle/ }
+  );
+  const self = callSetup({ status: 'running', trigger: { type: 'manual' } });
+  await t.throwsAsync(
+    self.callTrigger('ws', { automationId: 'a1', runId: 'r1' }, 'a1'),
+    { message: /cycle/ }
+  );
+});
+
+test('a chain longer than the limit is refused', async t => {
+  const chain = Array.from({ length: MAX_CALL_DEPTH }, (_, i) => `a${i}`);
+  const service = callSetup({
+    status: 'running',
+    trigger: { type: 'call', chain },
+  });
+  await t.throwsAsync(
+    service.callTrigger('ws', { automationId: 'a4', runId: 'r' }, 'z'),
+    { message: /at most/ }
+  );
+});
+
+test('a call from an ended or unknown run is refused', async t => {
+  const ended = callSetup({ status: 'succeeded', trigger: { type: 'cron' } });
+  await t.throwsAsync(
+    ended.callTrigger('ws', { automationId: 'a1', runId: 'r1' }, 'a2'),
+    { message: /already ended/ }
+  );
+  const other = callSetup({ status: 'running', trigger: { type: 'cron' } });
+  await t.throwsAsync(
+    other.callTrigger('ws', { automationId: 'gone', runId: 'r1' }, 'a2'),
+    { message: /not found/ }
+  );
 });
 
 test('job statuses map to run statuses', t => {
