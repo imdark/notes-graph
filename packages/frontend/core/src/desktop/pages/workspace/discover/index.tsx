@@ -47,7 +47,13 @@ import {
   saveUseInterests,
   type UserInterests,
 } from './interests';
-import { interleaveFeed, virtualItemsToFeed } from './records';
+import {
+  appendNewToFeed,
+  interleaveFeed,
+  nextShownFeed,
+  type ShownFeed,
+  virtualItemsToFeed,
+} from './records';
 import { TopicsPicker } from './topics-picker';
 
 /** How long the picker waits after the last change before refetching. */
@@ -295,9 +301,11 @@ const InterestsRow = ({
                     <button
                       type="button"
                       className={styles.interestRemove}
-                      aria-label={t['com.notesgraph.discover.interests.remove']({
-                        topic,
-                      })}
+                      aria-label={t['com.notesgraph.discover.interests.remove'](
+                        {
+                          topic,
+                        }
+                      )}
                       onClick={() => onRemove(topic)}
                     >
                       ×
@@ -309,7 +317,9 @@ const InterestsRow = ({
           )}
           <Input
             className={styles.interestAdd}
-            placeholder={t['com.notesgraph.discover.interests.add.placeholder']()}
+            placeholder={t[
+              'com.notesgraph.discover.interests.add.placeholder'
+            ]()}
             value={draft}
             onChange={setDraft}
             onEnter={submit}
@@ -335,7 +345,14 @@ const DiscoverPage = () => {
   // The picker's selection; it becomes `manualTopics` (and refetches the
   // feed) once the user stops changing it for a moment.
   const [draftTopics, setDraftTopics] = useState<string[]>(manualTopics);
-  const [items, setItems] = useState<DiscoverItem[]>([]);
+  // The news, tagged with the user selection it was loaded for, so the page
+  // can tell a change the user made (start the feed over) from a background
+  // update (append to it).
+  const [news, setNews] = useState<{
+    selection: string | null;
+    items: DiscoverItem[];
+  }>({ selection: null, items: [] });
+  const items = news.items;
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState(false);
@@ -348,6 +365,9 @@ const DiscoverPage = () => {
     loadInterestEdits(globalCache, workspaceId)
   );
   const [regenerating, setRegenerating] = useState(false);
+  // Counts finished "Regenerate" clicks: their new interests start the feed
+  // over, unlike the quiet daily re-read.
+  const [regenerations, setRegenerations] = useState(0);
 
   const readInterests = useCallback(async () => {
     const derived = deriveInterests(
@@ -380,7 +400,10 @@ const DiscoverPage = () => {
   const regenerate = useCallback(() => {
     setRegenerating(true);
     readInterests()
-      .then(setInterests)
+      .then(derived => {
+        setInterests(derived);
+        setRegenerations(n => n + 1);
+      })
       .catch(console.error)
       .finally(() => setRegenerating(false));
   }, [readInterests]);
@@ -426,6 +449,15 @@ const DiscoverPage = () => {
   }, []);
 
   const topicsKey = useMemo(() => topics.join('|'), [topics]);
+  // What the user chose: changing it starts the feed over. Interests re-read
+  // in the background change `topicsKey` but not this, so their news is
+  // appended instead.
+  const selection = useMemo(
+    () => JSON.stringify([manualTopics, useInterests, edits, regenerations]),
+    [manualTopics, useInterests, edits, regenerations]
+  );
+  const selectionRef = useRef(selection);
+  selectionRef.current = selection;
 
   // Records from the virtual folders (email, Slack…), mixed in with the news.
   // They are already stored locally, so they come from the store, not the
@@ -442,24 +474,38 @@ const DiscoverPage = () => {
     () => virtualItemsToFeed(virtualItems ?? [], views ?? []),
     [virtualItems, views]
   );
-  const feed = useMemo(
+  const latestFeed = useMemo(
     () => interleaveFeed(topics.length ? items : [], records),
     [items, records, topics.length]
   );
+  // What is on screen. Updates that arrive while the user reads (a background
+  // refresh, a re-crawled email) go at the end rather than reshuffling it.
+  const shownRef = useRef<ShownFeed>({ selection: null, items: [] });
+  const feed = useMemo(() => {
+    shownRef.current = nextShownFeed(
+      shownRef.current,
+      news.selection,
+      latestFeed
+    );
+    return shownRef.current.items;
+  }, [latestFeed, news.selection]);
 
   const refresh = useCallback(
-    async (activeTopics: string[], showLoading = true) => {
-      if (activeTopics.length === 0) {
-        setItems([]);
-        return;
-      }
+    async (
+      activeTopics: string[],
+      forSelection: string,
+      showLoading = true
+    ) => {
       if (showLoading) setLoading(true);
       setError(false);
       try {
         const feed = await fetchDiscoverFeed(activeTopics);
-        setItems(feed);
-        setError(feed.length === 0);
         saveCachedFeed(globalCache, activeTopics.join('|'), feed);
+        // A fetch for a selection the user has since left must not put its
+        // topics back on screen.
+        if (selectionRef.current !== forSelection) return;
+        setNews({ selection: forSelection, items: feed });
+        setError(feed.length === 0);
       } catch {
         setError(true);
       } finally {
@@ -472,7 +518,7 @@ const DiscoverPage = () => {
   useEffect(() => {
     const activeTopics = topicsKey ? topicsKey.split('|') : [];
     if (activeTopics.length === 0) {
-      setItems([]);
+      setNews({ selection, items: [] });
       return;
     }
     // Show the cached feed instantly, then pull a fresh one only when it's
@@ -480,14 +526,14 @@ const DiscoverPage = () => {
     // something to show, refresh quietly in the background (no full spinner).
     const cached = loadCachedFeed(globalCache, topicsKey);
     if (cached) {
-      setItems(cached.items);
+      setNews({ selection, items: cached.items });
       setError(false);
     }
     const stale = !cached || Date.now() - cached.fetchedAt > FEED_MAX_AGE_MS;
     if (stale) {
-      refresh(activeTopics, !cached).catch(console.error);
+      refresh(activeTopics, selection, !cached).catch(console.error);
     }
-  }, [topicsKey, globalCache, refresh]);
+  }, [topicsKey, selection, globalCache, refresh]);
 
   // "Load more": pull a fresh feed on demand and append any items we haven't
   // shown yet, with a spinner on the button while it runs.
@@ -496,10 +542,10 @@ const DiscoverPage = () => {
     setLoadingMore(true);
     try {
       const fresh = await fetchDiscoverFeed(topics);
-      setItems(prev => {
-        const seen = new Set(prev.map(existing => existing.id));
-        return [...prev, ...fresh.filter(item => !seen.has(item.id))];
-      });
+      setNews(prev => ({
+        ...prev,
+        items: appendNewToFeed(prev.items, fresh),
+      }));
     } catch {
       // keep the existing items on failure
     } finally {
