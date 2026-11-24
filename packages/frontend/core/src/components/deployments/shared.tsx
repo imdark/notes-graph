@@ -1,7 +1,8 @@
-import type {
-  MergeReadiness,
-  ReleaseState,
-  ReleaseTask,
+import {
+  formatDuration,
+  type MergeReadiness,
+  type ReleaseState,
+  type ReleaseTask,
 } from '@notesgraph/core/modules/agents';
 import { WorkbenchService } from '@notesgraph/core/modules/workbench';
 import { useService } from '@notesgraph/infra';
@@ -53,6 +54,14 @@ export const when = (iso: string | null | undefined) => {
     minute: '2-digit',
   });
 };
+
+/**
+ * How long something has been running, e.g. "4m 10s", or "just now". A
+ * helper rather than inline in a card: React's purity rule forbids calling
+ * Date.now() during render.
+ */
+export const elapsedSince = (iso: string) =>
+  formatDuration(Date.now() - Date.parse(iso)) || 'just now';
 
 /** "2h", "3d", "just now" */
 export const ago = (iso: string | null | undefined) => {
