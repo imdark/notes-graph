@@ -16,6 +16,14 @@ export const UserSettingsSchema = z.object({
   receiveInvitationEmail: z.boolean().default(true),
   receiveMentionEmail: z.boolean().default(true),
   receiveCommentEmail: z.boolean().default(true),
+  /**
+   * The topics picked on the Discover page. Absent until the user saves a
+   * selection, when Discover and its morning preseed use the defaults.
+   */
+  discoverTopics: z
+    .array(z.string().trim().min(1).max(200))
+    .max(100)
+    .optional(),
 });
 
 export type UserSettingsInput = z.input<typeof UserSettingsSchema>;

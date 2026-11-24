@@ -24,6 +24,8 @@ async function run(opts: {
   feeds: Record<string, Story[] | number>;
   images?: Record<string, string | null>;
   topicsNote?: string;
+  /** What the user picked on the Discover page; null when never saved. */
+  picked?: string[] | null;
 }) {
   const sidecar: string[] = [];
   const log: string[] = [];
@@ -37,6 +39,9 @@ async function run(opts: {
     notesgraph: {
       workspaceId: 'ws1',
       fetch: async (path: string) => {
+        if (path === '/api/notes/discover/topics') {
+          return { topics: opts.picked ?? null };
+        }
         if (path.startsWith('/api/notes/workspaces/ws1/docs?q=')) {
           return {
             docs: opts.topicsNote
@@ -140,6 +145,30 @@ test('adds the topics listed in the "Discover topics" note', async t => {
   t.deepEqual(
     output.topics.map((r: { topic: string }) => r.topic),
     ['Technology', 'Artificial intelligence', 'Science', 'Climbing', 'Rust']
+  );
+});
+
+test('the topics picked on the Discover page replace the defaults', async t => {
+  const { output } = await run({
+    feeds: {},
+    picked: ['Climbing', 'Rust'],
+    topicsNote: '- rust\n- Chess',
+  });
+  t.deepEqual(
+    output.topics.map((r: { topic: string }) => r.topic),
+    ['Climbing', 'Rust', 'Chess']
+  );
+});
+
+test('an empty saved selection leaves only the note topics', async t => {
+  const { output } = await run({
+    feeds: {},
+    picked: [],
+    topicsNote: '- Chess',
+  });
+  t.deepEqual(
+    output.topics.map((r: { topic: string }) => r.topic),
+    ['Chess']
   );
 });
 

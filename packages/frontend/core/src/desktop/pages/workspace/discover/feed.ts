@@ -57,19 +57,54 @@ function stringList(value: unknown): string[] | null {
     : null;
 }
 
-/**
- * The user's selected topics, persisted in localStorage. The defaults apply
- * only until the user has saved a selection; an empty selection stays empty.
- */
-export function loadTopics(): string[] {
+/** The selection this browser last saved, or null if it never saved one. */
+export function loadSavedTopics(): string[] | null {
   try {
     const raw = globalThis.localStorage?.getItem(TOPICS_KEY);
-    const parsed = raw ? stringList(JSON.parse(raw)) : null;
-    if (parsed) return parsed;
+    return raw ? stringList(JSON.parse(raw)) : null;
   } catch {
-    // ignore malformed storage
+    return null; // malformed storage
   }
-  return DEFAULT_TOPICS;
+}
+
+/**
+ * The user's selected topics as this browser last saw them. The server's copy
+ * (`fetchServerTopics`) wins once it loads. The defaults apply only until the
+ * user has saved a selection; an empty selection stays empty.
+ */
+export function loadTopics(): string[] {
+  return loadSavedTopics() ?? DEFAULT_TOPICS;
+}
+
+const SERVER_TOPICS_PATH = '/api/notes/discover/topics';
+
+/** Fetch on the signed-in server (FetchService.fetch). */
+export type ServerFetch = (
+  input: string,
+  init?: RequestInit
+) => Promise<Response>;
+
+/**
+ * The selection saved on the server, where the morning preseed automation
+ * reads it. Null when none is saved yet; throws when signed out or offline.
+ */
+export async function fetchServerTopics(
+  fetch: ServerFetch
+): Promise<string[] | null> {
+  const res = await fetch(SERVER_TOPICS_PATH, { cache: 'no-store' });
+  const body = (await res.json()) as { topics?: unknown };
+  return stringList(body.topics);
+}
+
+export async function saveServerTopics(
+  fetch: ServerFetch,
+  topics: string[]
+): Promise<void> {
+  await fetch(SERVER_TOPICS_PATH, {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ topics: uniqueTopics(topics) }),
+  });
 }
 
 export function saveTopics(topics: string[]): void {

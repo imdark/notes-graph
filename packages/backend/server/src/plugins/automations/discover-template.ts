@@ -12,7 +12,8 @@
 export const PRESEED_DISCOVER_TEMPLATE = String.raw`// Every morning, pull today's news for each Discover topic onto the
 // link-card sidecar and resolve each story's picture, so Discover opens
 // with the day's feed and its images already there.
-// The topics are TOPICS below plus any listed one per line in a note titled
+// The topics are the ones picked on the Discover page (TOPICS below until a
+// selection is saved) plus any listed one per line in a note titled
 // "Discover topics". CLIP_URL is where this device reaches the app's /clip/*.
 const CLIP_URL = 'https://app.notesgraph.com';
 const TOPICS = ['Technology', 'Artificial intelligence', 'Science'];
@@ -37,7 +38,8 @@ function addTopic(raw) {
   seen.add(key);
   topics.push(topic);
 }
-TOPICS.forEach(addTopic);
+const picked = await notesgraph.fetch('/api/notes/discover/topics');
+(Array.isArray(picked.topics) ? picked.topics : TOPICS).forEach(addTopic);
 
 const { docs } = await notesgraph.fetch('/api/notes/workspaces/' + ws + '/docs?q=' + encodeURIComponent(TOPICS_NOTE) + '&limit=20');
 const note = docs.find(d => d.title.trim().toLowerCase() === TOPICS_NOTE.toLowerCase());
@@ -103,10 +105,8 @@ export const DISCOVER_TEMPLATES = [
     id: 'preseed-discover',
     name: 'Preseed the Discover feed every morning',
     description:
-      "Every day at 5am (Pacific), pull the day's news for each Discover topic and resolve each story's picture, so Discover opens with today's feed and its images ready. Topics are set at the top of the code and in a \"Discover topics\" note.",
-    triggers: [
-      { type: 'cron', expr: '0 5 * * *', tz: 'America/Los_Angeles' },
-    ],
+      "Every day at 5am (Pacific), pull the day's news for each Discover topic and resolve each story's picture, so Discover opens with today's feed and its images ready. Topics are the ones picked on the Discover page, plus any listed in a \"Discover topics\" note.",
+    triggers: [{ type: 'cron', expr: '0 5 * * *', tz: 'America/Los_Angeles' }],
     code: PRESEED_DISCOVER_TEMPLATE,
     timeoutSeconds: 20 * 60,
   },
