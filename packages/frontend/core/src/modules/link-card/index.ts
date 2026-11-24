@@ -10,6 +10,7 @@ export {
   linkCardFetchEndpoint,
   linkCardImageProxyEndpoint,
   linkCardImageUrl,
+  linkCardNewsFeedEndpoint,
   linkCardNewsImageEndpoint,
   linkCardPreviewEndpoint,
 } from './utils';

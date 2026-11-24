@@ -43,6 +43,32 @@ const folderPath = (value: unknown): string[] | null => {
   return value as string[];
 };
 
+/** Discover topics as saved: trimmed, de-duplicated case-insensitively. */
+export const discoverTopics = (value: unknown): string[] => {
+  if (
+    !Array.isArray(value) ||
+    value.length > 100 ||
+    !value.every(
+      topic => typeof topic === 'string' && topic.trim().length <= 200
+    )
+  ) {
+    throw new BadRequestException(
+      'topics must be a list of at most 100 topics of up to 200 characters'
+    );
+  }
+  const seen = new Set<string>();
+  const topics: string[] = [];
+  for (const raw of value as string[]) {
+    const topic = raw.trim();
+    const key = topic.toLowerCase();
+    if (topic && !seen.has(key)) {
+      seen.add(key);
+      topics.push(topic);
+    }
+  }
+  return topics;
+};
+
 /**
  * User-facing (Personal Access Token authenticated) doc API for the notes CLI
  * and, later, the MCP server. Unlike the internal `/rpc` controller, these
@@ -72,6 +98,27 @@ export class NotesApiController {
       user: { id: user.id, email: user.email, name: user.name },
       workspaceIds,
     };
+  }
+
+  /**
+   * The topics the caller picked on the Discover page, so every device and
+   * the morning preseed automation see the same ones. `topics` is null until
+   * a selection is saved; an empty list means the user turned them all off.
+   */
+  @Get('/discover/topics')
+  async getDiscoverTopics(@CurrentUser() user: CurrentUserType) {
+    const settings = await this.models.userSettings.get(user.id);
+    return { topics: settings.discoverTopics ?? null };
+  }
+
+  @Put('/discover/topics')
+  async setDiscoverTopics(
+    @CurrentUser() user: CurrentUserType,
+    @Body() body: { topics?: unknown }
+  ) {
+    const topics = discoverTopics(body.topics);
+    await this.models.userSettings.set(user.id, { discoverTopics: topics });
+    return { topics };
   }
 
   private async assertReadable(
