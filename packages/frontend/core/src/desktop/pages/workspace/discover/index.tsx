@@ -21,9 +21,9 @@ import * as styles from './discover.css';
 import {
   DEFAULT_TOPICS,
   type DiscoverItem,
-  FEED_MAX_AGE_MS,
   fetchCardImage,
   fetchDiscoverFeed,
+  isFeedStale,
   loadCachedFeed,
   loadTopics,
   saveCachedFeed,
@@ -483,7 +483,7 @@ const DiscoverPage = () => {
       setItems(cached.items);
       setError(false);
     }
-    const stale = !cached || Date.now() - cached.fetchedAt > FEED_MAX_AGE_MS;
+    const stale = !cached || isFeedStale(cached.fetchedAt);
     if (stale) {
       refresh(activeTopics, !cached).catch(console.error);
     }
