@@ -20,7 +20,9 @@ import { ReadwiseStore } from './store/readwise';
 export { CalendarEventNoteService, IntegrationService };
 export { CalendarIntegration } from './entities/calendar';
 export type { CalendarEvent } from './type';
+export type { CalendarEventDetailLabels } from './utils/event-details';
 export { IntegrationTypeIcon } from './views/icon';
+export { useCalendarEventDetailLabels } from './views/use-event-detail-labels';
 export { DocIntegrationPropertiesTable } from './views/properties-table';
 
 export function configureIntegrationModule(framework: Framework) {

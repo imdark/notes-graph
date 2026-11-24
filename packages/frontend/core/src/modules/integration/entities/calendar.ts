@@ -8,7 +8,19 @@ import { Entity, LiveData } from '@notesgraph/infra';
 import dayjs, { type Dayjs } from 'dayjs';
 
 import type { CalendarStore } from '../store/calendar';
-import type { CalendarEvent } from '../type';
+import type { CalendarEvent, CalendarEventPerson } from '../type';
+
+const toPerson = (person: {
+  email?: string | null;
+  name?: string | null;
+  responseStatus?: string | null;
+  organizer?: boolean | null;
+}): CalendarEventPerson => ({
+  email: person.email ?? undefined,
+  name: person.name ?? undefined,
+  responseStatus: person.responseStatus ?? undefined,
+  organizer: person.organizer ?? undefined,
+});
 
 export class CalendarIntegration extends Entity {
   constructor(private readonly store: CalendarStore) {
@@ -112,6 +124,12 @@ export class CalendarIntegration extends Entity {
               subscriptionInfo?.colorOverride ??
               subscriptionInfo?.subscription.color ??
               undefined,
+            description: event.description ?? undefined,
+            location: event.location ?? undefined,
+            meetingUrl: event.meetingUrl ?? undefined,
+            eventUrl: event.eventUrl ?? undefined,
+            organizer: event.organizer ? toPerson(event.organizer) : undefined,
+            attendees: (event.attendees ?? []).map(toPerson),
           } satisfies CalendarEvent;
         })
         .sort(

@@ -424,17 +424,32 @@ export interface CalendarCalDavProviderPresetObjectType {
 export interface CalendarEventObjectType {
   __typename?: 'CalendarEventObjectType';
   allDay: Scalars['Boolean']['output'];
+  attendees: Array<CalendarEventPersonObjectType>;
   description: Maybe<Scalars['String']['output']>;
   endAtUtc: Scalars['DateTime']['output'];
+  /** The event in the calendar provider's own UI */
+  eventUrl: Maybe<Scalars['String']['output']>;
   externalEventId: Scalars['String']['output'];
   id: Scalars['String']['output'];
   location: Maybe<Scalars['String']['output']>;
+  /** Video-call link (Meet, Zoom, Teams, ...) for the event */
+  meetingUrl: Maybe<Scalars['String']['output']>;
+  organizer: Maybe<CalendarEventPersonObjectType>;
   originalTimezone: Maybe<Scalars['String']['output']>;
   recurrenceId: Maybe<Scalars['String']['output']>;
   startAtUtc: Scalars['DateTime']['output'];
   status: Maybe<Scalars['String']['output']>;
   subscriptionId: Scalars['String']['output'];
   title: Maybe<Scalars['String']['output']>;
+}
+
+export interface CalendarEventPersonObjectType {
+  __typename?: 'CalendarEventPersonObjectType';
+  email: Maybe<Scalars['String']['output']>;
+  name: Maybe<Scalars['String']['output']>;
+  organizer: Maybe<Scalars['Boolean']['output']>;
+  /** accepted | declined | tentative | needsAction */
+  responseStatus: Maybe<Scalars['String']['output']>;
 }
 
 export interface CalendarProviderRequestErrorDataType {
@@ -4680,6 +4695,20 @@ export type CalendarEventsQuery = {
         endAtUtc: string;
         originalTimezone: string | null;
         allDay: boolean;
+        meetingUrl: string | null;
+        eventUrl: string | null;
+        organizer: {
+          __typename?: 'CalendarEventPersonObjectType';
+          email: string | null;
+          name: string | null;
+        } | null;
+        attendees: Array<{
+          __typename?: 'CalendarEventPersonObjectType';
+          email: string | null;
+          name: string | null;
+          responseStatus: string | null;
+          organizer: boolean | null;
+        }>;
       }>;
     }>;
   };

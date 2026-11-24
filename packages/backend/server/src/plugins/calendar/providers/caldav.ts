@@ -200,14 +200,14 @@ const buildDigestAuthHeader = (params: {
   return `Digest ${parts.join(', ')}`;
 };
 
-const unescapeIcalText = (value: string) =>
+export const unescapeIcalText = (value: string) =>
   value
     .replace(/\\n/gi, '\n')
     .replace(/\\,/g, ',')
     .replace(/\\;/g, ';')
     .replace(/\\\\/g, '\\');
 
-const unfoldIcalLines = (content: string) => {
+export const unfoldIcalLines = (content: string) => {
   const lines = content.split(/\r\n|\n|\r/);
   const unfolded: string[] = [];
   for (const line of lines) {

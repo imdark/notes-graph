@@ -6,6 +6,7 @@ import {
   type CalendarEvent,
   CalendarEventNoteService,
   IntegrationService,
+  useCalendarEventDetailLabels,
 } from '@notesgraph/core/modules/integration';
 import { JournalService } from '@notesgraph/core/modules/journal';
 import { PeekViewService } from '@notesgraph/core/modules/peek-view';
@@ -55,6 +56,7 @@ const CalendarEventRenderer = ({ event }: { event: CalendarEvent }) => {
   const name = calendarName || t['Untitled']();
   const color = calendarColor || cssVarV2.button.primary;
   const eventTitle = title || t['Untitled']();
+  const detailLabels = useCalendarEventDetailLabels();
 
   const handleClick = useAsyncCallback(async () => {
     if (loading) return;
@@ -85,7 +87,7 @@ const CalendarEventRenderer = ({ event }: { event: CalendarEvent }) => {
           continue;
         }
 
-        note ??= notes.ensureNote(event, t['Untitled']());
+        note ??= notes.ensureNote(event, t['Untitled'](), detailLabels);
         if (isNew) {
           await docsService.addLinkedDoc(doc.id, note.id);
         }
@@ -99,6 +101,7 @@ const CalendarEventRenderer = ({ event }: { event: CalendarEvent }) => {
     }
   }, [
     date,
+    detailLabels,
     docsService,
     event,
     guardService,
@@ -147,6 +150,21 @@ const CalendarEventRenderer = ({ event }: { event: CalendarEvent }) => {
               ? t['com.notesgraph.integration.calendar.all-day']()
               : formatTime(startAt, endAt)}
           </span>
+          {detailLabels && event.meetingUrl ? (
+            <a
+              className={styles.eventJoin}
+              href={event.meetingUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              // The row's own click makes the event's note.
+              onClick={e => e.stopPropagation()}
+              aria-label={t['com.notesgraph.integration.calendar.join-meeting'](
+                { title: eventTitle }
+              )}
+            >
+              {t['com.notesgraph.integration.calendar.join']()}
+            </a>
+          ) : null}
           <span className={styles.eventNewDoc}>
             <PlusIcon style={{ fontSize: 18 }} />
             {t['com.notesgraph.integration.calendar.new-doc']()}

@@ -48,9 +48,29 @@ export const eventTitle = style({
 });
 
 export const eventCaption = style({
+  display: 'flex',
+  alignItems: 'center',
+  gap: 8,
   fontSize: 12,
   lineHeight: '20px',
   color: cssVarV2.text.secondary,
+});
+
+/** Join the event's video call; shown only when it has one. */
+export const eventJoin = style({
+  color: cssVarV2.text.link,
+  fontWeight: 500,
+  textDecoration: 'none',
+  borderRadius: 4,
+  selectors: {
+    '&:hover': {
+      textDecoration: 'underline',
+    },
+    '&:focus-visible': {
+      outline: `2px solid ${cssVarV2.button.primary}`,
+      outlineOffset: 1,
+    },
+  },
 });
 
 export const eventTime = style({

@@ -112,4 +112,20 @@ export type CalendarEvent = {
   date: Dayjs;
   calendarName?: string;
   calendarColor?: string;
+  description?: string;
+  location?: string;
+  /** Video-call link (Meet, Zoom, Teams, ...), if the event has one. */
+  meetingUrl?: string;
+  /** The event in the calendar provider's own UI. */
+  eventUrl?: string;
+  organizer?: CalendarEventPerson;
+  attendees?: CalendarEventPerson[];
+};
+
+export type CalendarEventPerson = {
+  email?: string;
+  name?: string;
+  /** accepted | declined | tentative | needsAction */
+  responseStatus?: string;
+  organizer?: boolean;
 };

@@ -1,9 +1,10 @@
-import { PageIcon, PlusIcon } from '@blocksuite/icons/rc';
+import { LinkIcon, PageIcon, PlusIcon } from '@blocksuite/icons/rc';
 import { DocsSearchService } from '@notesgraph/core/modules/docs-search';
 import {
   type CalendarEvent,
   CalendarEventNoteService,
   IntegrationService,
+  useCalendarEventDetailLabels,
 } from '@notesgraph/core/modules/integration';
 import { PeekViewService } from '@notesgraph/core/modules/peek-view';
 import { useI18n } from '@notesgraph/i18n';
@@ -116,43 +117,64 @@ const EventRow = ({
     )
   );
 
+  const detailLabels = useCalendarEventDetailLabels();
+
   const openNote = useCallback(() => {
-    const doc = notes.ensureNote(event, t['Untitled']());
+    const doc = notes.ensureNote(event, t['Untitled'](), detailLabels);
     peekView.open({ docRef: { docId: doc.id } }).catch(console.error);
-  }, [event, notes, peekView, t]);
+  }, [detailLabels, event, notes, peekView, t]);
 
   const noteLabel = note
     ? t['com.notesgraph.integration.calendar.open-note']()
     : t['com.notesgraph.integration.calendar.add-note']();
+  const eventTitle = event.title || t['Untitled']();
 
   return (
-    <button
-      type="button"
-      className={styles.row}
-      data-has-note={!!note}
-      onClick={openNote}
-      aria-label={`${event.title || t['Untitled']()} – ${noteLabel}`}
-    >
-      <span
-        className={styles.dot}
-        style={
-          event.calendarColor ? { background: event.calendarColor } : undefined
-        }
-      />
-      <span className={styles.time}>
-        {event.allDay
-          ? t['com.notesgraph.integration.calendar.all-day']()
-          : `${event.startAt.format('HH:mm')} – ${event.endAt.format('HH:mm')}`}
-      </span>
-      <span className={styles.title}>{event.title || t['Untitled']()}</span>
-      {showCalendarName && event.calendarName ? (
-        <span className={styles.calendarName}>{event.calendarName}</span>
+    <div className={styles.eventRow}>
+      <button
+        type="button"
+        className={styles.row}
+        data-has-note={!!note}
+        onClick={openNote}
+        aria-label={`${eventTitle} – ${noteLabel}`}
+      >
+        <span
+          className={styles.dot}
+          style={
+            event.calendarColor
+              ? { background: event.calendarColor }
+              : undefined
+          }
+        />
+        <span className={styles.time}>
+          {event.allDay
+            ? t['com.notesgraph.integration.calendar.all-day']()
+            : `${event.startAt.format('HH:mm')} – ${event.endAt.format('HH:mm')}`}
+        </span>
+        <span className={styles.title}>{event.title || t['Untitled']()}</span>
+        {showCalendarName && event.calendarName ? (
+          <span className={styles.calendarName}>{event.calendarName}</span>
+        ) : null}
+        <span className={styles.noteAction}>
+          {note ? <PageIcon /> : <PlusIcon />}
+          <span className={styles.noteActionLabel}>{noteLabel}</span>
+        </span>
+      </button>
+      {detailLabels && event.meetingUrl ? (
+        <a
+          className={styles.join}
+          href={event.meetingUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label={t['com.notesgraph.integration.calendar.join-meeting']({
+            title: eventTitle,
+          })}
+        >
+          <LinkIcon />
+          {t['com.notesgraph.integration.calendar.join']()}
+        </a>
       ) : null}
-      <span className={styles.noteAction}>
-        {note ? <PageIcon /> : <PlusIcon />}
-        <span className={styles.noteActionLabel}>{noteLabel}</span>
-      </span>
-    </button>
+    </div>
   );
 };
 
