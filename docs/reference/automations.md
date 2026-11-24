@@ -74,3 +74,13 @@ nightly passes live there as code the person can read and change:
 
 Both are tested by running their code under node against a fake
 `notesgraph` (`plugins/automations/__tests__/nightly-templates.spec.ts`).
+
+The **Tag interview events** template (`interview-template.ts`, every 30
+minutes) reads the workspace calendar over `/graphql`, keeps events whose
+title or description looks like an interview, and queues one agent run per
+new event through `POST /api/registry/workspaces/:id/devices/:key/jobs`. The
+agent classifies the event, tags its note `#interview` and adds the
+candidate's CV and LinkedIn link from the Slack-synced notes. Set
+`AGENT_DEVICE` (and `CALENDAR`, default `pantheon`) at the top of the code.
+Events already handed over are listed in the "Interview events handed to the
+agent" note. Tested in `__tests__/interview-template.spec.ts`.

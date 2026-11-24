@@ -1,6 +1,7 @@
 import type { RegistryJob } from '@prisma/client';
 
 import { isTaskStatus } from '../registry/task-status';
+import { INTERVIEW_TEMPLATES } from './interview-template';
 import { NIGHTLY_TEMPLATES } from './nightly-templates';
 
 /**
@@ -127,6 +128,7 @@ if (input.job.instructions.trim().length < 20) {
 /** What the app offers to start an automation from. */
 export const AUTOMATION_TEMPLATES = [
   ...NIGHTLY_TEMPLATES,
+  ...INTERVIEW_TEMPLATES,
   {
     id: 'fail-tasks-on-error',
     name: 'Mark tasks FAILED when a run fails',
