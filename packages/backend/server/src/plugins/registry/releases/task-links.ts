@@ -215,5 +215,4 @@ export const deployTasks = (
   blockIds: string[],
   commit: string,
   at: Date
-) =>
-  moveTasks(binary, blockIds, DEPLOYS, 'DEPLOYED', deployedNote(commit, at));
+) => moveTasks(binary, blockIds, DEPLOYS, 'DEPLOYED', deployedNote(commit, at));

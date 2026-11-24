@@ -16,9 +16,7 @@ describe('isSameLocation', () => {
   });
 
   test('search must match', () => {
-    expect(isSameLocation(at('/doc1?mode=page'), '/doc1?mode=page')).toBe(
-      true
-    );
+    expect(isSameLocation(at('/doc1?mode=page'), '/doc1?mode=page')).toBe(true);
     expect(isSameLocation(at('/doc1?mode=page'), '/doc1')).toBe(false);
     expect(isSameLocation(at('/doc1'), '/doc1?blockIds=b1')).toBe(false);
   });

@@ -29,7 +29,14 @@ async function run(events: any[], docs: any[] = [], device = 'cloud') {
                   {
                     displayNameOverride: 'Personal',
                     enabled: true,
-                    events: [{ externalEventId: 'x', title: 'Interview', startAtUtc: '', endAtUtc: '' }],
+                    events: [
+                      {
+                        externalEventId: 'x',
+                        title: 'Interview',
+                        startAtUtc: '',
+                        endAtUtc: '',
+                      },
+                    ],
                   },
                 ],
               },
@@ -49,7 +56,10 @@ async function run(events: any[], docs: any[] = [], device = 'cloud') {
     Error,
     encodeURIComponent,
   };
-  const output = await runInNewContext(`(async () => {\n${code}\n})`, context)();
+  const output = await runInNewContext(
+    `(async () => {\n${code}\n})`,
+    context
+  )();
   return { output, calls };
 }
 
@@ -72,7 +82,9 @@ test('queues an agent for each likely interview on the watched calendar', async 
   t.regex(job.body.instructions, /Dana Cohen/);
   t.regex(job.body.instructions, /CV/);
   t.regex(job.body.instructions, /LinkedIn/);
-  const ledger = calls.find(c => c.path === '/api/notes/workspaces/ws1/docs' && c.method === 'POST')!;
+  const ledger = calls.find(
+    c => c.path === '/api/notes/workspaces/ws1/docs' && c.method === 'POST'
+  )!;
   t.regex(ledger.body.markdown, /- e1/);
 });
 

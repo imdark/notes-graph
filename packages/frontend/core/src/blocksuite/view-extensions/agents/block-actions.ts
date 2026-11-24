@@ -49,7 +49,10 @@ const agentMenuIcon = (agent: Agent) => {
   return agent.emoji ? html`<span>${agent.emoji}</span>` : AiIcon();
 };
 
-export function blockTarget(std: BlockStdScope, model: BlockModel): AgentTarget {
+export function blockTarget(
+  std: BlockStdScope,
+  model: BlockModel
+): AgentTarget {
   return { kind: 'block', docId: std.store.id, blockId: model.id };
 }
 
@@ -90,8 +93,7 @@ export function openAssignToAgentMenu({
   onClose?: () => void;
 }) {
   const target = blockTarget(std, model);
-  const assign = (agent: Agent) =>
-    assignBlockToAgent(framework, target, agent);
+  const assign = (agent: Agent) => assignBlockToAgent(framework, target, agent);
 
   // Nothing may have fetched the machines yet this session; wait a moment
   // for them, but open unsorted rather than keep the menu waiting.

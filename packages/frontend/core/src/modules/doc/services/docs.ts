@@ -8,7 +8,6 @@ import { ObjectPool, Service } from '@notesgraph/infra';
 import { combineLatest, map } from 'rxjs';
 
 import { initDocFromProps } from '../../../blocksuite/initialization';
-import { scaffoldJournalSections } from '../utils/journal-sections';
 import type { DocProperties } from '../../db/schema/schema';
 import { getNotesGraphWorkspaceSchema } from '../../workspace/global-schema';
 import type { Doc } from '../entities/doc';
@@ -19,6 +18,7 @@ import { DocScope } from '../scopes/doc';
 import type { DocPropertiesStore } from '../stores/doc-properties';
 import type { DocsStore } from '../stores/docs';
 import type { DocCreateOptions } from '../types';
+import { scaffoldJournalSections } from '../utils/journal-sections';
 import { DocService } from './doc';
 import { getDuplicatedDocTitle } from './duplicate-title';
 

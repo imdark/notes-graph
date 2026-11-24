@@ -295,9 +295,11 @@ const InterestsRow = ({
                     <button
                       type="button"
                       className={styles.interestRemove}
-                      aria-label={t['com.notesgraph.discover.interests.remove']({
-                        topic,
-                      })}
+                      aria-label={t['com.notesgraph.discover.interests.remove'](
+                        {
+                          topic,
+                        }
+                      )}
                       onClick={() => onRemove(topic)}
                     >
                       ×
@@ -309,7 +311,9 @@ const InterestsRow = ({
           )}
           <Input
             className={styles.interestAdd}
-            placeholder={t['com.notesgraph.discover.interests.add.placeholder']()}
+            placeholder={t[
+              'com.notesgraph.discover.interests.add.placeholder'
+            ]()}
             value={draft}
             onChange={setDraft}
             onEnter={submit}

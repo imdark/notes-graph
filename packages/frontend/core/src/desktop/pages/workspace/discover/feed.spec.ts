@@ -24,11 +24,10 @@ describe('topicOptions', () => {
 
   test('leaves out suggestions the user deleted', () => {
     expect(
-      topicOptions(
-        [],
-        { known: [], hidden: ['science'], colors: {} },
-        ['Science', 'Music']
-      )
+      topicOptions([], { known: [], hidden: ['science'], colors: {} }, [
+        'Science',
+        'Music',
+      ])
     ).toEqual(['Music']);
   });
 });
