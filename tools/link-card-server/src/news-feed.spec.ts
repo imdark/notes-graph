@@ -66,10 +66,7 @@ describe('NewsFeedCache', () => {
   test('refresh pulls anew and concurrent reads share one pull', async () => {
     const { cache, pulled } = setup();
     await cache.get('Science');
-    await Promise.all([
-      cache.get('Science', true),
-      cache.get('Science', true),
-    ]);
+    await Promise.all([cache.get('Science', true), cache.get('Science', true)]);
     expect(pulled).toHaveLength(2);
   });
 
