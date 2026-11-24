@@ -11,6 +11,9 @@
 # entry leaves <dir> empty; the build treats that as a cold cache.
 # save stores <dir> as <key>, zstd-compressed.
 #
+# Both are best-effort: a failure is a GitHub warning and exit 0, never a
+# failed deploy, since a cache is only ever a speed-up.
+#
 # Why not the Actions cache: the repo gets 10 GB, and PR test runs use ~8 GB
 # each, so the deploy's caches were evicted between deploys (run 44960158138
 # found neither the Rust addon nor the yarn cache the deploy before had
@@ -45,13 +48,24 @@ case "$cmd" in
       exit 0
     fi
     s=$(date +%s)
-    aws s3 cp --only-show-errors "$(object "$found")" - | zstd -dq | tar -x -C "$dir"
+    if ! aws s3 cp --only-show-errors "$(object "$found")" - | zstd -dq | tar -x -C "$dir"; then
+      # A cache is only ever a speed-up: start cold rather than fail the deploy.
+      echo "::warning::couldn't restore $found; building without it"
+      rm -rf "$dir" && mkdir -p "$dir"
+      out "hit=false"
+      exit 0
+    fi
     echo "restored $found ($(du -sh "$dir" | cut -f1)) in $(( $(date +%s) - s )) s$([[ $hit == true ]] || echo ', newest under the prefix')"
     out "hit=$hit"
     ;;
   save)
     s=$(date +%s)
-    tar -C "$dir" -cf - . | zstd -3 -T0 -q | aws s3 cp --only-show-errors - "$(object "$key")"
+    if ! tar -C "$dir" -cf - . | zstd -3 -T0 -q | aws s3 cp --only-show-errors - "$(object "$key")"; then
+      # Run 45433772790 failed here (the bucket didn't exist yet) and so never
+      # rolled the box. A lost cache only makes the next deploy slower.
+      echo "::warning::couldn't save $key; the next deploy builds without it"
+      exit 0
+    fi
     echo "saved $key ($(du -sh "$dir" | cut -f1)) in $(( $(date +%s) - s )) s"
     ;;
   *)
