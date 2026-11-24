@@ -25,6 +25,7 @@ import { CommentSidebar } from '@notesgraph/core/components/comment/sidebar';
 import { useGuard } from '@notesgraph/core/components/guard';
 import { useAgentFinishedNotification } from '@notesgraph/core/components/hooks/notesgraph/use-agent-finished-notification';
 import { useAppSettingHelper } from '@notesgraph/core/components/hooks/notesgraph/use-app-setting-helper';
+import { useAssignAgentFromUrl } from '@notesgraph/core/components/hooks/notesgraph/use-assign-agent-from-url';
 import { useRegisterAgentCommands } from '@notesgraph/core/components/hooks/notesgraph/use-register-agent-commands';
 import { useRegisterBlocksuiteEditorCommands } from '@notesgraph/core/components/hooks/notesgraph/use-register-blocksuite-editor-commands';
 import { useRegisterGoalCommands } from '@notesgraph/core/components/hooks/notesgraph/use-register-goal-commands';
@@ -265,6 +266,7 @@ const DetailPageImpl = memo(function DetailPageImpl() {
   useRegisterGoalCommands(editor, isActiveView);
   useRegisterVideoBackupCommands(editor, isActiveView);
   useAgentFinishedNotification(isActiveView);
+  useAssignAgentFromUrl(editor);
 
   const journalService = useService(JournalService);
   const journalDate = useLiveData(journalService.journalDate$(doc.id));

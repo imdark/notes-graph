@@ -5,7 +5,7 @@ import { map, shareReplay } from 'rxjs';
 import { isMacOS } from '../../shared/utils';
 import { persistentConfig } from '../config-storage/persist';
 import { logger } from '../logger';
-import { hideQuickAsk } from '../quick-ask';
+import { hideQuickAsk, showMainFromQuickWindow } from '../quick-ask';
 import { openExternalSafely } from '../security/open-external';
 import { resolveAndValidateUrlForPreview } from '../security/url-safety';
 import type { WorkbenchViewMeta } from '../shared-state-schema';
@@ -288,6 +288,9 @@ export const uiHandlers = {
   },
   hideQuickAsk: async e => {
     await hideQuickAsk(e);
+  },
+  showMainFromQuickWindow: async e => {
+    await showMainFromQuickWindow(e);
   },
   restartApp: async () => {
     app.relaunch();

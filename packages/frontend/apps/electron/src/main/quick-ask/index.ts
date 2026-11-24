@@ -192,6 +192,21 @@ export async function hideQuickAsk(e: IpcMainInvokeEvent) {
   }
 }
 
+/**
+ * Put the quick window away and bring the main window up, for work that
+ * carries on there: a capture handed to an agent picks the agent and runs in
+ * the main window, where the Agents panel is.
+ */
+export async function showMainFromQuickWindow(e: IpcMainInvokeEvent) {
+  await hideQuickAsk(e);
+  const mainWindow = await getMainWindow();
+  if (mainWindow.isMinimized()) {
+    mainWindow.restore();
+  }
+  mainWindow.show();
+  mainWindow.focus();
+}
+
 function registerShortcut(accelerator: string, open: () => Promise<void>) {
   let registered = false;
   try {

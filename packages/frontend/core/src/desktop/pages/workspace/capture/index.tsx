@@ -7,7 +7,7 @@ import {
 } from '@notesgraph/core/modules/workbench';
 import { isQuickAskWindow } from '@notesgraph/core/utils/quick-ask';
 import { useServiceOptional } from '@notesgraph/infra';
-import { useEffect } from 'react';
+import { useCallback, useEffect } from 'react';
 
 export const Component = () => {
   const desktopApi = useServiceOptional(DesktopApiService);
@@ -25,12 +25,20 @@ export const Component = () => {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [desktopApi, quickWindow]);
 
+  // A capture handed to an agent carries on in the main window.
+  const showMainWindow = useCallback(() => {
+    desktopApi?.handler.ui.showMainFromQuickWindow().catch(console.error);
+  }, [desktopApi]);
+
   return (
     <>
       <ViewTitle title="Capture" />
       <ViewIcon icon="capture" />
       <ViewBody>
-        <CaptureView openNoteAt={quickWindow ? 'new-tab' : 'active'} />
+        <CaptureView
+          openNoteAt={quickWindow ? 'new-tab' : 'active'}
+          onOpenedElsewhere={quickWindow ? showMainWindow : undefined}
+        />
       </ViewBody>
     </>
   );

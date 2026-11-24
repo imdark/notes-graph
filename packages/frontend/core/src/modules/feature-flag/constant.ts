@@ -387,7 +387,7 @@ export const NOTESGRAPH_FLAGS = {
     category: 'notesgraph',
     displayName: 'Hand a capture to agents',
     description:
-      'A "Hand to agent" button on the capture page: starts runs on the captured note with the agents you pick.',
+      'A "Hand to agent" button on the capture page: opens the captured note with its first line\'s agent menu up, to pick an agent as from the pill.',
     configurable: true,
     defaultState: true,
   },

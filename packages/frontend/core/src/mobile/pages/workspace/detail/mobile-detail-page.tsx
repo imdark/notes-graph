@@ -8,6 +8,7 @@ import { useThemeColorV2 } from '@notesgraph/component';
 import { PageDetailLoading } from '@notesgraph/component/page-detail-skeleton';
 import type { NotesGraphEditorContainer } from '@notesgraph/core/blocksuite/block-suite-editor';
 import { useGuard } from '@notesgraph/core/components/guard';
+import { useAssignAgentFromUrl } from '@notesgraph/core/components/hooks/notesgraph/use-assign-agent-from-url';
 import { useActiveBlocksuiteEditor } from '@notesgraph/core/components/hooks/use-block-suite-editor';
 import { useNavigateHelper } from '@notesgraph/core/components/hooks/use-navigate-helper';
 import { NotesGraphErrorBoundary } from '@notesgraph/core/components/notesgraph/notesgraph-error-boundary';
@@ -176,6 +177,8 @@ const DetailPageImpl = ({
   }, [globalContext, isInTrash]);
 
   const server = useService(ServerService).server;
+
+  useAssignAgentFromUrl(editor);
 
   const onLoad = useCallback(
     (editorContainer: NotesGraphEditorContainer) => {

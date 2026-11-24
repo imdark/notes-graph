@@ -1,6 +1,7 @@
 import { MicrophoneIcon } from '@blocksuite/icons/rc';
 import type { Store } from '@blocksuite/notesgraph/store';
 import { Button } from '@notesgraph/component';
+import { ASSIGN_AGENT_PARAM } from '@notesgraph/core/components/hooks/notesgraph/use-assign-agent-from-url';
 import { DocsService } from '@notesgraph/core/modules/doc';
 import { FeatureFlagService } from '@notesgraph/core/modules/feature-flag';
 import { JournalService } from '@notesgraph/core/modules/journal';
@@ -17,7 +18,6 @@ import { useLiveData, useService } from '@notesgraph/infra';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import * as styles from './capture.css';
-import { CaptureHandOff } from './hand-off';
 import { OnDeviceModelOffer } from './on-device-model';
 import { useDictationVocabulary } from './use-dictation-vocabulary';
 
@@ -34,8 +34,9 @@ const errorMessages: Record<SpeechToTextError, string> = {
  * Capture mode: a big mic and a text box for getting an idea down fast. The
  * first word typed or said creates an untitled note with no parent, so it
  * lands in the Inbox, and the note follows the text from then on. Nothing is
- * created for a capture that stays empty. "Hand to agent" starts runs on the
- * note with the agents picked from a list.
+ * created for a capture that stays empty. "Hand to agent" opens the note
+ * with the assign-to-agent menu up on its first line, the menu a line's agent
+ * pill opens, so the agent is picked and run the same way as from a note.
  *
  * Opened by the "NotesGraph Capture" launcher on Android and the capture
  * window on desktop.
@@ -44,13 +45,16 @@ export const CaptureView = ({
   autoListen = false,
   openNoteAt = 'active',
   compact = false,
+  onOpenedElsewhere,
 }: {
   /** Start listening as soon as the view opens. */
   autoListen?: boolean;
   /** A smaller mic, for while the on-screen keyboard takes up the screen. */
   compact?: boolean;
-  /** Where "Open note" opens it; the desktop capture window is too small. */
+  /** Where the note opens; the desktop capture window is too small. */
   openNoteAt?: 'active' | 'new-tab';
+  /** The note was handed to an agent in another tab (see `openNoteAt`). */
+  onOpenedElsewhere?: () => void;
 }) => {
   const voice = useService(VoiceTasksService);
   const docsService = useService(DocsService);
@@ -65,9 +69,6 @@ export const CaptureView = ({
   const [listening, setListening] = useState(false);
   const [error, setError] = useState<SpeechToTextError | null>(null);
   const [docId, setDocId] = useState<string | null>(null);
-  const [handingOff, setHandingOff] = useState(false);
-  /** Names of the agents this capture was last handed to. */
-  const [handedTo, setHandedTo] = useState<string[]>([]);
 
   const sessionRef = useRef<SpeechToTextSession | null>(null);
   // Bumped per session and when the capture is left, so late callbacks can't
@@ -185,8 +186,6 @@ export const CaptureView = ({
     setText('');
     setPartial('');
     setDocId(null);
-    setHandingOff(false);
-    setHandedTo([]);
     textareaRef.current?.focus();
   }, [finishCapture]);
 
@@ -197,27 +196,40 @@ export const CaptureView = ({
     workbench.openDoc(docId, { at: openNoteAt });
   }, [docId, openNoteAt, save, stop, workbench]);
 
-  const flush = useCallback(() => {
+  // The agent is picked in the note, from its first line's agent menu, so it
+  // runs where the Agents panel can show it: from the desktop capture window
+  // that is the main window, which has the panel.
+  const handOff = useCallback(() => {
+    if (!docId) return;
     stop();
     save();
-  }, [save, stop]);
+    const [note] =
+      noteRef.current?.store.getModelsByFlavour('notesgraph:note') ?? [];
+    const firstLine = note?.children[0]?.id;
+    workbench.open(
+      firstLine
+        ? `/${docId}?${ASSIGN_AGENT_PARAM}=${encodeURIComponent(firstLine)}`
+        : `/${docId}`,
+      { at: openNoteAt }
+    );
+    if (openNoteAt === 'new-tab') {
+      // This view stays open; clear it for the next idea.
+      newCapture();
+      onOpenedElsewhere?.();
+    }
+  }, [
+    docId,
+    newCapture,
+    onOpenedElsewhere,
+    openNoteAt,
+    save,
+    stop,
+    workbench,
+  ]);
 
-  const getBlockIds = useCallback(() => {
-    const store = noteRef.current?.store;
-    const [note] = store?.getModelsByFlavour('notesgraph:note') ?? [];
-    return note ? note.children.map(block => block.id) : [];
-  }, []);
-
-  const handedOff = useCallback((agents: { name: string }[]) => {
-    setHandingOff(false);
-    setHandedTo(agents.map(agent => agent.name));
-  }, []);
-
-  const status = handedTo.length
-    ? `Handed to ${handedTo.join(', ')}. Follow it in Agents.`
-    : docId
-      ? 'Saving to your Inbox as you go.'
-      : 'A note is saved to your Inbox once you start.';
+  const status = docId
+    ? 'Saving to your Inbox as you go.'
+    : 'A note is saved to your Inbox once you start.';
 
   return (
     <div
@@ -266,9 +278,8 @@ export const CaptureView = ({
         {handOffEnabled ? (
           <Button
             disabled={!docId}
-            aria-expanded={handingOff}
-            onClick={() => setHandingOff(open => !open)}
-            data-testid="capture-hand-off-toggle"
+            onClick={handOff}
+            data-testid="capture-hand-off"
           >
             Hand to agent
           </Button>
@@ -281,15 +292,6 @@ export const CaptureView = ({
         </Button>
       </div>
       {compact ? null : <OnDeviceModelOffer />}
-      {handOffEnabled && handingOff && docId ? (
-        <CaptureHandOff
-          docId={docId}
-          getBlockIds={getBlockIds}
-          onBeforeHandOff={flush}
-          onHandedOff={handedOff}
-          onCancel={() => setHandingOff(false)}
-        />
-      ) : null}
     </div>
   );
 };

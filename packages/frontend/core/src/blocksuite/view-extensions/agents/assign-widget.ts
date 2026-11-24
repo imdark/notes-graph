@@ -1,7 +1,9 @@
 import { AiIcon, PlusIcon } from '@blocksuite/icons/lit';
 import { EnterIcon } from '@blocksuite/notesgraph/components/icons';
+import { focusTextModel } from '@blocksuite/notesgraph/rich-text';
 import {
   BLOCK_ID_ATTR,
+  type BlockStdScope,
   TextSelection,
   WidgetComponent,
   WidgetViewExtension,
@@ -330,19 +332,46 @@ export class AgentAssignWidget extends WidgetComponent {
   private readonly _openMenu = (e: MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    const framework = this._framework;
-    if (!framework || this._menuOpen) return;
+    if (!this._framework || this._menuOpen) return;
     this._menuOpen = true;
+    this._showMenu(e.currentTarget as HTMLElement);
+  };
+
+  /** Pop the menu at `anchor`; `_menuOpen` is already set. */
+  private _showMenu(anchor: HTMLElement) {
+    const framework = this._framework;
+    if (!framework) return;
     openAssignToAgentMenu({
       framework,
       std: this.std,
       model: this.model,
-      anchor: e.currentTarget as HTMLElement,
+      anchor,
       onClose: () => {
         this._menuOpen = false;
       },
     });
-  };
+  }
+
+  /**
+   * Open the menu as if the pill were clicked, for a hand-off from elsewhere
+   * (see openAssignToAgentMenuOn). False when the line offers no pill.
+   */
+  async openMenu(): Promise<boolean> {
+    if (!this._framework || this._menuOpen) return false;
+    // The pill only renders while the menu is open (or the caret is in the
+    // line), so mark it open first to have a pill to anchor the menu on.
+    this._menuOpen = true;
+    await this.updateComplete;
+    const pill = this.renderRoot.querySelector<HTMLElement>(
+      '[data-testid="agent-assign-button"]'
+    );
+    if (!pill) {
+      this._menuOpen = false;
+      return false;
+    }
+    this._showMenu(pill);
+    return true;
+  }
 
   private readonly _addRow = (e: MouseEvent) => {
     e.preventDefault();
@@ -384,6 +413,35 @@ export class AgentAssignWidget extends WidgetComponent {
 
 if (!customElements.get(WIDGET_TAG)) {
   customElements.define(WIDGET_TAG, AgentAssignWidget);
+}
+
+/** Longest a hand-off waits for its line to sync in and render. */
+const HAND_OFF_WAIT_MS = 5000;
+
+/**
+ * Put the caret at the end of `blockId` and open its assign-to-agent menu,
+ * as clicking the line's pill does. For a note opened to be handed to an
+ * agent, such as a capture from the capture window: the block may not have
+ * synced in or rendered yet, so this waits for it. Resolves false if the
+ * line never offers a pill.
+ */
+export async function openAssignToAgentMenuOn(
+  std: BlockStdScope,
+  blockId: string,
+  signal?: AbortSignal
+): Promise<boolean> {
+  const deadline = Date.now() + HAND_OFF_WAIT_MS;
+  while (!signal?.aborted && Date.now() < deadline) {
+    const widget = std.view.getWidget(WIDGET_TAG, blockId);
+    if (widget instanceof AgentAssignWidget) {
+      const text = std.store.getBlock(blockId)?.model.text;
+      focusTextModel(std, blockId, text?.length ?? 0);
+      std.view.getBlock(blockId)?.scrollIntoView({ block: 'nearest' });
+      return widget.openMenu();
+    }
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+  return false;
 }
 
 /**
