@@ -31,6 +31,7 @@ import { AgentReviewBar } from './agent-review-card';
 import { AgentRunChanges } from './agent-run-changes';
 import { AgentRunChat } from './agent-run-chat';
 import { AgentRunDeploy } from './agent-run-deploy';
+import { AgentRunFix } from './agent-run-fix';
 import { formatDuration } from './agent-run-row';
 import { AgentRunShare } from './agent-run-share';
 import { AgentRunSteer } from './agent-run-steer';
@@ -375,8 +376,12 @@ export const AgentRunLogDialog = ({
   // A deploy opened from the Deploy tab shows here in the run's place, with
   // a way back to it.
   const [deployRunId, setDeployRunId] = useState<string | null>(null);
-  useEffect(() => setDeployRunId(null), [openedRunId]);
-  const runId = deployRunId ?? openedRunId;
+  const [fixRunId, setFixRunId] = useState<string | null>(null);
+  useEffect(() => {
+    setDeployRunId(null);
+    setFixRunId(null);
+  }, [openedRunId]);
+  const runId = fixRunId ?? deployRunId ?? openedRunId;
   const runsStore = useService(AgentRunsStore);
   const sessionService = useService(AgentRunSessionService);
   const remoteRunner = useService(RemoteAgentRunnerService);
@@ -541,7 +546,15 @@ export const AgentRunLogDialog = ({
       <div
         className={clsx(styles.logDialogBody, flatChat && styles.flatChatBody)}
       >
-        {deployRunId ? (
+        {fixRunId ? (
+          <button
+            className={styles.linkButton}
+            onClick={() => setFixRunId(null)}
+            data-testid="agent-run-log-back"
+          >
+            Back to the run it fixes
+          </button>
+        ) : deployRunId ? (
           <button
             className={styles.linkButton}
             onClick={backToRun}
@@ -646,6 +659,17 @@ export const AgentRunLogDialog = ({
             {/* A device run takes new instructions until it ends. */}
             {run?.status === 'running' && run.remoteJobId && !loading ? (
               <AgentRunSteer jobId={run.remoteJobId} steers={steers} />
+            ) : null}
+
+            {run && ended && !askRow && !loading ? (
+              <div className={styles.sessionActions}>
+                <AgentRunFix
+                  run={run}
+                  log={log}
+                  summary={summary}
+                  onOpenRun={setFixRunId}
+                />
+              </div>
             ) : null}
 
             {canStop || canAllowAll ? (

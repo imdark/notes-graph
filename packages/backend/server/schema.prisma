@@ -188,6 +188,7 @@ model Workspace {
   projectDocs                ProjectDoc[]
   directoryAccounts          DirectoryAccount[]
   automations                Automation[]
+  agentPlugins               AgentPlugin[]
 
   @@index([lastCheckEmbeddings])
   @@index([createdAt])
@@ -1074,6 +1075,31 @@ model WorkspaceSecret {
 
   @@unique([workspaceId, name])
   @@map("workspace_secrets")
+}
+
+// Client plugins an agent wrote for a workspace (the create_plugin MCP tool).
+// The app loads one from /api/agent-plugins/<token>/, so the token is the only
+// key to its files: random, and kept across updates so an installed plugin
+// picks up the latest code on reload.
+model AgentPlugin {
+  id          String   @id @default(uuid()) @db.VarChar
+  workspaceId String   @map("workspace_id") @db.VarChar
+  pluginId    String   @map("plugin_id") @db.VarChar
+  token       String   @unique @db.VarChar
+  version     String   @db.VarChar
+  // The validated manifest.json, as served.
+  manifest    Json     @db.Json
+  code        String   @db.Text
+  createdBy   String?  @map("created_by") @db.VarChar
+  updatedBy   String?  @map("updated_by") @db.VarChar
+  agent       String?  @db.VarChar
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, pluginId])
+  @@map("agent_plugins")
 }
 
 model AiUsageEvent {

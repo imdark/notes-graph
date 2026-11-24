@@ -13,7 +13,8 @@ const BUILTIN_ENABLED_PREFIX = 'plugin:builtin-enabled:';
 
 export interface InstalledPlugin {
   manifest: PluginManifest;
-  source: 'dev' | 'marketplace' | 'builtin';
+  /** `agent`: written by an agent with the create_plugin tool, served by the workspace's server. */
+  source: 'dev' | 'marketplace' | 'builtin' | 'agent';
   entryUrl: string;
   enabled: boolean;
   status: 'active' | 'error' | 'disabled';

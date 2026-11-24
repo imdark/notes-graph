@@ -37,6 +37,17 @@ export interface AgentProfile {
   skills?: Array<{ name: string; url: string }>;
   /** Set when the server's Headroom plugin asks for compressed context. */
   headroom?: { compressContext?: boolean };
+  /** The model and effort the server picked (plugins/registry/model-router.ts). */
+  routing?: ModelRoute;
+}
+
+export interface ModelRoute {
+  /** A Claude Code alias: haiku, sonnet, opus or fable. */
+  model: string;
+  effort: 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+  fallbackModel?: string;
+  tier?: string;
+  reasons?: string[];
 }
 
 export interface Job {

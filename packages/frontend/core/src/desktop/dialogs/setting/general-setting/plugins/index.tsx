@@ -12,6 +12,8 @@ import {
 import { useLiveData, useService } from '@notesgraph/infra';
 import { useCallback, useEffect, useState } from 'react';
 
+import { AgentPluginsSection } from './agent-plugins';
+
 export const PluginsSettings = () => {
   const pluginService = useService(PluginService);
   const marketplaceService = useService(PluginMarketplaceService);
@@ -122,6 +124,8 @@ export const PluginsSettings = () => {
           ))
         )}
       </SettingWrapper>
+
+      <AgentPluginsSection />
 
       <SettingWrapper title="Development">
         <SettingRow

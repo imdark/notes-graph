@@ -123,18 +123,29 @@ ARG GITHUB_SHA
 # ---- web bundle (the heaviest; runs beside the stages below) ----
 FROM prepared AS web
 ARG GITHUB_SHA
+# rspack's module cache from earlier deploys (deploy-prod.yml passes it as the
+# rspack-cache-files context, empty when it has none): a warm web build
+# compiles in ~1.5 s instead of ~11 s. Each bundle keeps its own folder.
+COPY --from=rspack-cache-files / /rspack-cache/
 RUN test -n "$GITHUB_SHA" || { echo "pass --build-arg GITHUB_SHA=\$(git rev-parse HEAD)"; exit 1; } \
- && BUILD_TYPE=stable SELF_HOSTED=true yarn notesgraph bundle -p @notesgraph/web \
+ && NOTESGRAPH_RSPACK_CACHE_DIR=/rspack-cache BUILD_TYPE=stable SELF_HOSTED=true yarn notesgraph bundle -p @notesgraph/web \
  && test -f packages/frontend/apps/web/dist/selfhost.html
 
 # ---- admin + mobile bundles ----
 FROM prepared AS frontends
 ARG GITHUB_SHA
+COPY --from=rspack-cache-files / /rspack-cache/
 RUN test -n "$GITHUB_SHA" || { echo "pass --build-arg GITHUB_SHA=\$(git rev-parse HEAD)"; exit 1; } \
- && BUILD_TYPE=stable SELF_HOSTED=true yarn notesgraph bundle -p @notesgraph/admin \
- && BUILD_TYPE=stable SELF_HOSTED=true yarn notesgraph bundle -p @notesgraph/mobile \
+ && NOTESGRAPH_RSPACK_CACHE_DIR=/rspack-cache BUILD_TYPE=stable SELF_HOSTED=true yarn notesgraph bundle -p @notesgraph/admin \
+ && NOTESGRAPH_RSPACK_CACHE_DIR=/rspack-cache BUILD_TYPE=stable SELF_HOSTED=true yarn notesgraph bundle -p @notesgraph/mobile \
  && test -d packages/frontend/admin/dist \
  && test -d packages/frontend/apps/mobile/dist
+
+# ---- the bundles' rspack caches after this build, for deploy-prod.yml to keep ----
+FROM scratch AS rspack-cache-export
+COPY --from=web /rspack-cache/web /web
+COPY --from=frontends /rspack-cache/admin /admin
+COPY --from=frontends /rspack-cache/mobile /mobile
 
 # ---- server bundle + prod-only deps (mirror image-build.sh) ----
 FROM prepared AS server

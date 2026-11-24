@@ -37,6 +37,7 @@ import {
 } from './agent-profiles';
 import { AgentRules, withAgentRules } from './agent-rules';
 import { JobGates } from './job-gates';
+import { routeModel } from './model-router';
 import { AgentPushService } from './push';
 import { isSessionLimit, sessionLimitRunAfter } from './session-limit';
 import { SkillNoteService } from './skill-notes';
@@ -1178,7 +1179,18 @@ export class RegistryJobService {
         job.skills,
         job.createdBy
       )) ?? [];
-    const profile = profileFor(job.model, job.skills, job.access, noteSkills);
+    const base = profileFor(job.model, job.skills, job.access, noteSkills);
+    const profile = base && {
+      ...base,
+      routing: routeModel({
+        agent: job.model,
+        workdir: base.workdir,
+        context: job.context,
+        instructions: job.instructions,
+        title: job.title,
+        maxCostUsd: job.maxCostUsd,
+      }),
+    };
     if (!profile || !this.rules) return profile;
     const rules = await this.rules.read(job.workspaceId, job.createdBy);
     if (!rules) return profile;
