@@ -1,3 +1,4 @@
+/* eslint-disable rxjs/finnish -- fakes of the services, whose LiveData fields end in $ */
 import { Framework } from '@notesgraph/infra';
 import { of } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
