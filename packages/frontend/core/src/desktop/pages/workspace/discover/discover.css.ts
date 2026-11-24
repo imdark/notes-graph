@@ -44,10 +44,10 @@ export const status = style({
 });
 
 export const feed = style({
-  display: 'grid',
-  gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
+  display: 'flex',
+  flexDirection: 'column',
   gap: 12,
-  maxWidth: 1200,
+  maxWidth: 720,
   margin: '0 auto',
 });
 
@@ -55,7 +55,7 @@ export const interests = style({
   display: 'flex',
   flexDirection: 'column',
   gap: 8,
-  maxWidth: 1200,
+  maxWidth: 720,
   margin: '0 auto 16px',
   fontSize: 13,
   color: cssVarV2('text/secondary'),
