@@ -33,7 +33,17 @@ export interface NotesGraphIdentity {
   workspaceId: string;
   /** A token for the automation's creator, good for the run's duration. */
   token: string;
+  /**
+   * This run, named as the caller when its code starts another automation
+   * (`notesgraph.automations`), so the server can refuse a cycle.
+   */
+  automationId?: string;
+  runId?: string;
 }
+
+/** How often `notesgraph.automations.wait` looks at a called run, at first and at most. */
+const CALL_POLL_MS = 1000;
+const CALL_POLL_MAX_MS = 5000;
 
 export interface CodeRunOptions {
   /** Each console line as the code writes it. */
@@ -69,6 +79,107 @@ const logAt = level => (...args) => {
   parentPort.postMessage({ type: 'log', line: level ? level + ': ' + line : line });
 };
 
+const identity = workerData.notesgraph;
+
+async function apiFetch(path, init = {}) {
+  const body =
+    init.body !== undefined &&
+    init.body !== null &&
+    typeof init.body !== 'string'
+      ? JSON.stringify(init.body)
+      : init.body;
+  const headers = new Headers(init.headers || {});
+  headers.set('Authorization', 'Bearer ' + identity.token);
+  if (body !== undefined && !headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json');
+  }
+  const url = identity.url.replace(/\\/$/, '') + path;
+  const response = await fetch(url, { ...init, body, headers });
+  const text = await response.text();
+  let parsed = text;
+  try {
+    parsed = text ? JSON.parse(text) : null;
+  } catch {}
+  if (!response.ok) {
+    const message =
+      parsed && typeof parsed === 'object' && parsed.message
+        ? parsed.message
+        : text.slice(0, 200);
+    const error = new Error(
+      (init.method || 'GET') + ' ' + path + ': ' + response.status + ' ' + message
+    );
+    error.status = response.status;
+    throw error;
+  }
+  return parsed;
+}
+
+// Other automations of the workspace, to call from this one.
+const automationsPath = () =>
+  '/api/workspaces/' + encodeURIComponent(identity.workspaceId) + '/automations';
+const RUN_ENDED = ['succeeded', 'failed', 'timed_out', 'cancelled'];
+const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+async function listAutomations() {
+  const { automations } = await apiFetch(automationsPath());
+  return automations;
+}
+
+// An automation by id, or by its name when exactly one has it.
+async function findAutomation(nameOrId) {
+  const all = await listAutomations();
+  const byId = all.find(a => a.id === nameOrId);
+  if (byId) return byId;
+  const named = all.filter(a => a.name === nameOrId);
+  if (named.length === 1) return named[0];
+  throw new Error(
+    named.length
+      ? named.length + ' automations are named "' + nameOrId + '": call one by id'
+      : 'No automation "' + nameOrId + '" in this workspace'
+  );
+}
+
+async function startAutomation(nameOrId, input, options = {}) {
+  const automation = await findAutomation(nameOrId);
+  const { run } = await apiFetch(
+    automationsPath() + '/' + encodeURIComponent(automation.id) + '/run',
+    {
+      method: 'POST',
+      body: {
+        input: input === undefined ? null : input,
+        ...(options.target ? { target: options.target } : {}),
+        ...(identity.automationId && identity.runId
+          ? { caller: { automationId: identity.automationId, runId: identity.runId } }
+          : {}),
+      },
+    }
+  );
+  return { automationId: automation.id, runId: run.id, status: run.status };
+}
+
+// Wait for a called run to end: its output when it succeeded, else an Error
+// carrying the run.
+async function waitForRun(handle) {
+  const path =
+    automationsPath() + '/' + encodeURIComponent(handle.automationId) +
+    '/runs/' + encodeURIComponent(handle.runId);
+  let delay = ${CALL_POLL_MS};
+  for (;;) {
+    const { run } = await apiFetch(path);
+    if (RUN_ENDED.includes(run.status)) {
+      if (run.status === 'succeeded') return run.output;
+      const error = new Error(
+        'Called automation run ' + run.id + ' ' + run.status.replace('_', ' ') +
+          (run.error ? ': ' + run.error : '')
+      );
+      error.run = run;
+      throw error;
+    }
+    await sleep(delay);
+    delay = Math.min(delay * 2, ${CALL_POLL_MAX_MS});
+  }
+}
+
 const context = vm.createContext({
   console: {
     log: logAt(''),
@@ -83,42 +194,21 @@ const context = vm.createContext({
   // takes a path under the server (\`/api/workspaces/...\`), sends a JSON
   // body given an object, and returns the parsed JSON (or the text when the
   // reply is not JSON); it throws with the status and message on an error.
-  notesgraph: workerData.notesgraph
+  // \`automations.run(nameOrId, input)\` calls another automation and waits
+  // for its output; \`start\` only starts it, returning a handle to \`wait\` on.
+  notesgraph: identity
     ? Object.freeze({
-        url: workerData.notesgraph.url,
-        workspaceId: workerData.notesgraph.workspaceId,
-        async fetch(path, init = {}) {
-          const body =
-            init.body !== undefined &&
-            init.body !== null &&
-            typeof init.body !== 'string'
-              ? JSON.stringify(init.body)
-              : init.body;
-          const headers = new Headers(init.headers || {});
-          headers.set('Authorization', 'Bearer ' + workerData.notesgraph.token);
-          if (body !== undefined && !headers.has('Content-Type')) {
-            headers.set('Content-Type', 'application/json');
-          }
-          const url = workerData.notesgraph.url.replace(/\\/$/, '') + path;
-          const response = await fetch(url, { ...init, body, headers });
-          const text = await response.text();
-          let parsed = text;
-          try {
-            parsed = text ? JSON.parse(text) : null;
-          } catch {}
-          if (!response.ok) {
-            const message =
-              parsed && typeof parsed === 'object' && parsed.message
-                ? parsed.message
-                : text.slice(0, 200);
-            const error = new Error(
-              (init.method || 'GET') + ' ' + path + ': ' + response.status + ' ' + message
-            );
-            error.status = response.status;
-            throw error;
-          }
-          return parsed;
-        },
+        url: identity.url,
+        workspaceId: identity.workspaceId,
+        fetch: apiFetch,
+        automations: Object.freeze({
+          list: listAutomations,
+          start: startAutomation,
+          wait: waitForRun,
+          async run(nameOrId, input, options) {
+            return waitForRun(await startAutomation(nameOrId, input, options));
+          },
+        }),
       })
     : undefined,
   fetch,

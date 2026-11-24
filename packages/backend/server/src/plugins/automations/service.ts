@@ -28,12 +28,24 @@ import {
 
 /** What started a run, as kept on the run. */
 export interface RunTrigger {
-  type: Trigger['type'];
+  /** 'call': another automation's run started this one. */
+  type: Trigger['type'] | 'call';
   event?: AutomationEvent;
   hook?: AgentHook;
   /** Who clicked Run, for a manual run. */
   by?: string;
+  /** For a call: the run that made it. */
+  callerAutomationId?: string;
+  callerRunId?: string;
+  /**
+   * For a call: the automations from the first caller down to this one,
+   * which is how a cycle or a chain too deep is caught.
+   */
+  chain?: string[];
 }
+
+/** Most automations one chain of calls may hold, the first caller included. */
+export const MAX_CALL_DEPTH = 5;
 
 /** A doc.updated trigger fires at most once in this long, per automation. */
 export const DOC_UPDATED_DEBOUNCE_MS = 60_000;
@@ -95,6 +107,48 @@ export class AutomationService implements OnModuleInit {
     const automation = await this.models.automation.get(workspaceId, id);
     if (!automation) throw new NotFound('Automation not found');
     return automation;
+  }
+
+  /**
+   * The trigger for a run that one automation's run starts of another. The
+   * caller must be a run of this workspace that has not ended, and the call
+   * must not close a cycle or make the chain longer than MAX_CALL_DEPTH.
+   */
+  async callTrigger(
+    workspaceId: string,
+    caller: { automationId: string; runId: string },
+    calleeId: string
+  ): Promise<RunTrigger> {
+    const callerAutomation = await this.models.automation.get(
+      workspaceId,
+      caller.automationId
+    );
+    const run = callerAutomation
+      ? await this.models.automation.getRun(caller.automationId, caller.runId)
+      : null;
+    if (!run) throw new BadRequest('The calling run was not found');
+    if (run.status !== 'queued' && run.status !== 'running') {
+      throw new BadRequest('The calling run has already ended');
+    }
+    const callerTrigger = run.trigger as unknown as RunTrigger | null;
+    const chain = [...(callerTrigger?.chain ?? [caller.automationId])];
+    if (chain.includes(calleeId)) {
+      throw new BadRequest(
+        'An automation in this chain of calls is already running it: a cycle'
+      );
+    }
+    chain.push(calleeId);
+    if (chain.length > MAX_CALL_DEPTH) {
+      throw new BadRequest(
+        `A chain of calls may hold at most ${MAX_CALL_DEPTH} automations`
+      );
+    }
+    return {
+      type: 'call',
+      callerAutomationId: caller.automationId,
+      callerRunId: caller.runId,
+      chain,
+    };
   }
 
   /**

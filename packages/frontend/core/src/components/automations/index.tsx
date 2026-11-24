@@ -137,7 +137,9 @@ const Runs = ({
             <span>
               {run.trigger.hook
                 ? `${run.trigger.hook} hook`
-                : (run.trigger.event ?? run.trigger.type)}
+                : run.trigger.type === 'call'
+                  ? 'called by another automation'
+                  : (run.trigger.event ?? run.trigger.type)}
               {run.attempt > 1 ? ` · attempt ${run.attempt}` : ''} · on{' '}
               {run.target} · {ago(run.createdAt)}
             </span>

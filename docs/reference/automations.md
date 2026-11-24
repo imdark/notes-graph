@@ -45,6 +45,37 @@ cannot shadow them.
 Because the token acts as the creator, only workspace admins may write
 automations, and a run can do nothing its creator could not.
 
+## Calling other automations
+
+`notesgraph.automations` lets one automation run another, so small ones
+can be put together:
+
+- `await notesgraph.automations.run(nameOrId, input?, {target?})`: start
+  it and wait. Returns its output; throws when the run fails, times out or
+  is cancelled (the error's `run` holds the run with its error).
+- `await notesgraph.automations.start(nameOrId, input?, {target?})`: start
+  it and go on. Returns `{automationId, runId, status}`.
+- `await notesgraph.automations.wait(handle)`: wait for a started run, as
+  `run` does. Start several, then `Promise.all` their `wait`s to run them
+  side by side.
+- `await notesgraph.automations.list()`: the workspace's automations.
+
+A name must match exactly one automation; when two share it, call by id.
+The called automation runs its deployed version on its own device, with
+its own secrets and time limit, as a run of kind `call` on its Runs list.
+
+The runner names the calling run in the request (`caller` on
+`POST .../automations/:id/run`), and the server refuses a call whose
+caller has already ended, one that would call an automation already in the
+chain (a cycle, including calling itself), and a chain of more than five
+automations (`MAX_CALL_DEPTH`). A caller waiting on `run` counts against
+its own time limit, so give it room for what it calls. Calling needs the
+same right as Run now: the automation's creator must be a workspace admin.
+
+This is the cloud runner's helper (`tools/agent-runner`). Code run by a wf
+device can call the same endpoint with `NOTESGRAPH_TOKEN`, but without
+`caller` its run counts as a manual one and no cycle check applies.
+
 ## Useful endpoints
 
 - `GET /api/notes/workspaces/:id/docs?q=&limit=1000`: docs by title match
