@@ -1,4 +1,5 @@
 import { Button, Checkbox, Input, notify } from '@notesgraph/component';
+import { FetchService } from '@notesgraph/core/modules/cloud';
 import { DocsService } from '@notesgraph/core/modules/doc';
 import { JournalService } from '@notesgraph/core/modules/journal';
 import { GlobalCacheService } from '@notesgraph/core/modules/storage';
@@ -21,12 +22,15 @@ import * as styles from './discover.css';
 import {
   DEFAULT_TOPICS,
   type DiscoverItem,
-  FEED_MAX_AGE_MS,
   fetchCardImage,
   fetchDiscoverFeed,
+  fetchServerTopics,
+  isFeedStale,
   loadCachedFeed,
+  loadSavedTopics,
   loadTopics,
   saveCachedFeed,
+  saveServerTopics,
   saveTopics,
 } from './feed';
 import {
@@ -339,6 +343,38 @@ const DiscoverPage = () => {
   // The picker's selection; it becomes `manualTopics` (and refetches the
   // feed) once the user stops changing it for a moment.
   const [draftTopics, setDraftTopics] = useState<string[]>(manualTopics);
+  const fetchService = useService(FetchService);
+  // Set once the user changes the picker, so a late server answer can't
+  // undo their edit.
+  const pickedRef = useRef(false);
+  const pickTopics = useCallback((next: string[]) => {
+    pickedRef.current = true;
+    setDraftTopics(next);
+  }, []);
+
+  // The server holds the selection, so other devices and the morning
+  // preseed automation use it too. This browser's copy shows first and
+  // stands in when signed out or offline. A selection saved only here
+  // (before the server kept one) is moved up.
+  useEffect(() => {
+    let cancelled = false;
+    fetchServerTopics(fetchService.fetch)
+      .then(async server => {
+        if (server === null) {
+          const local = loadSavedTopics();
+          if (local) await saveServerTopics(fetchService.fetch, local);
+          return;
+        }
+        if (cancelled || pickedRef.current) return;
+        saveTopics(server);
+        setManualTopics(server);
+        setDraftTopics(server);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [fetchService]);
   const [items, setItems] = useState<DiscoverItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -487,7 +523,7 @@ const DiscoverPage = () => {
       setItems(cached.items);
       setError(false);
     }
-    const stale = !cached || Date.now() - cached.fetchedAt > FEED_MAX_AGE_MS;
+    const stale = !cached || isFeedStale(cached.fetchedAt);
     if (stale) {
       refresh(activeTopics, !cached).catch(console.error);
     }
@@ -516,9 +552,10 @@ const DiscoverPage = () => {
     const timer = setTimeout(() => {
       saveTopics(draftTopics);
       setManualTopics(draftTopics);
+      saveServerTopics(fetchService.fetch, draftTopics).catch(console.error);
     }, TOPICS_COMMIT_DELAY_MS);
     return () => clearTimeout(timer);
-  }, [draftTopics, manualTopics]);
+  }, [draftTopics, manualTopics, fetchService]);
 
   const topicSuggestions = useMemo(
     () => [
@@ -560,7 +597,7 @@ const DiscoverPage = () => {
           <TopicsPicker
             selected={draftTopics}
             suggestions={topicSuggestions}
-            onChange={setDraftTopics}
+            onChange={pickTopics}
           />
         </div>
       </ViewHeader>

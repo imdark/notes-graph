@@ -15,6 +15,7 @@ import {
 import { renderScreenshot } from '@notesgraph/link-card/screenshot';
 import { ImapFlow } from 'imapflow';
 
+import { NewsFeedCache } from './news-feed';
 import {
   DEFAULT_MAX_VIDEO_BYTES,
   downloadYoutubeVideo,
@@ -301,6 +302,18 @@ async function newsImage(
   return pending;
 }
 
+const newsFeeds = new NewsFeedCache({
+  fetchText: async url => {
+    const res = await fetch(url, { headers: { 'user-agent': UA } });
+    if (!res.ok) throw new Error(`news feed ${res.status}`);
+    return res.text();
+  },
+  cachedImage: (title, source) => {
+    const hit = newsImageCache.get(`${title}\0${source}`);
+    return hit && Date.now() - hit.at < NEWS_OK_TTL_MS ? hit.image : null;
+  },
+});
+
 async function handle(req: http.IncomingMessage, res: http.ServerResponse) {
   try {
     if (req.method === 'OPTIONS') {
@@ -364,6 +377,23 @@ async function handle(req: http.IncomingMessage, res: http.ServerResponse) {
         return;
       }
       sendJson(res, 200, { image: await newsImage(title, source, link) });
+      return;
+    }
+
+    // One Discover topic's news, shared by every client (news-feed.ts).
+    // `refresh=1` pulls it anew; the daily preseed automation sends that.
+    if (path === '/clip/news-feed') {
+      const topic = reqUrl.searchParams.get('topic')?.trim();
+      if (!topic) {
+        sendJson(res, 400, { error: 'missing "topic"' });
+        return;
+      }
+      const refresh = reqUrl.searchParams.get('refresh') === '1';
+      try {
+        sendJson(res, 200, await newsFeeds.get(topic, refresh));
+      } catch (err) {
+        sendJson(res, 502, { error: (err as Error).message });
+      }
       return;
     }
 

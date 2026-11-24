@@ -71,6 +71,14 @@ export function linkCardFetchEndpoint(url: string): string {
 }
 
 /**
+ * One Discover topic's news from the sidecar, shared by every client and
+ * preseeded daily with images by an automation.
+ */
+export function linkCardNewsFeedEndpoint(topic: string): string {
+  return `${getLinkCardBaseUrl()}/clip/news-feed?topic=${encodeURIComponent(topic)}`;
+}
+
+/**
  * Resolve a news article's preview image on the sidecar: it decodes the
  * aggregator link (Google News hides the real article URL), falling back to a
  * search for the headline + source, reads the article's og:image, and caches
