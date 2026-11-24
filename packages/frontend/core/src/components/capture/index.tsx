@@ -217,15 +217,7 @@ export const CaptureView = ({
       newCapture();
       onOpenedElsewhere?.();
     }
-  }, [
-    docId,
-    newCapture,
-    onOpenedElsewhere,
-    openNoteAt,
-    save,
-    stop,
-    workbench,
-  ]);
+  }, [docId, newCapture, onOpenedElsewhere, openNoteAt, save, stop, workbench]);
 
   const status = docId
     ? 'Saving to your Inbox as you go.'
