@@ -19,6 +19,18 @@ export interface SpeechToTextHandlers {
 export interface SpeechToTextSession {
   /** Stop listening; the utterance in progress still arrives as a segment. */
   stop(): Promise<void>;
+  /**
+   * What the mic heard, for a session started with `record`. Settles once
+   * listening has ended; null when nothing could be recorded.
+   */
+  recording?: Promise<Blob | null>;
+}
+
+export interface SpeechToTextOptions {
+  /** A BCP 47 tag. */
+  lang: string;
+  /** Keep the audio as well as the words, as `session.recording`. */
+  record?: boolean;
 }
 
 export interface OnDeviceModelStatus {
@@ -51,7 +63,7 @@ export interface SpeechToTextProvider {
   isAvailable(): Promise<boolean>;
   start(
     handlers: SpeechToTextHandlers,
-    options: { lang: string }
+    options: SpeechToTextOptions
   ): Promise<SpeechToTextSession>;
   /** Present where a better, on-device recognizer can be downloaded. */
   onDeviceModel?: OnDeviceSpeechModel;

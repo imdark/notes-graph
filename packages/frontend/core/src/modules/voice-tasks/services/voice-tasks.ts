@@ -49,12 +49,15 @@ export class VoiceTasksService extends Service {
     this.request$.next(null);
   }
 
-  async listen(handlers: SpeechToTextHandlers): Promise<SpeechToTextSession> {
+  async listen(
+    handlers: SpeechToTextHandlers,
+    { record = false }: { record?: boolean } = {}
+  ): Promise<SpeechToTextSession> {
     const provider = this.provider;
     if (!provider || !(await provider.isAvailable())) {
       handlers.onEnd('unavailable');
       return { stop: async () => {} };
     }
-    return provider.start(handlers, { lang: this.lang });
+    return provider.start(handlers, { lang: this.lang, record });
   }
 }

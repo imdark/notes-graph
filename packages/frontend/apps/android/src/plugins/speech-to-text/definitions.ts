@@ -8,6 +8,8 @@ export interface SpeechToTextTextEvent {
 export interface SpeechToTextEndEvent {
   session: number;
   error?: 'permission-denied' | 'failed';
+  /** The session's audio, from a recognizer started with `record`. */
+  recording?: { path: string; mimeType: string };
 }
 
 export interface SpeechToTextPlugin {

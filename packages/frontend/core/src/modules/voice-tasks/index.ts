@@ -8,6 +8,7 @@ export {
   type OnDeviceSpeechModel,
   type SpeechToTextError,
   type SpeechToTextHandlers,
+  type SpeechToTextOptions,
   SpeechToTextProvider,
   type SpeechToTextSession,
 } from './providers/speech-to-text';
@@ -15,11 +16,13 @@ export {
   type VoiceTasksRequest,
   VoiceTasksService,
 } from './services/voice-tasks';
+export { addCaptureRecording } from './utils/capture-recording';
 export {
   buildVocabulary,
   cleanDictation,
   type VocabularyTerm,
 } from './utils/clean-dictation';
+export { compressRecording } from './utils/compress-recording';
 export { insertTasks } from './utils/insert-tasks';
 export { appendDictation, splitDictatedTasks } from './utils/split-tasks';
 export { writeCapture } from './utils/write-capture';

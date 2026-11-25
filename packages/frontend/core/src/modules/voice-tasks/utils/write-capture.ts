@@ -13,7 +13,8 @@ const isBullet = (block: BlockModel) =>
  * captured item is its own block to click and hand to an agent. Lines are
  * edited in place, so a capture rewritten on every keystroke only touches what
  * changed. Blank lines are dropped, and blocks that aren't bullets (the empty
- * paragraph a new note starts with) are removed.
+ * paragraph a new note starts with) are removed, except attachments: the
+ * capture's recordings.
  */
 export function writeCapture(store: Store, text: string) {
   const [note] = store.getModelsByFlavour('notesgraph:note');
@@ -28,7 +29,9 @@ export function writeCapture(store: Store, text: string) {
 
   store.transact(() => {
     for (const block of blocks) {
-      if (!isBullet(block)) store.deleteBlock(block);
+      if (!isBullet(block) && block.flavour !== 'notesgraph:attachment') {
+        store.deleteBlock(block);
+      }
     }
     bullets.slice(0, lines.length).forEach((block, index) => {
       const line = lines[index];

@@ -1,3 +1,4 @@
+import { recordMicrophone } from '../utils/record-microphone';
 import type {
   SpeechToTextHandlers,
   SpeechToTextProvider,
@@ -44,7 +45,7 @@ const getRecognitionCtor = (): RecognitionCtor | undefined => {
 export const webSpeechToText: SpeechToTextProvider | null = getRecognitionCtor()
   ? {
       isAvailable: async () => true,
-      start: async (handlers: SpeechToTextHandlers, { lang }) => {
+      start: async (handlers: SpeechToTextHandlers, { lang, record }) => {
         const Ctor = getRecognitionCtor();
         if (!Ctor) {
           handlers.onEnd('unavailable');
@@ -53,6 +54,11 @@ export const webSpeechToText: SpeechToTextProvider | null = getRecognitionCtor()
         let stopped = false;
         let error: 'permission-denied' | 'failed' | undefined;
         let recognition: RecognitionLike;
+        let ended = () => {};
+        const listeningEnded = new Promise<void>(resolve => (ended = resolve));
+        // The recognizer keeps its audio to itself, so the mic is recorded
+        // separately, from now until listening ends.
+        const mic = record ? recordMicrophone() : null;
 
         const listen = () => {
           recognition = new Ctor();
@@ -82,16 +88,26 @@ export const webSpeechToText: SpeechToTextProvider | null = getRecognitionCtor()
           recognition.onend = () => {
             if (!stopped && !error) return listen();
             handlers.onEnd(error);
+            ended();
           };
           recognition.start();
         };
-        listen();
+        try {
+          listen();
+        } catch (err) {
+          // Don't leave the mic recording for a session that never began.
+          mic?.then(recorder => recorder?.stop()).catch(console.error);
+          throw err;
+        }
 
         const session: SpeechToTextSession = {
           stop: async () => {
             stopped = true;
             recognition.stop();
           },
+          recording: mic
+            ? listeningEnded.then(async () => (await mic)?.stop() ?? null)
+            : undefined,
         };
         return session;
       },
