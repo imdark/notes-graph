@@ -94,15 +94,6 @@ export {
   verifyBrief,
 } from './services/deployments';
 export {
-  queueAhead,
-  queuedPulls,
-  ReleaseActionQueue,
-  type ReleaseJob,
-  type ReleaseJobKind,
-  type ReleaseJobSpec,
-  type ReleaseJobStatus,
-} from './services/release-queue';
-export {
   AgentAlreadyRunningError,
   type AgentEvent,
   type AgentExecutor,
@@ -186,6 +177,15 @@ export {
   forkTranscript,
   splitSuggestion,
 } from './services/question-fork';
+export {
+  queueAhead,
+  queuedPulls,
+  ReleaseActionQueue,
+  type ReleaseJob,
+  type ReleaseJobKind,
+  type ReleaseJobSpec,
+  type ReleaseJobStatus,
+} from './services/release-queue';
 export {
   AGENT_SKILLS,
   type AgentBudget,
@@ -293,8 +293,8 @@ export {
   type AgentTargetKind,
   DEFAULT_MAX_STEPS,
 } from './stores/agents';
-export { AgentIcon, agentIconData } from './views/agent-icon';
 export { AGENT_DOWN_TITLE, AgentDownMark } from './views/agent-down-mark';
+export { AgentIcon, agentIconData } from './views/agent-icon';
 export {
   useAgentsDownLast,
   useDownDeviceKeys,
