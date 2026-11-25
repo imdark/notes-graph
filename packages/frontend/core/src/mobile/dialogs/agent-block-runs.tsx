@@ -1,5 +1,6 @@
 import { Modal, notify } from '@notesgraph/component';
 import { AgentRunLogDialog } from '@notesgraph/core/desktop/pages/workspace/detail-page/tabs/agent-run-log';
+import { AgentRunProject } from '@notesgraph/core/desktop/pages/workspace/detail-page/tabs/agent-run-project';
 import {
   RunRow,
   useMinuteTick,
@@ -119,6 +120,8 @@ export const AgentBlockRunsDialog = ({
     )
   );
   const running = runs.some(run => run.status === 'running');
+  // The one going, if any, so it is told when its task changes project.
+  const latest = runs.find(run => run.status === 'running') ?? runs[0];
 
   const openAgentsPage = useCallback(() => {
     workbench.open('/agents');
@@ -161,6 +164,8 @@ export const AgentBlockRunsDialog = ({
             ))}
           </div>
         )}
+
+        {latest ? <AgentRunProject run={latest} /> : null}
 
         {target && agents.length > 0 ? (
           <>
