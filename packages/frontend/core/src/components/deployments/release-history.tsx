@@ -280,6 +280,7 @@ export const ReleaseHistory = ({
   onChecked,
 }: {
   state: ReleaseState;
+  /** A rollback is on the screen's queue already. */
   busy: boolean;
   onRedeployThis: (imageSha: string) => void;
   onChecked: () => void;

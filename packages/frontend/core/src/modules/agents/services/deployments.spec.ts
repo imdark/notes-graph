@@ -1145,11 +1145,22 @@ describe('release copy', () => {
         releaseState({ production: production({ diverged: true }) })
       ).reason
     ).toMatch(/^main has commits stage lacks/);
+    // A running deploy queues the release rather than turning it off.
     expect(
       releaseAction(
         releaseState({ production: production({ status: 'deploying' }) })
-      ).disabled
-    ).toBe(true);
+      )
+    ).toMatchObject({
+      disabled: false,
+      reason: 'A deploy is running: this release is queued until it ends.',
+    });
+    // Nothing on stage yet, but merges queued ahead will put some there.
+    expect(
+      releaseAction(
+        releaseState({ next: { sha: 'm'.repeat(40), commits: 0, prs: [] } }),
+        { jobs: 1, merges: 1 }
+      )
+    ).toMatchObject({ disabled: false, reason: /^Queued behind 1 action;/ });
     // A failed deploy leaves it on, so a fix can go out.
     expect(
       releaseAction(
@@ -1162,6 +1173,16 @@ describe('release copy', () => {
     const state = releaseState();
     expect(releaseConfirmText(state)).toBe(
       'Fast-forwards main to stage (sssssss, 1 PR) and starts deploy-prod.yml.'
+    );
+    expect(releaseConfirmText(state, { jobs: 2, merges: 1 })).toBe(
+      'Queued: once 2 queued actions ahead of it finish, fast-forwards main to what stage has then and starts deploy-prod.yml. The merges queued ahead of it go out with it.'
+    );
+    expect(
+      releaseConfirmText(
+        releaseState({ production: production({ status: 'deploying' }) })
+      )
+    ).toBe(
+      'Queued: once the running deploy ends, fast-forwards main to what stage has then and starts deploy-prod.yml.'
     );
     expect(mergeConfirmText(releasePull(373), state.settings)).toBe(
       'Merge #373 into stage with a merge commit and delete personal-373-x.'
