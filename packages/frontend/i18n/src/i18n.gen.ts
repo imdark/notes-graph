@@ -7450,11 +7450,11 @@ export function useNotesGraphI18N(): {
       */
     ["com.notesgraph.share-menu.navigate.workspace"](): string;
     /**
-      * `Anyone with the link`
+      * `Publish this page only`
       */
     ["com.notesgraph.share-menu.option.link.label"](): string;
     /**
-      * `No access`
+      * `Not published`
       */
     ["com.notesgraph.share-menu.option.link.no-access"](): string;
     /**

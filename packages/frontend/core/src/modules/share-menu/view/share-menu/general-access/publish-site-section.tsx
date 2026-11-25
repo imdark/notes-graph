@@ -70,7 +70,7 @@ export const PublishSiteSection = ({ disabled }: { disabled?: boolean }) => {
         settings ? { ...settings, enabled: true } : defaultSettings(docTitle)
       );
       notify.success({
-        title: 'Published as site',
+        title: 'Published with child pages',
         message: `${published} page${published === 1 ? '' : 's'} are now public.`,
       });
     } catch (error) {
@@ -82,7 +82,7 @@ export const PublishSiteSection = ({ disabled }: { disabled?: boolean }) => {
   const onUnpublish = useAsyncCallback(async () => {
     try {
       await publishSite.unpublishSite(rootId);
-      notify.success({ title: 'Site unpublished' });
+      notify.success({ title: 'Child pages unpublished' });
     } catch (error) {
       const err = UserFriendlyError.fromAny(error);
       notify.error({ title: err.name, message: err.message });
@@ -109,7 +109,7 @@ export const PublishSiteSection = ({ disabled }: { disabled?: boolean }) => {
     [publishSite, rootId, settings]
   );
 
-  const stateLabel = enabled ? 'Published as site' : 'Not a site';
+  const stateLabel = enabled ? 'Published with children' : 'Not published';
 
   const setTitle = useCallback(
     (value: string) => void patch({ title: value }),
@@ -119,7 +119,7 @@ export const PublishSiteSection = ({ disabled }: { disabled?: boolean }) => {
   return (
     <>
       <div className={rowContainerStyle}>
-        <div className={labelStyle}>Publish folder as site</div>
+        <div className={labelStyle}>Publish with child pages</div>
         {disabled ? (
           <div className={styles.disabledTrigger}>{stateLabel}</div>
         ) : (
@@ -132,7 +132,7 @@ export const PublishSiteSection = ({ disabled }: { disabled?: boolean }) => {
                   onSelect={onUnpublish}
                   selected={!enabled}
                 >
-                  Not a site
+                  Not published
                 </MenuItem>
                 <MenuItem
                   prefixIcon={<EmbedWebIcon />}
@@ -140,7 +140,7 @@ export const PublishSiteSection = ({ disabled }: { disabled?: boolean }) => {
                   selected={enabled}
                   data-testid="publish-site-enable"
                 >
-                  Publish this doc + descendants
+                  This page and all its child pages
                 </MenuItem>
               </>
             }
