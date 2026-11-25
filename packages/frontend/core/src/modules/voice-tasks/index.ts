@@ -16,12 +16,12 @@ export {
   type VoiceTasksRequest,
   VoiceTasksService,
 } from './services/voice-tasks';
+export { addCaptureRecording } from './utils/capture-recording';
 export {
   buildVocabulary,
   cleanDictation,
   type VocabularyTerm,
 } from './utils/clean-dictation';
-export { addCaptureRecording } from './utils/capture-recording';
 export { compressRecording } from './utils/compress-recording';
 export { insertTasks } from './utils/insert-tasks';
 export { appendDictation, splitDictatedTasks } from './utils/split-tasks';
