@@ -16,6 +16,7 @@ import {
   editorHarness,
   isDeviceClaudeModel,
   openQuestions,
+  pendingLogText,
   RemoteAgentRunnerService,
   type RemoteJob,
   RESEARCH_MODEL,
@@ -55,6 +56,34 @@ describe('question attachments', () => {
     expect(attachmentName('agent-artifacts/abc/preview%20v2.mp4')).toBe(
       'preview v2.mp4'
     );
+  });
+});
+
+describe('pendingLogText', () => {
+  const now = Date.UTC(2026, 10, 25, 12);
+  const at = (status: RemoteJob['status'], runAfter?: number) =>
+    pendingLogText({ status, deviceKey: 'laptop', runAfter }, now);
+
+  test('says where a job without output is', () => {
+    expect(at('held')).toMatch(/^Held: /);
+    expect(at('queued')).toBe('Queued: waiting for laptop to pick this up…');
+    expect(at('running')).toBe('Running: no output yet…');
+  });
+
+  test('a queued job held for a session limit says when it runs again', () => {
+    expect(at('queued', now / 1000 + 600)).toMatch(
+      /^Queued: laptop hit its session limit\. It runs again at /
+    );
+    // A limit already past is an ordinary wait for the device.
+    expect(at('queued', now / 1000 - 600)).toBe(
+      'Queued: waiting for laptop to pick this up…'
+    );
+  });
+
+  test('says nothing once the job has ended', () => {
+    expect(at('done')).toBeNull();
+    expect(at('error')).toBeNull();
+    expect(at('cancelled')).toBeNull();
   });
 });
 

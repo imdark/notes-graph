@@ -204,6 +204,7 @@ export {
   isDeviceClaudeModel,
   isSkillNoteTitle,
   openQuestions,
+  pendingLogText,
   type ProductionStatus,
   type ReleasePull,
   type ReleaseRun,

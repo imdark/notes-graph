@@ -7,6 +7,7 @@ import {
   deviceHarnessName,
   isAskRun,
   openQuestions,
+  pendingLogText,
   RemoteAgentRunnerService,
   type RemoteArtifact,
   type RemoteQuestion,
@@ -49,6 +50,8 @@ interface RunLogState {
   allowAllTools: boolean;
   /** Why there is no log to show, when there isn't. */
   note: string | null;
+  /** Where a remote run is (held, queued, running) while its log is empty. */
+  pending: string | null;
   loading: boolean;
   /** A remote run's whole answer; the run row keeps only its start. */
   result: string | null;
@@ -68,6 +71,7 @@ const EMPTY: RunLogState = {
   steers: [],
   allowAllTools: false,
   note: null,
+  pending: null,
   loading: true,
   result: null,
   changes: undefined,
@@ -127,12 +131,8 @@ const useRunLog = (run: AgentRun | undefined): RunLogState => {
             questions: openQuestions(job),
             steers: job.steers ?? [],
             allowAllTools: !!job.allowAllTools,
-            note:
-              job.status === 'held'
-                ? 'Waiting for the workspace’s prestart automations…'
-                : job.status === 'queued'
-                  ? 'Waiting for the device to pick this up…'
-                  : null,
+            note: null,
+            pending: pendingLogText(job),
             loading: false,
             result: job.result,
             // Recorded only as the run ends, so it comes with the last poll.
@@ -168,6 +168,7 @@ const useRunLog = (run: AgentRun | undefined): RunLogState => {
                 : finished
                   ? 'This run happened on another device. An on-device run keeps its log only in the browser that ran it.'
                   : 'This run is going in another tab or on another device. Its log is only viewable there.',
+            pending: null,
             loading: false,
             result: null,
             changes: undefined,
@@ -202,6 +203,7 @@ const useRunLog = (run: AgentRun | undefined): RunLogState => {
       steers: [],
       allowAllTools: false,
       note: null,
+      pending: null,
       loading: false,
       result: null,
       changes: undefined,
@@ -400,6 +402,7 @@ export const AgentRunLogDialog = ({
     steers,
     allowAllTools,
     note,
+    pending,
     loading,
     result,
     changes,
@@ -648,11 +651,12 @@ export const AgentRunLogDialog = ({
               placeholder={
                 loading
                   ? 'Loading…'
-                  : run?.status === 'running'
-                    ? 'Waiting for output…'
-                    : note
+                  : (pending ??
+                    (note
                       ? ''
-                      : 'This run left no log.'
+                      : run?.status === 'running'
+                        ? 'Running: no output yet…'
+                        : 'This run left no log.'))
               }
             />
 

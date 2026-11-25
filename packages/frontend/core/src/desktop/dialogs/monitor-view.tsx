@@ -7,6 +7,7 @@ import {
   monitorChatMessages,
   type MonitorReading,
   MonitorsService,
+  pendingLogText,
   RemoteAgentRunnerService,
   type RemoteJob,
   RESEARCH_MODEL,
@@ -237,11 +238,7 @@ const LogTab = ({
         placeholder={
           log.loading
             ? 'Loading…'
-            : job && ['held', 'queued'].includes(job.status)
-              ? 'Waiting for the device to pick this up…'
-              : job?.status === 'running'
-                ? 'Waiting for output…'
-                : 'This run left no log.'
+            : ((job && pendingLogText(job)) ?? 'This run left no log.')
         }
       />
       {job?.result ? (

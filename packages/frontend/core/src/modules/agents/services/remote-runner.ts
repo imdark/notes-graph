@@ -337,6 +337,28 @@ export interface SpentRun {
 export const openQuestions = (job: RemoteJob): RemoteQuestion[] =>
   (job.questions ?? []).filter(q => !q.answeredAt);
 
+/**
+ * What a job's empty log says: where the job is, so one still queued doesn't
+ * read as stuck. Null once it has ended.
+ */
+export const pendingLogText = (
+  job: Pick<RemoteJob, 'status' | 'deviceKey' | 'runAfter'>,
+  now = Date.now()
+): string | null => {
+  switch (job.status) {
+    case 'held':
+      return 'Held: the workspace’s prestart automations are checking this run…';
+    case 'queued':
+      return job.runAfter && job.runAfter * 1000 > now
+        ? `Queued: ${job.deviceKey} hit its session limit. It runs again at ${new Date(job.runAfter * 1000).toLocaleString()}…`
+        : `Queued: waiting for ${job.deviceKey} to pick this up…`;
+    case 'running':
+      return 'Running: no output yet…';
+    default:
+      return null;
+  }
+};
+
 /** Messages sent to the job that its runner hasn't taken yet. */
 export const waitingSteers = (job: RemoteJob): RemoteSteer[] =>
   (job.steers ?? []).filter(s => !s.deliveredAt);
