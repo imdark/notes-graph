@@ -41,12 +41,14 @@ const todo = (text: string, parent = noteId) =>
 
 /** The note's outline: each top-level block with the lines nested under it. */
 const outline = () =>
-  store.getModelById(noteId)!.children.map(model =>
-    [
-      model.text?.toString() ?? '',
-      ...model.children.map(c => `  - ${c.text?.toString() ?? ''}`),
-    ].join('\n')
-  );
+  store
+    .getModelById(noteId)!
+    .children.map(model =>
+      [
+        model.text?.toString() ?? '',
+        ...model.children.map(c => `  - ${c.text?.toString() ?? ''}`),
+      ].join('\n')
+    );
 
 const projectIdOf = (id: string) =>
   projectOf(store, 'doc', store.getModelById(id)!, PROJECTS)?.id ?? null;
