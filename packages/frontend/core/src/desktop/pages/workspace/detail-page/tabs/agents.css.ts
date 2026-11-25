@@ -314,6 +314,33 @@ export const attachRow = style({
   flexWrap: 'wrap',
 });
 
+export const projectRow = style({
+  display: 'flex',
+  alignItems: 'center',
+  gap: 8,
+  maxWidth: '100%',
+});
+
+export const projectSelect = style({
+  minWidth: 0,
+  maxWidth: '100%',
+  minHeight: 32,
+  padding: '4px 8px',
+  borderRadius: 4,
+  border: `1px solid ${cssVarV2('layer/insideBorder/border')}`,
+  background: cssVarV2('layer/background/primary'),
+  color: cssVarV2('text/primary'),
+  fontFamily: 'inherit',
+  fontSize: cssVar('fontXs'),
+  ':focus-visible': {
+    outline: `2px solid ${cssVar('primaryColor')}`,
+    outlineOffset: 1,
+  },
+  ':disabled': {
+    opacity: 0.6,
+  },
+});
+
 export const attachCommand = style({
   fontFamily: cssVar('fontMonoFamily'),
   fontSize: cssVar('fontXs'),

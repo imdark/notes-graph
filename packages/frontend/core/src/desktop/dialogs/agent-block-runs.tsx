@@ -8,6 +8,7 @@ import { cssVarV2 } from '@toeverything/theme/v2';
 import { useCallback, useMemo, useState } from 'react';
 
 import { AgentRunLogDialog } from '../pages/workspace/detail-page/tabs/agent-run-log';
+import { AgentRunProject } from '../pages/workspace/detail-page/tabs/agent-run-project';
 import {
   RunRow,
   useMinuteTick,
@@ -33,6 +34,8 @@ export const AgentBlockRunsDialog = ({
     () => all.filter(run => runIds.includes(run.id)),
     [all, runIds]
   );
+  // The one going, if any, so it is told when its task changes project.
+  const latest = runs.find(run => run.status === 'running') ?? runs[0];
   const [logRunId, setLogRunId] = useState<string | null>(null);
 
   const onMenuOpenChange = useCallback(
@@ -79,6 +82,7 @@ export const AgentBlockRunsDialog = ({
               All runs →
             </button>
           </div>
+          {latest ? <AgentRunProject run={latest} /> : null}
           {runs.length === 0 ? (
             <p className={styles.empty}>
               These runs have been deleted from your run history.

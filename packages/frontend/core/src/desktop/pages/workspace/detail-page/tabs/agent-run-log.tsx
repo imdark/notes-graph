@@ -32,6 +32,7 @@ import { AgentRunChanges } from './agent-run-changes';
 import { AgentRunChat } from './agent-run-chat';
 import { AgentRunDeploy } from './agent-run-deploy';
 import { AgentRunFix } from './agent-run-fix';
+import { AgentRunProject } from './agent-run-project';
 import { formatDuration } from './agent-run-row';
 import { AgentRunShare } from './agent-run-share';
 import { AgentRunSteer } from './agent-run-steer';
@@ -575,6 +576,7 @@ export const AgentRunLogDialog = ({
             data-testid="agent-run-log-tabs"
           />
         ) : null}
+        {run && !askRow ? <AgentRunProject run={run} /> : null}
         {/* Only a device run lives on the server, so only it can be shared. */}
         {run?.remoteJobId ? <AgentRunShare jobId={run.remoteJobId} /> : null}
         {run && tab === DETAILS_TAB ? (
