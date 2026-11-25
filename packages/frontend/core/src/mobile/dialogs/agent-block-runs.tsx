@@ -8,6 +8,7 @@ import {
 import * as styles from '@notesgraph/core/desktop/pages/workspace/detail-page/tabs/agents.css';
 import {
   type Agent,
+  AgentDownMark,
   AgentIcon,
   type AgentRun,
   AgentRunSessionService,
@@ -17,6 +18,7 @@ import {
   AgentTaskClaimService,
   RemoteAgentRunnerService,
   useAgentsDownLast,
+  useDownDeviceKeys,
 } from '@notesgraph/core/modules/agents';
 import type { DialogComponentProps } from '@notesgraph/core/modules/dialogs';
 import type { WORKSPACE_DIALOG_SCHEMA } from '@notesgraph/core/modules/dialogs/constant';
@@ -119,6 +121,7 @@ export const AgentBlockRunsDialog = ({
       [agentsService, targetKind]
     )
   );
+  const down = useDownDeviceKeys();
   const running = runs.some(run => run.status === 'running');
   // The one going, if any, so it is told when its task changes project.
   const latest = runs.find(run => run.status === 'running') ?? runs[0];
@@ -191,6 +194,7 @@ export const AgentBlockRunsDialog = ({
                     <AgentIcon agent={agent} />
                   </span>
                   <span className={styles.agentName}>{agent.name}</span>
+                  <AgentDownMark agent={agent} down={down} />
                 </button>
               ))}
             </div>

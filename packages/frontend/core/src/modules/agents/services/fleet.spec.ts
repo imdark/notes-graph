@@ -16,6 +16,7 @@ import {
   FleetService,
   fleetSummary,
   type MonitoringDecision,
+  onDownDevice,
   openDecisions,
   type RegistryDevice,
   STALE_AFTER_SECONDS,
@@ -179,6 +180,13 @@ describe('agents on down machines', () => {
       'c',
     ]);
   });
+
+  test('marks an agent down only when its device is', () => {
+    const down = downDeviceKeys(devices, nowSeconds);
+    expect(onDownDevice({ deviceKey: 'down/repo' }, down)).toBe(true);
+    expect(onDownDevice({ deviceKey: 'stale' }, down)).toBe(false);
+    expect(onDownDevice({}, down)).toBe(false);
+  });
 });
 
 describe('monitoring agent helpers', () => {
@@ -221,6 +229,8 @@ describe('FleetService', () => {
     await service.ensureLoaded();
     expect(calls.filter(c => c.path.endsWith('/devices'))).toHaveLength(1);
     expect(service.downLastNow(agents).map(a => a.id)).toEqual(['b', 'a']);
+    expect([...service.downKeysNow()]).toEqual(['down']);
+    expect([...service.downKeys$.value]).toEqual(['down']);
   });
 
   test('a list older than the refresh interval is fetched again', async () => {

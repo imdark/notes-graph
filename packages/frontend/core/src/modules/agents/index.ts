@@ -30,7 +30,7 @@ export {
   type ChatModel,
   CloudAgentRunnerService,
 } from './services/cloud-runner';
-export { AgentContextService } from './services/context';
+export { AgentContextService, projectOf } from './services/context';
 export {
   apkConfirmText,
   apkPendingText,
@@ -132,6 +132,7 @@ export {
   type LogPattern,
   type MonitoringAgent,
   type MonitoringDecision,
+  onDownDevice,
   openDecisions,
   type RegistryDevice,
   STALE_AFTER_SECONDS,
@@ -293,7 +294,11 @@ export {
   DEFAULT_MAX_STEPS,
 } from './stores/agents';
 export { AgentIcon, agentIconData } from './views/agent-icon';
-export { useAgentsDownLast } from './views/use-agents-down-last';
+export { AGENT_DOWN_TITLE, AgentDownMark } from './views/agent-down-mark';
+export {
+  useAgentsDownLast,
+  useDownDeviceKeys,
+} from './views/use-agents-down-last';
 
 import { type Framework } from '@notesgraph/infra';
 

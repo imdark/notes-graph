@@ -1,4 +1,4 @@
-import { ToolIcon } from '@blocksuite/icons/lit';
+import { NoNetworkIcon, ToolIcon } from '@blocksuite/icons/lit';
 import { BlockSelection, TextSelection } from '@blocksuite/notesgraph/std';
 import {
   SlashMenuConfigExtension,
@@ -11,6 +11,7 @@ import {
   AgentsService,
   type AgentTarget,
   FleetService,
+  onDownDevice,
 } from '@notesgraph/core/modules/agents';
 import { WorkspaceDialogService } from '@notesgraph/core/modules/dialogs';
 import { WorkbenchService } from '@notesgraph/core/modules/workbench';
@@ -42,15 +43,17 @@ export function AgentsSlashMenuConfigExtension(framework: FrameworkProvider) {
   return SlashMenuConfigExtension('notesgraph-agents', {
     items: (ctx: SlashMenuContext): SlashMenuItem[] => {
       let agents: Agent[] = [];
+      let down = new Set<string>();
       try {
-        // Agents on a machine monitoring reports down go last. The menu is
-        // built at once, so it sorts by what is loaded; the first `/` of a
-        // session starts the fetch the next one sorts by.
+        // Agents on a machine monitoring reports down go last, and say so.
+        // The menu is built at once, so it sorts by what is loaded; the
+        // first `/` of a session starts the fetch the next one sorts by.
         const fleet = framework.get(FleetService);
         fleet.ensureLoaded().catch(() => {});
         agents = fleet.downLastNow(
           framework.get(AgentsService).agentsFor$('block').value
         );
+        down = fleet.downKeysNow();
       } catch {
         // No workspace scope (e.g. a detached editor) — offer nothing rather
         // than breaking the whole slash menu.
@@ -83,10 +86,16 @@ export function AgentsSlashMenuConfigExtension(framework: FrameworkProvider) {
         monitor,
         ...agents.map<SlashMenuItem>(agent => ({
           name: agent.name,
-          description: 'Run this agent on the current block',
-          icon: html`<div style="color: var(--notesgraph-primary-color)">
-            ${agent.emoji ? html`<span>${agent.emoji}</span>` : ToolIcon()}
-          </div>`,
+          description: onDownDevice(agent, down)
+            ? 'Offline: monitoring reports its machine down'
+            : 'Run this agent on the current block',
+          icon: onDownDevice(agent, down)
+            ? html`<div style="color: var(--notesgraph-icon-color)">
+                ${NoNetworkIcon()}
+              </div>`
+            : html`<div style="color: var(--notesgraph-primary-color)">
+                ${agent.emoji ? html`<span>${agent.emoji}</span>` : ToolIcon()}
+              </div>`,
           searchAlias: ['agent'],
           group: GROUP,
           when: () => currentBlockId(ctx) !== null,
