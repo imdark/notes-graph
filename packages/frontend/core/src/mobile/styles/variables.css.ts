@@ -1,4 +1,4 @@
-import { createVar } from '@vanilla-extract/css';
+import { createVar, fallbackVar } from '@vanilla-extract/css';
 
 export const globalVars = {
   /**
@@ -13,3 +13,10 @@ export const globalVars = {
   appTabHeight: createVar('appTabHeight'),
   appTabSafeArea: createVar('appTabSafeArea'),
 };
+
+/**
+ * How far a bottom sheet sits off the bottom where the WebView doesn't shrink
+ * for the keyboard (Android): above the keyboard while it is open, 12px
+ * otherwise.
+ */
+export const sheetKeyboardOffset = `max(12px, ${fallbackVar(globalVars.appKeyboardHeight, '0px')})`;

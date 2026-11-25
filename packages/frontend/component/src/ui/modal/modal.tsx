@@ -271,6 +271,14 @@ export const ModalInner = forwardRef<HTMLDivElement, ModalProps>(
                       fullScreen ? '100dvh' : 'unset'
                     ),
                     [styles.minHeightVar]: getVar(minHeight, '26px'),
+                    ...(dynamicKeyboardHeight === undefined
+                      ? {}
+                      : {
+                          [styles.keyboardHeightVar]: getVar(
+                            dynamicKeyboardHeight,
+                            '0px'
+                          ),
+                        }),
                   }),
                   ...contentStyle,
                 }}
