@@ -11,7 +11,7 @@ import {
 } from '@notesgraph/core/modules/agents';
 import { NOTESGRAPH_FLAGS } from '@notesgraph/core/modules/feature-flag';
 
-import { pillClass, when } from './shared';
+import { elapsedSince, pillClass, when } from './shared';
 import * as styles from './styles.css';
 
 /**
@@ -126,10 +126,7 @@ export const ProductionCard = ({
             Deploying{' '}
             <code className={styles.sha}>{sha7(times.deploying.sha)}</code>,
             started {when(times.deploying.startedAt)} (
-            {formatDuration(
-              Date.now() - Date.parse(times.deploying.startedAt)
-            ) || 'just now'}{' '}
-            so far)
+            {elapsedSince(times.deploying.startedAt)} so far)
           </span>
           <a
             className={styles.link}

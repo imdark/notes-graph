@@ -44,8 +44,8 @@ export function lineToolbarItems(
   framework: FrameworkProvider
 ): KeyboardToolbarActionItem[] {
   const on = () =>
-    !!framework.get(FeatureFlagService).flags
-      .enable_mobile_toolbar_line_actions.value;
+    !!framework.get(FeatureFlagService).flags.enable_mobile_toolbar_line_actions
+      .value;
 
   const assignToAgent: KeyboardToolbarActionItem = {
     name: 'Assign to agent',

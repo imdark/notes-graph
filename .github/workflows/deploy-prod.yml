@@ -198,7 +198,7 @@ jobs:
             --build-context rspack-cache-files=rspack-cache \
             --target compress-cache-export --output type=local,dest=compress-cache-new .
           rm -rf compress-cache && mv compress-cache-new compress-cache
-          echo "$(ls compress-cache | wc -l) files, $(du -sh compress-cache | cut -f1)"
+          echo "$(find compress-cache -type f | wc -l) files, $(du -sh compress-cache | cut -f1)"
 
       - name: Save compressed assets
         if: inputs.image_sha == ''
@@ -219,7 +219,7 @@ jobs:
             --build-context rspack-cache-files=rspack-cache \
             --target rspack-cache-export --output type=local,dest=rspack-cache-new .
           rm -rf rspack-cache && mv rspack-cache-new rspack-cache
-          echo "$(du -sh rspack-cache | cut -f1)"
+          du -sh rspack-cache
 
       - name: Save the bundler cache
         if: inputs.image_sha == ''
@@ -242,7 +242,7 @@ jobs:
             --build-context rspack-cache-files=rspack-cache \
             --target yarn-cache-export --output type=local,dest=yarn-cache-new .
           rm -rf yarn-cache && mv yarn-cache-new yarn-cache
-          echo "$(ls yarn-cache | wc -l) files, $(du -sh yarn-cache | cut -f1)"
+          echo "$(find yarn-cache -type f | wc -l) files, $(du -sh yarn-cache | cut -f1)"
 
       - name: Save the yarn cache
         if: inputs.image_sha == '' && steps.yarn.outputs.hit != 'true'

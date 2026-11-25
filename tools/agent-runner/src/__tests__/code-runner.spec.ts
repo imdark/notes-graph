@@ -166,7 +166,9 @@ describe('notesgraph helper', () => {
         if (start && req.method === 'POST') {
           const body = JSON.parse(raw);
           started.push({ id: start[1], body });
-          reply(200, { run: { id: `run-${started.length}`, status: 'queued' } });
+          reply(200, {
+            run: { id: `run-${started.length}`, status: 'queued' },
+          });
           return;
         }
         const read = url.match(/\/automations\/([^/]+)\/runs\/([^/]+)$/);

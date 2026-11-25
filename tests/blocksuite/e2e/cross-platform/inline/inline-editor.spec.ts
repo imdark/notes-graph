@@ -1175,9 +1175,7 @@ test('delete embed when pressing backspace after embed', async ({ page }) => {
   ]);
 });
 
-test('triple click to select the whole text, every line', async ({
-  page,
-}) => {
+test('triple click to select the whole text, every line', async ({ page }) => {
   await enterInlineEditorPlayground(page);
   await focusInlineRichText(page);
 

@@ -28,10 +28,10 @@ import {
 } from './android';
 import {
   type Fetch,
-  GitHubClient,
-  GitHubError,
   type GhPull,
   type GhRun,
+  GitHubClient,
+  GitHubError,
 } from './github';
 import {
   checksState,
@@ -800,7 +800,8 @@ export class ReleaseService {
       CLOSED_PULLS
     );
     const merged = pulls.filter(
-      pull => pull.merged_at && Date.parse(pull.merged_at) > since
+      (pull): pull is typeof pull & { merged_at: string } =>
+        !!pull.merged_at && Date.parse(pull.merged_at) > since
     );
     if (!merged.length) return;
     const moved = await this.moveLinkedTasks(
@@ -814,7 +815,7 @@ export class ReleaseService {
         `releases: ${moved.length} task(s) merged in ${row.workspaceId}`
       );
     }
-    const newest = Math.max(...merged.map(pull => Date.parse(pull.merged_at!)));
+    const newest = Math.max(...merged.map(pull => Date.parse(pull.merged_at)));
     await this.models.registryJob.setDeploySynced(row.workspaceId, row.repo, {
       syncedMergedAt: new Date(newest),
     });

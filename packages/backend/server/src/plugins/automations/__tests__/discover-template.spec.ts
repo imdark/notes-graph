@@ -124,7 +124,10 @@ test('pulls each topic fresh and resolves the pictures it lacks', async t => {
     .filter(p => p.startsWith('/clip/news-image'))
     .map(p => new URL('https://x' + p).searchParams.get('title'));
   // Phones already had its picture, so it is not asked for again
-  t.deepEqual(asked.sort(), ['Chips', 'Models']);
+  t.deepEqual(
+    asked.sort((a, b) => (a ?? '').localeCompare(b ?? '')),
+    ['Chips', 'Models']
+  );
   t.like(output.topics[0], { topic: 'Technology', stories: 2, images: 2 });
   t.like(output.topics[1], { stories: 1, images: 0 });
   t.is(output.summary, '3 of 3 topics preseeded, 2 pictures ready');

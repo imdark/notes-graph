@@ -1,3 +1,4 @@
+import { PlayIcon } from '@blocksuite/icons/lit';
 import {
   type CodeBlockComponent,
   NotesGraphCodeToolbarWidget,
@@ -12,7 +13,6 @@ import {
   LifeCycleWatcher,
   TextSelection,
 } from '@blocksuite/notesgraph/std';
-import { PlayIcon } from '@blocksuite/icons/lit';
 import { html } from 'lit';
 
 import { isRunnableLanguage } from '../runner/format';

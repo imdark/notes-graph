@@ -9,7 +9,7 @@ import {
 } from '@notesgraph/core/modules/agents';
 import { useState } from 'react';
 
-import { pillClass, when } from './shared';
+import { elapsedSince, pillClass, when } from './shared';
 import * as styles from './styles.css';
 
 const RunLink = ({ url, id }: { url: string; id: number }) => (
@@ -141,10 +141,8 @@ export const AndroidCard = ({
           <span>
             APK from {line.ref}
             {line.run.forced ? ' (forced)' : ''}, started{' '}
-            {when(line.run.startedAt)} (
-            {formatDuration(Date.now() - Date.parse(line.run.startedAt)) ||
-              'just now'}{' '}
-            so far)
+            {when(line.run.startedAt)} ({elapsedSince(line.run.startedAt)} so
+            far)
           </span>
           <RunLink url={line.run.url} id={line.run.id} />
         </div>
