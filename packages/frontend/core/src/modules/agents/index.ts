@@ -67,6 +67,7 @@ export {
   releaseAction,
   releaseBlocker,
   releaseConfirmText,
+  type ReleaseQueueAhead,
   type ReleaseStage,
   releaseStageOf,
   repoOf,
@@ -92,6 +93,15 @@ export {
   validateReleaseSettings,
   verifyBrief,
 } from './services/deployments';
+export {
+  queueAhead,
+  queuedPulls,
+  ReleaseActionQueue,
+  type ReleaseJob,
+  type ReleaseJobKind,
+  type ReleaseJobSpec,
+  type ReleaseJobStatus,
+} from './services/release-queue';
 export {
   AgentAlreadyRunningError,
   type AgentEvent,

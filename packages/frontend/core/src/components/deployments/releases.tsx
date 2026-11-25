@@ -5,8 +5,11 @@ import {
   defaultReleaseSettings,
   DeploymentsService,
   mergeConfirmText,
+  queueAhead,
+  queuedPulls,
   releaseBlocker,
   releaseConfirmText,
+  type ReleaseJobSpec,
   type ReleasePull,
   type ReleaseState,
   rollbackConfirmText,
@@ -24,6 +27,7 @@ import {
   useState,
 } from 'react';
 
+import { ActionQueue } from './action-queue';
 import { AndroidCard } from './android-card';
 import { NextRelease } from './next-release';
 import { OpenPulls } from './open-pulls';
@@ -73,8 +77,15 @@ export const ReleasesView = () => {
   const agents = useLiveData(useService(AgentsService).agents$);
   const agent = useMemo(() => shipAgents(agents)[0], [agents]);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  // The action under way, so the others wait for it.
-  const [busy, setBusy] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const queue = deployments.releaseQueue;
+  const jobs = useLiveData(queue.jobs$);
+  const ahead = useMemo(() => queueAhead(jobs), [jobs]);
+  const pulls = useMemo(() => queuedPulls(jobs), [jobs]);
+  const queued = useCallback(
+    (key: string) => jobs.some(job => job.key === key),
+    [jobs]
+  );
 
   useEffect(() => deployments.pollRelease(), [deployments]);
   // Prefills the set-up dialog's repo when the server has no state to say.
@@ -84,26 +95,34 @@ export const ReleasesView = () => {
 
   const openSecrets = isMobile ? null : () => workbench.open('/secrets');
   const refresh = useCallback(() => {
-    setBusy('refresh');
+    setRefreshing(true);
     deployments
       .refreshRelease({ fresh: true })
       .catch(() => {})
-      .finally(() => setBusy(null));
+      .finally(() => setRefreshing(false));
   }, [deployments]);
 
-  /** Run one of the screen's actions, saying how it went. */
+  /**
+   * Queue one of the screen's actions; it says how it went when it has run.
+   * The page's buttons stay on meanwhile, so more can be queued.
+   */
   const act = useCallback(
-    async (name: string, failTitle: string, fn: () => Promise<void>) => {
-      setBusy(name);
-      try {
-        await fn();
-      } catch (err) {
-        notify.error({ title: failTitle, message: errorMessage(err) });
-      } finally {
-        setBusy(null);
-      }
+    (
+      spec: Omit<ReleaseJobSpec, 'run'> & { failTitle: string },
+      fn: () => Promise<void>
+    ) => {
+      queue.add({
+        ...spec,
+        run: async () => {
+          try {
+            await fn();
+          } catch (err) {
+            notify.error({ title: spec.failTitle, message: errorMessage(err) });
+          }
+        },
+      });
     },
-    []
+    [queue]
   );
 
   const confirm = useCallback(
@@ -111,7 +130,7 @@ export const ReleasesView = () => {
       title: string;
       description: ReactNode;
       confirmText: string;
-      onConfirm: () => Promise<void>;
+      onConfirm: () => void;
     }) =>
       openConfirmModal({
         title: opts.title,
@@ -125,25 +144,47 @@ export const ReleasesView = () => {
 
   const release = useCallback(
     (current: ReleaseState) => {
-      const sha = current.next.sha;
-      if (!sha) return;
+      const base = current.settings?.baseBranch ?? 'stage';
+      const deploy = current.settings?.deployBranch ?? 'main';
+      const waits = current.production.status === 'deploying' || ahead.jobs > 0;
+      const count = current.next.prs.length;
       confirm({
-        title: `Release ${current.next.prs.length} PR${current.next.prs.length === 1 ? '' : 's'}?`,
-        description: listed(releaseConfirmText(current), current.next.prs),
-        confirmText: 'Release',
+        title: waits
+          ? `Queue a release of ${base}?`
+          : `Release ${count} PR${count === 1 ? '' : 's'}?`,
+        description: listed(
+          releaseConfirmText(current, ahead),
+          current.next.prs
+        ),
+        confirmText: waits ? 'Queue release' : 'Release',
         onConfirm: () =>
-          act('release', "Couldn't release", async () => {
-            const { run } = await deployments.release(sha);
-            notify.success({
-              title: `Releasing ${sha7(sha)}`,
-              message: run
-                ? `Deploy run ${run.id} started.`
-                : 'The deploy was started; its run shows here once GitHub lists it.',
-            });
-          }),
+          act(
+            {
+              kind: 'release',
+              label: `Release ${base} to ${deploy}`,
+              afterDeploy: true,
+              failTitle: "Couldn't release",
+            },
+            async () => {
+              const result = await deployments.releaseNext();
+              if (!result) {
+                notify({
+                  title: 'Nothing new to release',
+                  message: `${deploy} already has everything on ${base}.`,
+                });
+                return;
+              }
+              notify.success({
+                title: `Releasing ${sha7(result.sha)}`,
+                message: result.run
+                  ? `Deploy run ${result.run.id} started.`
+                  : 'The deploy was started; its run shows here once GitHub lists it.',
+              });
+            }
+          ),
       });
     },
-    [act, confirm, deployments]
+    [act, ahead, confirm, deployments]
   );
 
   const redeploy = useCallback(
@@ -154,10 +195,19 @@ export const ReleasesView = () => {
         description: `Builds and deploys ${deploy} (${sha7(current.production.mainSha)}) again with ${current.settings?.workflowFile ?? 'the deploy workflow'}.`,
         confirmText: 'Redeploy',
         onConfirm: () =>
-          act('redeploy', "Couldn't redeploy", async () => {
-            await deployments.redeploy();
-            notify.success({ title: `Redeploying ${deploy}` });
-          }),
+          act(
+            {
+              kind: 'redeploy',
+              key: 'redeploy',
+              label: `Redeploy ${deploy}`,
+              afterDeploy: true,
+              failTitle: "Couldn't redeploy",
+            },
+            async () => {
+              await deployments.redeploy();
+              notify.success({ title: `Redeploying ${deploy}` });
+            }
+          ),
       });
     },
     [act, confirm, deployments]
@@ -170,20 +220,38 @@ export const ReleasesView = () => {
         description: rollbackConfirmText(imageSha),
         confirmText: 'Roll back',
         onConfirm: () =>
-          act('rollback', "Couldn't roll back", async () => {
-            await deployments.rollback(imageSha);
-            notify.success({ title: `Rolling back to ${sha7(imageSha)}` });
-          }),
+          act(
+            {
+              kind: 'rollback',
+              key: 'rollback',
+              label: `Roll back to ${sha7(imageSha)}`,
+              afterDeploy: true,
+              failTitle: "Couldn't roll back",
+            },
+            async () => {
+              await deployments.rollback(imageSha);
+              notify.success({ title: `Rolling back to ${sha7(imageSha)}` });
+            }
+          ),
       }),
     [act, confirm, deployments]
   );
 
   const retry = useCallback(
     (runId: number) =>
-      act('retry', "Couldn't retry the deploy", async () => {
-        await deployments.retry(runId);
-        notify.success({ title: `Retrying run ${runId}` });
-      }),
+      act(
+        {
+          kind: 'retry',
+          key: `retry:${runId}`,
+          label: `Retry run ${runId}`,
+          afterDeploy: true,
+          failTitle: "Couldn't retry the deploy",
+        },
+        async () => {
+          await deployments.retry(runId);
+          notify.success({ title: `Retrying run ${runId}` });
+        }
+      ),
     [act, deployments]
   );
 
@@ -196,15 +264,23 @@ export const ReleasesView = () => {
         description: apkConfirmText(ref, force),
         confirmText: 'Build APK',
         onConfirm: () =>
-          act('apk', "Couldn't start the APK build", async () => {
-            const { run } = await deployments.buildApk(ref, force);
-            notify.success({
-              title: `Building the APK from ${ref}`,
-              message: run
-                ? `Run ${run.id} started.`
-                : 'The build was started; its run shows here once GitHub lists it.',
-            });
-          }),
+          act(
+            {
+              kind: 'apk',
+              key: 'apk',
+              label: `Build the APK from ${ref}`,
+              failTitle: "Couldn't start the APK build",
+            },
+            async () => {
+              const { run } = await deployments.buildApk(ref, force);
+              notify.success({
+                title: `Building the APK from ${ref}`,
+                message: run
+                  ? `Run ${run.id} started.`
+                  : 'The build was started; its run shows here once GitHub lists it.',
+              });
+            }
+          ),
       }),
     [act, confirm, deployments]
   );
@@ -214,17 +290,26 @@ export const ReleasesView = () => {
       confirm({
         title: `Merge #${pr.number}?`,
         description: mergeConfirmText(pr, current.settings),
-        confirmText: 'Merge',
+        confirmText: ahead.jobs > 0 ? 'Queue merge' : 'Merge',
         onConfirm: () =>
-          act('merge', `Couldn't merge #${pr.number}`, async () => {
-            await deployments.merge(pr);
-            notify.success({
-              title: `Merged #${pr.number}`,
-              message: `It is in the next release; ${pr.branch} was deleted.`,
-            });
-          }),
+          act(
+            {
+              kind: 'merge',
+              key: `pr:${pr.number}`,
+              prs: [pr.number],
+              label: `Merge #${pr.number} ${pr.title}`,
+              failTitle: `Couldn't merge #${pr.number}`,
+            },
+            async () => {
+              await deployments.merge(pr);
+              notify.success({
+                title: `Merged #${pr.number}`,
+                message: `It is in the next release; ${pr.branch} was deleted.`,
+              });
+            }
+          ),
       }),
-    [act, confirm, deployments]
+    [act, ahead, confirm, deployments]
   );
 
   const close = useCallback(
@@ -232,14 +317,23 @@ export const ReleasesView = () => {
       confirm({
         title: `Close #${pr.number}?`,
         description: `Closes it on GitHub without merging. ${pr.branch} is kept, so it can be reopened there.`,
-        confirmText: 'Close',
+        confirmText: ahead.jobs > 0 ? 'Queue close' : 'Close',
         onConfirm: () =>
-          act('close', `Couldn't close #${pr.number}`, async () => {
-            await deployments.close(pr);
-            notify.success({ title: `Closed #${pr.number}` });
-          }),
+          act(
+            {
+              kind: 'close',
+              key: `pr:${pr.number}`,
+              prs: [pr.number],
+              label: `Close #${pr.number} ${pr.title}`,
+              failTitle: `Couldn't close #${pr.number}`,
+            },
+            async () => {
+              await deployments.close(pr);
+              notify.success({ title: `Closed #${pr.number}` });
+            }
+          ),
       }),
-    [act, confirm, deployments]
+    [act, ahead, confirm, deployments]
   );
 
   const mergeAll = useCallback(
@@ -250,38 +344,52 @@ export const ReleasesView = () => {
           `Merges each into ${current.settings?.baseBranch ?? 'stage'} with a merge commit, oldest first, and deletes its branch. Drafts and ones with conflicts are skipped.`,
           prs
         ),
-        confirmText: 'Merge all',
+        confirmText: ahead.jobs > 0 ? 'Queue merges' : 'Merge all',
         onConfirm: () =>
-          act('merge-all', "Couldn't merge them", async () => {
-            const result = await deployments.mergeAll(prs.map(pr => pr.number));
-            const skipped = result.skipped
-              .map(s => `#${s.number} (${s.why})`)
-              .join(', ');
-            (result.skipped.length ? notify.error : notify.success)({
-              title: `Merged ${result.merged.length}`,
-              message: skipped ? `Skipped ${skipped}.` : undefined,
-            });
-          }),
+          act(
+            {
+              kind: 'merge',
+              prs: prs.map(pr => pr.number),
+              label: `Merge ${prs.length} ready PR${prs.length === 1 ? '' : 's'}: ${prs.map(pr => `#${pr.number}`).join(', ')}`,
+              failTitle: "Couldn't merge them",
+            },
+            async () => {
+              const result = await deployments.mergeAll(
+                prs.map(pr => pr.number)
+              );
+              const skipped = result.skipped
+                .map(s => `#${s.number} (${s.why})`)
+                .join(', ');
+              (result.skipped.length ? notify.error : notify.success)({
+                title: `Merged ${result.merged.length}`,
+                message: skipped ? `Skipped ${skipped}.` : undefined,
+              });
+            }
+          ),
       }),
-    [act, confirm, deployments]
+    [act, ahead, confirm, deployments]
   );
 
+  // Not queued: it only hands the pull request to Claude, which runs apart.
   const fix = useCallback(
     (current: ReleaseState, pr: ReleasePull) => {
       if (!agent) return;
-      act('fix', "Couldn't send it to Claude", async () => {
-        await deployments.fixWithClaude(
-          agent,
-          pr,
-          current.tasks[pr.number]?.[0]
+      deployments
+        .fixWithClaude(agent, pr, current.tasks[pr.number]?.[0])
+        .then(() =>
+          notify.success({
+            title: `Sent #${pr.number} to Claude to fix`,
+            message: `${agent.name} on ${agent.deviceKey} is on it. Questions it asks come to you as notifications.`,
+          })
+        )
+        .catch(err =>
+          notify.error({
+            title: "Couldn't send it to Claude",
+            message: errorMessage(err),
+          })
         );
-        notify.success({
-          title: `Sent #${pr.number} to Claude to fix`,
-          message: `${agent.name} on ${agent.deviceKey} is on it. Questions it asks come to you as notifications.`,
-        });
-      }).catch(() => {});
     },
-    [act, agent, deployments]
+    [agent, deployments]
   );
 
   const settingsButton = (
@@ -317,11 +425,11 @@ export const ReleasesView = () => {
         {state ? (
           <button
             className={styles.link}
-            disabled={busy !== null}
+            disabled={refreshing}
             onClick={refresh}
             data-testid="release-refresh"
           >
-            {busy === 'refresh' ? 'Reading…' : 'Refresh'}
+            {refreshing ? 'Reading…' : 'Refresh'}
           </button>
         ) : null}
       </span>
@@ -355,7 +463,6 @@ export const ReleasesView = () => {
   }
 
   const blocker = releaseBlocker(state);
-  const isBusy = busy !== null;
 
   return (
     <div className={styles.content} data-testid="deployments-view">
@@ -398,24 +505,26 @@ export const ReleasesView = () => {
       ) : null}
       {blocker ? null : (
         <>
+          <ActionQueue jobs={jobs} onCancel={id => queue.cancel(id)} />
           <ProductionCard
             state={state}
-            busy={isBusy}
+            ahead={ahead}
+            queued={queued}
             onRelease={() => release(state)}
             onRedeploy={() => redeploy(state)}
             onRollback={rollback}
-            onRetry={id => void retry(id)}
+            onRetry={retry}
             onOpenFlags={() => workbench.open('/feature-flags')}
           />
-          <AndroidCard state={state} busy={isBusy} onBuild={buildApk} />
+          <AndroidCard state={state} busy={queued('apk')} onBuild={buildApk} />
           <NextRelease
             state={state}
-            busy={isBusy}
+            ahead={ahead}
             onRelease={() => release(state)}
           />
           <OpenPulls
             state={state}
-            busy={isBusy}
+            queued={pulls}
             agent={agent}
             onMerge={pr => merge(state, pr)}
             onMergeAll={prs => mergeAll(state, prs)}
@@ -424,7 +533,7 @@ export const ReleasesView = () => {
           />
           <ReleaseHistory
             state={state}
-            busy={isBusy}
+            busy={queued('rollback')}
             onRedeployThis={rollback}
             onChecked={() => {
               deployments.refreshRelease({ fresh: true }).catch(() => {});

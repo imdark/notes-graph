@@ -85,6 +85,7 @@ export const AndroidCard = ({
   onBuild,
 }: {
   state: ReleaseState;
+  /** An APK build is on the screen's queue already. */
   busy: boolean;
   onBuild: (ref: string, force: boolean) => void;
 }) => {

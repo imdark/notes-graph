@@ -1,6 +1,7 @@
 import { Button } from '@notesgraph/component';
 import {
   releaseAction,
+  type ReleaseQueueAhead,
   type ReleaseState,
 } from '@notesgraph/core/modules/agents';
 
@@ -13,17 +14,18 @@ import * as styles from './styles.css';
  */
 export const NextRelease = ({
   state,
-  busy,
+  ahead,
   onRelease,
 }: {
   state: ReleaseState;
-  busy: boolean;
+  /** What is on the screen's queue, which a release goes behind. */
+  ahead: ReleaseQueueAhead;
   onRelease: () => void;
 }) => {
   const base = state.settings?.baseBranch ?? 'stage';
   const deploy = state.settings?.deployBranch ?? 'main';
   const { prs, commits } = state.next;
-  const release = releaseAction(state);
+  const release = releaseAction(state, ahead);
   return (
     <section className={styles.section} data-testid="release-next">
       <div className={styles.sectionHead}>
@@ -33,7 +35,7 @@ export const NextRelease = ({
         </div>
         <Button
           variant="primary"
-          disabled={busy || release.disabled}
+          disabled={release.disabled}
           tooltip={release.reason ?? undefined}
           onClick={onRelease}
           data-testid="release-next-release"
