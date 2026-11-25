@@ -92,7 +92,13 @@ export const webSpeechToText: SpeechToTextProvider | null = getRecognitionCtor()
           };
           recognition.start();
         };
-        listen();
+        try {
+          listen();
+        } catch (err) {
+          // Don't leave the mic recording for a session that never began.
+          mic?.then(recorder => recorder?.stop()).catch(console.error);
+          throw err;
+        }
 
         const session: SpeechToTextSession = {
           stop: async () => {
