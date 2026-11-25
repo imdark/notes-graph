@@ -24,7 +24,7 @@ FROM node:22-slim
 
 # The wf the cloud runs, pinned: bump it to ship a wf change (it changes this
 # file, so the next deploy rebuilds the image).
-ARG WF_REF=661659907f9dbd1cc992b8c4d28886d37d638a7b
+ARG WF_REF=f8ca3a1d453512c99140766e15c1d25a7f575565
 
 RUN apt-get update \
  && apt-get install -y --no-install-recommends ca-certificates curl git python3 python3-venv \
