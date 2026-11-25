@@ -3,13 +3,14 @@
 //! Provides functionality to update existing NotesGraph documents by applying
 //! surgical y-octo operations based on content differences.
 
-use std::collections::HashMap;
+use std::collections::HashSet;
 
 use super::{
   super::{
     block_spec::{BlockSpec, TreeNode, count_tree_nodes, text_delta_eq},
-    blocksuite::{collect_child_ids, find_child_id_by_flavour},
+    blocksuite::{DocContext, collect_child_ids, find_child_id_by_flavour},
     markdown::{MAX_BLOCKS, parse_markdown_blocks},
+    read::block_markdown,
   },
   builder::{ApplyBlockOptions, apply_block_spec, insert_block_tree, insert_children},
   *,
@@ -22,6 +23,11 @@ struct StoredNode {
   id: String,
   spec: BlockSpec,
   children: Vec<StoredNode>,
+  /// What this block reads back as when its markdown is parsed, when that
+  /// isn't the block itself: a database reads as a `###` heading and a
+  /// table, a task with a note under it as one list item. A rewrite that
+  /// returns those blocks unchanged leaves this one as it is.
+  echo: Option<Vec<BlockNode>>,
 }
 
 impl TreeNode for StoredNode {
@@ -59,7 +65,7 @@ enum PatchOp {
 /// # Returns
 /// A binary vector representing only the delta (changes) to apply
 pub fn update_doc(existing_binary: &[u8], new_markdown: &str, doc_id: &str) -> Result<Vec<u8>, ParseError> {
-  let mut new_nodes = parse_markdown_blocks(new_markdown)?;
+  let new_nodes = parse_markdown_blocks(new_markdown)?;
   let state = load_doc_state(existing_binary, doc_id)?;
 
   check_limits(&state.blocks, &new_nodes)?;
@@ -68,7 +74,7 @@ pub fn update_doc(existing_binary: &[u8], new_markdown: &str, doc_id: &str) -> R
 
   let mut blocks_map = state.doc.get_map("blocks")?;
 
-  let new_children = sync_nodes(&state.doc, &mut blocks_map, &state.blocks, &mut new_nodes)?;
+  let new_children = sync_nodes(&state.doc, &mut blocks_map, &state.blocks, &new_nodes)?;
   sync_children(&state.doc, &mut blocks_map, &state.note_id, &new_children)?;
 
   Ok(state.doc.encode_state_as_update_v1(&state_before)?)
@@ -82,111 +88,250 @@ fn load_doc_state(binary: &[u8], doc_id: &str) -> Result<DocState, ParseError> {
     return Err(ParseError::ParserError("blocks map is empty".into()));
   }
 
-  let block_index = build_block_index(&blocks_map);
-  let page_id = find_block_id_by_flavour(&block_index.block_pool, PAGE_FLAVOUR)
+  let context = DocContext::from_blocks_map(&blocks_map, PAGE_FLAVOUR)
     .ok_or_else(|| ParseError::ParserError("page block not found".into()))?;
-  let page_block = block_index
+  let page_block = context
     .block_pool
-    .get(&page_id)
+    .get(&context.root_block_id)
     .ok_or_else(|| ParseError::ParserError("page block not found".into()))?;
-  let note_id = find_child_id_by_flavour(page_block, &block_index.block_pool, NOTE_FLAVOUR)
+  let note_id = find_child_id_by_flavour(page_block, &context.block_pool, NOTE_FLAVOUR)
     .ok_or_else(|| ParseError::ParserError("note block not found".into()))?;
-  let note_block = block_index
+  let note_block = context
     .block_pool
     .get(&note_id)
     .ok_or_else(|| ParseError::ParserError("note block not found".into()))?;
-  let content_ids = collect_child_ids(note_block);
 
-  let mut blocks = Vec::new();
-  for block_id in content_ids {
-    let block = block_index
-      .block_pool
-      .get(&block_id)
-      .ok_or_else(|| ParseError::ParserError("content block not found".into()))?;
-    // Blocks the markdown pipeline can't express (database/board blocks,
-    // synced embeds, …) become opaque nodes the differ preserves in place —
-    // updating the rest of the doc must not fail on or delete them.
-    blocks.push(
-      build_stored_tree(&block_id, block, &block_index.block_pool).unwrap_or_else(|_| StoredNode {
-        id: block_id.to_string(),
-        spec: BlockSpec::opaque(),
-        children: Vec::new(),
-      }),
-    );
-  }
+  let blocks = collect_child_ids(note_block)
+    .iter()
+    .map(|block_id| build_stored_tree(&context, block_id))
+    .collect::<Result<Vec<_>, _>>()?;
 
   Ok(DocState { doc, note_id, blocks })
 }
 
-fn build_stored_tree(block_id: &str, block: &Map, pool: &HashMap<String, Map>) -> Result<StoredNode, ParseError> {
-  let spec = BlockSpec::from_block_map(block)?;
+fn build_stored_tree(context: &DocContext, block_id: &str) -> Result<StoredNode, ParseError> {
+  let block = context
+    .block_pool
+    .get(block_id)
+    .ok_or_else(|| ParseError::ParserError("content block not found".into()))?;
+  // Blocks the markdown pipeline can't express (database/board blocks,
+  // synced embeds, …) become opaque nodes the differ preserves in place —
+  // updating the rest of the doc must not fail on or delete them.
+  let mut node = representable_tree(context, block_id, block).unwrap_or_else(|| StoredNode {
+    id: block_id.to_string(),
+    spec: BlockSpec::opaque(),
+    children: Vec::new(),
+    echo: None,
+  });
+  node.echo = echo_of(context, &node);
+  Ok(node)
+}
 
+fn representable_tree(context: &DocContext, block_id: &str, block: &Map) -> Option<StoredNode> {
+  let spec = BlockSpec::from_block_map(block).ok()?;
   let child_ids = collect_child_ids(block);
-  if !child_ids.is_empty() && !matches!(spec.flavour, BlockFlavour::List | BlockFlavour::Callout) {
-    return Err(ParseError::ParserError(format!(
-      "unsupported children on block: {block_id}"
-    )));
+  if !child_ids.is_empty()
+    && !matches!(
+      spec.flavour,
+      BlockFlavour::List | BlockFlavour::Callout | BlockFlavour::Paragraph
+    )
+  {
+    return None;
   }
-  let mut children = Vec::new();
-  for child_id in child_ids {
-    let child_block = pool
-      .get(&child_id)
-      .ok_or_else(|| ParseError::ParserError("child block not found".into()))?;
-    children.push(build_stored_tree(&child_id, child_block, pool).unwrap_or_else(|_| StoredNode {
-      id: child_id.to_string(),
-      spec: BlockSpec::opaque(),
-      children: Vec::new(),
-    }));
-  }
-
-  Ok(StoredNode {
+  let children = child_ids
+    .iter()
+    .map(|child_id| build_stored_tree(context, child_id))
+    .collect::<Result<Vec<_>, _>>()
+    .ok()?;
+  Some(StoredNode {
     id: block_id.to_string(),
     spec,
     children,
+    echo: None,
   })
+}
+
+/// A heading (or any paragraph) with blocks under it, such as a journal's
+/// project heading and its tasks. Markdown can't nest under a paragraph, so
+/// its children read as the blocks after it; the differ lines them up that
+/// way and puts them back under it afterwards (see `regroup`).
+fn lifts_children(node: &StoredNode) -> bool {
+  node.spec.flavour == BlockFlavour::Paragraph && !node.children.is_empty()
+}
+
+fn echo_of(context: &DocContext, node: &StoredNode) -> Option<Vec<BlockNode>> {
+  let descendants = !lifts_children(node);
+  let echo = parse_markdown_blocks(&block_markdown(context, &node.id, descendants)).ok()?;
+  let reads_as_itself = match echo.as_slice() {
+    [] => true,
+    [only] => stored_reads_as(node, only, descendants),
+    _ => false,
+  };
+  (!reads_as_itself).then_some(echo)
+}
+
+fn stored_reads_as(stored: &StoredNode, parsed: &BlockNode, with_children: bool) -> bool {
+  let children_match = if with_children {
+    stored.children.len() == parsed.children.len()
+      && stored
+        .children
+        .iter()
+        .zip(&parsed.children)
+        .all(|(stored, parsed)| stored_reads_as(stored, parsed, true))
+  } else {
+    parsed.children.is_empty()
+  };
+  stored.spec.is_exact(&parsed.spec) && children_match
+}
+
+fn same_tree(a: &BlockNode, b: &BlockNode) -> bool {
+  a.spec.is_exact(&b.spec)
+    && a.children.len() == b.children.len()
+    && a.children.iter().zip(&b.children).all(|(a, b)| same_tree(a, b))
+}
+
+/// A block of `current` in markdown order: a lifted child follows the block
+/// it sits under, which `lifted_from` names.
+struct FlatNode<'a> {
+  node: &'a StoredNode,
+  lifted_from: Option<&'a str>,
+}
+
+fn flatten<'a>(nodes: &'a [StoredNode], lifted_from: Option<&'a str>, out: &mut Vec<FlatNode<'a>>) {
+  for node in nodes {
+    out.push(FlatNode { node, lifted_from });
+    if lifts_children(node) {
+      flatten(&node.children, Some(&node.id), out);
+    }
+  }
+}
+
+/// What a target block is compared with: a block of `current`, or one block
+/// of its echo.
+struct Part<'a> {
+  flat: usize,
+  echo: Option<&'a BlockNode>,
+}
+
+fn parts_of<'a>(flat: &[FlatNode<'a>]) -> Vec<Part<'a>> {
+  let mut parts = Vec::new();
+  for (index, entry) in flat.iter().enumerate() {
+    match &entry.node.echo {
+      // A block markdown can express is matched or rewritten whole, so only
+      // an opaque one may read as several blocks.
+      Some(echo) if echo.len() == 1 || entry.node.spec.flavour == BlockFlavour::Opaque => {
+        parts.extend(echo.iter().map(|block| Part {
+          flat: index,
+          echo: Some(block),
+        }));
+      }
+      _ => parts.push(Part { flat: index, echo: None }),
+    }
+  }
+  parts
+}
+
+enum Origin<'a> {
+  Kept { lifted_from: Option<&'a str> },
+  Inserted { list: bool },
+}
+
+struct Placed<'a> {
+  id: String,
+  origin: Origin<'a>,
+  lifts: bool,
+}
+
+impl<'a> Placed<'a> {
+  fn kept(entry: &FlatNode<'a>) -> Self {
+    Placed {
+      id: entry.node.id.clone(),
+      origin: Origin::Kept {
+        lifted_from: entry.lifted_from,
+      },
+      lifts: lifts_children(entry.node),
+    }
+  }
 }
 
 fn sync_nodes(
   doc: &Doc,
   blocks_map: &mut Map,
   current: &[StoredNode],
-  target: &mut [BlockNode],
+  target: &[BlockNode],
 ) -> Result<Vec<String>, ParseError> {
-  let ops = diff_blocks(current, target);
-  let mut new_children = Vec::new();
+  let mut flat = Vec::new();
+  flatten(current, None, &mut flat);
+  let parts = parts_of(&flat);
+
+  let ops = diff_blocks(
+    parts.len(),
+    target.len(),
+    |p, t| match parts[p].echo {
+      Some(echo) => same_tree(echo, &target[t]),
+      None => flat[parts[p].flat].node.spec.is_exact(&target[t].spec),
+    },
+    |p, t| {
+      let spec = &flat[parts[p].flat].node.spec;
+      spec.flavour != BlockFlavour::Opaque && spec.is_similar(&target[t].spec)
+    },
+  );
+
+  let mut placed = Vec::new();
+  let mut placed_flat = HashSet::new();
   let mut to_remove = Vec::new();
 
   for op in ops {
     match op {
-      PatchOp::Keep(old_idx, new_idx) => {
-        let old_node = &current[old_idx];
-        let new_node = &target[new_idx];
-        update_block_props(doc, blocks_map, old_node, &new_node.spec, true)?;
-        let child_ids = sync_nodes(doc, blocks_map, &old_node.children, &mut new_node.children.clone())?;
-        sync_children(doc, blocks_map, &old_node.id, &child_ids)?;
-        new_children.push(old_node.id.clone());
+      PatchOp::Keep(p, t) | PatchOp::Update(p, t) => {
+        let part = &parts[p];
+        let entry = &flat[part.flat];
+        if !placed_flat.insert(part.flat) {
+          continue;
+        }
+        let keep = matches!(op, PatchOp::Keep(..));
+        // Its echo came back as it was: the block is unchanged.
+        if !(keep && part.echo.is_some()) {
+          update_block_props(doc, blocks_map, entry.node, &target[t].spec, keep)?;
+          if !lifts_children(entry.node) {
+            let child_ids = sync_nodes(doc, blocks_map, &entry.node.children, &target[t].children)?;
+            sync_children(doc, blocks_map, &entry.node.id, &child_ids)?;
+          }
+        }
+        placed.push(Placed::kept(entry));
       }
-      PatchOp::Update(old_idx, new_idx) => {
-        let old_node = &current[old_idx];
-        let new_node = &target[new_idx];
-        update_block_props(doc, blocks_map, old_node, &new_node.spec, false)?;
-        let child_ids = sync_nodes(doc, blocks_map, &old_node.children, &mut new_node.children.clone())?;
-        sync_children(doc, blocks_map, &old_node.id, &child_ids)?;
-        new_children.push(old_node.id.clone());
+      PatchOp::Insert(t) => {
+        let id = insert_block_tree(doc, blocks_map, &target[t])?;
+        placed.push(Placed {
+          id,
+          origin: Origin::Inserted {
+            list: target[t].spec.flavour == BlockFlavour::List,
+          },
+          lifts: false,
+        });
       }
-      PatchOp::Insert(new_idx) => {
-        let new_id = insert_block_tree(doc, blocks_map, &target[new_idx])?;
-        new_children.push(new_id);
-      }
-      PatchOp::Delete(old_idx) => {
-        let node = &current[old_idx];
-        if matches!(node.spec.flavour, BlockFlavour::Callout | BlockFlavour::Opaque) {
-          new_children.push(node.id.clone());
-        } else {
-          collect_tree_ids(node, &mut to_remove);
+      PatchOp::Delete(p) => {
+        let index = parts[p].flat;
+        let entry = &flat[index];
+        if matches!(entry.node.spec.flavour, BlockFlavour::Callout | BlockFlavour::Opaque) {
+          if placed_flat.insert(index) {
+            placed.push(Placed::kept(entry));
+          }
+        } else if !placed_flat.contains(&index) {
+          if lifts_children(entry.node) {
+            // Its children are entries of their own.
+            to_remove.push(entry.node.id.clone());
+          } else {
+            collect_tree_ids(entry.node, &mut to_remove);
+          }
         }
       }
     }
+  }
+
+  let (new_children, groups) = regroup(&placed);
+  for (parent_id, child_ids) in groups {
+    sync_children(doc, blocks_map, &parent_id, &child_ids)?;
   }
 
   for id in to_remove {
@@ -196,10 +341,48 @@ fn sync_nodes(
   Ok(new_children)
 }
 
-fn diff_blocks(current: &[StoredNode], target: &[BlockNode]) -> Vec<PatchOp> {
-  let old_len = current.len();
-  let new_len = target.len();
+/// Puts lifted children back under the block they came from, together with
+/// list items written among them, so a task added under a project heading
+/// lands under it. Anything else ends the heading's run. Returns the blocks
+/// at this level and each lifting block's children.
+fn regroup(placed: &[Placed]) -> (Vec<String>, Vec<(String, Vec<String>)>) {
+  let mut level = Vec::new();
+  let mut groups: Vec<(String, Vec<String>)> = Vec::new();
+  let mut open: Vec<usize> = Vec::new();
 
+  for entry in placed {
+    let parent = match entry.origin {
+      Origin::Kept {
+        lifted_from: Some(from),
+      } => open.iter().rposition(|&group| groups[group].0 == from).map(|at| {
+        open.truncate(at + 1);
+        open[at]
+      }),
+      Origin::Inserted { list: true } => open.last().copied(),
+      _ => None,
+    };
+    match parent {
+      Some(group) => groups[group].1.push(entry.id.clone()),
+      None => {
+        open.clear();
+        level.push(entry.id.clone());
+      }
+    }
+    if entry.lifts {
+      groups.push((entry.id.clone(), Vec::new()));
+      open.push(groups.len() - 1);
+    }
+  }
+
+  (level, groups)
+}
+
+fn diff_blocks(
+  old_len: usize,
+  new_len: usize,
+  is_exact: impl Fn(usize, usize) -> bool,
+  is_similar: impl Fn(usize, usize) -> bool,
+) -> Vec<PatchOp> {
   if old_len == 0 {
     return (0..new_len).map(PatchOp::Insert).collect();
   }
@@ -211,10 +394,7 @@ fn diff_blocks(current: &[StoredNode], target: &[BlockNode]) -> Vec<PatchOp> {
 
   for i in 1..=old_len {
     for j in 1..=new_len {
-      let old_spec = &current[i - 1].spec;
-      let new_spec = &target[j - 1].spec;
-
-      if old_spec.is_exact(new_spec) {
+      if is_exact(i - 1, j - 1) {
         lcs[i][j] = lcs[i - 1][j - 1] + 1;
       } else {
         lcs[i][j] = std::cmp::max(lcs[i - 1][j], lcs[i][j - 1]);
@@ -228,14 +408,11 @@ fn diff_blocks(current: &[StoredNode], target: &[BlockNode]) -> Vec<PatchOp> {
 
   while i > 0 || j > 0 {
     if i > 0 && j > 0 {
-      let old_spec = &current[i - 1].spec;
-      let new_spec = &target[j - 1].spec;
-
-      if old_spec.is_exact(new_spec) {
+      if is_exact(i - 1, j - 1) {
         ops.push(PatchOp::Keep(i - 1, j - 1));
         i -= 1;
         j -= 1;
-      } else if old_spec.is_similar(new_spec)
+      } else if is_similar(i - 1, j - 1)
         && lcs[i - 1][j - 1] >= lcs[i - 1][j]
         && lcs[i - 1][j - 1] >= lcs[i][j - 1]
       {
@@ -754,5 +931,211 @@ mod tests {
     let markdown = "# Title\n\n<div>HTML</div>";
     let result = update_doc(&initial_bin, markdown, doc_id);
     assert!(result.is_err());
+  }
+
+  const JOURNAL_ID: &str = "journal-test";
+
+  fn note_child_ids(doc: &Doc) -> Vec<String> {
+    let blocks_map = doc.get_map("blocks").expect("blocks map");
+    for (_, value) in blocks_map.iter() {
+      if let Some(block) = value.to_map()
+        && get_string(&block, "sys:flavour").as_deref() == Some(NOTE_FLAVOUR)
+      {
+        return collect_child_ids(&block);
+      }
+    }
+    panic!("note block not found");
+  }
+
+  fn block_children(doc: &Doc, id: &str) -> Vec<String> {
+    let block = doc
+      .get_map("blocks")
+      .expect("blocks map")
+      .get(id)
+      .and_then(|v| v.to_map())
+      .expect("block");
+    collect_child_ids(&block)
+  }
+
+  fn block_text(doc: &Doc, id: &str) -> String {
+    doc
+      .get_map("blocks")
+      .expect("blocks map")
+      .get(id)
+      .and_then(|v| v.to_map())
+      .and_then(|b| b.get("prop:text"))
+      .and_then(|v| v.to_text())
+      .map(|t| t.to_string())
+      .unwrap_or_default()
+  }
+
+  fn count_flavour(doc: &Doc, flavour: &str) -> usize {
+    doc
+      .get_map("blocks")
+      .expect("blocks map")
+      .iter()
+      .filter(|(_, value)| {
+        value
+          .to_map()
+          .is_some_and(|b| get_string(&b, "sys:flavour").as_deref() == Some(flavour))
+      })
+      .count()
+  }
+
+  /// A journal day as the app scaffolds it: per project an `h2` heading with
+  /// its to-dos under it, then the project's "todos:" task list (a database
+  /// with Status/Deadline/Scheduled columns), plus a note under one task.
+  fn journal_doc() -> Vec<u8> {
+    let markdown = "## Work\n\n- [ ] \n\n## notes graph\n\n- [ ] when an\n\n## Inbox\n\n- [ ] ";
+    let bin = build_full_doc("2026-11-25", markdown, JOURNAL_ID).expect("create doc");
+    let mut doc = load(&bin);
+
+    let flat = note_child_ids(&doc);
+    let mut blocks_map = doc.get_map("blocks").expect("blocks map");
+    let mut sections = Vec::new();
+    for pair in flat.chunks(2) {
+      let (heading, task) = (pair[0].clone(), pair[1].clone());
+      let mut heading_block = blocks_map.get(&heading).and_then(|v| v.to_map()).expect("heading");
+      insert_children(&doc, &mut heading_block, std::slice::from_ref(&task)).expect("nest task");
+
+      let db_id = format!("db-{heading}");
+      let mut database = doc.create_map().expect("map");
+      blocks_map.insert(db_id.clone(), database.clone()).expect("insert db");
+      database.insert("sys:id".into(), Any::String(db_id.clone())).expect("id");
+      database
+        .insert("sys:flavour".into(), Any::String("notesgraph:database".into()))
+        .expect("flavour");
+      database.insert("sys:children".into(), doc.create_array().expect("array")).expect("children");
+      database.insert("prop:title".into(), Any::String("todos:".into())).expect("title");
+      database.insert("prop:cells".into(), doc.create_map().expect("map")).expect("cells");
+      let columns = doc.create_array().expect("array");
+      database.insert("prop:columns".into(), columns.clone()).expect("columns");
+      let mut columns = columns;
+      for name in ["Status", "Deadline", "Scheduled"] {
+        let mut column = doc.create_map().expect("map");
+        columns.push(column.clone()).expect("push column");
+        column.insert("id".into(), Any::String(format!("col-{name}"))).expect("col id");
+        column.insert("name".into(), Any::String(name.into())).expect("col name");
+        column.insert("type".into(), Any::String("text".into())).expect("col type");
+      }
+      sections.push(heading);
+      sections.push(db_id);
+    }
+    let mut note = blocks_map
+      .iter()
+      .find_map(|(_, value)| {
+        value
+          .to_map()
+          .filter(|b| get_string(b, "sys:flavour").as_deref() == Some(NOTE_FLAVOUR))
+      })
+      .expect("note");
+    insert_children(&doc, &mut note, &sections).expect("note children");
+    let bin = doc.encode_update_v1().expect("encode");
+
+    // the "when an" task gets an agent's progress note under it
+    let task = flat[3].clone();
+    let delta = super::super::task::update_task_block(
+      &bin,
+      JOURNAL_ID,
+      &super::super::task::TaskUpdate {
+        block_id: &task,
+        status: None,
+        note: Some("Looked into it"),
+        agent: Some("claude"),
+        now_naive_iso: "2026-11-25T10:00",
+      },
+    )
+    .expect("note");
+    doc.apply_update_from_binary_v1(&delta).expect("apply note");
+    doc.encode_update_v1().expect("encode")
+  }
+
+  fn load(bin: &[u8]) -> Doc {
+    let mut doc = DocOptions::new().with_guid(JOURNAL_ID.to_string()).build();
+    doc.apply_update_from_binary_v1(bin).expect("apply");
+    doc
+  }
+
+  fn apply(bin: &[u8], markdown: &str) -> Doc {
+    let delta = update_doc(bin, markdown, JOURNAL_ID).expect("update");
+    let mut doc = DocOptions::new().with_guid(JOURNAL_ID.to_string()).build();
+    doc.apply_update_from_binary_v1(bin).expect("apply base");
+    doc.apply_update_from_binary_v1(&delta).expect("apply delta");
+    doc
+  }
+
+  fn markdown_of(doc: &Doc) -> String {
+    parse_doc_to_markdown(doc.encode_update_v1().unwrap(), JOURNAL_ID.to_string(), false, None)
+      .expect("markdown")
+      .markdown
+  }
+
+  #[test]
+  fn test_journal_read_back_unchanged_keeps_the_page() {
+    let bin = journal_doc();
+    let before = markdown_of(&load(&bin));
+    assert!(before.contains("### todos:"), "fixture reads its task lists: {before}");
+
+    // Twice: a page an agent rewrote must survive the next rewrite too.
+    let once = apply(&bin, &before);
+    let twice = apply(&once.encode_update_v1().unwrap(), &markdown_of(&once));
+
+    for doc in [&once, &twice] {
+      assert_eq!(markdown_of(doc), before);
+      assert_eq!(count_flavour(doc, "notesgraph:table"), 0, "no tables added");
+      assert_eq!(count_flavour(doc, "notesgraph:database"), 3);
+      assert_eq!(note_child_ids(doc).len(), 6, "headings and task lists only");
+    }
+  }
+
+  #[test]
+  fn test_journal_task_added_under_a_heading_lands_under_it() {
+    let bin = journal_doc();
+    let base = load(&bin);
+    let before = markdown_of(&base);
+    let heading = note_child_ids(&base)[2].clone();
+    let task = block_children(&base, &heading)[0].clone();
+
+    // What an agent filing a task sends back: the page with one line added
+    // at the end of the notes graph section.
+    let (head, tail) = before.split_once("## notes graph").expect("section");
+    let tail = tail.replacen("\n### todos:", "- [ ] PERSONAL-1 Refiled task\n\n### todos:", 1);
+    let after = format!("{head}## notes graph{tail}");
+
+    let doc = apply(&bin, &after);
+    assert_eq!(markdown_of(&doc), after);
+    assert_eq!(count_flavour(&doc, "notesgraph:table"), 0);
+    assert_eq!(note_child_ids(&doc).len(), 6);
+
+    let children = block_children(&doc, &heading);
+    assert_eq!(children.len(), 2, "both tasks sit under the heading");
+    assert_eq!(children[0], task);
+    assert_eq!(block_text(&doc, &children[1]), "PERSONAL-1 Refiled task");
+    let notes = block_children(&doc, &task);
+    assert_eq!(notes.len(), 1, "the task keeps its note");
+    assert!(block_text(&doc, &notes[0]).starts_with("Looked into it"));
+    assert_eq!(block_text(&doc, &task), "when an");
+  }
+
+  #[test]
+  fn test_journal_task_moved_between_headings() {
+    let bin = journal_doc();
+    let base = load(&bin);
+    let before = markdown_of(&base);
+    let work = note_child_ids(&base)[0].clone();
+    let inbox = note_child_ids(&base)[4].clone();
+
+    // Refile: the Inbox to-do goes to Work.
+    assert!(before.ends_with("## Inbox\n\n- [ ] \n\n### todos:\n|Status|Deadline|Scheduled|\n|---|---|---|\n\n"));
+    let after = before
+      .replacen("## Work\n\n- [ ] \n", "## Work\n\n- [ ] \n- [ ] Moved task\n", 1)
+      .replacen("## Inbox\n\n- [ ] \n", "## Inbox\n\n", 1);
+
+    let doc = apply(&bin, &after);
+    assert_eq!(markdown_of(&doc), after);
+    assert_eq!(block_children(&doc, &work).len(), 2);
+    assert_eq!(block_text(&doc, &block_children(&doc, &work)[1]), "Moved task");
+    assert!(block_children(&doc, &inbox).is_empty(), "inbox: {:?}", block_children(&doc, &inbox));
+    assert_eq!(count_flavour(&doc, "notesgraph:database"), 3);
   }
 }

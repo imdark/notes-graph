@@ -15,7 +15,9 @@ use self::org_task::{collect_hashtags, collect_org_task_props};
 use super::{
   ParseError,
   block_spec::{BlockFlavour, BlockSpec, ImageSpec},
-  blocksuite::{DocContext, get_block_id, get_flavour, get_list_depth, get_string, nearest_by_flavour},
+  blocksuite::{
+    DocContext, collect_child_ids, get_block_id, get_flavour, get_list_depth, get_string, nearest_by_flavour,
+  },
   doc_loader::load_doc,
   markdown::{DeltaToMdOptions, MarkdownRenderer, MarkdownWriter, extract_inline_references},
   schema::{NOTE_FLAVOUR, PAGE_FLAVOUR},
@@ -377,33 +379,7 @@ pub fn parse_doc_to_markdown(
     };
     let ai_block = ai_editable && block_level == 2;
 
-    let mut block_markdown = String::new();
-
-    match flavour.as_str() {
-      "notesgraph:database" => {
-        let title = get_string(block, "prop:title").unwrap_or_default();
-        block_markdown.push_str(&format!("\n### {title}\n"));
-
-        if let Some(table) = build_database_table(block, &context, &md_options)
-          && let Some(table_md) = database_table_markdown(table)
-        {
-          let mut writer = MarkdownWriter::new(&mut block_markdown);
-          writer.push_table(&table_md);
-        }
-      }
-      _ => {
-        let Some(block_flavour) = BlockFlavour::from_str(flavour.as_str()) else {
-          continue;
-        };
-        let spec = BlockSpec::from_block_map_with_flavour(block, block_flavour);
-        let list_depth = if block_flavour == BlockFlavour::List {
-          get_list_depth(&block_id, &context.parent_lookup, &context.block_pool)
-        } else {
-          0
-        };
-        renderer.write_block(&mut block_markdown, &spec, list_depth);
-      }
-    }
+    let block_markdown = render_block_markdown(&context, &block_id, block, &flavour, &renderer, &md_options);
 
     if ai_block {
       markdown.push_str(&format!("<!-- block_id={block_id} flavour={flavour} -->\n"));
@@ -417,6 +393,93 @@ pub fn parse_doc_to_markdown(
     known_unsupported_blocks,
     unknown_blocks,
   })
+}
+
+/// The markdown one block reads as in `parse_doc_to_markdown`. A database
+/// (board, task list) reads as its title as a `###` heading over a table of
+/// its rows.
+fn render_block_markdown(
+  context: &DocContext,
+  block_id: &str,
+  block: &Map,
+  flavour: &str,
+  renderer: &MarkdownRenderer,
+  md_options: &DeltaToMdOptions,
+) -> String {
+  let mut block_markdown = String::new();
+  if flavour == "notesgraph:database" {
+    let title = get_string(block, "prop:title").unwrap_or_default();
+    block_markdown.push_str(&format!("\n### {title}\n"));
+
+    if let Some(table) = build_database_table(block, context, md_options)
+      && let Some(table_md) = database_table_markdown(table)
+    {
+      let mut writer = MarkdownWriter::new(&mut block_markdown);
+      writer.push_table(&table_md);
+    }
+    return block_markdown;
+  }
+  let Some(block_flavour) = BlockFlavour::from_str(flavour) else {
+    return block_markdown;
+  };
+  let spec = BlockSpec::from_block_map_with_flavour(block, block_flavour);
+  let list_depth = if block_flavour == BlockFlavour::List {
+    get_list_depth(block_id, &context.parent_lookup, &context.block_pool)
+  } else {
+    0
+  };
+  renderer.write_block(&mut block_markdown, &spec, list_depth);
+  block_markdown
+}
+
+/// The markdown `parse_doc_to_markdown` writes for one block, followed, with
+/// `descendants`, by what it writes for the blocks under it. The update
+/// differ parses this back to recognise a block an agent's rewrite returned
+/// unchanged.
+pub(crate) fn block_markdown(context: &DocContext, block_id: &str, descendants: bool) -> String {
+  let md_options = DeltaToMdOptions::new(None);
+  let renderer = MarkdownRenderer::new(&md_options);
+  let mut markdown = String::new();
+  let mut stack = vec![block_id.to_string()];
+
+  while let Some(id) = stack.pop() {
+    let Some(block) = context.block_pool.get(&id) else {
+      continue;
+    };
+    let Some(flavour) = get_flavour(block) else {
+      continue;
+    };
+    let push_children = |stack: &mut Vec<String>| {
+      if descendants {
+        stack.extend(collect_child_ids(block).into_iter().rev());
+      }
+    };
+
+    if is_known_unsupported_markdown_flavour(flavour.as_str()) {
+      if !is_edgeless_markdown_flavour(flavour.as_str()) {
+        push_children(&mut stack);
+      }
+      continue;
+    }
+    let database = flavour == "notesgraph:database";
+    if !database && BlockFlavour::from_str(flavour.as_str()).is_none() {
+      continue;
+    }
+    markdown.push_str(&render_block_markdown(
+      context,
+      &id,
+      block,
+      &flavour,
+      &renderer,
+      &md_options,
+    ));
+    // A database's children are its rows, already in its table.
+    if !database {
+      push_children(&mut stack);
+    }
+  }
+
+  markdown
 }
 
 pub fn parse_doc_from_binary(doc_bin: Vec<u8>, doc_id: String) -> Result<CrawlResult, ParseError> {
