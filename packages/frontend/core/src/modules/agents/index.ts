@@ -263,6 +263,7 @@ export {
   QUEUED_STATUS,
   releaseQueuedTasks,
 } from './services/task-claim';
+export { moveToProject, TaskProjectService } from './services/task-project';
 export {
   configureTerminalSocketAuth,
   TERMINAL_HARNESSES,
@@ -320,6 +321,7 @@ import { RemoteAgentRunnerService } from './services/remote-runner';
 import { ResearchToolsService } from './services/research-tools';
 import { AgentRunSessionService } from './services/run-session';
 import { AgentTaskClaimService } from './services/task-claim';
+import { TaskProjectService } from './services/task-project';
 import { TerminalService } from './services/terminal';
 import { AgentRunLogsStore } from './stores/agent-run-logs';
 import { AgentRunsStore } from './stores/agent-runs';
@@ -352,6 +354,7 @@ export function configureAgentsModule(framework: Framework) {
       AgentRulesService,
     ])
     .service(AgentTaskClaimService, [DocsService])
+    .service(TaskProjectService, [DocsService])
     .service(AgentRunSessionService, [
       AgentExecutorService,
       AgentTaskClaimService,
