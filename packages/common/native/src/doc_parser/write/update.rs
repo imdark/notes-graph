@@ -3,25 +3,44 @@
 //! Provides functionality to update existing NotesGraph documents by applying
 //! surgical y-octo operations based on content differences.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use super::{
   super::{
     block_spec::{BlockSpec, TreeNode, count_tree_nodes, text_delta_eq},
     blocksuite::{collect_child_ids, find_child_id_by_flavour},
-    markdown::{MAX_BLOCKS, parse_markdown_blocks},
+    markdown::{DeltaToMdOptions, MAX_BLOCKS, parse_markdown_blocks},
+    read::database_markdown,
+    schema::SYS_FLAVOUR,
   },
   builder::{ApplyBlockOptions, apply_block_spec, insert_block_tree, insert_children},
   *,
 };
 
 const MAX_LCS_CELLS: usize = 2_000_000;
+const DATABASE_FLAVOUR: &str = "notesgraph:database";
 
 #[derive(Debug, Clone)]
 struct StoredNode {
   id: String,
   spec: BlockSpec,
   children: Vec<StoredNode>,
+  /// One of the nodes a database block reads as (its title heading, its
+  /// table). They match the agent's copy of that markdown, so writing a
+  /// read_document result back keeps the database instead of adding a plain
+  /// heading and table beside it. The database itself is never rewritten.
+  stand_in: bool,
+}
+
+impl StoredNode {
+  fn opaque(id: &str) -> Self {
+    StoredNode {
+      id: id.to_string(),
+      spec: BlockSpec::opaque(),
+      children: Vec::new(),
+      stand_in: false,
+    }
+  }
 }
 
 impl TreeNode for StoredNode {
@@ -103,19 +122,41 @@ fn load_doc_state(binary: &[u8], doc_id: &str) -> Result<DocState, ParseError> {
       .block_pool
       .get(&block_id)
       .ok_or_else(|| ParseError::ParserError("content block not found".into()))?;
-    // Blocks the markdown pipeline can't express (database/board blocks,
-    // synced embeds, …) become opaque nodes the differ preserves in place —
-    // updating the rest of the doc must not fail on or delete them.
-    blocks.push(
-      build_stored_tree(&block_id, block, &block_index.block_pool).unwrap_or_else(|_| StoredNode {
-        id: block_id.to_string(),
-        spec: BlockSpec::opaque(),
-        children: Vec::new(),
-      }),
-    );
+    blocks.extend(stored_nodes(&block_id, block, &block_index.block_pool));
   }
 
   Ok(DocState { doc, note_id, blocks })
+}
+
+fn stored_nodes(block_id: &str, block: &Map, pool: &HashMap<String, Map>) -> Vec<StoredNode> {
+  if get_string(block, SYS_FLAVOUR).as_deref() == Some(DATABASE_FLAVOUR)
+    && let Some(stand_ins) = database_stand_ins(block_id, block, pool)
+  {
+    return stand_ins;
+  }
+  // Blocks the markdown pipeline can't express (board blocks, synced embeds,
+  // …) become opaque nodes the differ preserves in place — updating the rest
+  // of the doc must not fail on or delete them.
+  vec![build_stored_tree(block_id, block, pool).unwrap_or_else(|_| StoredNode::opaque(block_id))]
+}
+
+fn database_stand_ins(block_id: &str, block: &Map, pool: &HashMap<String, Map>) -> Option<Vec<StoredNode>> {
+  let markdown = database_markdown(block, pool, &DeltaToMdOptions::new(None));
+  let nodes = parse_markdown_blocks(&markdown).ok()?;
+  if nodes.is_empty() {
+    return None;
+  }
+  Some(
+    nodes
+      .into_iter()
+      .map(|node| StoredNode {
+        id: block_id.to_string(),
+        spec: node.spec,
+        children: Vec::new(),
+        stand_in: true,
+      })
+      .collect(),
+  )
 }
 
 fn build_stored_tree(block_id: &str, block: &Map, pool: &HashMap<String, Map>) -> Result<StoredNode, ParseError> {
@@ -132,17 +173,14 @@ fn build_stored_tree(block_id: &str, block: &Map, pool: &HashMap<String, Map>) -
     let child_block = pool
       .get(&child_id)
       .ok_or_else(|| ParseError::ParserError("child block not found".into()))?;
-    children.push(build_stored_tree(&child_id, child_block, pool).unwrap_or_else(|_| StoredNode {
-      id: child_id.to_string(),
-      spec: BlockSpec::opaque(),
-      children: Vec::new(),
-    }));
+    children.extend(stored_nodes(&child_id, child_block, pool));
   }
 
   Ok(StoredNode {
     id: block_id.to_string(),
     spec,
     children,
+    stand_in: false,
   })
 }
 
@@ -155,8 +193,20 @@ fn sync_nodes(
   let ops = diff_blocks(current, target);
   let mut new_children = Vec::new();
   let mut to_remove = Vec::new();
+  let mut kept_stand_ins = HashSet::new();
 
   for op in ops {
+    if let PatchOp::Keep(old_idx, _) | PatchOp::Update(old_idx, _) | PatchOp::Delete(old_idx) = op
+      && current[old_idx].stand_in
+    {
+      // A database reads as several nodes; it stays once, where the first of
+      // them lands, whether the agent kept, edited or dropped its markdown.
+      let id = &current[old_idx].id;
+      if kept_stand_ins.insert(id.clone()) {
+        new_children.push(id.clone());
+      }
+      continue;
+    }
     match op {
       PatchOp::Keep(old_idx, new_idx) => {
         let old_node = &current[old_idx];
@@ -228,17 +278,18 @@ fn diff_blocks(current: &[StoredNode], target: &[BlockNode]) -> Vec<PatchOp> {
 
   while i > 0 || j > 0 {
     if i > 0 && j > 0 {
-      let old_spec = &current[i - 1].spec;
+      let old_node = &current[i - 1];
+      let old_spec = &old_node.spec;
       let new_spec = &target[j - 1].spec;
+      // A database's edited table still pairs with it (the edit is dropped),
+      // but a renamed heading is the agent's own block, not the database title.
+      let similar = old_spec.is_similar(new_spec) && (!old_node.stand_in || old_spec.flavour == BlockFlavour::Table);
 
       if old_spec.is_exact(new_spec) {
         ops.push(PatchOp::Keep(i - 1, j - 1));
         i -= 1;
         j -= 1;
-      } else if old_spec.is_similar(new_spec)
-        && lcs[i - 1][j - 1] >= lcs[i - 1][j]
-        && lcs[i - 1][j - 1] >= lcs[i][j - 1]
-      {
+      } else if similar && lcs[i - 1][j - 1] >= lcs[i - 1][j] && lcs[i - 1][j - 1] >= lcs[i][j - 1] {
         ops.push(PatchOp::Update(i - 1, j - 1));
         i -= 1;
         j -= 1;
@@ -332,7 +383,7 @@ fn check_limits(current: &[StoredNode], target: &[BlockNode]) -> Result<(), Pars
 
 #[cfg(test)]
 mod tests {
-  use y_octo::{Any, DocOptions, TextDeltaOp, TextInsert};
+  use y_octo::{Any, DocOptions, TextDeltaOp, TextInsert, Value};
 
   use super::{super::builder::text_ops_from_plain, *};
   use crate::doc_parser::{
@@ -473,6 +524,214 @@ mod tests {
     assert!(
       note_child_ids.contains(&"db-block-1".to_string()),
       "database block must stay among the note children, got: {note_child_ids:?}"
+    );
+  }
+
+  /// Adds a journal-style `todos:` database (Status/Deadline/Scheduled) at
+  /// `index` among the note's children, with one row per `(title, status)`.
+  fn insert_todos_database(doc: &Doc, id: &str, index: u64, rows: &[(&str, &str)]) {
+    let mut blocks_map = doc.get_map("blocks").expect("blocks map exists");
+    let mut database = doc.create_map().expect("create map");
+    blocks_map
+      .insert(id.to_string(), database.clone())
+      .expect("insert block");
+    database
+      .insert("sys:id".into(), Any::String(id.into()))
+      .expect("set id");
+    database
+      .insert("sys:flavour".into(), Any::String(DATABASE_FLAVOUR.into()))
+      .expect("set flavour");
+    let mut title = doc.create_text().expect("create text");
+    title.insert(0, "todos:").expect("set title");
+    database
+      .insert("prop:title".into(), Value::Text(title))
+      .expect("set title");
+
+    let mut columns = doc.create_array().expect("create array");
+    database
+      .insert("prop:columns".into(), Value::Array(columns.clone()))
+      .expect("set columns");
+    for (column_id, name, col_type) in [
+      ("status", "Status", "select"),
+      ("deadline", "Deadline", "date"),
+      ("scheduled", "Scheduled", "date"),
+    ] {
+      let mut column = doc.create_map().expect("create map");
+      columns.push(Value::Map(column.clone())).expect("push column");
+      column.insert("id".into(), column_id).expect("set id");
+      column.insert("name".into(), name).expect("set name");
+      column.insert("type".into(), col_type).expect("set type");
+      let mut data = doc.create_map().expect("create map");
+      column
+        .insert("data".into(), Value::Map(data.clone()))
+        .expect("set data");
+      if col_type == "select" {
+        let mut options = doc.create_array().expect("create array");
+        data
+          .insert("options".into(), Value::Array(options.clone()))
+          .expect("set options");
+        let mut option = doc.create_map().expect("create map");
+        options.push(Value::Map(option.clone())).expect("push option");
+        option.insert("id".into(), "opt-todo").expect("set id");
+        option.insert("value".into(), "TODO").expect("set value");
+        option.insert("color".into(), "blue").expect("set color");
+      }
+    }
+
+    let mut children = doc.create_array().expect("create array");
+    database
+      .insert("sys:children".into(), Value::Array(children.clone()))
+      .expect("set children");
+    let mut cells = doc.create_map().expect("create map");
+    database
+      .insert("prop:cells".into(), Value::Map(cells.clone()))
+      .expect("set cells");
+    for (n, (row_title, status)) in rows.iter().enumerate() {
+      let row_id = format!("{id}-row-{n}");
+      let mut row_block = doc.create_map().expect("create map");
+      blocks_map
+        .insert(row_id.clone(), row_block.clone())
+        .expect("insert row block");
+      row_block
+        .insert("sys:id".into(), Any::String(row_id.clone()))
+        .expect("set id");
+      row_block
+        .insert("sys:flavour".into(), Any::String("notesgraph:paragraph".into()))
+        .expect("set flavour");
+      row_block
+        .insert(
+          "sys:children".into(),
+          Value::Array(doc.create_array().expect("create array")),
+        )
+        .expect("set children");
+      let mut text = doc.create_text().expect("create text");
+      text.insert(0, row_title).expect("set text");
+      row_block
+        .insert("prop:text".into(), Value::Text(text))
+        .expect("set text");
+      children.push(Any::String(row_id.clone())).expect("push row");
+
+      let mut row_cells = doc.create_map().expect("create map");
+      cells.insert(row_id, Value::Map(row_cells.clone())).expect("set row");
+      let mut cell = doc.create_map().expect("create map");
+      row_cells
+        .insert("status".into(), Value::Map(cell.clone()))
+        .expect("set cell");
+      cell.insert("columnId".into(), "status").expect("set column");
+      cell.insert("value".into(), *status).expect("set value");
+    }
+
+    let mut note_children = None;
+    for (_, value) in blocks_map.iter() {
+      if let Some(block_map) = value.to_map()
+        && get_string(&block_map, SYS_FLAVOUR).as_deref() == Some(NOTE_FLAVOUR)
+      {
+        note_children = block_map.get("sys:children").and_then(|v| v.to_array());
+        break;
+      }
+    }
+    note_children
+      .expect("note children array")
+      .insert(index, Any::String(id.into()))
+      .expect("insert into note children");
+  }
+
+  fn flavour_count(binary: &[u8], doc_id: &str, flavour: &str) -> usize {
+    let mut doc = DocOptions::new().with_guid(doc_id.to_string()).build();
+    doc.apply_update_from_binary_v1(binary).expect("apply");
+    let blocks_map = doc.get_map("blocks").expect("blocks map exists");
+    blocks_map
+      .iter()
+      .filter(|(_, value)| {
+        value
+          .to_map()
+          .is_some_and(|block| get_string(&block, SYS_FLAVOUR).as_deref() == Some(flavour))
+      })
+      .count()
+  }
+
+  #[test]
+  fn test_update_writing_back_a_journal_keeps_its_databases() {
+    // A journal page: each section is a heading, a to-do and a `todos:`
+    // database. An agent filing a task reads the page, adds one line and
+    // writes it all back; the databases must not come back as plain tables.
+    let doc_id = "journal-test";
+    let initial_md = "## Work\n\n- [ ] \n\n## notes graph\n\n- [ ] when an";
+    let initial_bin = build_full_doc("2026-11-25", initial_md, doc_id).expect("create doc");
+    let mut doc = DocOptions::new().with_guid(doc_id.to_string()).build();
+    doc.apply_update_from_binary_v1(&initial_bin).expect("apply initial");
+    insert_todos_database(&doc, "db-work", 2, &[]);
+    insert_todos_database(&doc, "db-graph", 5, &[("Ship it", "opt-todo")]);
+    let full_bin = doc.encode_update_v1().expect("encode");
+
+    for ai_editable in [false, true] {
+      let read = parse_doc_to_markdown(full_bin.clone(), doc_id.to_string(), ai_editable, None)
+        .expect("read")
+        .markdown;
+      assert!(read.contains("### todos:"), "databases read as tables: {read}");
+      let refiled = read.replacen(
+        "- [ ] when an\n",
+        "- [ ] when an\n- [ ] PERSONAL-311 Publish one page\n",
+        1,
+      );
+      assert_ne!(refiled, read, "test must add a line");
+
+      let delta = update_doc(&full_bin, &refiled, doc_id).expect("update");
+      let mut merged = DocOptions::new().with_guid(doc_id.to_string()).build();
+      merged.apply_update_from_binary_v1(&full_bin).expect("apply base");
+      merged.apply_update_from_binary_v1(&delta).expect("apply delta");
+      let merged_bin = merged.encode_update_v1().expect("encode");
+
+      assert_eq!(flavour_count(&merged_bin, doc_id, "notesgraph:table"), 0);
+      assert_eq!(flavour_count(&merged_bin, doc_id, DATABASE_FLAVOUR), 2);
+      assert_eq!(
+        flavour_count(&merged_bin, doc_id, "notesgraph:list"),
+        flavour_count(&full_bin, doc_id, "notesgraph:list") + 1
+      );
+
+      let before = parse_doc_to_markdown(full_bin.clone(), doc_id.to_string(), false, None)
+        .expect("read before")
+        .markdown;
+      let after = parse_doc_to_markdown(merged_bin, doc_id.to_string(), false, None)
+        .expect("read after")
+        .markdown;
+      assert_eq!(
+        after,
+        before.replacen(
+          "- [ ] when an\n",
+          "- [ ] when an\n- [ ] PERSONAL-311 Publish one page\n",
+          1
+        )
+      );
+    }
+  }
+
+  #[test]
+  fn test_update_renamed_database_heading_is_a_new_block() {
+    let doc_id = "journal-rename-test";
+    let initial_bin = build_full_doc("Day", "## Work\n\n- [ ] one", doc_id).expect("create doc");
+    let mut doc = DocOptions::new().with_guid(doc_id.to_string()).build();
+    doc.apply_update_from_binary_v1(&initial_bin).expect("apply initial");
+    insert_todos_database(&doc, "db-work", 2, &[]);
+    let full_bin = doc.encode_update_v1().expect("encode");
+
+    let read = parse_doc_to_markdown(full_bin.clone(), doc_id.to_string(), false, None)
+      .expect("read")
+      .markdown;
+    let renamed = read.replacen("### todos:", "### later:", 1);
+    let delta = update_doc(&full_bin, &renamed, doc_id).expect("update");
+    let mut merged = DocOptions::new().with_guid(doc_id.to_string()).build();
+    merged.apply_update_from_binary_v1(&full_bin).expect("apply base");
+    merged.apply_update_from_binary_v1(&delta).expect("apply delta");
+    let after = parse_doc_to_markdown(merged.encode_update_v1().unwrap(), doc_id.to_string(), false, None)
+      .expect("read after")
+      .markdown;
+
+    assert!(after.contains("### later:"), "the agent's heading is written: {after}");
+    assert!(after.contains("### todos:"), "the database is kept: {after}");
+    assert_eq!(
+      flavour_count(&merged.encode_update_v1().unwrap(), doc_id, DATABASE_FLAVOUR),
+      1
     );
   }
 

@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use y_octo::{Any, Map, Value};
 
@@ -6,8 +6,8 @@ use super::{text_content, text_content_for_summary};
 use crate::doc_parser::{
   blocksuite::{DocContext, collect_child_ids, get_string},
   markdown::{
-    DeltaToMdOptions, InlineReferencePayload, delta_value_to_inline_markdown, extract_inline_references_from_value,
-    text_to_inline_markdown,
+    DeltaToMdOptions, InlineReferencePayload, MarkdownWriter, delta_value_to_inline_markdown,
+    extract_inline_references_from_value, text_to_inline_markdown,
   },
   table::{MarkdownTableOptions, render_markdown_table},
   value::{any_as_string, value_to_string},
@@ -31,9 +31,28 @@ pub(super) struct DatabaseColumn {
   pub(super) options: Vec<DatabaseOption>,
 }
 
+/// The markdown a database block reads as: its title as an H3, then its rows
+/// as a table. The update differ matches this rendering back to the block.
+pub(crate) fn database_markdown(
+  block: &Map,
+  block_pool: &HashMap<String, Map>,
+  md_options: &DeltaToMdOptions,
+) -> String {
+  let title = get_string(block, "prop:title").unwrap_or_default();
+  let mut markdown = format!("\n### {title}\n");
+
+  if let Some(table) = build_database_table(block, block_pool, md_options)
+    && let Some(table_md) = database_table_markdown(table)
+  {
+    let mut writer = MarkdownWriter::new(&mut markdown);
+    writer.push_table(&table_md);
+  }
+  markdown
+}
+
 pub(super) fn build_database_table(
   block: &Map,
-  context: &DocContext,
+  block_pool: &HashMap<String, Map>,
   md_options: &DeltaToMdOptions,
 ) -> Option<DatabaseTable> {
   let columns = parse_database_columns(block)?;
@@ -48,7 +67,7 @@ pub(super) fn build_database_table(
     for column in columns.iter() {
       let mut cell_text = String::new();
       if column.col_type == "title" {
-        if let Some(child_block) = context.block_pool.get(&child_id) {
+        if let Some(child_block) = block_pool.get(&child_id) {
           if let Some(text_md) = text_to_inline_markdown(child_block, "prop:text", md_options) {
             cell_text = text_md;
           } else if let Some((text, _)) = text_content(child_block, "prop:text") {
@@ -94,7 +113,7 @@ pub(super) fn database_table_markdown(table: DatabaseTable) -> Option<String> {
 
 pub(super) fn database_summary_text(block: &Map, context: &DocContext) -> Option<String> {
   let md_options = DeltaToMdOptions::new(None);
-  let table = build_database_table(block, context, &md_options)?;
+  let table = build_database_table(block, &context.block_pool, &md_options)?;
   let mut summary = String::new();
 
   if let Some(title) = get_string(block, "prop:title")

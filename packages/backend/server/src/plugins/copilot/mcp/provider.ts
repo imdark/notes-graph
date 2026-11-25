@@ -1692,7 +1692,9 @@ export class WorkspaceMcpProvider {
         description:
           'Update an existing document with new markdown content (body only). Uses structural diffing to apply minimal changes, preserving document history and enabling real-time collaboration. Every update is stamped "Edited via MCP by <agent>". ' +
           "Task workflow: task lists use org-mode annotations at the start of each list item — `[ ]` todo, `[-]` in progress, `[X]` done, or an UPPERCASE keyword — which kanban boards mirroring the list group by, plus planning annotations like `SCHEDULED: <date>`, `DEADLINE: <date>`, `STARTED: [date]`, `CLOSED: [date]` at the end of the line. To pick up a task, rewrite its annotation to `[-]` and append ` @<your-agent-name>` to the task line to claim it; mark it `[X]` when finished. A task that ships code only becomes `[X]` once it is deployed and verified live — until then it climbs `COMMITTED` → `MERGED` → `DEPLOYED`. Keep working memory and documentation in the task's own linked note (see link_document). " +
-          'This does NOT update the document title. This tool not support insert or update database block and image yet.' +
+          'This does NOT update the document title. This tool not support insert or update database block and image yet. ' +
+          'A database block reads as a `### <title>` heading followed by a table: write that heading and table back unchanged where they were. The database is kept; changes to its rows are ignored. ' +
+          'To add or change one line of a long note (filing a task in a journal, say), prefer update_block on that line over rewriting the whole note.' +
           firstPersonGuidance,
         parser: z.object({
           docId: z.string(),
