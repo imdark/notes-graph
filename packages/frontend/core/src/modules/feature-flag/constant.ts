@@ -396,7 +396,7 @@ export const NOTESGRAPH_FLAGS = {
     category: 'notesgraph',
     displayName: 'Line actions on the mobile keyboard toolbar',
     description:
-      'Two buttons at the end of the toolbar above the phone keyboard: assign the current line to an agent, and add an empty line of the same kind after it.',
+      'Two buttons on the toolbar above the phone keyboard: assign the current line to an agent (near the front, next to the mic), and add an empty line of the same kind after it (at the end).',
     configurable: true,
     defaultState: true,
   },
