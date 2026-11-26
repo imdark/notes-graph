@@ -49,6 +49,11 @@ jobs:
       name: production
       url: https://app.notesgraph.com
     timeout-minutes: 120
+    # The workflow's own, plus starting build-apk.yml after Verify.
+    permissions:
+      contents: read
+      id-token: write
+      actions: write
     steps:
       # Full history: deploy-info lists the pull requests merged into HEAD.
       - uses: actions/checkout@v4
@@ -140,6 +145,7 @@ jobs:
         run: mkdir -p native-prebuilt compress-cache yarn-cache rspack-cache
 
       - name: Build and push image
+        id: build
         if: inputs.image_sha == ''
         uses: docker/build-push-action@v6
         with:
@@ -163,93 +169,9 @@ jobs:
           # cache cost 14 min to save ~25 s. The Rust addon is kept on its
           # own instead (above and below).
 
-      # A miss compiled the addon in the build above; take it from this
-      # builder's layers (seconds, nothing recompiles) and keep it.
-      - name: Export the Rust addon
-        if: inputs.image_sha == '' && steps.native.outputs.hit != 'true'
-        run: |
-          docker buildx build --platform linux/amd64 \
-            -f .github/deployment/node/Dockerfile.selfhost \
-            --target native-export --output type=local,dest=native-prebuilt .
-          test -s native-prebuilt/server-native.node
-
-      - name: Save the Rust addon
-        if: inputs.image_sha == '' && steps.native.outputs.hit != 'true'
-        env:
-          KEY: server-native-${{ hashFiles('Cargo.toml', 'Cargo.lock', 'rust-toolchain.toml', 'packages/backend/native/**', 'packages/common/native/**', 'packages/frontend/mobile-native/**', 'packages/frontend/native/**') }}-${{ steps.native_stages.outputs.hash }}
-        run: scripts/ci/s3-cache.sh save native-prebuilt "$KEY"
-
-      # This build's compressed assets, from the builder's layers: the same
-      # args and contexts as the build above, so nothing re-runs. Written
-      # beside the restored cache and swapped in, since changing that folder
-      # first would change the build's inputs.
-      - name: Export compressed assets
-        if: inputs.image_sha == ''
-        env:
-          NATIVE_STAGE: ${{ steps.native.outputs.hit == 'true' && 'native-prebuilt' || 'native' }}
-        run: |
-          docker buildx build --platform linux/amd64 \
-            -f .github/deployment/node/Dockerfile.selfhost \
-            --build-arg GITHUB_SHA=${{ github.sha }} \
-            --build-arg NATIVE_STAGE="$NATIVE_STAGE" \
-            --build-context native-prebuilt-files=native-prebuilt \
-            --build-context compress-cache-files=compress-cache \
-            --build-context yarn-cache-files=yarn-cache \
-            --build-context rspack-cache-files=rspack-cache \
-            --target compress-cache-export --output type=local,dest=compress-cache-new .
-          rm -rf compress-cache && mv compress-cache-new compress-cache
-          echo "$(find compress-cache -type f | wc -l) files, $(du -sh compress-cache | cut -f1)"
-
-      - name: Save compressed assets
-        if: inputs.image_sha == ''
-        run: scripts/ci/s3-cache.sh save compress-cache compressed-assets-${{ github.sha }}
-
-      - name: Export the bundler cache
-        if: inputs.image_sha == ''
-        env:
-          NATIVE_STAGE: ${{ steps.native.outputs.hit == 'true' && 'native-prebuilt' || 'native' }}
-        run: |
-          docker buildx build --platform linux/amd64 \
-            -f .github/deployment/node/Dockerfile.selfhost \
-            --build-arg GITHUB_SHA=${{ github.sha }} \
-            --build-arg NATIVE_STAGE="$NATIVE_STAGE" \
-            --build-context native-prebuilt-files=native-prebuilt \
-            --build-context compress-cache-files=compress-cache \
-            --build-context yarn-cache-files=yarn-cache \
-            --build-context rspack-cache-files=rspack-cache \
-            --target rspack-cache-export --output type=local,dest=rspack-cache-new .
-          rm -rf rspack-cache && mv rspack-cache-new rspack-cache
-          du -sh rspack-cache
-
-      - name: Save the bundler cache
-        if: inputs.image_sha == ''
-        run: scripts/ci/s3-cache.sh save rspack-cache rspack-cache-${{ github.sha }}
-
-      # Only when yarn.lock changed (no exact cache): the cache after this
-      # build's install, from the builder's cache mount.
-      - name: Export the yarn cache
-        if: inputs.image_sha == '' && steps.yarn.outputs.hit != 'true'
-        env:
-          NATIVE_STAGE: ${{ steps.native.outputs.hit == 'true' && 'native-prebuilt' || 'native' }}
-        run: |
-          docker buildx build --platform linux/amd64 \
-            -f .github/deployment/node/Dockerfile.selfhost \
-            --build-arg GITHUB_SHA=${{ github.sha }} \
-            --build-arg NATIVE_STAGE="$NATIVE_STAGE" \
-            --build-context native-prebuilt-files=native-prebuilt \
-            --build-context compress-cache-files=compress-cache \
-            --build-context yarn-cache-files=yarn-cache \
-            --build-context rspack-cache-files=rspack-cache \
-            --target yarn-cache-export --output type=local,dest=yarn-cache-new .
-          rm -rf yarn-cache && mv yarn-cache-new yarn-cache
-          echo "$(find yarn-cache -type f | wc -l) files, $(du -sh yarn-cache | cut -f1)"
-
-      - name: Save the yarn cache
-        if: inputs.image_sha == '' && steps.yarn.outputs.hit != 'true'
-        env:
-          KEY: yarn-cache-${{ hashFiles('yarn.lock', '.yarnrc.yml') }}
-        run: scripts/ci/s3-cache.sh save yarn-cache "$KEY"
-
+      # The box rolls as soon as the image is pushed. The build caches are
+      # exported after it (below): they only speed up the next deploy, and
+      # one once took 18+ min, holding prod and the APK build back with it.
       - name: Roll the box
         env:
           IMAGE: ${{ steps.ecr.outputs.registry }}/notesgraph:${{ inputs.image_sha || github.sha }}
@@ -300,25 +222,124 @@ jobs:
           done
           exit 1
 
-  # A release also rebuilds the Android APK, if the deployed commit changed
-  # the app since the published one (build-apk.yml checks). It is started as
-  # its own run rather than called here, so this run (and the deploy-prod
-  # concurrency group) doesn't wait ~25 minutes on it, and so an APK failure
-  # doesn't read as a failed deploy. A rollback builds nothing.
-  android:
-    name: Start the APK build
-    needs: deploy
-    if: inputs.image_sha == ''
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    continue-on-error: true
-    permissions:
-      actions: write
-    steps:
-      - name: Start build-apk.yml
+      # A release also rebuilds the Android APK, if the deployed commit
+      # changed the app since the published one (build-apk.yml checks). It
+      # is started as its own run, so this one (and the deploy-prod
+      # concurrency group) doesn't wait ~25 min on it and an APK failure
+      # doesn't read as a failed deploy. Right after Verify, not after the
+      # cache exports. A rollback builds nothing.
+      - name: Start the APK build
+        if: inputs.image_sha == ''
+        continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh workflow run build-apk.yml --repo "$GITHUB_REPOSITORY" --ref "$GITHUB_REF_NAME" \
             -f ref="$GITHUB_SHA" -f force=false
           echo "Started build-apk.yml for $GITHUB_SHA (force=false)" >> "$GITHUB_STEP_SUMMARY"
+
+      # ---- build caches for the next deploy ----
+      # Each runs even when the roll or Verify failed (the image built, so
+      # its caches are good), and none can fail the deploy: a lost cache
+      # only makes the next build slower.
+
+      # A miss compiled the addon in the build above; take it from this
+      # builder's layers (seconds, nothing recompiles) and keep it.
+      - name: Export the Rust addon
+        id: native_export
+        if: ${{ !cancelled() && steps.build.outcome == 'success' && steps.native.outputs.hit != 'true' }}
+        continue-on-error: true
+        run: |
+          docker buildx build --platform linux/amd64 \
+            -f .github/deployment/node/Dockerfile.selfhost \
+            --target native-export --output type=local,dest=native-prebuilt .
+          test -s native-prebuilt/server-native.node
+
+      # A save only follows its export's success: saving after a failed one
+      # would keep an empty or partial cache for the next deploy to restore.
+      - name: Save the Rust addon
+        if: ${{ !cancelled() && steps.native_export.outcome == 'success' }}
+        continue-on-error: true
+        env:
+          KEY: server-native-${{ hashFiles('Cargo.toml', 'Cargo.lock', 'rust-toolchain.toml', 'packages/backend/native/**', 'packages/common/native/**', 'packages/frontend/mobile-native/**', 'packages/frontend/native/**') }}-${{ steps.native_stages.outputs.hash }}
+        run: scripts/ci/s3-cache.sh save native-prebuilt "$KEY"
+
+      # This build's compressed assets, from the builder's layers: the same
+      # args and contexts as the build above, so nothing re-runs. Written
+      # beside the restored cache and swapped in, since changing that folder
+      # first would change the build's inputs.
+      - name: Export compressed assets
+        id: compress_export
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        continue-on-error: true
+        env:
+          NATIVE_STAGE: ${{ steps.native.outputs.hit == 'true' && 'native-prebuilt' || 'native' }}
+        run: |
+          docker buildx build --platform linux/amd64 \
+            -f .github/deployment/node/Dockerfile.selfhost \
+            --build-arg GITHUB_SHA=${{ github.sha }} \
+            --build-arg NATIVE_STAGE="$NATIVE_STAGE" \
+            --build-context native-prebuilt-files=native-prebuilt \
+            --build-context compress-cache-files=compress-cache \
+            --build-context yarn-cache-files=yarn-cache \
+            --build-context rspack-cache-files=rspack-cache \
+            --target compress-cache-export --output type=local,dest=compress-cache-new .
+          rm -rf compress-cache && mv compress-cache-new compress-cache
+          echo "$(find compress-cache -type f | wc -l) files, $(du -sh compress-cache | cut -f1)"
+
+      - name: Save compressed assets
+        if: ${{ !cancelled() && steps.compress_export.outcome == 'success' }}
+        continue-on-error: true
+        run: scripts/ci/s3-cache.sh save compress-cache compressed-assets-${{ github.sha }}
+
+      - name: Export the bundler cache
+        id: rspack_export
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        continue-on-error: true
+        env:
+          NATIVE_STAGE: ${{ steps.native.outputs.hit == 'true' && 'native-prebuilt' || 'native' }}
+        run: |
+          docker buildx build --platform linux/amd64 \
+            -f .github/deployment/node/Dockerfile.selfhost \
+            --build-arg GITHUB_SHA=${{ github.sha }} \
+            --build-arg NATIVE_STAGE="$NATIVE_STAGE" \
+            --build-context native-prebuilt-files=native-prebuilt \
+            --build-context compress-cache-files=compress-cache \
+            --build-context yarn-cache-files=yarn-cache \
+            --build-context rspack-cache-files=rspack-cache \
+            --target rspack-cache-export --output type=local,dest=rspack-cache-new .
+          rm -rf rspack-cache && mv rspack-cache-new rspack-cache
+          du -sh rspack-cache
+
+      - name: Save the bundler cache
+        if: ${{ !cancelled() && steps.rspack_export.outcome == 'success' }}
+        continue-on-error: true
+        run: scripts/ci/s3-cache.sh save rspack-cache rspack-cache-${{ github.sha }}
+
+      # Only when yarn.lock changed (no exact cache): the cache after this
+      # build's install, from the builder's cache mount.
+      - name: Export the yarn cache
+        id: yarn_export
+        if: ${{ !cancelled() && steps.build.outcome == 'success' && steps.yarn.outputs.hit != 'true' }}
+        continue-on-error: true
+        env:
+          NATIVE_STAGE: ${{ steps.native.outputs.hit == 'true' && 'native-prebuilt' || 'native' }}
+        run: |
+          docker buildx build --platform linux/amd64 \
+            -f .github/deployment/node/Dockerfile.selfhost \
+            --build-arg GITHUB_SHA=${{ github.sha }} \
+            --build-arg NATIVE_STAGE="$NATIVE_STAGE" \
+            --build-context native-prebuilt-files=native-prebuilt \
+            --build-context compress-cache-files=compress-cache \
+            --build-context yarn-cache-files=yarn-cache \
+            --build-context rspack-cache-files=rspack-cache \
+            --target yarn-cache-export --output type=local,dest=yarn-cache-new .
+          rm -rf yarn-cache && mv yarn-cache-new yarn-cache
+          echo "$(find yarn-cache -type f | wc -l) files, $(du -sh yarn-cache | cut -f1)"
+
+      - name: Save the yarn cache
+        if: ${{ !cancelled() && steps.yarn_export.outcome == 'success' }}
+        continue-on-error: true
+        env:
+          KEY: yarn-cache-${{ hashFiles('yarn.lock', '.yarnrc.yml') }}
+        run: scripts/ci/s3-cache.sh save yarn-cache "$KEY"
