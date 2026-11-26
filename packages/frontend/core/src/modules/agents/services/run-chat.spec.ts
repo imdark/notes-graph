@@ -71,13 +71,15 @@ describe('runDied', () => {
     expect(runDied(run({ status: 'running' }))).toBe(false);
   });
 
-  test('only a died run is told the reader can continue it', () => {
+  test('any ended run can be continued; only a died one ended early', () => {
     const [died] = runChatMessages(run({ status: 'error' }), {
       transcript: '',
     });
     const [done] = runChatMessages(run(), { transcript: '' });
     expect(died.content).toContain('The reader can continue it');
-    expect(done.content).not.toContain('The reader can continue it');
+    expect(done.content).toContain('The reader can continue it');
+    expect(died.content).toContain('ended before its work was done');
+    expect(done.content).not.toContain('ended before its work was done');
   });
 });
 
@@ -103,7 +105,7 @@ describe('continuationBrief', () => {
       ]
     );
     expect(brief.taskIds).toEqual(['b1']);
-    expect(brief.title).toBe('Fix the login bug');
+    expect(brief.title).toBe('Continue: Fix the login bug');
     expect(brief.scope).toEqual(task.scope);
     expect(brief.text.startsWith(task.text)).toBe(true);
     expect(brief.text).toContain('on mac');
@@ -151,6 +153,31 @@ describe('continuationBrief', () => {
     );
     expect(brief.text).toContain('the last word');
     expect(brief.text).not.toContain('a'.repeat(FOLLOW_UP_CHAT_CHARS));
+  });
+
+  test('a finished run is taken further, not said to have died', () => {
+    const brief = continuationBrief(
+      task,
+      run(),
+      { transcript: 'x' },
+      'Now add a test'
+    );
+    expect(brief.text).toContain('has ended. It finished.');
+    expect(brief.text).not.toContain('ended before its work was done');
+  });
+
+  test("without the task, the earlier run's input stands in", () => {
+    const brief = continuationBrief(
+      null,
+      run({ status: 'error', input: 'Fix login' }),
+      { transcript: 'x' },
+      ''
+    );
+    expect(brief.text).toContain(
+      '<previous-input>\nFix login\n</previous-input>'
+    );
+    expect(brief.title).toBe('Continue: Fix the login bug');
+    expect(brief.taskIds).toBeUndefined();
   });
 });
 

@@ -241,6 +241,7 @@ export {
 export {
   askTranscript,
   continuationBrief,
+  FOLLOW_UP_TRANSCRIPT_CHARS,
   type RunChatContext,
   runChatMessages,
   runDied,

@@ -47,9 +47,7 @@ export function runChatMessages(
     `You are answering the reader's questions about a run of their AI agent "${run.agentName}" that has ended.`,
     'You have what the agent was given, the transcript of what it did, and how it ended. Speak about the run as its record: what it did and found, why it stopped or failed, what it changed, and what is left to do.',
     "You cannot act: you don't run tools or change notes or files, and the agent doesn't see this chat. If the reader wants something done, say what to ask the agent for when they run it again.",
-    runDied(run)
-      ? 'This run ended before its work was done. The reader can continue it: what they write and choose to continue with starts a new run of the agent, given this record and this chat. When they want the work finished, say what to tell it.'
-      : null,
+    `${runDied(run) ? 'This run ended before its work was done. ' : ''}The reader can continue it: what they write and choose to continue with starts a new run of the agent, given this record and this chat. When they want more work done, say what to tell it.`,
     "Be concise, and say plainly when the record doesn't tell you something rather than guessing.",
   ]
     .filter(Boolean)
@@ -98,16 +96,23 @@ export const runDied = (run: AgentRun): boolean =>
 export const FOLLOW_UP_CHAT_CHARS = 4_000;
 
 /**
+ * How much of the earlier transcript a follow-up run is given: more than the
+ * chat gets, since the new run has to tell from it what was already done.
+ */
+export const FOLLOW_UP_TRANSCRIPT_CHARS = 40_000;
+
+/**
  * What a follow-up run reads: the task as it reads now, then the earlier
  * run's record (how it ended, its transcript, its last answer), the chat the
  * reader had about it, and what they want done next.
  *
  * The earlier session is gone, so the follow-up is a new agent rebuilt from
  * that record rather than a resumed one. It keeps the task's ids, so its
- * claims and run list entry are the task's as before.
+ * claims and run list entry are the task's as before. Without the task (its
+ * note couldn't be read) the earlier run's input stands in for it.
  */
 export function continuationBrief(
-  task: AgentContext,
+  task: AgentContext | null,
   run: AgentRun,
   { transcript, output }: RunChatContext,
   followUp: string,
@@ -134,13 +139,16 @@ export function continuationBrief(
   const earlier = [
     '## This continues an earlier run',
     [
-      `An earlier run of this agent on this task, started ${new Date(run.startedAt).toISOString()}${run.deviceKey ? ` on ${run.deviceKey}` : ''}, ended before its work was done. ${ending(run)}`,
+      `An earlier run of this agent on this task, started ${new Date(run.startedAt).toISOString()}${run.deviceKey ? ` on ${run.deviceKey}` : ''}, ${runDied(run) ? 'ended before its work was done' : 'has ended'}. ${ending(run)}`,
       'Its session is gone, so you are a new run picking up where it stopped. Before redoing anything, check what it already did (the notes, the branch and its commits, the files) and go on from there.',
     ].join(' '),
     transcript
       ? `<previous-transcript>\n${transcript}\n</previous-transcript>`
       : 'There is no transcript of the earlier run.',
     clipped ? `<previous-answer>\n${clipped}\n</previous-answer>` : null,
+    !task && run.input
+      ? `This run's task couldn't be read again, so here is what the earlier run was given:\n<previous-input>\n${run.input}\n</previous-input>`
+      : null,
     talked
       ? `The reader talked the run over before continuing it:\n<chat>\n${talked}\n</chat>`
       : null,
@@ -151,7 +159,10 @@ export function continuationBrief(
     .filter(Boolean)
     .join('\n\n');
 
-  return { ...task, text: `${task.text}\n\n${earlier}` };
+  // Named apart from the earlier run, so the two read as two in run lists.
+  const title = `Continue: ${task?.title || run.title || run.agentName}`;
+  if (!task) return { text: earlier, label: run.title || title, title };
+  return { ...task, title, text: `${task.text}\n\n${earlier}` };
 }
 
 /**

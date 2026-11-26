@@ -8,11 +8,11 @@ import {
   AgentsService,
   askTranscript,
   continuationBrief,
+  FOLLOW_UP_TRANSCRIPT_CHARS,
   forkTranscript,
   RemoteAgentRunnerService,
   type RunChatContext,
   runChatMessages,
-  runDied,
 } from '@notesgraph/core/modules/agents';
 import { WorkspaceService } from '@notesgraph/core/modules/workspace';
 import { useService } from '@notesgraph/infra';
@@ -70,30 +70,36 @@ export const AgentRunChat = ({
   }, [agentsService, executor, run.agentId, run.agentName]);
 
   // Without the transcript the chat can still go on the input and answer.
-  const runRecord = useCallback(async (): Promise<RunChatContext> => {
-    if (run.remoteJobId) {
-      const job = await remoteRunner
-        .get(workspaceService.workspace.id, run.remoteJobId)
-        .catch(() => null);
-      return {
-        transcript: forkTranscript(job?.log ?? ''),
-        output: output ?? job?.result ?? undefined,
-      };
-    }
-    const log = await logsStore.get(run.id).catch(() => undefined);
-    return { transcript: forkTranscript(log ?? ''), output };
-  }, [logsStore, output, remoteRunner, run, workspaceService]);
+  // A follow-up run is given more of the transcript than the chat is.
+  const runRecord = useCallback(
+    async (limit?: number): Promise<RunChatContext> => {
+      if (run.remoteJobId) {
+        const job = await remoteRunner
+          .get(workspaceService.workspace.id, run.remoteJobId)
+          .catch(() => null);
+        return {
+          transcript: forkTranscript(job?.log ?? '', limit),
+          output: output ?? job?.result ?? undefined,
+        };
+      }
+      const log = await logsStore.get(run.id).catch(() => undefined);
+      return { transcript: forkTranscript(log ?? '', limit), output };
+    },
+    [logsStore, output, remoteRunner, run, workspaceService]
+  );
 
   const opening = useCallback(
     async () => runChatMessages(run, await runRecord()),
     [run, runRecord]
   );
 
-  // A run whose session died is carried on by a new one, rebuilt from its
-  // transcript: the agent, the task, what it did and what the reader asks.
+  // An ended run's session is gone, so it is carried on by a new one rebuilt
+  // from its transcript: the agent, the task, what it did and what the reader
+  // asks. Most often the run died (failed or was stopped), but a finished one
+  // can be taken further the same way.
   const followUp = useMemo<SideChatFollowUp | undefined>(
     () =>
-      runDied(run)
+      run.status !== 'running'
         ? {
             label: 'Continue the run',
             title:
@@ -114,8 +120,9 @@ export const AgentRunChat = ({
                 );
               }
               const [task, record] = await Promise.all([
-                contextService.build(target),
-                runRecord(),
+                // Without it, the earlier run's input stands in.
+                contextService.build(target).catch(() => null),
+                runRecord(FOLLOW_UP_TRANSCRIPT_CHARS),
               ]);
               sessionService
                 .start(
