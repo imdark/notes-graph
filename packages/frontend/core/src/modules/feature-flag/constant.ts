@@ -509,6 +509,15 @@ export const NOTESGRAPH_FLAGS = {
     configurable: true,
     defaultState: true,
   },
+  enable_generate_note_title: {
+    commit: '',
+    category: 'notesgraph',
+    displayName: 'Generate a title for untitled notes',
+    description:
+      'An untitled note gets a Generate title item in its … menu (the page header and the notes list). The AI you chose in Settings (cloud or on-device) reads the note and gives it a short title.',
+    configurable: true,
+    defaultState: true,
+  },
 } satisfies { [key in string]: FlagInfo };
 
 // oxlint-disable-next-line no-redeclare

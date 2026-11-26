@@ -1,4 +1,5 @@
 import {
+  AiOutlineIcon,
   DeleteIcon,
   DuplicateIcon,
   InformationIcon,
@@ -25,6 +26,7 @@ import track from '@notesgraph/track';
 import { useCallback, useContext } from 'react';
 
 import { useBlockSuiteMetaHelper } from '../../hooks/notesgraph/use-block-suite-meta-helper';
+import { useGenerateDocTitle } from '../../hooks/notesgraph/use-generate-doc-title';
 import { IsFavoriteIcon } from '../../pure/icons';
 import { DocExplorerContext } from '../context';
 
@@ -140,6 +142,24 @@ const Duplicate = ({ docId }: DocOperationProps) => {
 };
 
 /**
+ * Generate Title Operation, for an untitled note
+ */
+const GenerateTitle = ({ docId }: DocOperationProps) => {
+  const { available, generating, generate } = useGenerateDocTitle(docId);
+  if (!available) return null;
+  return (
+    <MenuItem
+      prefixIcon={<AiOutlineIcon />}
+      data-testid="doc-list-operation-generate-title"
+      onSelect={generate}
+      disabled={generating}
+    >
+      Generate title
+    </MenuItem>
+  );
+};
+
+/**
  * Move to Trash Operation
  */
 const MoveToTrash = ({ docId }: DocOperationProps) => {
@@ -189,6 +209,7 @@ export const MoreMenuContent = (props: DocOperationProps) => {
   return (
     <>
       <ToggleFavorite {...props} />
+      <GenerateTitle {...props} />
       <DocInfo {...props} />
       <NewTab {...props} />
       <SplitView {...props} />

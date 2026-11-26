@@ -177,6 +177,9 @@ declare global {
       summary<T extends AITextActionOptions>(
         options: T
       ): Promise<AIActionTextResponse<T>>;
+      generateTitle<T extends AITextActionOptions>(
+        options: T
+      ): Promise<AIActionTextResponse<T>>;
       improveWriting<T extends AITextActionOptions>(
         options: T
       ): Promise<AIActionTextResponse<T>>;
