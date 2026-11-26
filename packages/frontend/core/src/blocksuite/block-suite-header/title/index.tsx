@@ -6,8 +6,10 @@ import { DocService, DocsService } from '@notesgraph/core/modules/doc';
 import { WorkspaceService } from '@notesgraph/core/modules/workspace';
 import { useLiveData, useService } from '@notesgraph/infra';
 import { track } from '@notesgraph/track';
+import type { Store } from '@blocksuite/store';
 import clsx from 'clsx';
 import type { HTMLAttributes } from 'react';
+import { useCallback, useSyncExternalStore } from 'react';
 
 import * as styles from './style.css';
 
@@ -20,13 +22,55 @@ export interface BlockSuiteHeaderTitleProps {
 const inputAttrs = {
   'data-testid': 'title-content',
 } as HTMLAttributes<HTMLInputElement>;
+
+type TitleText = {
+  yText: { observe(f: () => void): void; unobserve(f: () => void): void };
+  toString(): string;
+};
+
+const rootTitleOf = (store: Store) =>
+  (store.root?.props as { title?: TitleText } | undefined)?.title ?? null;
+
+/**
+ * The note's title as it is being typed. The workspace meta title, which
+ * the rest of the app reads, is only written once typing pauses or the title
+ * loses focus. Showing that here made the header widen on that blur, under
+ * the pointer of the click that caused it, so the click landed beside the
+ * header button it was aimed at.
+ */
+function useLiveRootTitle(store: Store): string | null {
+  const subscribe = useCallback(
+    (onChange: () => void) => {
+      let observed: TitleText | null = null;
+      const attach = () => {
+        observed?.yText.unobserve(onChange);
+        observed = rootTitleOf(store);
+        observed?.yText.observe(onChange);
+        onChange();
+      };
+      attach();
+      const subscription = store.slots.rootAdded.subscribe(attach);
+      return () => {
+        subscription.unsubscribe();
+        observed?.yText.unobserve(onChange);
+      };
+    },
+    [store]
+  );
+  return useSyncExternalStore(
+    subscribe,
+    () => rootTitleOf(store)?.toString() ?? null
+  );
+}
 export const BlocksuiteHeaderTitle = (props: BlockSuiteHeaderTitleProps) => {
   const { inputHandleRef } = props;
   const workspaceService = useService(WorkspaceService);
   const isSharedMode = workspaceService.workspace.openOptions.isSharedMode;
   const docsService = useService(DocsService);
   const docService = useService(DocService);
-  const docTitle = useLiveData(docService.doc.record.title$);
+  const metaTitle = useLiveData(docService.doc.record.title$);
+  const docTitle =
+    useLiveRootTitle(docService.doc.blockSuiteDoc) ?? metaTitle;
 
   const onChange = useAsyncCallback(
     async (v: string) => {
