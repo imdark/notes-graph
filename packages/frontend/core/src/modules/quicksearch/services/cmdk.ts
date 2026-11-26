@@ -47,7 +47,7 @@ export class CMDKQuickSearchService extends Service {
           }
 
           if (result.source === 'commands') {
-            result.payload.run()?.catch(err => {
+            result.payload.run()?.catch((err: unknown) => {
               console.error(err);
             });
             return;
