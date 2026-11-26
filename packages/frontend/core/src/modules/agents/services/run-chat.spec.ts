@@ -111,7 +111,9 @@ describe('continuationBrief', () => {
     expect(brief.text).toContain(
       '<previous-transcript>\n→ edit auth.ts\n</previous-transcript>'
     );
-    expect(brief.text).toContain('<previous-answer>\nHalf done\n</previous-answer>');
+    expect(brief.text).toContain(
+      '<previous-answer>\nHalf done\n</previous-answer>'
+    );
     expect(brief.text).toContain(
       '<chat>\nReader: What is left?\n\nAbout the run: The tests.\n</chat>'
     );
@@ -135,12 +137,18 @@ describe('continuationBrief', () => {
   });
 
   test('a long chat keeps its end', () => {
-    const brief = continuationBrief(task, run({ status: 'error' }), {
-      transcript: 'x',
-    }, 'go', [
-      { role: 'user', content: 'a'.repeat(FOLLOW_UP_CHAT_CHARS) },
-      { role: 'user', content: 'the last word' },
-    ]);
+    const brief = continuationBrief(
+      task,
+      run({ status: 'error' }),
+      {
+        transcript: 'x',
+      },
+      'go',
+      [
+        { role: 'user', content: 'a'.repeat(FOLLOW_UP_CHAT_CHARS) },
+        { role: 'user', content: 'the last word' },
+      ]
+    );
     expect(brief.text).toContain('the last word');
     expect(brief.text).not.toContain('a'.repeat(FOLLOW_UP_CHAT_CHARS));
   });
