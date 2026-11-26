@@ -4,8 +4,11 @@ import type { AgentRun } from '../stores/agent-runs';
 import { parseLogLines } from './log-lines';
 import {
   askTranscript,
+  continuationBrief,
+  FOLLOW_UP_CHAT_CHARS,
   RUN_CHAT_OUTPUT_CHARS,
   runChatMessages,
+  runDied,
 } from './run-chat';
 
 const run = (over: Partial<AgentRun> = {}): AgentRun => ({
@@ -57,6 +60,89 @@ describe('runChatMessages', () => {
     });
     expect(user.content).toContain(`${'a'.repeat(RUN_CHAT_OUTPUT_CHARS - 1)}…`);
     expect(user.content).not.toContain('a'.repeat(RUN_CHAT_OUTPUT_CHARS));
+  });
+});
+
+describe('runDied', () => {
+  test('a failed or stopped run died; a finished or running one did not', () => {
+    expect(runDied(run({ status: 'error' }))).toBe(true);
+    expect(runDied(run({ status: 'cancelled' }))).toBe(true);
+    expect(runDied(run({ status: 'done' }))).toBe(false);
+    expect(runDied(run({ status: 'running' }))).toBe(false);
+  });
+
+  test('only a died run is told the reader can continue it', () => {
+    const [died] = runChatMessages(run({ status: 'error' }), {
+      transcript: '',
+    });
+    const [done] = runChatMessages(run(), { transcript: '' });
+    expect(died.content).toContain('The reader can continue it');
+    expect(done.content).not.toContain('The reader can continue it');
+  });
+});
+
+describe('continuationBrief', () => {
+  const task = {
+    text: '- [ ] Fix the login bug #repo:app',
+    label: 'the selected block',
+    title: 'Fix the login bug',
+    taskIds: ['b1'],
+    scope: { projects: ['app'], tags: [] },
+  };
+
+  test('keeps the task and adds the earlier run, the chat and the ask', () => {
+    const brief = continuationBrief(
+      task,
+      run({ status: 'error', error: 'Device went offline', deviceKey: 'mac' }),
+      { transcript: '→ edit auth.ts', output: 'Half done' },
+      'Finish it and open the PR',
+      [
+        { role: 'user', content: 'What is left?' },
+        { role: 'assistant', content: 'The tests.' },
+        { role: 'assistant', content: '' },
+      ]
+    );
+    expect(brief.taskIds).toEqual(['b1']);
+    expect(brief.title).toBe('Fix the login bug');
+    expect(brief.scope).toEqual(task.scope);
+    expect(brief.text.startsWith(task.text)).toBe(true);
+    expect(brief.text).toContain('on mac');
+    expect(brief.text).toContain('It failed: Device went offline');
+    expect(brief.text).toContain(
+      '<previous-transcript>\n→ edit auth.ts\n</previous-transcript>'
+    );
+    expect(brief.text).toContain('<previous-answer>\nHalf done\n</previous-answer>');
+    expect(brief.text).toContain(
+      '<chat>\nReader: What is left?\n\nAbout the run: The tests.\n</chat>'
+    );
+    expect(brief.text).toContain(
+      'What the reader wants now:\nFinish it and open the PR'
+    );
+  });
+
+  test('with nothing asked, it finishes the earlier run', () => {
+    const brief = continuationBrief(
+      task,
+      run({ status: 'cancelled', summary: undefined }),
+      { transcript: '' },
+      '  '
+    );
+    expect(brief.text).toContain('It was stopped before it finished.');
+    expect(brief.text).toContain('no transcript of the earlier run');
+    expect(brief.text).not.toContain('<previous-answer>');
+    expect(brief.text).not.toContain('<chat>');
+    expect(brief.text).toContain('Finish what the earlier run set out to do.');
+  });
+
+  test('a long chat keeps its end', () => {
+    const brief = continuationBrief(task, run({ status: 'error' }), {
+      transcript: 'x',
+    }, 'go', [
+      { role: 'user', content: 'a'.repeat(FOLLOW_UP_CHAT_CHARS) },
+      { role: 'user', content: 'the last word' },
+    ]);
+    expect(brief.text).toContain('the last word');
+    expect(brief.text).not.toContain('a'.repeat(FOLLOW_UP_CHAT_CHARS));
   });
 });
 
