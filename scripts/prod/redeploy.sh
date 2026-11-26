@@ -46,14 +46,20 @@ step_end() {
   fi
 }
 
+# Pull an image from ECR. The ECR helper signs in with the box's instance
+# role; a throwaway docker config keeps it out of ubuntu's own.
+ecr_pull() {
+  local ref="$1" config rc
+  config="$(mktemp -d)"
+  echo "{\"credHelpers\":{\"${ref%%/*}\":\"ecr-login\"}}" > "$config/config.json"
+  DOCKER_CONFIG="$config" docker pull -q "$ref" && rc=0 || rc=$?
+  rm -rf "$config"
+  return "$rc"
+}
+
 if [ -n "${NOTESGRAPH_IMAGE:-}" ]; then
   step "pull prebuilt server image"
-  # The ECR helper signs in with the box's instance role; a throwaway docker
-  # config keeps it out of ubuntu's own.
-  ECR_DOCKER_CONFIG="$(mktemp -d)"
-  echo "{\"credHelpers\":{\"${NOTESGRAPH_IMAGE%%/*}\":\"ecr-login\"}}" > "$ECR_DOCKER_CONFIG/config.json"
-  DOCKER_CONFIG="$ECR_DOCKER_CONFIG" docker pull "$NOTESGRAPH_IMAGE"
-  rm -rf "$ECR_DOCKER_CONFIG"
+  ecr_pull "$NOTESGRAPH_IMAGE"
   docker tag "$NOTESGRAPH_IMAGE" notesgraph:prod
 else
 # Build the server image here (the rsync deploy from deploy-prod.sh).
@@ -128,95 +134,52 @@ test -d packages/frontend/apps/mobile/dist || { echo "FATAL: mobile dist missing
 step "image assembly (prod deps, prisma, docker image)"
 /opt/notesgraph/image-build.sh
 fi
-step "linkcard sidecar image"
-# Measured at 374s, rebuilt on every single deploy, for a sidecar that rarely
-# changes. Docker's own layer cache cannot help: the Dockerfile does `COPY . .`
-# from the repo root, so any change anywhere in the tree invalidates the layer
-# above the expensive RUN (yarn workspaces focus + playwright install webkit +
-# esbuild).
+# --- sidecar images ----------------------------------------------------------
+# The link-card, plugin marketplace and agent runner images. Each is redone
+# only when its source changes: scripts/prod/sidecar-hash.sh hashes just the
+# inputs that determine it (Docker's layer cache can't help, as each
+# Dockerfile does `COPY . .` from the repo root), and the image carries that
+# hash as a label for the next deploy to compare.
 #
-# So hash only the inputs that actually determine this image and stamp it on
-# the built image as a label. The closure is small and checked: the entry
-# imports @notesgraph/link-card, which itself pulls in no other workspace
-# package - only npm deps, which yarn.lock pins.
-linkcard_src_hash() {
-  {
-    find tools/link-card-server packages/common/link-card \
-      -type f -not -path '*/node_modules/*' -not -path '*/dist/*' -print0 \
-      2>/dev/null | sort -z | xargs -0 sha256sum
-    sha256sum yarn.lock package.json .yarnrc.yml 2>/dev/null
-  } | sha256sum | cut -d' ' -f1
-}
-LINKCARD_HASH="$(linkcard_src_hash || true)"
-LINKCARD_PREV="$(docker image inspect notesgraph-linkcard:prod \
-  --format '{{ index .Config.Labels "notesgraph.src-hash" }}' 2>/dev/null || true)"
-
-if [ "${NOTESGRAPH_FORCE_LINKCARD:-0}" != "1" ] \
-  && [ -n "$LINKCARD_HASH" ] \
-  && [ "$LINKCARD_HASH" = "$LINKCARD_PREV" ]; then
-  echo "linkcard image already matches source (${LINKCARD_HASH:0:12}), skipping rebuild"
-else
+# A GitHub deploy builds them in CI (deploy-prod.yml's sidecars job) and
+# pushes each to ECR as notesgraph:<name>-<hash>, so here they are pulled.
+# Built on this 2-vCPU box they took 22 of a 30-min deploy on 2026-11-26.
+# Only a missing CI image (or an rsync deploy, with no ECR) builds here.
+# NOTESGRAPH_FORCE_<LINKCARD|PLUGIN_SERVER|AGENT_RUNNER>=1 builds here always.
+sidecar_image() {
+  local name="$1" dockerfile="$2" local_tag="$3" force="$4"
+  local hash prev ref
+  hash="$(bash "$SRC/scripts/prod/sidecar-hash.sh" "$name" 2>/dev/null || true)"
+  prev="$(docker image inspect "$local_tag" \
+    --format '{{ index .Config.Labels "notesgraph.src-hash" }}' 2>/dev/null || true)"
+  if [ "$force" != "1" ] && [ -n "$hash" ] && [ "$hash" = "$prev" ]; then
+    echo "$name image already matches source (${hash:0:12}), skipping"
+    return
+  fi
+  if [ "$force" != "1" ] && [ -n "$hash" ] && [ -n "${NOTESGRAPH_IMAGE:-}" ]; then
+    ref="${NOTESGRAPH_IMAGE%:*}:$name-$hash"
+    if ecr_pull "$ref"; then
+      docker tag "$ref" "$local_tag"
+      echo "$name image pulled from CI (${hash:0:12})"
+      return
+    fi
+    echo "WARN $name image not in ECR ($ref): building it here"
+  fi
   # The label is what the next deploy compares against. A failed build leaves
   # no new label, so the rebuild is retried rather than silently skipped.
-  docker build -f tools/link-card-server/Dockerfile \
-    --label "notesgraph.src-hash=$LINKCARD_HASH" \
-    -t notesgraph-linkcard:prod . || echo "WARN linkcard image build failed"
-fi
-step_end
+  docker build -f "$dockerfile" --label "notesgraph.src-hash=$hash" -t "$local_tag" . \
+    || echo "WARN $name image build failed"
+}
 
+step "linkcard sidecar image"
+sidecar_image linkcard tools/link-card-server/Dockerfile notesgraph-linkcard:prod \
+  "${NOTESGRAPH_FORCE_LINKCARD:-0}"
 step "plugin marketplace image"
-# Same rebuild-only-when-source-changed trick as the linkcard image above, for
-# the same reason: the Dockerfile does `COPY . .`, so Docker's layer cache is
-# useless here. The closure is the sidecar, the SDK it bundles, and the
-# plugin-template folder baked in as the first-party seed.
-plugin_src_hash() {
-  {
-    find tools/notesgraph-plugin-server packages/common/plugin-sdk tools/plugin-template \
-      -type f -not -path '*/node_modules/*' -not -path '*/dist/*' -print0 \
-      2>/dev/null | sort -z | xargs -0 sha256sum
-    sha256sum yarn.lock package.json .yarnrc.yml 2>/dev/null
-  } | sha256sum | cut -d' ' -f1
-}
-PLUGINSRV_HASH="$(plugin_src_hash || true)"
-PLUGINSRV_PREV="$(docker image inspect notesgraph-plugin-server:prod \
-  --format '{{ index .Config.Labels "notesgraph.src-hash" }}' 2>/dev/null || true)"
-
-if [ "${NOTESGRAPH_FORCE_PLUGIN_SERVER:-0}" != "1" ] \
-  && [ -n "$PLUGINSRV_HASH" ] \
-  && [ "$PLUGINSRV_HASH" = "$PLUGINSRV_PREV" ]; then
-  echo "plugin marketplace image already matches source (${PLUGINSRV_HASH:0:12}), skipping rebuild"
-else
-  docker build -f tools/notesgraph-plugin-server/Dockerfile \
-    --label "notesgraph.src-hash=$PLUGINSRV_HASH" \
-    -t notesgraph-plugin-server:prod . || echo "WARN plugin marketplace image build failed"
-fi
-step_end
-
+sidecar_image plugin-server tools/notesgraph-plugin-server/Dockerfile notesgraph-plugin-server:prod \
+  "${NOTESGRAPH_FORCE_PLUGIN_SERVER:-0}"
 step "agent runner image"
-# The cloud agent runner (scripts/prod/agent-runner.md); same rebuild-only-
-# when-source-changed trick. Its closure is just itself: it reaches the
-# server over HTTP and imports no workspace package.
-runner_src_hash() {
-  {
-    find tools/agent-runner \
-      -type f -not -path '*/node_modules/*' -not -path '*/dist/*' -print0 \
-      2>/dev/null | sort -z | xargs -0 sha256sum
-    sha256sum yarn.lock package.json .yarnrc.yml 2>/dev/null
-  } | sha256sum | cut -d' ' -f1
-}
-RUNNER_HASH="$(runner_src_hash || true)"
-RUNNER_PREV="$(docker image inspect notesgraph-agent-runner:prod \
-  --format '{{ index .Config.Labels "notesgraph.src-hash" }}' 2>/dev/null || true)"
-
-if [ "${NOTESGRAPH_FORCE_AGENT_RUNNER:-0}" != "1" ] \
-  && [ -n "$RUNNER_HASH" ] \
-  && [ "$RUNNER_HASH" = "$RUNNER_PREV" ]; then
-  echo "agent runner image already matches source (${RUNNER_HASH:0:12}), skipping rebuild"
-else
-  docker build -f tools/agent-runner/Dockerfile \
-    --label "notesgraph.src-hash=$RUNNER_HASH" \
-    -t notesgraph-agent-runner:prod . || echo "WARN agent runner image build failed"
-fi
+sidecar_image agent-runner tools/agent-runner/Dockerfile notesgraph-agent-runner:prod \
+  "${NOTESGRAPH_FORCE_AGENT_RUNNER:-0}"
 step_end
 echo "BUILD-ALL-DONE"
 
