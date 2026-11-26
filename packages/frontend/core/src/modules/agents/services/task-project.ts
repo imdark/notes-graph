@@ -250,7 +250,7 @@ export class TaskProjectService extends Service {
   /** Move the target's blocks into `project` (null: Inbox); see {@link moveToProject}. */
   async move(
     target: AgentTarget,
-    project: Pick<Project, 'name'> | null
+    project: Pick<Project, 'id' | 'name'> | null
   ): Promise<boolean> {
     const blockIds = agentTargetBlockIds(target);
     if (!blockIds.length) return false;
