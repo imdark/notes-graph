@@ -268,6 +268,27 @@ const withGitLock = (command: string, waitSeconds: number) =>
   `else ${command}; fi`;
 
 /**
+ * A teardown step that pushes the run's branch to origin when it holds
+ * commits no origin branch has, before the worktree goes. A run that ends
+ * without pushing (cloud-125 and cloud-130 on 2026-11-25, whose permission
+ * requests all failed) otherwise leaves its work only in the runner's
+ * clone, where nobody sees it. A run that pushed has nothing to add here.
+ */
+export const keepUnpushed = (dir: string): AutomationStep => ({
+  name: 'keep unpushed work',
+  // The push writes the clone's remote-tracking ref, so it takes the lock.
+  run: withGitLock(
+    `cd ${dir} 2>/dev/null && b="$(git symbolic-ref --short -q HEAD)" && ` +
+      'n="$(git rev-list --count HEAD --not --remotes=origin)" && ' +
+      'if [ "$n" -gt 0 ]; then git push -q origin "HEAD:refs/heads/$b" && ' +
+      'echo "pushed $n unpushed commit(s) to $b"; fi',
+    480
+  ),
+  optional: true,
+  timeout: 900,
+});
+
+/**
  * Where install_deps puts corepack's yarn shim, and the PATH every tool runs
  * with so `yarn` finds it. A plain `corepack enable` symlinks into node's own
  * bin directory, which the runner's user may not own: three runs on
@@ -346,6 +367,7 @@ const CODE_AUTOMATION: Automation = {
     },
   ],
   teardown: [
+    keepUnpushed('{job_dir}/repo'),
     {
       name: 'worktree',
       run: withGitLock(
@@ -407,6 +429,7 @@ const WORKFLOW_AUTOMATION: Automation = {
   ],
   tools: CODE_AUTOMATION.tools,
   teardown: [
+    keepUnpushed('"$AGENT_CWD"'),
     {
       name: 'worktree',
       run: withGitLock(

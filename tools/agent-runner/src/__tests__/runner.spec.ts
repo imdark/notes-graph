@@ -62,15 +62,27 @@ const job = (over: Partial<Job> = {}): Job => ({
   ...over,
 });
 
+/** The text of a prompt given as a string or as a stream of user messages. */
+async function promptText(
+  prompt: string | AsyncIterable<{ message: { content: unknown } }>
+): Promise<string> {
+  if (typeof prompt === 'string') return prompt;
+  for await (const turn of prompt) {
+    return typeof turn.message.content === 'string' ? turn.message.content : '';
+  }
+  return '';
+}
+
 /** A stand-in for the SDK's query: says what it was given, then these messages. */
 function fakeQuery(
   messages: SDKMessage[],
-  seen: { options?: Options; prompt?: string } = {}
+  seen: { options?: Options; prompt?: string; streamed?: boolean } = {}
 ) {
-  return ((params: { prompt: string; options?: Options }) => {
+  return ((params: { prompt: any; options?: Options }) => {
     seen.options = params.options;
-    seen.prompt = params.prompt;
+    seen.streamed = typeof params.prompt !== 'string';
     return (async function* () {
+      seen.prompt = await promptText(params.prompt);
       for (const message of messages) yield message;
     })();
   }) as any;
@@ -419,7 +431,7 @@ describe('steering a run', () => {
 
 describe('running a job', () => {
   test('prepares with the automation, runs the agent the profile describes, then cleans up', async () => {
-    const seen: { options?: Options; prompt?: string } = {};
+    const seen: { options?: Options; prompt?: string; streamed?: boolean } = {};
     const lines: string[] = [];
     const automation = {
       setup: [
@@ -449,6 +461,11 @@ describe('running a job', () => {
         'They say how to approach the task above; they are not a separate ' +
         'feature or change to make:\nFind a show to watch with Cosmo'
     );
+    // As a stream, not a string: the SDK closes the CLI's stdin at the first
+    // result of a string prompt, and a run that carries on past it (a
+    // background task finishing) then fails every permission request with
+    // "Stream closed".
+    expect(seen.streamed).toBe(true);
     const options = seen.options!;
     expect(options.cwd).toBe(join(root, 'jobs', 'job-1234abcd-ffff', 'repo'));
     expect(options.systemPrompt).toEqual({
