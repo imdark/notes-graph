@@ -20,6 +20,7 @@ import {
   appendFlashcards,
   appendLinkedDocReference,
   type Flashcard,
+  insertUnderHeading,
 } from './blocksuite-headless';
 import { fileDocInFolders, foldersDocId } from './folders';
 
@@ -490,6 +491,25 @@ export class DocWriter {
       workspaceId,
       docId,
       binary => appendFlashcards(binary, docId, cards),
+      editorId
+    );
+  }
+
+  /**
+   * Adds to-do items under a heading as new blocks, leaving every other
+   * block as it was (see insertUnderHeading).
+   */
+  async insertUnderHeading(
+    workspaceId: string,
+    docId: string,
+    heading: string,
+    lines: string[],
+    editorId?: string
+  ): Promise<UpdateDocResult> {
+    return await this.appendBlock(
+      workspaceId,
+      docId,
+      binary => insertUnderHeading(binary, docId, heading, lines),
       editorId
     );
   }
