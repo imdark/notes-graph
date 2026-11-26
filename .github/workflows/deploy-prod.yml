@@ -2,10 +2,11 @@ name: Deploy prod
 
 # Deploys main to app.notesgraph.com without SSH or stored keys:
 #   1. builds the server image here (Dockerfile.selfhost), so the RAM-heavy
-#      bundling never runs on the 7.6 GB box;
-#   2. pushes it to the private ECR repo notesgraph;
+#      bundling never runs on the 7.6 GB box, and the sidecar images (the
+#      sidecars job) when their sources changed;
+#   2. pushes them to the private ECR repo notesgraph;
 #   3. runs scripts/prod/deploy-image.sh on the box over SSM, which pulls the
-#      image and does the rest (landing page, sidecars, backup, roll).
+#      images and does the rest (landing page, backup, roll).
 #
 # AWS access is a short-lived OIDC session for the notesgraph-github-deploy
 # role, which only jobs in the `production` environment (main only) can
@@ -43,6 +44,78 @@ env:
   INSTANCE_ID: i-025bea042bd6b9b1d
 
 jobs:
+  # The box's sidecar images, built here rather than on the 2-vCPU box (22 of
+  # a 30-min deploy on 2026-11-26), in parallel with the server image. Each is
+  # pushed to ECR as notesgraph:<name>-<source hash> (scripts/prod/
+  # sidecar-hash.sh, which redeploy.sh also runs to pull it) and built only
+  # when that tag isn't there yet. They share the notesgraph repo, whose
+  # lifecycle keeps its newest 10 images: one that ages out is built again.
+  sidecars:
+    name: Sidecar image (${{ matrix.name }})
+    if: inputs.image_sha == ''
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linkcard
+            dockerfile: tools/link-card-server/Dockerfile
+          - name: plugin-server
+            dockerfile: tools/notesgraph-plugin-server/Dockerfile
+          - name: agent-runner
+            dockerfile: tools/agent-runner/Dockerfile
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::726029337107:role/notesgraph-github-deploy
+          aws-region: ${{ env.AWS_REGION }}
+
+      - id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Source hash
+        id: src
+        env:
+          NAME: ${{ matrix.name }}
+        run: |
+          hash=$(scripts/prod/sidecar-hash.sh "$NAME")
+          echo "tag=$NAME-$hash" >> "$GITHUB_OUTPUT"
+          echo "hash=$hash" >> "$GITHUB_OUTPUT"
+          if aws ecr describe-images --repository-name notesgraph \
+              --image-ids imageTag="$NAME-$hash" >/dev/null 2>&1; then
+            echo "have=true" >> "$GITHUB_OUTPUT"
+            echo "notesgraph:$NAME-$hash is already in ECR: nothing to build"
+          fi
+
+      - name: Disk for Docker
+        if: steps.src.outputs.have != 'true'
+        run: scripts/ci/docker-disk.sh
+
+      - uses: docker/setup-buildx-action@v3
+        if: steps.src.outputs.have != 'true'
+        with:
+          cleanup: false
+
+      # A failed build only means the box builds that image itself; it mustn't
+      # read as a failed deploy (the Deployments screen fails a run on any
+      # failed job).
+      - name: Build and push
+        if: steps.src.outputs.have != 'true'
+        continue-on-error: true
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          platforms: linux/amd64
+          # What redeploy.sh compares on the box to skip an unchanged image.
+          labels: notesgraph.src-hash=${{ steps.src.outputs.hash }}
+          tags: ${{ steps.ecr.outputs.registry }}/notesgraph:${{ steps.src.outputs.tag }}
+          push: true
+
   deploy:
     runs-on: ubuntu-latest
     environment:
@@ -177,6 +250,25 @@ jobs:
           # commit rebuilds every expensive layer anyway, and exporting the
           # cache cost 14 min to save ~25 s. The Rust addon is kept on its
           # own instead (above and below).
+
+      # The sidecars job builds the link-card, plugin marketplace and agent
+      # runner images alongside the build above; the roll pulls them, so wait
+      # for it (up to 20 min). Whatever it didn't push, the box builds itself
+      # (redeploy.sh), as every deploy did before, so this never fails.
+      - name: Wait for the sidecar images
+        if: inputs.image_sha == ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for _ in $(seq 1 120); do
+            pending=$(gh run view "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --json jobs \
+              --jq '[.jobs[] | select(.name | startswith("Sidecar image")) | select(.status != "completed")] | length') \
+              || pending=unknown
+            [ "$pending" = 0 ] && break
+            sleep 10
+          done
+          gh run view "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --json jobs \
+            --jq '.jobs[] | select(.name | startswith("Sidecar image")) | "\(.name): \(.conclusion // .status)"' || true
 
       # The box rolls as soon as the image is pushed. The build caches are
       # exported after it (below): they only speed up the next deploy, and
