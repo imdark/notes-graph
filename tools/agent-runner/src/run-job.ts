@@ -156,14 +156,24 @@ async function omniseek(settings: RunnerSettings, fetchImpl: typeof fetch) {
       "OmniSeek isn't set up on the cloud runner (OMNISEEK_URL and OMNISEEK_TOKEN)."
     );
   }
-  try {
-    const health = await fetchImpl(`${url}/healthz`, {
-      signal: AbortSignal.timeout(5000),
-    });
-    if (!health.ok) throw new Error(`HTTP ${health.status}`);
-  } catch (err) {
+  // The sidecar shares a 2 vCPU box and can stall past a single 5s probe while
+  // busy, so give it a second, longer try before calling it down.
+  let healthErr: unknown;
+  for (const timeoutMs of [5000, 15000]) {
+    try {
+      const health = await fetchImpl(`${url}/healthz`, {
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+      if (!health.ok) throw new Error(`HTTP ${health.status}`);
+      healthErr = undefined;
+      break;
+    } catch (err) {
+      healthErr = err;
+    }
+  }
+  if (healthErr) {
     throw new Error(
-      `OmniSeek isn't running for the cloud runner (${url}: ${err}).`
+      `OmniSeek isn't running for the cloud runner (${url}: ${healthErr}).`
     );
   }
   // /healthz can pass while /mcp refuses the runner (token, Host header), and
