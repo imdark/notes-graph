@@ -176,14 +176,18 @@ export function parseSessionReset(
 }
 
 /**
- * When a job stopped by the limit in `text` should be handed out again:
- * just after the reset, or after a retry interval if the reset can't be read.
+ * When a job stopped by the limit in `text` should be handed out again: just
+ * after the reset, but no later than the retry interval. Usage credits bought
+ * meanwhile lift the limit before the reset Claude names (a weekly one can be
+ * days off), and a device's whole queue waits on this. Trying again early
+ * costs one run that stops at once, and holds the queue again.
  */
 export function sessionLimitRunAfter(text: string, now = Date.now()): Date {
   const reset = parseSessionReset(text, now);
+  const retry = now + SESSION_LIMIT_RETRY_MS;
   const at =
     reset === null || reset <= now || reset - now > MAX_WAIT_MS
-      ? now + SESSION_LIMIT_RETRY_MS
-      : reset + AFTER_RESET_MS;
+      ? retry
+      : Math.min(reset + AFTER_RESET_MS, retry);
   return new Date(at);
 }
