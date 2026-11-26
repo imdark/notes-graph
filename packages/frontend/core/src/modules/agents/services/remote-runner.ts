@@ -286,6 +286,12 @@ export interface RemoteJob {
   logEnd?: number;
   startedAt: number | null;
   finishedAt: number | null;
+  /** When it was queued (seconds); absent from older servers. */
+  createdAt?: number;
+  /** The note (and block) it was started on, when it was started on one. */
+  targetKind?: string | null;
+  docId?: string | null;
+  blockId?: string | null;
   /** Present on single-job reads. */
   questions?: RemoteQuestion[];
   /** What the starter sent the run while it worked. Single-job reads only. */
@@ -937,6 +943,17 @@ export class RemoteAgentRunnerService extends Service {
       `${this.base(workspaceId)}/jobs/${encodeURIComponent(jobId)}?logFrom=${logFrom}`
     );
     return data.job;
+  }
+
+  /**
+   * The workspace's newest agent runs, any device, ended or not, without
+   * their transcripts: what the Agents page adopts runs it didn't start from.
+   */
+  async listJobs(workspaceId: string, limit = 100): Promise<RemoteJob[]> {
+    const data = await this.json<{ jobs: RemoteJob[] }>(
+      `${this.base(workspaceId)}/jobs?kind=agent&limit=${limit}`
+    );
+    return data.jobs;
   }
 
   /** Answer a question a job asked; only its starter is allowed to. */
