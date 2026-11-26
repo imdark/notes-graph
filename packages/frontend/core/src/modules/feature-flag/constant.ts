@@ -509,6 +509,15 @@ export const NOTESGRAPH_FLAGS = {
     configurable: true,
     defaultState: true,
   },
+  enable_run_review: {
+    commit: '',
+    category: 'notesgraph',
+    displayName: 'Review recent runs',
+    description:
+      'A Review recent runs button on the Agents page starts a Claude Code agent on the server that reviews the last few days of agent runs: whether each run’s pull request merged and is live, which runs failed or stopped early and why, work left unpushed, and runs that repeat each other. It writes the review, with a to-do per follow-up, in a Run reviews note.',
+    configurable: true,
+    defaultState: true,
+  },
 } satisfies { [key in string]: FlagInfo };
 
 // oxlint-disable-next-line no-redeclare

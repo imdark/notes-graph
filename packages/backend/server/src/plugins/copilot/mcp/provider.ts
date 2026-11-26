@@ -29,6 +29,7 @@ import {
   parseSearchQuery,
   searchText,
 } from '../search-query';
+import { agentRunsAnswer } from './agent-runs';
 import {
   CanvasError,
   canvasSvg,
@@ -71,6 +72,8 @@ function first(value: unknown): string {
 const SEMANTIC_SEARCH_TOP_K = 5;
 const KEYWORD_SEARCH_LIMIT = 20;
 const HYBRID_DEFAULT_ITEMS = 8;
+/** Runs list_agent_runs reads before keeping the last `days` of them. */
+const MAX_LISTED_RUNS = 300;
 const HYBRID_DEFAULT_CHARS = 6000;
 /** A widget is stored in the doc and synced to every device. */
 const MAX_WIDGET_HTML = 100_000;
@@ -1502,6 +1505,40 @@ export class WorkspaceMcpProvider {
         ),
     });
 
+    const listAgentRunsTool = defineTool({
+      name: 'list_agent_runs',
+      title: 'List Agent Runs',
+      description:
+        "The workspace's agent runs started in the last few days, newest first, running and queued ones included: each run's title, agent, device, status, when it started and ended, its error and result (clipped), its git branch and commit subjects when it had any, how many notes it created or edited, how many tool permission requests failed, and the end of its log. Use it to review recent runs: which ended without pushing or opening a pull request, which failed or stopped early, and which repeat each other. Pair with deploy_info to check whether their pull requests are live. It only reads.",
+      parser: z.object({
+        days: z.number().int().min(1).max(30).optional(),
+        status: z.string().optional(),
+      }),
+      inputSchema: {
+        type: 'object',
+        properties: {
+          days: {
+            type: 'number',
+            description: 'How many days back to look (1-30, default 3).',
+          },
+          status: {
+            type: 'string',
+            description:
+              'Only runs with this status: queued, running, done, error, blocked or cancelled.',
+          },
+        },
+        additionalProperties: false,
+      },
+      execute: async ({ days, status }) => {
+        const jobs = await this.models.registryJob.list(workspaceId, {
+          kind: 'agent',
+          status: status || undefined,
+          limit: MAX_LISTED_RUNS,
+        });
+        return toolText(JSON.stringify(agentRunsAnswer(jobs, days ?? 3)));
+      },
+    });
+
     const tools = [
       readDocument,
       readComments,
@@ -1520,6 +1557,7 @@ export class WorkspaceMcpProvider {
       getLinks,
       notesHealthTool,
       deployInfoTool,
+      listAgentRunsTool,
     ];
 
     if (env.dev || env.namespaces.canary || env.mcpWriteToolsEnabled) {
