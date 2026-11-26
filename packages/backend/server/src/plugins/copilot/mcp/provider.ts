@@ -2089,6 +2089,80 @@ export class WorkspaceMcpProvider {
         },
       });
 
+      const appendToSection = defineTool({
+        name: 'append_to_section',
+        title: 'Append To Section',
+        description:
+          'Add to-do items under a heading of a document without rewriting it: each line becomes a new unchecked to-do block (a `[label](url)` in it becomes a link), as a surgical CRDT insert that leaves every other block untouched, databases and images included, unlike update_document. ' +
+          "The heading is matched ignoring case, spaces and punctuation. The first line fills the section's empty to-do when it has one (as a daily journal's template leaves under each heading); the rest go after the section's last block, before any subheading. A missing heading is added, as an h2, before an \"Inbox\" heading or at the end. Use it to file a task in a journal or list note." +
+          firstPersonGuidance,
+        parser: z.object({
+          docId: z.string(),
+          heading: z.string().min(1),
+          lines: z.array(z.string().min(1)).min(1).max(50),
+          agent: z.string().optional(),
+        }),
+        inputSchema: {
+          type: 'object',
+          properties: {
+            docId: {
+              type: 'string',
+              description: 'The document to add to',
+            },
+            heading: {
+              type: 'string',
+              description:
+                'The heading to add under, e.g. "notes-graph" (matches "## notes graph")',
+            },
+            lines: {
+              type: 'array',
+              items: { type: 'string' },
+              description:
+                'The to-do texts, one item each, without the "- [ ]" marker',
+            },
+            agent: agentInputSchema,
+          },
+          required: ['docId', 'heading', 'lines'],
+          additionalProperties: false,
+        },
+        execute: async ({ docId, heading, lines, agent }, options) => {
+          const secret = guardSecrets(lines.join('\n'), agent);
+          if (secret) return toolError(secret);
+
+          const accessible = await this.ac
+            .user(userId)
+            .workspace(workspaceId)
+            .doc(docId)
+            .can('Doc.Update');
+          if (!accessible) return toolError(`Doc with id ${docId} not found.`);
+
+          const aborted = abortIfNeeded(options.signal);
+          if (aborted) return aborted;
+
+          try {
+            await this.writer.insertUnderHeading(
+              workspaceId,
+              docId,
+              heading,
+              lines,
+              userId
+            );
+            return toolText(
+              JSON.stringify({
+                success: true,
+                docId,
+                heading,
+                added: lines.length,
+              })
+            );
+          } catch (error) {
+            return toolError(
+              `Failed to add to section: ${error instanceof Error ? error.message : 'Unknown error'}`
+            );
+          }
+        },
+      });
+
       // A monitor run's reading, as a number the agent states, so nothing has
       // to read one out of its closing text (MonitorService.onJobFinished).
       const reportMonitorValue = defineTool({
@@ -2974,6 +3048,7 @@ export class WorkspaceMcpProvider {
         linkDocument,
         updateTask,
         updateBlock,
+        appendToSection,
         reportMonitorValue,
         createDiagram,
         drawOnCanvasTool
