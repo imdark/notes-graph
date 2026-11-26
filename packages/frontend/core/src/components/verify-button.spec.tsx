@@ -21,16 +21,24 @@ const state = vi.hoisted(() => ({
   verify: null as any,
 }));
 
+// The flag service's flags carry their LiveData under `$`.
+const flagLive = {
+  get value() {
+    return state.enabled;
+  },
+};
+const flags = { enable_verify_buttons: Object.fromEntries([['$', flagLive]]) };
+
 vi.mock('@notesgraph/infra', () => ({
   useService: (token: unknown) =>
     token === tokens.FeatureFlagService
-      ? { flags: { enable_verify_buttons: { $: { value: state.enabled } } } }
+      ? { flags }
       : { verify: state.verify, watch: () => ({ value: state.started }) },
   useLiveData: (live: { value: unknown }) => live.value,
 }));
 vi.mock('@notesgraph/component', () => ({
-  Button: ({ children, onClick, disabled, loading, tooltip, ...rest }: any) => (
-    <button onClick={onClick} disabled={disabled} {...rest}>
+  Button: ({ children, onClick, disabled, 'data-testid': testId }: any) => (
+    <button onClick={onClick} disabled={disabled} data-testid={testId}>
       {children}
     </button>
   ),
