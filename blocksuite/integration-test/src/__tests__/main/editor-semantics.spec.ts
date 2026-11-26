@@ -453,6 +453,12 @@ describe('composition ending after a tap elsewhere', () => {
       new CompositionEvent('compositionupdate', { bubbles: true, data: 'xyz' })
     );
     await wait(50);
+    // Committing the word in A must not pull the caret back out of B.
+    expect(a.yTextString).toBe('abk');
+    expect(editor.host!.selection.find(TextSelection)?.from.blockId).toBe(bId);
+    const range = document.getSelection()!.getRangeAt(0);
+    expect(b.rootElement!.contains(range.startContainer)).toBe(true);
+
     source.dispatchEvent(
       new CompositionEvent('compositionend', { bubbles: true, data: 'xyzm' })
     );

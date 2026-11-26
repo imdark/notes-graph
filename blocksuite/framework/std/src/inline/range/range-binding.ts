@@ -98,7 +98,8 @@ export class RangeBinding {
 
   /**
    * A tap on another block mid-word moves the DOM selection there before the
-   * composition ends, and the selection change is skipped because every
+   * composition ends (or moves with it, see the compositionupdate listener),
+   * and the selection change is skipped because every
    * paragraph shares the event source and so counts as composing. Nothing
    * fires once it ends, so the text selection would stay on the old block and
    * its rerender after the commit would pull the caret back there. Follow the
@@ -414,6 +415,16 @@ export class RangeBinding {
       this.host,
       'compositionend',
       this._onCompositionEnd,
+      {
+        capture: true,
+      }
+    );
+    // Gboard can move its composing region into the tapped block without
+    // ending the composition; the update is then the only sign of the move.
+    this.host.disposables.addFromEvent(
+      this.host,
+      'compositionupdate',
+      this._followSelectionMovedWhileComposing,
       {
         capture: true,
       }
