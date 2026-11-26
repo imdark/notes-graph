@@ -168,9 +168,12 @@ const WF_READ_COMMANDS = wfCommands([
   'ai-mcp-status',
 ]);
 
-// wf commands that write notes or tasks and nothing else, as mcp__notesgraph
-// does. `wf done` pushes, so it is not here: it rides on "Allow all".
+// wf commands that write notes or tasks, as mcp__notesgraph does, and `wf
+// done`, which ships a run's branch as a PR: the person chose (2026-11-26) to
+// let it through without asking.
 const WF_WRITE_COMMANDS = wfCommands([
+  'done',
+  'create',
   'task create',
   'task update',
   'task transition',
@@ -886,8 +889,8 @@ export function profileFor(
 }
 
 // Shell commands that deploy, spend money or delete. Pushing a branch is not
-// among them: a run that ships its work ends with `wf done`, and the person
-// chose (2026-10-14) to let that through once they press "Allow all".
+// among them: the person chose (2026-10-14) to let that through once they
+// press "Allow all" (and `wf done`, which pushes, doesn't ask at all).
 const ALWAYS_ASK_COMMANDS: RegExp[] = [
   /\bdeploy/i,
   /\bwf\s+(release|ship)\b/,
