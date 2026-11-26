@@ -18,7 +18,6 @@ import type {
   McpServerConfig,
   Options,
   query as sdkQuery,
-  SDKUserMessage,
 } from '@anthropic-ai/claude-agent-sdk';
 
 import type { Job, ModelRoute, NotesGraphApi } from './api';
@@ -48,6 +47,7 @@ import {
 import { healthReading, isHealthCheck } from './health';
 import { Narrator } from './narrate';
 import { permissionPrompt, runServer, steerHooks } from './run-tools';
+import { SessionInput } from './session-input';
 import { skillsPlugin } from './skills';
 import { jobDir } from './workdir';
 
@@ -427,9 +427,21 @@ export async function runJob(job: Job, deps: RunDeps): Promise<RunOutcome> {
 
     const recorder = new ChangeRecorder(cwd);
     const narrator = new Narrator(say, maxTurns, recorder);
-    const prompt = userTurn(handed.prompt ?? jobPrompt(job));
-    for await (const message of deps.query({ prompt, options })) {
-      narrator.feed(message);
+    // Open until the run is over, background work included: see SessionInput.
+    const input = new SessionInput(handed.prompt ?? jobPrompt(job));
+    const stopInput = () => input.end();
+    deps.signal.addEventListener('abort', stopInput);
+    try {
+      for await (const message of deps.query({
+        prompt: input.stream(),
+        options,
+      })) {
+        narrator.feed(message);
+        input.feed(message);
+      }
+    } finally {
+      input.end();
+      deps.signal.removeEventListener('abort', stopInput);
     }
     narrator.finish();
     // Before teardown, which may remove the checkout.
@@ -457,23 +469,6 @@ export async function runJob(job: Job, deps: RunDeps): Promise<RunOutcome> {
     ).catch(() => {});
     await workdir.dispose().catch(() => {});
   }
-}
-
-/**
- * The prompt as a one-message stream rather than a string. The SDK takes a
- * string prompt as a single user turn and closes the CLI's stdin at its
- * first result; a run that goes on past that (a background task finishing
- * wakes the agent) then has no channel for permission requests or hooks,
- * and every tool that needs permission fails with "Tool permission request
- * failed: AbortError: Stream closed". With a stream, the SDK keeps stdin
- * open until the session is idle.
- */
-async function* userTurn(text: string): AsyncIterable<SDKUserMessage> {
-  yield {
-    type: 'user',
-    message: { role: 'user', content: text },
-    parent_tool_use_id: null,
-  };
 }
 
 /**
