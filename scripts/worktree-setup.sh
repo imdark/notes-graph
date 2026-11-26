@@ -3,10 +3,13 @@
 # Make a fresh git worktree of this repo runnable (tests, typecheck, scripts)
 # with the main checkout's installed dependencies, without a `yarn install`.
 #
-#   scripts/worktree-setup.sh
+#   scripts/worktree-setup.sh [--from <install dir>]
 #
 # Run it from inside the worktree. `wf start` runs it for you when it creates
 # one. Re-running is safe and picks up packages added to main since.
+#
+# --from links another install in place of main's: scripts/shared-deps.sh
+# passes the cloud runner's shared install this way. "main" below means it.
 #
 # Why not just `ln -s <main>/node_modules node_modules`: the workspace packages
 # in node_modules (@notesgraph/*, @blocksuite/*, @notesgraph-tools/*, ...) are
@@ -24,9 +27,13 @@
 set -euo pipefail
 
 wt="$(cd "$(dirname "$0")/.." && pwd -P)"
-common="$(git -C "$wt" rev-parse --git-common-dir)"
-case "$common" in /*) ;; *) common="$wt/$common" ;; esac
-main="$(cd "$common/.." && pwd -P)"
+if [ "${1:-}" = "--from" ]; then
+  main="$(cd "${2:?--from needs a directory}" && pwd -P)"
+else
+  common="$(git -C "$wt" rev-parse --git-common-dir)"
+  case "$common" in /*) ;; *) common="$wt/$common" ;; esac
+  main="$(cd "$common/.." && pwd -P)"
+fi
 
 if [ "$wt" = "$main" ]; then
   echo "worktree-setup: $wt is the main checkout; nothing to do"

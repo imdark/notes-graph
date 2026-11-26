@@ -148,6 +148,10 @@ and only when `tools/agent-runner` or `yarn.lock` changed.
 
 ## Disk
 
-Each code task's worktree is removed when it ends, but `install_deps` puts
-a few GB of node_modules in it while it runs. With ~11 GB free, keep
-`RUNNER_MAX_JOBS` at 2 or below. See `prod-disk-headroom`.
+A code task's tools (`install_deps`, `run_tests`, `typecheck`) don't
+install into its worktree. They link one install shared by every job with
+the same `yarn.lock` and `package.json` files (`scripts/shared-deps.sh`).
+That install is a few GB in `/work/cache/deps/<key>`. The first job after a
+manifest change makes it, in a few minutes; later jobs link it in seconds.
+A new install deletes the ones nobody has linked for two days. Keep the
+space for two of them free.

@@ -947,6 +947,13 @@ test('a claimed job carries how to run it, the same for every runner', async t =
     code?.profile?.automation.tools.map(tool => tool.name),
     ['install_deps', 'run_tests', 'typecheck']
   );
+  // Each links the install shared between jobs, so none waits on install_deps.
+  for (const tool of code?.profile?.automation.tools ?? []) {
+    t.true(
+      tool.run.includes('scripts/shared-deps.sh {cache}/deps'),
+      `${tool.name} links the shared install`
+    );
+  }
   // Agent-supplied values reach a tool's command only as $ARG_*, never spliced in.
   for (const tool of code?.profile?.automation.tools ?? []) {
     for (const param of Object.keys(tool.params ?? {})) {
