@@ -273,12 +273,20 @@ const withGitLock = (command: string, waitSeconds: number) =>
  * without pushing (cloud-125 and cloud-130 on 2026-11-25, whose permission
  * requests all failed) otherwise leaves its work only in the runner's
  * clone, where nobody sees it. A run that pushed has nothing to add here.
+ *
+ * Changes the run never committed (CLOUD-148 on 2026-11-26) are committed
+ * first, as a "wip" commit on the run's own branch, so they go too.
  */
 export const keepUnpushed = (dir: string): AutomationStep => ({
   name: 'keep unpushed work',
   // The push writes the clone's remote-tracking ref, so it takes the lock.
   run: withGitLock(
     `cd ${dir} 2>/dev/null && b="$(git symbolic-ref --short -q HEAD)" && ` +
+      '{ if [ -n "$(git status --porcelain)" ]; then git add -A && ' +
+      'git -c user.name="NotesGraph agent runner" ' +
+      '-c user.email=agent-runner@notesgraph.invalid ' +
+      'commit -q --no-verify -m "wip: work the run left uncommitted" && ' +
+      'echo "committed the changes the run left uncommitted"; fi; } && ' +
       'n="$(git rev-list --count HEAD --not --remotes=origin)" && ' +
       'if [ "$n" -gt 0 ]; then git push -q origin "HEAD:refs/heads/$b" && ' +
       'echo "pushed $n unpushed commit(s) to $b"; fi',

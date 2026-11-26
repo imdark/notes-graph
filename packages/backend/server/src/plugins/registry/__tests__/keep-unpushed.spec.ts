@@ -68,3 +68,19 @@ test('a checkout that is already gone is not an error', t => {
   // It fails quietly; the step is optional, so the teardown carries on.
   t.true(keepUnpushed('x').optional);
 });
+
+test('commits what the run left uncommitted, then pushes it (CLOUD-148)', t => {
+  const { root, origin, work } = setup();
+  t.teardown(() => rmSync(root, { recursive: true, force: true }));
+  writeFileSync(join(work, 'shared-deps.sh'), 'echo install\n');
+
+  const out = runStep(work, root);
+
+  t.regex(out, /committed the changes the run left uncommitted/);
+  t.regex(out, /pushed 1 unpushed commit\(s\) to task/);
+  t.is(
+    git(origin, 'log', '-1', '--format=%s', 'task'),
+    'wip: work the run left uncommitted'
+  );
+  t.is(git(origin, 'show', 'task:shared-deps.sh'), 'echo install');
+});
