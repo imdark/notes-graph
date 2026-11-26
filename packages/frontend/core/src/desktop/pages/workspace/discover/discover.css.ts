@@ -240,5 +240,32 @@ export const cardSnippet = style({
 export const cardActions = style({
   display: 'flex',
   justifyContent: 'flex-end',
+  gap: 4,
   padding: '0 12px 12px',
+});
+
+/** "Why this?": the reasons a story is in the feed, under it. */
+export const cardWhy = style({
+  margin: '0 16px 8px',
+  padding: '8px 12px 8px 28px',
+  borderRadius: 8,
+  background: cssVarV2('layer/background/secondary'),
+  color: cssVarV2('text/secondary'),
+  fontSize: 13,
+  lineHeight: '20px',
+});
+
+/** The offer to stop following an interest whose stories keep being dismissed. */
+export const dropSuggestion = style({
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  gap: 12,
+  maxWidth: FEED_WIDTH,
+  margin: '0 auto 12px',
+  padding: '8px 12px',
+  borderRadius: 8,
+  border: `1px solid ${cssVarV2('layer/insideBorder/border')}`,
+  color: cssVarV2('text/secondary'),
+  fontSize: 13,
 });
