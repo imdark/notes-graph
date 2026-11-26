@@ -1,4 +1,5 @@
 import { Button, Modal, notify, RadioGroup } from '@notesgraph/component';
+import { VerifyButton } from '@notesgraph/core/components/verify-button';
 import {
   type AgentRun,
   AgentRunLogsStore,
@@ -690,6 +691,10 @@ export const AgentRunLogDialog = ({
                   run={run}
                   log={log}
                   summary={summary}
+                  onOpenRun={setFixRunId}
+                />
+                <VerifyButton
+                  target={{ kind: 'run', run, summary }}
                   onOpenRun={setFixRunId}
                 />
               </div>

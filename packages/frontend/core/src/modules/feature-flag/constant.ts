@@ -518,6 +518,15 @@ export const NOTESGRAPH_FLAGS = {
     configurable: true,
     defaultState: true,
   },
+  enable_verify_buttons: {
+    commit: 'ae10a4cf03ecbae78ca38c80755d73ab1155a5ec',
+    category: 'notesgraph',
+    displayName: 'Verify runs, branches and pull requests',
+    description:
+      'A Verify button on an agent run\u2019s log and on each pull request on the Deployments page, plus a box there to verify any branch. It starts a Claude Code agent on the server that checks the work exists, builds, passes its tests and does what its task asked, and writes its verdict in a Verifications note. It changes nothing.',
+    configurable: true,
+    defaultState: true,
+  },
 } satisfies { [key in string]: FlagInfo };
 
 // oxlint-disable-next-line no-redeclare
