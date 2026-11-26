@@ -9,6 +9,7 @@ import {
   openQuestions,
   RemoteAgentRunnerService,
   type RemoteArtifact,
+  type RemoteJob,
   type RemoteQuestion,
   type RemoteSteer,
   type RunChanges,
@@ -25,6 +26,7 @@ import {
   useState,
 } from 'react';
 
+import { waitingText } from './agent-log-status';
 import { AgentLogView } from './agent-log-view';
 import { AgentQuestionCard } from './agent-question';
 import { AgentReviewBar } from './agent-review-card';
@@ -60,6 +62,10 @@ interface RunLogState {
   changes: RunChanges | null | undefined;
   /** Files a remote run uploaded (previews, renders). */
   artifacts: RemoteArtifact[];
+  /** A remote run's job status, as of the last poll; null for any other run. */
+  jobStatus: RemoteJob['status'] | null;
+  /** Epoch seconds a queued remote run is held until (a session limit). */
+  runAfter: number | null;
 }
 
 const EMPTY: RunLogState = {
@@ -73,6 +79,8 @@ const EMPTY: RunLogState = {
   result: null,
   changes: undefined,
   artifacts: [],
+  jobStatus: null,
+  runAfter: null,
 };
 
 /**
@@ -128,17 +136,14 @@ const useRunLog = (run: AgentRun | undefined): RunLogState => {
             questions: openQuestions(job),
             steers: job.steers ?? [],
             allowAllTools: !!job.allowAllTools,
-            note:
-              job.status === 'held'
-                ? 'Waiting for the workspace’s prestart automations…'
-                : job.status === 'queued'
-                  ? 'Waiting for the device to pick this up…'
-                  : null,
+            note: null,
             loading: false,
             result: job.result,
             // Recorded only as the run ends, so it comes with the last poll.
             changes: job.changes ?? prev.changes ?? null,
             artifacts: job.artifacts ?? prev.artifacts,
+            jobStatus: job.status,
+            runAfter: job.runAfter ?? null,
           }));
         }
       })().catch(err => {
@@ -173,6 +178,8 @@ const useRunLog = (run: AgentRun | undefined): RunLogState => {
             result: null,
             changes: undefined,
             artifacts: [],
+            jobStatus: null,
+            runAfter: null,
           });
         })
         .catch(() => {
@@ -207,6 +214,8 @@ const useRunLog = (run: AgentRun | undefined): RunLogState => {
       result: null,
       changes: undefined,
       artifacts: [],
+      jobStatus: null,
+      runAfter: null,
     };
   }
   return state;
@@ -405,6 +414,8 @@ export const AgentRunLogDialog = ({
     result,
     changes,
     artifacts,
+    jobStatus,
+    runAfter,
   } = useRunLog(run ?? undefined);
   // For a chat about a run, that run: the chat goes on with its context.
   const parentRunId = run?.parentRunId;
@@ -486,6 +497,16 @@ export const AgentRunLogDialog = ({
     setDeployRunId(null);
   }, []);
   const ended = !!run && run.status !== 'running';
+
+  // Where a run that hasn't ended is: a device run by its job, one in this
+  // tab is running. An on-device run elsewhere has a note saying so instead.
+  const waiting =
+    run?.status === 'running' && (jobStatus || !note)
+      ? waitingText(jobStatus ?? 'running', {
+          deviceKey: run.deviceKey,
+          runAfter,
+        })
+      : null;
 
   // The run's whole answer, wherever it is kept.
   const summary = run
@@ -643,6 +664,10 @@ export const AgentRunLogDialog = ({
             ) : null}
 
             {note ? <p className={styles.empty}>{note}</p> : null}
+            {/* A run sent back to the queue keeps the log it had so far. */}
+            {log && waiting && jobStatus !== 'running' ? (
+              <p className={styles.empty}>{waiting}</p>
+            ) : null}
 
             <AgentLogView
               log={log}
@@ -650,11 +675,7 @@ export const AgentRunLogDialog = ({
               placeholder={
                 loading
                   ? 'Loading…'
-                  : run?.status === 'running'
-                    ? 'Waiting for output…'
-                    : note
-                      ? ''
-                      : 'This run left no log.'
+                  : (waiting ?? (note ? '' : 'This run left no log.'))
               }
             />
 

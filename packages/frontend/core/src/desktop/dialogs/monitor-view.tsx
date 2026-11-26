@@ -20,6 +20,7 @@ import { useLiveData, useService } from '@notesgraph/infra';
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 
 import { watches } from '../pages/workspace/agents/monitors-section';
+import { waitingText } from '../pages/workspace/detail-page/tabs/agent-log-status';
 import { AgentLogView } from '../pages/workspace/detail-page/tabs/agent-log-view';
 import {
   formatDuration,
@@ -237,11 +238,7 @@ const LogTab = ({
         placeholder={
           log.loading
             ? 'Loading…'
-            : job && ['held', 'queued'].includes(job.status)
-              ? 'Waiting for the device to pick this up…'
-              : job?.status === 'running'
-                ? 'Waiting for output…'
-                : 'This run left no log.'
+            : ((job && waitingText(job.status, job)) ?? 'This run left no log.')
         }
       />
       {job?.result ? (
