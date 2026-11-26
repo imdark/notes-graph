@@ -425,6 +425,42 @@ describe('composition ending after a tap elsewhere', () => {
     expect(a.rootElement!.contains(range.startContainer)).toBe(true);
   });
 
+  /**
+   * A tap right after a word in another block: Gboard moves its composing
+   * region onto that word without a compositionend (logged on Android as a
+   * bare compositionupdate with the tapped word), and ends it later there.
+   */
+  test('a composition that moves to another block commits its word where it was typed, once', async () => {
+    const { aId, bId } = await twoParagraphs('ab', 'xyz');
+    caretIn(aId, 2);
+    await wait();
+
+    const a = inlineEditorOf(aId);
+    const b = inlineEditorOf(bId);
+    const source = a.eventSource!;
+    source.dispatchEvent(
+      new CompositionEvent('compositionstart', { bubbles: true })
+    );
+    source.dispatchEvent(
+      new CompositionEvent('compositionupdate', { bubbles: true, data: 'k' })
+    );
+
+    b.rootElement!.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    const native = document.getSelection()!;
+    native.removeAllRanges();
+    native.addRange(b.toDomRange({ index: 3, length: 0 })!);
+    source.dispatchEvent(
+      new CompositionEvent('compositionupdate', { bubbles: true, data: 'xyz' })
+    );
+    await wait(50);
+    source.dispatchEvent(
+      new CompositionEvent('compositionend', { bubbles: true, data: 'xyzm' })
+    );
+    await wait(100);
+
+    expect(a.yTextString).toBe('abk');
+  });
+
   test('a word composed without a tap elsewhere keeps the caret in its block', async () => {
     const { bId } = await twoParagraphs('ab', 'xyz');
     caretIn(bId, 3);

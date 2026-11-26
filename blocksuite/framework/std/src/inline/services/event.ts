@@ -42,6 +42,14 @@ export class EventService<TextAttributes extends BaseTextAttributes> {
   private _isComposing = false;
 
   /**
+   * The text composed in this editor so far, from its last compositionupdate
+   * with the selection inside it; null while the word isn't being composed
+   * here. Every paragraph shares the event source, so this is what tells the
+   * editor that owns the composition from the others.
+   */
+  private _compositionData: string | null = null;
+
+  /**
    * Whether the last pointer press landed in another inline editor. A tap on
    * another block ends the composition here, and the commit must then leave
    * the caret where the tap put it.
@@ -633,6 +641,7 @@ export class EventService<TextAttributes extends BaseTextAttributes> {
     this._pressedAnotherRoot = false;
     this._compositionRangeFrozen = false;
     this._compositionTextInserted = false;
+    this._compositionData = null;
     this._compositionEmbedTrim = { start: false, end: false };
     if (!this.editor.rootElement) return;
     // embeds is not editable and it will break IME
@@ -664,14 +673,44 @@ export class EventService<TextAttributes extends BaseTextAttributes> {
     }
 
     const range = this.editor.rangeService.getNativeRange();
-    if (
-      this.editor.isReadonly ||
-      !range ||
-      !this._isRangeCompletelyInRoot(range)
-    )
+    if (this.editor.isReadonly || !range) return;
+    if (!this._isRangeCompletelyInRoot(range)) {
+      if (
+        this._compositionData !== null &&
+        this._isNativeSelectionInAnotherLiveRoot()
+      ) {
+        this._handOffComposition();
+      }
       return;
+    }
 
+    this._compositionData = event.data;
     this.editor.slots.inputting.next(event.data ?? '');
+  };
+
+  /**
+   * A tap right after a word in another block makes Gboard move its
+   * composing region onto that word without ending the composition: the next
+   * compositionupdate already carries the tapped word. Commit what was typed
+   * here now, where it was typed. The composition's own end then belongs to
+   * the tapped block, and committing it here as well would put the tapped
+   * word in place of this one.
+   */
+  private readonly _handOffComposition = () => {
+    const data = this._compositionData;
+    const composition = {
+      inlineRange: this._compositionInlineRange,
+      textInserted: this._compositionTextInserted,
+      embedTrim: this._compositionEmbedTrim,
+      caret: null,
+      pressedAnotherRoot: true,
+    };
+    this._compositionData = null;
+    this._compositionInlineRange = null;
+    this._compositionTextInserted = false;
+    this._compositionRangeFrozen = false;
+    const event = new CompositionEvent('compositionend', { data: data ?? '' });
+    this._enqueueInput(() => this._onCompositionEnd(event, composition));
   };
 
   private readonly _onKeyDown = (event: KeyboardEvent) => {
