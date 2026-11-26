@@ -1,12 +1,19 @@
 import { cssVarV2 } from '@toeverything/theme/v2';
 import { style } from '@vanilla-extract/css';
 
+/**
+ * How wide the feed runs, one card per row: most of a desktop window rather
+ * than a narrow column. The header and interests bar take the same width so
+ * they line up with it.
+ */
+const FEED_WIDTH = 1200;
+
 export const header = style({
   display: 'flex',
   alignItems: 'center',
   gap: 8,
   width: '100%',
-  maxWidth: 720,
+  maxWidth: FEED_WIDTH,
 });
 
 export const topicsPicker = style({
@@ -47,7 +54,7 @@ export const feed = style({
   display: 'flex',
   flexDirection: 'column',
   gap: 12,
-  maxWidth: 720,
+  maxWidth: FEED_WIDTH,
   margin: '0 auto',
 });
 
@@ -55,7 +62,7 @@ export const interests = style({
   display: 'flex',
   flexDirection: 'column',
   gap: 8,
-  maxWidth: 720,
+  maxWidth: FEED_WIDTH,
   margin: '0 auto 16px',
   fontSize: 13,
   color: cssVarV2('text/secondary'),
@@ -151,6 +158,8 @@ export const cardImageWrap = style({
   display: 'block',
   width: '100%',
   aspectRatio: '16 / 9',
+  // A wide card's picture would otherwise take a whole screen; it crops.
+  maxHeight: 400,
   padding: 0,
   border: 'none',
   background: cssVarV2('layer/background/secondary'),
