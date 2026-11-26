@@ -528,7 +528,7 @@ export const NOTESGRAPH_FLAGS = {
     defaultState: true,
   },
   enable_discover_relevance: {
-    commit: '',
+    commit: 'f16427995195796d78b0cb737448ed5a9fe50f19',
     category: 'notesgraph',
     displayName: 'Not interesting, and why this story',
     description:
