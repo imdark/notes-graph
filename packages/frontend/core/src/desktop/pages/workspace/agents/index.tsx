@@ -1,5 +1,5 @@
 import { PlusIcon } from '@blocksuite/icons/rc';
-import { Button, useConfirmModal } from '@notesgraph/component';
+import { Button, notify, useConfirmModal } from '@notesgraph/component';
 import {
   type Agent,
   AgentIcon,
@@ -7,8 +7,11 @@ import {
   AgentRunsStore,
   AgentsService,
   deviceHarnessName,
+  RUN_REVIEW_DAYS,
+  RunReviewService,
 } from '@notesgraph/core/modules/agents';
 import { WorkspaceDialogService } from '@notesgraph/core/modules/dialogs';
+import { FeatureFlagService } from '@notesgraph/core/modules/feature-flag';
 import {
   ViewBody,
   ViewHeader,
@@ -153,6 +156,31 @@ const AgentsPage = () => {
   const openSettings = useCallback(() => {
     dialogService.open('setting', { activeTab: 'workspace:agents' });
   }, [dialogService]);
+
+  const runReview = useService(RunReviewService);
+  const runReviewEnabled = useLiveData(
+    useService(FeatureFlagService).flags.enable_run_review.$
+  );
+  const [reviewing, setReviewing] = useState(false);
+  const startReview = useCallback(() => {
+    setReviewing(true);
+    runReview
+      .review(RUN_REVIEW_DAYS)
+      .then(({ runId }) => {
+        notify.success({
+          title: 'Reviewing recent runs',
+          message: `The review of the last ${RUN_REVIEW_DAYS} days goes in the Run reviews note.`,
+        });
+        if (runId) openLog(runId);
+      })
+      .catch(err => {
+        notify.error({
+          title: "Couldn't start the review",
+          message: err instanceof Error ? err.message : String(err),
+        });
+      })
+      .finally(() => setReviewing(false));
+  }, [runReview, openLog]);
   const openDoc = useCallback(
     (docId: string) => workbench.openDoc(docId, { at: 'active' }),
     [workbench]
@@ -259,6 +287,17 @@ const AgentsPage = () => {
       <ViewIcon icon="ai" />
       <ViewHeader>
         <div className={styles.headerBar}>
+          {runReviewEnabled ? (
+            <Button
+              onClick={startReview}
+              loading={reviewing}
+              disabled={reviewing}
+              tooltip={`An agent checks the last ${RUN_REVIEW_DAYS} days of runs: what shipped, what failed and why, work left unpushed, and repeats.`}
+              data-testid="agents-page-review-runs"
+            >
+              Review recent runs
+            </Button>
+          ) : null}
           <Button onClick={openSettings} data-testid="agents-page-manage">
             Manage agents
           </Button>
