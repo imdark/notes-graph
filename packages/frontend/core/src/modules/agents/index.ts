@@ -238,8 +238,14 @@ export {
   type PatchLine,
   type RunChanges,
 } from './services/run-changes';
-export { runChatMessages } from './services/run-chat';
-export { askTranscript } from './services/run-chat';
+export {
+  askTranscript,
+  continuationBrief,
+  FOLLOW_UP_TRANSCRIPT_CHARS,
+  type RunChatContext,
+  runChatMessages,
+  runDied,
+} from './services/run-chat';
 export {
   type AgentRunSession,
   AgentRunSessionService,

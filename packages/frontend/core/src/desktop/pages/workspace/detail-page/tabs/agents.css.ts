@@ -812,6 +812,26 @@ export const chatSendButton = style({
   },
 });
 
+/** Sits beside Send: hands what is typed to a new run instead. */
+export const chatContinueButton = style({
+  marginLeft: 'auto',
+  minHeight: 28,
+  padding: '0 10px',
+  border: `1px solid ${cssVarV2('layer/insideBorder/border')}`,
+  borderRadius: 14,
+  background: 'transparent',
+  fontSize: cssVar('fontSm'),
+  color: cssVarV2('text/primary'),
+  cursor: 'pointer',
+  selectors: {
+    '&:hover': { background: cssVarV2('layer/background/hoverOverlay') },
+    '&[aria-disabled="true"]': {
+      cursor: 'not-allowed',
+      color: cssVarV2('text/disable'),
+    },
+  },
+});
+
 export const chatChips = style({
   display: 'flex',
   flexWrap: 'wrap',
