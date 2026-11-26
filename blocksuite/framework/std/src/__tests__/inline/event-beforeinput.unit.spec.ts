@@ -110,6 +110,44 @@ test('beforeinput does not intercept when selection spans another inline root', 
   }
 });
 
+test('compositionend commits the word but keeps a tap that moved to another block', async () => {
+  const ctx1 = await setupInlineEditor('ab');
+  const ctx2 = await setupInlineEditor('xyz');
+  try {
+    // Composition still holds the caret in the first editor when it ends.
+    setNativeSelection(ctx1.editor.toDomRange({ index: 2, length: 0 })!);
+
+    const event = {
+      data: 'cd',
+      preventDefault: vi.fn(),
+      stopPropagation: vi.fn(),
+    } as unknown as CompositionEvent;
+    const committing = (ctx1.editor.eventService as any)._onCompositionEnd(
+      event,
+      {
+        inlineRange: { index: 2, length: 0 },
+        textInserted: true,
+        embedTrim: { start: false, end: false },
+        caret: null,
+      }
+    );
+
+    // The tap lands in the second editor while the commit is rerendering.
+    const tapped = ctx2.editor.toDomRange({ index: 1, length: 0 })!;
+    setNativeSelection(tapped);
+    await committing;
+    await ctx1.editor.waitForUpdate();
+
+    expect(ctx1.editor.yTextString).toBe('abcd');
+    const range = document.getSelection()!.getRangeAt(0);
+    expect(ctx2.root.contains(range.startContainer)).toBe(true);
+    expect(ctx2.editor.toInlineRange(range)).toEqual({ index: 1, length: 0 });
+  } finally {
+    await teardownInlineEditor(ctx1);
+    await teardownInlineEditor(ctx2);
+  }
+});
+
 test('beforeinput ignores un-resolvable target range and still applies input', async () => {
   const ctx = await setupInlineEditor('hello world');
   try {

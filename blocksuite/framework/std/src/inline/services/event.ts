@@ -541,6 +541,12 @@ export class EventService<TextAttributes extends BaseTextAttributes> {
     };
     this.editor.hooks.compositionEnd?.(ctx);
 
+    // A tap on another block can end the composition before the selection
+    // moves there, so the check above passed, and land during the rerender
+    // wait. Commit the word, but leave the caret where the tap put it:
+    // setting it here would pull it back into this block.
+    const tappedAway = this._isNativeSelectionInAnotherLiveRoot();
+
     const { inlineRange: newInlineRange, data: newData } = ctx;
     if (newData && newData.length > 0) {
       // Clamp against the model before computing the caret — an oversized
@@ -555,20 +561,22 @@ export class EventService<TextAttributes extends BaseTextAttributes> {
         newData,
         ctx.attributes
       );
-      this.editor.setInlineRange({
-        index: Math.min(
-          this._caretAfterCommit(
-            composition.caret,
-            inlineRange.index,
-            event.data?.length ?? 0,
-            insertIndex,
-            newData.length
+      if (!tappedAway) {
+        this.editor.setInlineRange({
+          index: Math.min(
+            this._caretAfterCommit(
+              composition.caret,
+              inlineRange.index,
+              event.data?.length ?? 0,
+              insertIndex,
+              newData.length
+            ),
+            this.editor.yTextLength
           ),
-          this.editor.yTextLength
-        ),
-        length: 0,
-      });
-    } else {
+          length: 0,
+        });
+      }
+    } else if (!tappedAway) {
       // Keep the caret anchored where the composition happened — the rerender
       // above wiped the composed DOM, and without an explicit range the
       // WebView re-seats the selection in whatever editable it finds next
@@ -584,7 +592,7 @@ export class EventService<TextAttributes extends BaseTextAttributes> {
     // nodes makes the next word type into the void. Unless a tap/word-select
     // already moved the live selection to another block while this awaited —
     // resyncing here would stomp it back onto the block that was just edited.
-    if (IS_ANDROID) {
+    if (IS_ANDROID && !tappedAway) {
       await this.editor.waitForUpdate();
       if (!this._isNativeSelectionInAnotherLiveRoot()) {
         this.editor.rangeService.syncInlineRange();
