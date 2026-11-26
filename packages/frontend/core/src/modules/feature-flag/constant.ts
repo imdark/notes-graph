@@ -510,7 +510,7 @@ export const NOTESGRAPH_FLAGS = {
     defaultState: true,
   },
   enable_generate_note_title: {
-    commit: '',
+    commit: 'cdb337312aef60dcd28e8de126120bac6c3df84f',
     category: 'notesgraph',
     displayName: 'Generate a title for untitled notes',
     description:
