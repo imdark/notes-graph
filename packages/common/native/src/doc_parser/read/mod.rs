@@ -7,17 +7,15 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map as JsonMap, Value as JsonValue};
 use y_octo::{Any, Map};
 
-use self::database::{
-  build_database_table, collect_database_cell_references, database_summary_text, database_table_markdown,
-  gather_database_texts,
-};
+pub(crate) use self::database::database_markdown;
+use self::database::{collect_database_cell_references, database_summary_text, gather_database_texts};
 use self::org_task::{collect_hashtags, collect_org_task_props};
 use super::{
   ParseError,
   block_spec::{BlockFlavour, BlockSpec, ImageSpec},
   blocksuite::{DocContext, get_block_id, get_flavour, get_list_depth, get_string, nearest_by_flavour},
   doc_loader::load_doc,
-  markdown::{DeltaToMdOptions, MarkdownRenderer, MarkdownWriter, extract_inline_references},
+  markdown::{DeltaToMdOptions, MarkdownRenderer, extract_inline_references},
   schema::{NOTE_FLAVOUR, PAGE_FLAVOUR},
   value::{any_as_string, any_truthy, build_reference_payload, params_value_to_json, value_to_string},
 };
@@ -381,15 +379,7 @@ pub fn parse_doc_to_markdown(
 
     match flavour.as_str() {
       "notesgraph:database" => {
-        let title = get_string(block, "prop:title").unwrap_or_default();
-        block_markdown.push_str(&format!("\n### {title}\n"));
-
-        if let Some(table) = build_database_table(block, &context, &md_options)
-          && let Some(table_md) = database_table_markdown(table)
-        {
-          let mut writer = MarkdownWriter::new(&mut block_markdown);
-          writer.push_table(&table_md);
-        }
+        block_markdown.push_str(&database_markdown(block, &context.block_pool, &md_options));
       }
       _ => {
         let Some(block_flavour) = BlockFlavour::from_str(flavour.as_str()) else {
