@@ -535,7 +535,10 @@ export class EventService<TextAttributes extends BaseTextAttributes> {
     this.editor.rerenderWholeEditor();
     await this.editor.waitForUpdate();
 
-    const inlineRange = composition.inlineRange ?? this.editor.getInlineRange();
+    // No range at compositionstart means the word wasn't composed here (every
+    // paragraph shares the event source). Don't read the range now: after a
+    // tap mid-word it is the tapped block's, and the word would land twice.
+    const inlineRange = composition.inlineRange;
     if (!inlineRange) return;
 
     event.preventDefault();

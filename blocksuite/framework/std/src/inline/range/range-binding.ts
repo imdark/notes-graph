@@ -2,7 +2,7 @@ import type { BaseSelection, BlockModel } from '@blocksuite/store';
 import throttle from 'lodash-es/throttle';
 
 import { TextSelection } from '../../selection/index.js';
-import { EditorHost } from '../../view/index.js';
+import { BLOCK_ID_ATTR, EditorHost } from '../../view/index.js';
 import { INLINE_ROOT_ATTR } from '../consts.js';
 import { isActiveInEditor } from './active.js';
 import { RANGE_SYNC_EXCLUDE_ATTR } from './consts.js';
@@ -91,7 +91,31 @@ export class RangeBinding {
       event.stopPropagation();
       this._compositionStartCallback(event).catch(console.error);
       this._compositionStartCallback = null;
+      return;
     }
+    this._followSelectionMovedWhileComposing();
+  };
+
+  /**
+   * A tap on another block mid-word moves the DOM selection there before the
+   * composition ends, and the selection change is skipped because every
+   * paragraph shares the event source and so counts as composing. Nothing
+   * fires once it ends, so the text selection would stay on the old block and
+   * its rerender after the commit would pull the caret back there. Follow the
+   * DOM selection now, before that rerender reads the text selection.
+   */
+  private readonly _followSelectionMovedWhileComposing = () => {
+    const textSelection = this.selectionManager.find(TextSelection);
+    const selection = document.getSelection();
+    if (!textSelection || !selection || selection.rangeCount === 0) return;
+    const range = selection.getRangeAt(0);
+    const block = getElement(range.startContainer)?.closest(
+      `[${BLOCK_ID_ATTR}]`
+    );
+    const blockId = block?.getAttribute(BLOCK_ID_ATTR);
+    if (!blockId || blockId === textSelection.from.blockId) return;
+    if (!this.host.contains(block!)) return;
+    this.rangeManager?.syncRangeToTextSelection(range, false);
   };
 
   private readonly _onCompositionStart = () => {
