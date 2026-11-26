@@ -34,7 +34,11 @@ import {
   SYNCED_BLOCK_FLAVOUR,
   type SyncedBlockClipboardPayload,
 } from '@blocksuite/notesgraph-shared/utils';
-import { BlockSelection, TextSelection, type UIEventHandler } from '@blocksuite/std';
+import {
+  BlockSelection,
+  TextSelection,
+  type UIEventHandler,
+} from '@blocksuite/std';
 import type { BlockSnapshot, Store } from '@blocksuite/store';
 
 import { ReadOnlyClipboard } from './readonly-clipboard';

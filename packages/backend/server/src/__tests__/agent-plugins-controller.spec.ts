@@ -40,8 +40,11 @@ function controller(canRead = true) {
 }
 
 function response() {
-  const sent: { headers: Record<string, string>; type?: string; body?: string } =
-    { headers: {} };
+  const sent: {
+    headers: Record<string, string>;
+    type?: string;
+    body?: string;
+  } = { headers: {} };
   const res = {
     setHeader: (k: string, v: string) => {
       sent.headers[k] = v;

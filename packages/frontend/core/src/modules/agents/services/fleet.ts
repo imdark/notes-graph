@@ -145,6 +145,12 @@ export function downDeviceKeys(
   return down;
 }
 
+/** Whether the agent runs on one of the `down` devices. */
+export const onDownDevice = (
+  agent: { deviceKey?: string },
+  down: Set<string>
+): boolean => !!agent.deviceKey && down.has(agent.deviceKey);
+
 /**
  * The agents with those that run on a down device moved to the end. Each
  * part keeps its order.
@@ -154,7 +160,7 @@ export function downLast<T extends { deviceKey?: string }>(
   down: Set<string>
 ): T[] {
   if (down.size === 0) return agents;
-  const isDown = (agent: T) => !!agent.deviceKey && down.has(agent.deviceKey);
+  const isDown = (agent: T) => onDownDevice(agent, down);
   return [...agents.filter(agent => !isDown(agent)), ...agents.filter(isDown)];
 }
 
@@ -331,12 +337,19 @@ export class FleetService extends Service {
     return this.loading ?? Promise.resolve();
   }
 
+  /** Keys of the devices monitoring reports down, as loaded now. */
+  downKeysNow(): Set<string> {
+    return downDeviceKeys(this.devices$.value, Date.now() / 1000);
+  }
+
+  /** Keys of the devices monitoring reports down, kept current. */
+  readonly downKeys$ = LiveData.computed(get =>
+    downDeviceKeys(get(this.devices$), Date.now() / 1000)
+  );
+
   /** The agents as they are now, those on a down device last. */
   downLastNow<T extends { deviceKey?: string }>(agents: T[]): T[] {
-    return downLast(
-      agents,
-      downDeviceKeys(this.devices$.value, Date.now() / 1000)
-    );
+    return downLast(agents, this.downKeysNow());
   }
 
   /** The agents, kept with those on a down device last. */
@@ -344,10 +357,7 @@ export class FleetService extends Service {
     agents$: LiveData<T[]>
   ): LiveData<T[]> {
     return LiveData.computed(get =>
-      downLast(
-        get(agents$),
-        downDeviceKeys(get(this.devices$), Date.now() / 1000)
-      )
+      downLast(get(agents$), get(this.downKeys$))
     );
   }
 

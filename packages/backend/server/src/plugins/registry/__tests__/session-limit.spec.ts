@@ -80,9 +80,25 @@ test('a clock time with no zone cannot be placed', t => {
   );
 });
 
-test('runs a minute after the reset', t => {
+test('runs a minute after a reset that is near', t => {
+  // 12:20pm in Los Angeles; the reset is 10 minutes off.
+  const at = Date.parse('2026-10-05T19:20:00Z');
+  t.is(
+    sessionLimitRunAfter('resets 12:30pm (America/Los_Angeles)', at).getTime(),
+    Date.parse('2026-10-05T19:31:00Z')
+  );
+});
+
+test('checks again before a far reset, since credits can lift the limit early', t => {
   t.is(
     sessionLimitRunAfter('resets 3pm (America/Los_Angeles)', now).getTime(),
-    Date.parse('2026-10-05T22:01:00Z')
+    now + SESSION_LIMIT_RETRY_MS
+  );
+  t.is(
+    sessionLimitRunAfter(
+      "You've hit your weekly limit · resets Oct 9 at 8am (America/Los_Angeles) · out of usage credits",
+      now
+    ).getTime(),
+    now + SESSION_LIMIT_RETRY_MS
   );
 });

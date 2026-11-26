@@ -314,6 +314,33 @@ export const attachRow = style({
   flexWrap: 'wrap',
 });
 
+export const projectRow = style({
+  display: 'flex',
+  alignItems: 'center',
+  gap: 8,
+  maxWidth: '100%',
+});
+
+export const projectSelect = style({
+  minWidth: 0,
+  maxWidth: '100%',
+  minHeight: 32,
+  padding: '4px 8px',
+  borderRadius: 4,
+  border: `1px solid ${cssVarV2('layer/insideBorder/border')}`,
+  background: cssVarV2('layer/background/primary'),
+  color: cssVarV2('text/primary'),
+  fontFamily: 'inherit',
+  fontSize: cssVar('fontXs'),
+  ':focus-visible': {
+    outline: `2px solid ${cssVar('primaryColor')}`,
+    outlineOffset: 1,
+  },
+  ':disabled': {
+    opacity: 0.6,
+  },
+});
+
 export const attachCommand = style({
   fontFamily: cssVar('fontMonoFamily'),
   fontSize: cssVar('fontXs'),
@@ -781,6 +808,26 @@ export const chatSendButton = style({
     '&[aria-disabled="true"]': {
       cursor: 'not-allowed',
       background: cssVarV2('button/disable'),
+    },
+  },
+});
+
+/** Sits beside Send: hands what is typed to a new run instead. */
+export const chatContinueButton = style({
+  marginLeft: 'auto',
+  minHeight: 28,
+  padding: '0 10px',
+  border: `1px solid ${cssVarV2('layer/insideBorder/border')}`,
+  borderRadius: 14,
+  background: 'transparent',
+  fontSize: cssVar('fontSm'),
+  color: cssVarV2('text/primary'),
+  cursor: 'pointer',
+  selectors: {
+    '&:hover': { background: cssVarV2('layer/background/hoverOverlay') },
+    '&[aria-disabled="true"]': {
+      cursor: 'not-allowed',
+      color: cssVarV2('text/disable'),
     },
   },
 });

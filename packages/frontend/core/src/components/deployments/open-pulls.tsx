@@ -8,6 +8,7 @@ import {
   fixRunFor,
   mergesDirectly,
   readyPulls,
+  type ReleaseJob,
   type ReleasePull,
   type ReleaseState,
 } from '@notesgraph/core/modules/agents';
@@ -123,6 +124,16 @@ const FixAction = ({
   );
 };
 
+/** A pull request's badge while a queued job acts on it. */
+const queuedLabel = (job: ReleaseJob) =>
+  job.kind === 'close'
+    ? job.status === 'running'
+      ? 'Closing…'
+      : 'Queued to close'
+    : job.status === 'running'
+      ? 'Merging…'
+      : 'Queued to merge';
+
 /** Says where to add the agent "Fix with Claude" needs. */
 export const NO_FIX_AGENT =
   'Fixing needs a Claude Code agent on a device with this repo: add one in Settings → Agents.';
@@ -133,7 +144,7 @@ export const NO_FIX_AGENT =
  */
 export const OpenPulls = ({
   state,
-  busy,
+  queued,
   agent,
   onMerge,
   onMergeAll,
@@ -141,7 +152,8 @@ export const OpenPulls = ({
   onFix,
 }: {
   state: ReleaseState;
-  busy: boolean;
+  /** The screen's queued jobs, by the pull request each acts on. */
+  queued: ReadonlyMap<number, ReleaseJob>;
   /** The device agent Fix with Claude goes to; none disables it. */
   agent: Agent | undefined;
   onMerge: (pr: ReleasePull) => void;
@@ -150,7 +162,7 @@ export const OpenPulls = ({
   onFix: (pr: ReleasePull) => void;
 }) => {
   const base = state.settings?.baseBranch ?? 'stage';
-  const ready = readyPulls(state.open);
+  const ready = readyPulls(state.open).filter(pr => !queued.has(pr.number));
   const runsStore = useService(AgentRunsStore);
   const runs = useLiveData(useMemo(() => runsStore.watchRuns(), [runsStore]));
   return (
@@ -161,10 +173,10 @@ export const OpenPulls = ({
           <span className={styles.sectionCount}>{state.open.length}</span>
         </div>
         <Button
-          disabled={busy || ready.length === 0}
+          disabled={ready.length === 0}
           tooltip={
             ready.length === 0
-              ? 'None is ready: drafts, conflicts and checks still running are left'
+              ? 'None is ready that isn’t queued: drafts, conflicts and checks still running are left'
               : 'Failing checks don’t hold a merge up; drafts, conflicts and checks still running are left'
           }
           onClick={() => onMergeAll(ready)}
@@ -187,6 +199,7 @@ export const OpenPulls = ({
             const { label, tone } = READINESS[pr.readiness];
             const fixRun = fixRunFor(pr.url, runs ?? []);
             const fixStatus = fixRun ? fixRunStatus(fixRun) : null;
+            const job = queued.get(pr.number);
             return (
               <div
                 key={pr.number}
@@ -207,6 +220,14 @@ export const OpenPulls = ({
                   </span>
                   <span className={styles.rowMeta}>
                     <span className={badgeClass(tone)}>{label}</span>
+                    {job ? (
+                      <span
+                        className={badgeClass('neutral')}
+                        data-testid="release-open-queued"
+                      >
+                        {queuedLabel(job)}
+                      </span>
+                    ) : null}
                     {fixStatus ? (
                       <span
                         className={badgeClass(fixStatus.tone)}
@@ -223,7 +244,7 @@ export const OpenPulls = ({
                 <div className={styles.rowActions}>
                   {mergesDirectly(pr.readiness) ? (
                     <Button
-                      disabled={busy}
+                      disabled={!!job}
                       onClick={() => onMerge(pr)}
                       data-testid="release-merge"
                     >
@@ -234,14 +255,14 @@ export const OpenPulls = ({
                     <FixAction
                       pr={pr}
                       run={fixRun}
-                      busy={busy}
+                      busy={!!job}
                       agent={agent}
                       onFix={onFix}
                     />
                   ) : null}
                   <Button
                     variant="plain"
-                    disabled={busy}
+                    disabled={!!job}
                     tooltip="Close it on GitHub without merging; its branch is kept."
                     onClick={() => onClose(pr)}
                     data-testid="release-close"

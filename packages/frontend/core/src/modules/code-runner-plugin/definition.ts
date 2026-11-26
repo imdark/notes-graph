@@ -7,9 +7,8 @@ import { definePlugin } from '@notesgraph/plugin-sdk/client';
  */
 export const codeRunnerPluginDefinition = definePlugin({
   async activate(ctx) {
-    const { CodeRunnerViewExtension } = await import(
-      './views/code-runner-view-extension'
-    );
+    const { CodeRunnerViewExtension } =
+      await import('./views/code-runner-view-extension');
     ctx.editor.registerViewExtensions([CodeRunnerViewExtension]);
   },
 });

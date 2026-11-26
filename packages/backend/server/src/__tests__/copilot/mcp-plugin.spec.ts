@@ -3,7 +3,8 @@ import test from 'ava';
 import { nextPatchVersion } from '../../models/agent-plugin';
 import { WorkspaceMcpProvider } from '../../plugins/copilot/mcp/provider';
 
-const CODE = 'export default { activate(ctx) { ctx.ui.notify({ title: "hi" }); } };';
+const CODE =
+  'export default { activate(ctx) { ctx.ui.notify({ title: "hi" }); } };';
 
 /** The plugin tools over an in-memory store, as a user who is (or isn't) a workspace admin. */
 async function pluginTools(admin = true) {

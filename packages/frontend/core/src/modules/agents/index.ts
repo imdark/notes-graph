@@ -30,7 +30,7 @@ export {
   type ChatModel,
   CloudAgentRunnerService,
 } from './services/cloud-runner';
-export { AgentContextService } from './services/context';
+export { AgentContextService, projectOf } from './services/context';
 export {
   apkConfirmText,
   apkPendingText,
@@ -45,6 +45,7 @@ export {
   type DeployCiRun,
   DeploymentsService,
   deployRunsFor,
+  fixRunFor,
   type FlagStage,
   flagStage,
   formatDuration,
@@ -55,7 +56,6 @@ export {
   mergeReadiness,
   mergesDirectly,
   needsHelpToMerge,
-  fixRunFor,
   productionPill,
   productionTimes,
   type PullRequest,
@@ -67,6 +67,7 @@ export {
   releaseAction,
   releaseBlocker,
   releaseConfirmText,
+  type ReleaseQueueAhead,
   type ReleaseStage,
   releaseStageOf,
   repoOf,
@@ -122,6 +123,7 @@ export {
   type LogPattern,
   type MonitoringAgent,
   type MonitoringDecision,
+  onDownDevice,
   openDecisions,
   type RegistryDevice,
   STALE_AFTER_SECONDS,
@@ -176,6 +178,15 @@ export {
   splitSuggestion,
 } from './services/question-fork';
 export {
+  queueAhead,
+  queuedPulls,
+  ReleaseActionQueue,
+  type ReleaseJob,
+  type ReleaseJobKind,
+  type ReleaseJobSpec,
+  type ReleaseJobStatus,
+} from './services/release-queue';
+export {
   AGENT_SKILLS,
   type AgentBudget,
   type AndroidApkState,
@@ -227,8 +238,14 @@ export {
   type PatchLine,
   type RunChanges,
 } from './services/run-changes';
-export { runChatMessages } from './services/run-chat';
-export { askTranscript } from './services/run-chat';
+export {
+  askTranscript,
+  continuationBrief,
+  FOLLOW_UP_TRANSCRIPT_CHARS,
+  type RunChatContext,
+  runChatMessages,
+  runDied,
+} from './services/run-chat';
 export {
   type AgentRunSession,
   AgentRunSessionService,
@@ -253,6 +270,7 @@ export {
   QUEUED_STATUS,
   releaseQueuedTasks,
 } from './services/task-claim';
+export { moveToProject, TaskProjectService } from './services/task-project';
 export {
   configureTerminalSocketAuth,
   TERMINAL_HARNESSES,
@@ -281,8 +299,12 @@ export {
   type AgentTargetKind,
   DEFAULT_MAX_STEPS,
 } from './stores/agents';
+export { AGENT_DOWN_TITLE, AgentDownMark } from './views/agent-down-mark';
 export { AgentIcon, agentIconData } from './views/agent-icon';
-export { useAgentsDownLast } from './views/use-agents-down-last';
+export {
+  useAgentsDownLast,
+  useDownDeviceKeys,
+} from './views/use-agents-down-last';
 
 import { type Framework } from '@notesgraph/infra';
 
@@ -310,6 +332,7 @@ import { RemoteAgentRunnerService } from './services/remote-runner';
 import { ResearchToolsService } from './services/research-tools';
 import { AgentRunSessionService } from './services/run-session';
 import { AgentTaskClaimService } from './services/task-claim';
+import { TaskProjectService } from './services/task-project';
 import { TerminalService } from './services/terminal';
 import { AgentRunLogsStore } from './stores/agent-run-logs';
 import { AgentRunsStore } from './stores/agent-runs';
@@ -342,6 +365,7 @@ export function configureAgentsModule(framework: Framework) {
       AgentRulesService,
     ])
     .service(AgentTaskClaimService, [DocsService])
+    .service(TaskProjectService, [DocsService])
     .service(AgentRunSessionService, [
       AgentExecutorService,
       AgentTaskClaimService,

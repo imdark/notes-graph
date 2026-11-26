@@ -342,6 +342,44 @@
       "env": "NOTESGRAPH_GITHUB_TOKEN"
     }
   },
+  "indexer": {
+    "enabled": {
+      "type": "Boolean",
+      "desc": "Enable indexer plugin",
+      "env": "NOTESGRAPH_INDEXER_ENABLED"
+    },
+    "provider.type": {
+      "type": "String",
+      "desc": "Indexer search service provider name",
+      "env": "NOTESGRAPH_INDEXER_SEARCH_PROVIDER"
+    },
+    "provider.endpoint": {
+      "type": "String",
+      "desc": "Indexer search service endpoint",
+      "env": "NOTESGRAPH_INDEXER_SEARCH_ENDPOINT"
+    },
+    "provider.apiKey": {
+      "type": "String",
+      "desc": "Indexer search service api key. Optional for elasticsearch",
+      "link": "https://www.elastic.co/guide/server/current/api-key.html",
+      "env": "NOTESGRAPH_INDEXER_SEARCH_API_KEY"
+    },
+    "provider.username": {
+      "type": "String",
+      "desc": "Indexer search service auth username, if not set, basic auth will be disabled. Optional for elasticsearch",
+      "link": "https://www.elastic.co/guide/en/elasticsearch/reference/current/http-clients.html",
+      "env": "NOTESGRAPH_INDEXER_SEARCH_USERNAME"
+    },
+    "provider.password": {
+      "type": "String",
+      "desc": "Indexer search service auth password, if not set, basic auth will be disabled. Optional for elasticsearch",
+      "env": "NOTESGRAPH_INDEXER_SEARCH_PASSWORD"
+    },
+    "autoIndex.batchSize": {
+      "type": "Number",
+      "desc": "Number of workspaces automatically indexed per batch"
+    }
+  },
   "headroom": {
     "copilot": {
       "type": "Boolean",
@@ -460,44 +498,6 @@
     "storage": {
       "type": "Object",
       "desc": "The config for the storage provider."
-    }
-  },
-  "indexer": {
-    "enabled": {
-      "type": "Boolean",
-      "desc": "Enable indexer plugin",
-      "env": "NOTESGRAPH_INDEXER_ENABLED"
-    },
-    "provider.type": {
-      "type": "String",
-      "desc": "Indexer search service provider name",
-      "env": "NOTESGRAPH_INDEXER_SEARCH_PROVIDER"
-    },
-    "provider.endpoint": {
-      "type": "String",
-      "desc": "Indexer search service endpoint",
-      "env": "NOTESGRAPH_INDEXER_SEARCH_ENDPOINT"
-    },
-    "provider.apiKey": {
-      "type": "String",
-      "desc": "Indexer search service api key. Optional for elasticsearch",
-      "link": "https://www.elastic.co/guide/server/current/api-key.html",
-      "env": "NOTESGRAPH_INDEXER_SEARCH_API_KEY"
-    },
-    "provider.username": {
-      "type": "String",
-      "desc": "Indexer search service auth username, if not set, basic auth will be disabled. Optional for elasticsearch",
-      "link": "https://www.elastic.co/guide/en/elasticsearch/reference/current/http-clients.html",
-      "env": "NOTESGRAPH_INDEXER_SEARCH_USERNAME"
-    },
-    "provider.password": {
-      "type": "String",
-      "desc": "Indexer search service auth password, if not set, basic auth will be disabled. Optional for elasticsearch",
-      "env": "NOTESGRAPH_INDEXER_SEARCH_PASSWORD"
-    },
-    "autoIndex.batchSize": {
-      "type": "Number",
-      "desc": "Number of workspaces automatically indexed per batch"
     }
   },
   "directory": {

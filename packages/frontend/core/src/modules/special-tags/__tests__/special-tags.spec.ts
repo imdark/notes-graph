@@ -1,3 +1,4 @@
+/* eslint-disable rxjs/finnish -- fakes of the services, whose LiveData fields end in $ */
 /**
  * @vitest-environment happy-dom
  */

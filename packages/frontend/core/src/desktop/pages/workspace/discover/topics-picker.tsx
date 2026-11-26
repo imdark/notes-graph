@@ -1,4 +1,7 @@
-import { type TagLike, TagsInlineEditor } from '@notesgraph/core/components/tags';
+import {
+  type TagLike,
+  TagsInlineEditor,
+} from '@notesgraph/core/components/tags';
 import { TagService } from '@notesgraph/core/modules/tag';
 import { useI18n } from '@notesgraph/i18n';
 import { useService } from '@notesgraph/infra';

@@ -37,15 +37,16 @@ function lineAnchor(std: BlockStdScope, model: BlockModel): HTMLElement | null {
 
 /**
  * The line's two pills (assign to an agent, add a row after) as keyboard
- * toolbar buttons, at the end of the toolbar, so they're reachable with the
- * keyboard up. Behind enable_mobile_toolbar_line_actions.
+ * toolbar buttons, so they're reachable with the keyboard up. Behind
+ * enable_mobile_toolbar_line_actions.
  */
-export function lineToolbarItems(
-  framework: FrameworkProvider
-): KeyboardToolbarActionItem[] {
+export function lineToolbarItems(framework: FrameworkProvider): {
+  assignToAgent: KeyboardToolbarActionItem;
+  addLineAfter: KeyboardToolbarActionItem;
+} {
   const on = () =>
-    !!framework.get(FeatureFlagService).flags
-      .enable_mobile_toolbar_line_actions.value;
+    !!framework.get(FeatureFlagService).flags.enable_mobile_toolbar_line_actions
+      .value;
 
   const assignToAgent: KeyboardToolbarActionItem = {
     name: 'Assign to agent',
@@ -80,5 +81,5 @@ export function lineToolbarItems(
     },
   };
 
-  return [assignToAgent, addLineAfter];
+  return { assignToAgent, addLineAfter };
 }

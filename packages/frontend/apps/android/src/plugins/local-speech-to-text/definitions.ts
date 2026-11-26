@@ -20,9 +20,17 @@ export interface LocalSpeechToTextPlugin {
   /** Resolves once the model is in place; a second call joins the first. Rejects with code `failed`. */
   download(): Promise<void>;
   remove(): Promise<void>;
-  /** Rejects with code `permission-denied`, `unavailable` or `failed`. */
-  start(options: { lang: string }): Promise<{ session: number }>;
+  /**
+   * With `record`, `end` carries the session's audio as a WAV file. Rejects
+   * with code `permission-denied`, `unavailable` or `failed`.
+   */
+  start(options: {
+    lang: string;
+    record?: boolean;
+  }): Promise<{ session: number }>;
   stop(): Promise<void>;
+  /** Delete a recording from `end` once it has been read. */
+  deleteRecording(options: { path: string }): Promise<void>;
   addListener(
     eventName: 'partial' | 'segment',
     listener: (event: SpeechToTextTextEvent) => void

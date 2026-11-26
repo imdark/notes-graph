@@ -10892,6 +10892,7 @@ __metadata:
     "@notesgraph/link-card": "workspace:*"
     imapflow: "npm:^1.0.191"
     playwright: "npm:^1.58.2"
+    vitest: "npm:^4.1.8"
   languageName: unknown
   linkType: soft
 

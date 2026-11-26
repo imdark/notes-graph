@@ -24,10 +24,7 @@ export class AgentPluginsController {
     @CurrentUser() user: User,
     @Param('workspaceId') workspaceId: string
   ) {
-    await this.ac
-      .user(user.id)
-      .workspace(workspaceId)
-      .assert('Workspace.Read');
+    await this.ac.user(user.id).workspace(workspaceId).assert('Workspace.Read');
     const plugins = await this.models.agentPlugin.list(workspaceId);
     return {
       plugins: plugins.map(p => ({

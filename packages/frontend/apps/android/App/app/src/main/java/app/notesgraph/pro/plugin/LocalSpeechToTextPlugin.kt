@@ -29,6 +29,9 @@ import okhttp3.Request
 import timber.log.Timber
 import java.io.File
 import java.io.FileOutputStream
+import java.io.RandomAccessFile
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import java.security.MessageDigest
 import java.util.concurrent.Executors
 import java.util.concurrent.RejectedExecutionException
@@ -47,10 +50,14 @@ import kotlin.concurrent.thread
  * The models (about 290 MB) aren't in the APK: download() fetches them once
  * into app storage, each file checked against its hash.
  *
+ * start({ record: true }) also keeps everything the mic heard, as a WAV file
+ * in the cache; `end` says where, and the web layer reads it and then has it
+ * deleted with deleteRecording().
+ *
  * Events, each tagged with the `session` that start() resolved with:
  *  - `partial` { text }: the utterance in progress
  *  - `segment` { text }: a finished utterance
- *  - `end` { error? }: listening is over
+ *  - `end` { error?, recording? { path, mimeType } }: listening is over
  *  - `progress` { downloaded, total }: model download, in bytes
  */
 @CapacitorPlugin(
@@ -78,6 +85,15 @@ class LocalSpeechToTextPlugin : Plugin() {
 
     private val modelDir get() = File(context.filesDir, "speech/$MODEL_NAME")
     private val vadFile get() = File(context.filesDir, "speech/silero_vad.onnx")
+    private val recordingsDir get() = File(context.cacheDir, "capture-recordings")
+
+    override fun load() {
+        // Recordings the web layer never got to, from a run that was cut off.
+        thread(name = "local-stt-cleanup") {
+            val stale = System.currentTimeMillis() - STALE_RECORDING_MS
+            recordingsDir.listFiles()?.forEach { if (it.lastModified() < stale) it.delete() }
+        }
+    }
 
     private fun fileFor(file: ModelFile) = if (file.name == VAD_NAME) vadFile else File(modelDir, file.name)
 
@@ -171,7 +187,7 @@ class LocalSpeechToTextPlugin : Plugin() {
             recording?.finish(null)
             session += 1
             main.removeCallbacks(releaseIdle)
-            val next = Recording(session)
+            val next = Recording(session, call.getBoolean("record", false) == true)
             if (!next.open()) {
                 call.reject("Couldn't open the microphone", "failed")
                 return@post
@@ -191,6 +207,18 @@ class LocalSpeechToTextPlugin : Plugin() {
         }
     }
 
+    /** `{ path }`: a recording from `end`, once the web layer has read it. */
+    @PluginMethod
+    fun deleteRecording(call: PluginCall) {
+        val file = call.getString("path")?.let { File(it) }
+        if (file == null || file.parentFile?.canonicalFile != recordingsDir.canonicalFile) {
+            call.reject("Not a recording", "failed")
+            return
+        }
+        file.delete()
+        call.resolve()
+    }
+
     override fun handleOnPause() {
         // Leaving the app ends dictation rather than listening in the background.
         main.post { recording?.stop() }
@@ -203,10 +231,14 @@ class LocalSpeechToTextPlugin : Plugin() {
     }
 
     /** One listening session: the mic, the VAD and the speech heard so far. */
-    private inner class Recording(val id: Int) {
+    private inner class Recording(val id: Int, private val keepAudio: Boolean) {
         private var audio: AudioRecord? = null
         private var suppressor: NoiseSuppressor? = null
         private var vad: Vad? = null
+        /** Where the mic's audio is going, for `keepAudio`; the read loop's once started. */
+        private var wav: WavWriter? = null
+        /** The finished recording, set before the read loop asks for `end`. */
+        @Volatile private var recorded: File? = null
         @Volatile private var running = false
         /** The read loop is going, and owns the mic and the VAD. */
         private var started = false
@@ -251,6 +283,7 @@ class LocalSpeechToTextPlugin : Plugin() {
                         numThreads = 1,
                     ),
                 )
+                if (keepAudio) wav = openWav()
                 // Loading the recognizer takes a moment; the mic is already
                 // recording, and what it hears waits in the decode queue.
                 queue { loadRecognizer() }
@@ -263,7 +296,44 @@ class LocalSpeechToTextPlugin : Plugin() {
                 Timber.w(e, "LocalSpeechToText: couldn't start")
                 closeAudio()
                 safely { vad?.release() }
+                safely { wav?.discard() }
+                wav = null
                 false
+            }
+        }
+
+        /** A file for this session's audio; without one, dictation goes on unrecorded. */
+        private fun openWav(): WavWriter? = try {
+            recordingsDir.mkdirs()
+            WavWriter(File(recordingsDir, "capture-${System.currentTimeMillis()}-$id.wav"), SAMPLE_RATE)
+        } catch (e: Exception) {
+            Timber.w(e, "LocalSpeechToText: couldn't record")
+            null
+        }
+
+        /** Record thread only. */
+        private fun writeWav(pcm: ShortArray, n: Int) {
+            val writer = wav ?: return
+            try {
+                writer.write(pcm, n)
+            } catch (e: Exception) {
+                // A full disk, say: keep listening, just stop recording.
+                Timber.w(e, "LocalSpeechToText: recording stopped")
+                wav = null
+                safely { writer.discard() }
+            }
+        }
+
+        /** Record thread only. */
+        private fun closeWav() {
+            val writer = wav ?: return
+            wav = null
+            recorded = try {
+                writer.close()
+            } catch (e: Exception) {
+                Timber.w(e, "LocalSpeechToText: couldn't save the recording")
+                safely { writer.discard() }
+                null
             }
         }
 
@@ -281,6 +351,7 @@ class LocalSpeechToTextPlugin : Plugin() {
                         if (n < 0) throw IllegalStateException("AudioRecord.read returned $n")
                         continue
                     }
+                    writeWav(pcm, n)
                     val samples = FloatArray(n) { pcm[it] / 32768f }
                     vad.acceptWaveform(samples)
                     if (vad.isSpeechDetected()) {
@@ -305,15 +376,19 @@ class LocalSpeechToTextPlugin : Plugin() {
                 }
                 vad.flush()
                 drain(vad)
+                closeWav()
                 queue { main.post { finish(null) } }
             } catch (e: Exception) {
                 Timber.w(e, "LocalSpeechToText: recording failed")
+                // What was heard before the failure is still worth keeping.
+                closeWav()
                 main.post { finish("failed") }
             } finally {
-                // This thread is the only one that touches the mic and the VAD
-                // once recording, so it alone lets them go.
+                // This thread is the only one that touches the mic, the VAD
+                // and the recording once started, so it alone lets them go.
                 closeAudio()
                 safely { vad.release() }
+                closeWav()
             }
         }
 
@@ -350,7 +425,18 @@ class LocalSpeechToTextPlugin : Plugin() {
             }
             // The read loop sees `running` drop and closes the mic itself.
             if (!started) closeAudio()
-            emitNow(id, "end", JSObject().apply { if (error != null) put("error", error) })
+            emitNow(
+                id,
+                "end",
+                JSObject().apply {
+                    if (error != null) put("error", error)
+                    // Ended any other way than by the read loop (a new session,
+                    // the app closing), the file is left to the cleanup in load().
+                    recorded?.let {
+                        put("recording", JSObject().put("path", it.absolutePath).put("mimeType", "audio/wav"))
+                    }
+                },
+            )
         }
 
         @Synchronized
@@ -539,6 +625,8 @@ class LocalSpeechToTextPlugin : Plugin() {
         private const val DECODE_THREADS = 4
         /** The model takes ~300 MB of memory; let it go when dictation stops for a while. */
         private const val RELEASE_IDLE_MS = 120_000L
+        /** A recording still in the cache after this long was never collected. */
+        private const val STALE_RECORDING_MS = 24 * 60 * 60 * 1000L
 
         private const val MODEL_NAME = "moonshine-base-en-int8"
         private const val VAD_NAME = "silero_vad.onnx"
@@ -569,5 +657,60 @@ class LocalSpeechToTextPlugin : Plugin() {
             ),
         )
         private val TOTAL_BYTES = FILES.sumOf { it.size }
+    }
+}
+
+/** Mono 16-bit PCM into a WAV file; the header's sizes are filled in by close(). */
+private class WavWriter(private val file: File, private val sampleRate: Int) {
+    private val out = RandomAccessFile(file, "rw").apply {
+        setLength(0)
+        write(ByteArray(HEADER_BYTES))
+    }
+    private var dataBytes = 0L
+
+    fun write(pcm: ShortArray, count: Int) {
+        val bytes = ByteBuffer.allocate(count * 2).order(ByteOrder.LITTLE_ENDIAN)
+        bytes.asShortBuffer().put(pcm, 0, count)
+        out.write(bytes.array())
+        dataBytes += count * 2
+    }
+
+    /** The finished file, or null (and no file) if nothing was recorded. */
+    fun close(): File? {
+        if (dataBytes == 0L) {
+            discard()
+            return null
+        }
+        val header = ByteBuffer.allocate(HEADER_BYTES).order(ByteOrder.LITTLE_ENDIAN).apply {
+            put("RIFF".toByteArray())
+            putInt((36 + dataBytes).toInt())
+            put("WAVE".toByteArray())
+            put("fmt ".toByteArray())
+            putInt(16) // PCM format chunk size
+            putShort(1) // PCM
+            putShort(1) // mono
+            putInt(sampleRate)
+            putInt(sampleRate * 2) // bytes per second
+            putShort(2) // bytes per sample frame
+            putShort(16) // bits per sample
+            put("data".toByteArray())
+            putInt(dataBytes.toInt())
+        }
+        out.seek(0)
+        out.write(header.array())
+        out.close()
+        return file
+    }
+
+    fun discard() {
+        try {
+            out.close()
+        } finally {
+            file.delete()
+        }
+    }
+
+    private companion object {
+        const val HEADER_BYTES = 44
     }
 }

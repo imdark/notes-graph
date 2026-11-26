@@ -5,8 +5,10 @@ import { DocsService } from '@notesgraph/core/modules/doc';
 import { FeatureFlagService } from '@notesgraph/core/modules/feature-flag';
 import { JournalService } from '@notesgraph/core/modules/journal';
 import {
+  addCaptureRecording,
   appendDictation,
   cleanDictation,
+  compressRecording,
   type SpeechToTextError,
   type SpeechToTextSession,
   VoiceTasksService,
@@ -30,12 +32,31 @@ const errorMessages: Record<SpeechToTextError, string> = {
   failed: 'Listening stopped. Tap the mic to try again.',
 };
 
+/** One capture: its note, once there is one, and the recordings bound for it. */
+interface Capture {
+  note: { id: string; store: Store; release: () => void } | null;
+  /** Recordings still on their way; the note is let go once they are in. */
+  pending: Set<Promise<void>>;
+  /** At least one recording made it into the note. */
+  recorded: boolean;
+  /** Left, with this text; closed once nothing is pending. */
+  finishedWith: string | null;
+}
+
+const newCaptureState = (): Capture => ({
+  note: null,
+  pending: new Set(),
+  recorded: false,
+  finishedWith: null,
+});
+
 /**
  * Capture mode: a big mic and a text box for getting an idea down fast. The
  * first word typed or said creates an untitled note with no parent, so it
- * lands in the Inbox, and the note follows the text from then on. Nothing is
- * created for a capture that stays empty. "Hand to agent" starts runs on the
- * note with the agents picked from a list.
+ * lands in the Inbox, and the note follows the text from then on. Each time
+ * the mic listens, what it heard is also kept, as a recording at the top of
+ * the note. Nothing is created for a capture that stays empty. "Hand to
+ * agent" starts runs on the note with the agents picked from a list.
  *
  * Opened by the "NotesGraph Capture" launcher on Android and the capture
  * window on desktop.
@@ -74,11 +95,7 @@ export const CaptureView = ({
   // write into a capture that has moved on. Stopping doesn't bump it: the
   // sentence still being said arrives after the stop.
   const generationRef = useRef(0);
-  const noteRef = useRef<{
-    id: string;
-    store: Store;
-    release: () => void;
-  } | null>(null);
+  const captureRef = useRef<Capture>(newCaptureState());
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const vocabularyRef = useDictationVocabulary();
 
@@ -89,44 +106,115 @@ export const CaptureView = ({
     session?.stop().catch(console.error);
   }, []);
 
+  /** The capture's note, made on its first word or recording. */
+  const ensureNote = useCallback(
+    (capture: Capture) => {
+      if (capture.note) return capture.note;
+      const record = docsService.createDoc();
+      // marks it as a captured idea (it gets that special tag)
+      record.setProperty('capturedAt', new Date().toISOString());
+      const { doc, release } = docsService.open(record.id);
+      capture.note = { id: record.id, store: doc.blockSuiteDoc, release };
+      if (capture === captureRef.current) setDocId(record.id);
+      journalService.addToTodayJournal(record.id).catch(console.error);
+      return capture.note;
+    },
+    [docsService, journalService]
+  );
+
+  // A left capture lets its note go once its last recording is in, and sends
+  // a note that ended up empty to the trash rather than leave it in the Inbox.
+  const closeIfDone = useCallback(
+    (capture: Capture) => {
+      const note = capture.note;
+      if (!note || capture.finishedWith === null || capture.pending.size > 0)
+        return;
+      capture.note = null;
+      note.release();
+      if (!capture.finishedWith.trim() && !capture.recorded) {
+        docsService.list.doc$(note.id).value?.moveToTrash();
+      }
+    },
+    [docsService]
+  );
+
+  const keepRecording = useCallback(
+    (
+      capture: Capture,
+      recording: Promise<Blob | null | undefined>,
+      startedAt: Date
+    ) => {
+      const task: Promise<void> = recording
+        .then(async audio => {
+          if (!audio?.size) return;
+          const compressed = await compressRecording(audio);
+          await addCaptureRecording(
+            ensureNote(capture).store,
+            compressed,
+            startedAt
+          );
+          capture.recorded = true;
+        })
+        .catch(err => {
+          console.error('capture: failed to save the recording', err);
+        })
+        .finally(() => {
+          capture.pending.delete(task);
+          closeIfDone(capture);
+        });
+      capture.pending.add(task);
+    },
+    [closeIfDone, ensureNote]
+  );
+
   const start = useCallback(() => {
     const generation = ++generationRef.current;
     const current = () => generation === generationRef.current;
+    const startedAt = new Date();
     setError(null);
     setListening(true);
-    voice
-      .listen({
-        // Fillers dropped and the workspace's own spellings kept, in the
-        // live text too, so what is shown is what gets saved.
-        onPartial: value => {
-          if (current())
-            setPartial(cleanDictation(value, vocabularyRef.current));
+    const recording = voice
+      .listen(
+        {
+          // Fillers dropped and the workspace's own spellings kept, in the
+          // live text too, so what is shown is what gets saved.
+          onPartial: value => {
+            if (current())
+              setPartial(cleanDictation(value, vocabularyRef.current));
+          },
+          onSegment: segment => {
+            if (!current()) return;
+            setPartial('');
+            const words = cleanDictation(segment, vocabularyRef.current);
+            setText(prev => appendDictation(prev, words));
+          },
+          onEnd: endError => {
+            if (!current()) return;
+            sessionRef.current = null;
+            setListening(false);
+            setPartial('');
+            if (endError) setError(endError);
+          },
         },
-        onSegment: segment => {
-          if (!current()) return;
-          setPartial('');
-          const words = cleanDictation(segment, vocabularyRef.current);
-          setText(prev => appendDictation(prev, words));
-        },
-        onEnd: endError => {
-          if (!current()) return;
-          sessionRef.current = null;
-          setListening(false);
-          setPartial('');
-          if (endError) setError(endError);
-        },
-      })
+        { record: true }
+      )
       .then(session => {
         if (current()) sessionRef.current = session;
         else session.stop().catch(console.error);
+        return session.recording;
       })
       .catch(err => {
         console.error(err);
-        if (!current()) return;
-        setListening(false);
-        setError('failed');
+        if (current()) {
+          setListening(false);
+          setError('failed');
+        }
+        return null;
       });
-  }, [voice, vocabularyRef]);
+    // Counted from the start, so a capture left mid-sentence still waits for
+    // the recording before it lets the note go.
+    keepRecording(captureRef.current, recording, startedAt);
+  }, [keepRecording, voice, vocabularyRef]);
 
   // Write what is on screen, the sentence still being said included, so
   // nothing is lost if the app is closed mid-sentence.
@@ -136,43 +224,32 @@ export const CaptureView = ({
 
   const save = useCallback(() => {
     const value = contentRef.current;
-    if (!value.trim() && !noteRef.current) return;
+    const capture = captureRef.current;
+    if (!value.trim() && !capture.note) return;
     try {
-      if (!noteRef.current) {
-        const record = docsService.createDoc();
-        // marks it as a captured idea (it gets that special tag)
-        record.setProperty('capturedAt', new Date().toISOString());
-        const { doc, release } = docsService.open(record.id);
-        noteRef.current = { id: record.id, store: doc.blockSuiteDoc, release };
-        setDocId(record.id);
-        journalService.addToTodayJournal(record.id).catch(console.error);
-      }
-      writeCapture(noteRef.current.store, value);
+      writeCapture(ensureNote(capture).store, value);
     } catch (err) {
       console.error('capture: failed to save', err);
     }
-  }, [docsService, journalService]);
+  }, [ensureNote]);
 
   useEffect(() => {
-    if (!content.trim() && !noteRef.current) return;
+    if (!content.trim() && !captureRef.current.note) return;
     const timer = setTimeout(save, SAVE_DELAY_MS);
     return () => clearTimeout(timer);
   }, [content, save]);
 
-  // Leaving a capture: write what the save delay hasn't yet, and send a note
-  // that was emptied again to the trash rather than leave it in the Inbox.
+  // Leaving a capture: write what the save delay hasn't yet. Its recordings
+  // may still be on their way; they go to its note all the same.
   const finishCapture = useCallback(() => {
     generationRef.current++;
     stop();
     save();
-    const note = noteRef.current;
-    noteRef.current = null;
-    if (!note) return;
-    note.release();
-    if (!contentRef.current.trim()) {
-      docsService.list.doc$(note.id).value?.moveToTrash();
-    }
-  }, [docsService, save, stop]);
+    const capture = captureRef.current;
+    captureRef.current = newCaptureState();
+    capture.finishedWith = contentRef.current;
+    closeIfDone(capture);
+  }, [closeIfDone, save, stop]);
 
   useEffect(() => {
     if (autoListen && voice.supported) start();
@@ -203,7 +280,7 @@ export const CaptureView = ({
   }, [save, stop]);
 
   const getBlockIds = useCallback(() => {
-    const store = noteRef.current?.store;
+    const store = captureRef.current.note?.store;
     const [note] = store?.getModelsByFlavour('notesgraph:note') ?? [];
     return note ? note.children.map(block => block.id) : [];
   }, []);

@@ -119,9 +119,7 @@ test('titling names untitled notes from their body and trashes empty ones', asyn
     ]
   );
   t.deepEqual(
-    calls
-      .filter(c => c.method === 'DELETE')
-      .map(c => c.path.split('/').pop()),
+    calls.filter(c => c.method === 'DELETE').map(c => c.path.split('/').pop()),
     ['b']
   );
   t.deepEqual(output, {

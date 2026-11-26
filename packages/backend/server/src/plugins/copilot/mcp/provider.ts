@@ -43,6 +43,13 @@ import { commentText, replyContent } from './comments';
 import { deployInfoAnswer } from './deploy-info';
 import { JOURNAL_DATE_RE, journalScaffold, todayDate } from './journal';
 import {
+  fileTaskInJournal,
+  INBOX,
+  type JournalSection,
+  nameKey,
+  taskLine,
+} from './journal-file';
+import {
   DEFAULT_STALE_DAYS,
   DEFAULT_STUB_CHARS,
   notesHealth,
@@ -1620,11 +1627,47 @@ export class WorkspaceMcpProvider {
         },
       });
 
+      /** The day's journal page, made from journalScaffold when it has none. */
+      const journalFor = async (
+        title: string,
+        agent: string | undefined,
+        signal: AbortSignal
+      ): Promise<
+        { docId: string; created: boolean } | WorkspaceMcpToolResult
+      > => {
+        for (const docId of await this.models.doc.findIdsByExactTitle(
+          workspaceId,
+          title
+        )) {
+          const readable = await this.ac
+            .user(userId)
+            .doc(workspaceId, docId)
+            .can('Doc.Read');
+          if (readable) return { docId, created: false };
+        }
+
+        await this.ac
+          .user(userId)
+          .workspace(workspaceId)
+          .assert('Workspace.CreateDoc');
+        const aborted = abortIfNeeded(signal);
+        if (aborted) return aborted;
+
+        const projects = await this.models.project.list(workspaceId);
+        const result = await this.writer.createDoc(
+          workspaceId,
+          title,
+          stampAttribution(journalScaffold(projects.map(p => p.name)), agent),
+          userId
+        );
+        return { docId: result.docId, created: true };
+      };
+
       const ensureJournal = defineTool({
         name: 'ensure_journal',
         title: 'Ensure Journal',
         description:
-          "Get the journal page for a day (title YYYY-MM-DD), creating it first when the day has none: a '## <project>' heading with an empty to-do per project, then '## Inbox', the outline the app gives a new day (the app adds each section's todos: list when it next opens that day). Call this before adding a task to a day's journal, then add it with update_document. Returns {docId, title, created}.",
+          "Get the journal page for a day (title YYYY-MM-DD), creating it first when the day has none: a '## <project>' heading with an empty to-do per project, then '## Inbox', the outline the app gives a new day (the app adds each section's todos: list when it next opens that day). To add a task to a day's journal use file_task, which calls this itself. Returns {docId, title, created}.",
         parser: z.object({
           date: z.string().regex(JOURNAL_DATE_RE).optional(),
           agent: z.string().optional(),
@@ -1643,44 +1686,105 @@ export class WorkspaceMcpProvider {
         execute: async ({ date, agent }, options) => {
           const title = date ?? todayDate();
           try {
-            for (const docId of await this.models.doc.findIdsByExactTitle(
-              workspaceId,
-              title
-            )) {
-              const readable = await this.ac
-                .user(userId)
-                .doc(workspaceId, docId)
-                .can('Doc.Read');
-              if (readable) {
-                return toolText(
-                  JSON.stringify({ docId, title, created: false })
-                );
-              }
-            }
-
-            await this.ac
-              .user(userId)
-              .workspace(workspaceId)
-              .assert('Workspace.CreateDoc');
-            const aborted = abortIfNeeded(options.signal);
-            if (aborted) return aborted;
-
-            const projects = await this.models.project.list(workspaceId);
-            const result = await this.writer.createDoc(
-              workspaceId,
-              title,
-              stampAttribution(
-                journalScaffold(projects.map(p => p.name)),
-                agent
-              ),
-              userId
-            );
-            return toolText(
-              JSON.stringify({ docId: result.docId, title, created: true })
-            );
+            const journal = await journalFor(title, agent, options.signal);
+            if ('content' in journal) return journal;
+            return toolText(JSON.stringify({ ...journal, title }));
           } catch (error) {
             return toolError(
               `Failed to get or create the journal: ${error instanceof Error ? error.message : 'Unknown error'}`
+            );
+          }
+        },
+      });
+
+      const fileTask = defineTool({
+        name: 'file_task',
+        title: 'File Task',
+        description:
+          "Add a task to a day's journal under a project: a to-do (checkbox) block under the journal's '## <project>' heading, above that section's empty to-do. Use this to file or refile a task in a journal instead of read_document + update_document, which can't round-trip the page's todos: Task Lists. The journal is made when the day has none (as ensure_journal), and a section the page lacks is added above Inbox: the heading, an empty to-do and the project's todos: Task List. Nothing else on the page changes. Leave project out to file in Inbox. Returns {docId, blockId, section, createdJournal, createdSection}." +
+          firstPersonGuidance,
+        parser: z.object({
+          text: z.string(),
+          project: z.string().optional(),
+          date: z.string().regex(JOURNAL_DATE_RE).optional(),
+          agent: z.string().optional(),
+        }),
+        inputSchema: {
+          type: 'object',
+          properties: {
+            text: {
+              type: 'string',
+              description:
+                'The task line, e.g. "PERSONAL-330 Fix the share menu #repo:notes-graph". A leading "- [ ]" is dropped; the block is a to-do either way.',
+            },
+            project: {
+              type: 'string',
+              description:
+                "The project's name, matching its journal heading (case and spaces aside). Omit for Inbox.",
+            },
+            date: {
+              type: 'string',
+              description: 'The journal day, YYYY-MM-DD (default: today, UTC)',
+            },
+            agent: agentInputSchema,
+          },
+          required: ['text'],
+          additionalProperties: false,
+        },
+        execute: async ({ text, project, date, agent }, options) => {
+          const secret = guardSecrets(text, project, agent);
+          if (secret) return toolError(secret);
+          if (!taskLine(text).text) {
+            return toolError('The task has no text.');
+          }
+          const title = date ?? todayDate();
+          try {
+            let section: JournalSection = { name: INBOX };
+            const name = project?.trim();
+            if (name && nameKey(name) !== nameKey(INBOX)) {
+              const match = (await this.models.project.list(workspaceId)).find(
+                p => nameKey(p.name) === nameKey(name)
+              );
+              if (!match) {
+                return toolError(
+                  `No project named "${name}". Leave project out to file in Inbox.`
+                );
+              }
+              section = { name: match.name, projectId: match.id };
+            }
+
+            const journal = await journalFor(title, agent, options.signal);
+            if ('content' in journal) return journal;
+            const accessible = await this.ac
+              .user(userId)
+              .workspace(workspaceId)
+              .doc(journal.docId)
+              .can('Doc.Update');
+            if (!accessible) {
+              return toolError(`Can't edit the journal for ${title}.`);
+            }
+            const aborted = abortIfNeeded(options.signal);
+            if (aborted) return aborted;
+
+            const filed = await this.writer.editDoc(
+              workspaceId,
+              journal.docId,
+              binary => fileTaskInJournal(binary, journal.docId, section, text),
+              userId
+            );
+            return toolText(
+              JSON.stringify({
+                success: true,
+                docId: journal.docId,
+                blockId: filed.blockId,
+                section: section.name,
+                createdJournal: journal.created,
+                createdSection: filed.createdSection,
+              })
+            );
+          } catch (error) {
+            return toolError(
+              `Failed to file the task: ${error instanceof Error ? error.message : 'Unknown error'}`
             );
           }
         },
@@ -1692,7 +1796,9 @@ export class WorkspaceMcpProvider {
         description:
           'Update an existing document with new markdown content (body only). Uses structural diffing to apply minimal changes, preserving document history and enabling real-time collaboration. Every update is stamped "Edited via MCP by <agent>". ' +
           "Task workflow: task lists use org-mode annotations at the start of each list item — `[ ]` todo, `[-]` in progress, `[X]` done, or an UPPERCASE keyword — which kanban boards mirroring the list group by, plus planning annotations like `SCHEDULED: <date>`, `DEADLINE: <date>`, `STARTED: [date]`, `CLOSED: [date]` at the end of the line. To pick up a task, rewrite its annotation to `[-]` and append ` @<your-agent-name>` to the task line to claim it; mark it `[X]` when finished. A task that ships code only becomes `[X]` once it is deployed and verified live — until then it climbs `COMMITTED` → `MERGED` → `DEPLOYED`. Keep working memory and documentation in the task's own linked note (see link_document). " +
-          'This does NOT update the document title. This tool not support insert or update database block and image yet.' +
+          'This does NOT update the document title. This tool not support insert or update database block and image yet. ' +
+          'A database block reads as a `### <title>` heading followed by a table: write that heading and table back unchanged where they were. The database is kept; changes to its rows are ignored. ' +
+          'To file a task in a journal use file_task, not this. To change one line of a long note, prefer update_block on that line over rewriting the whole note.' +
           firstPersonGuidance,
         parser: z.object({
           docId: z.string(),
@@ -1978,6 +2084,80 @@ export class WorkspaceMcpProvider {
           } catch (error) {
             return toolError(
               `Failed to update block: ${error instanceof Error ? error.message : 'Unknown error'}`
+            );
+          }
+        },
+      });
+
+      const appendToSection = defineTool({
+        name: 'append_to_section',
+        title: 'Append To Section',
+        description:
+          'Add to-do items under a heading of a document without rewriting it: each line becomes a new unchecked to-do block (a `[label](url)` in it becomes a link), as a surgical CRDT insert that leaves every other block untouched, databases and images included, unlike update_document. ' +
+          "The heading is matched ignoring case, spaces and punctuation. The first line fills the section's empty to-do when it has one (as a daily journal's template leaves under each heading); the rest go after the section's last block, before any subheading. A missing heading is added, as an h2, before an \"Inbox\" heading or at the end. Use it to file a task in a journal or list note." +
+          firstPersonGuidance,
+        parser: z.object({
+          docId: z.string(),
+          heading: z.string().min(1),
+          lines: z.array(z.string().min(1)).min(1).max(50),
+          agent: z.string().optional(),
+        }),
+        inputSchema: {
+          type: 'object',
+          properties: {
+            docId: {
+              type: 'string',
+              description: 'The document to add to',
+            },
+            heading: {
+              type: 'string',
+              description:
+                'The heading to add under, e.g. "notes-graph" (matches "## notes graph")',
+            },
+            lines: {
+              type: 'array',
+              items: { type: 'string' },
+              description:
+                'The to-do texts, one item each, without the "- [ ]" marker',
+            },
+            agent: agentInputSchema,
+          },
+          required: ['docId', 'heading', 'lines'],
+          additionalProperties: false,
+        },
+        execute: async ({ docId, heading, lines, agent }, options) => {
+          const secret = guardSecrets(lines.join('\n'), agent);
+          if (secret) return toolError(secret);
+
+          const accessible = await this.ac
+            .user(userId)
+            .workspace(workspaceId)
+            .doc(docId)
+            .can('Doc.Update');
+          if (!accessible) return toolError(`Doc with id ${docId} not found.`);
+
+          const aborted = abortIfNeeded(options.signal);
+          if (aborted) return aborted;
+
+          try {
+            await this.writer.insertUnderHeading(
+              workspaceId,
+              docId,
+              heading,
+              lines,
+              userId
+            );
+            return toolText(
+              JSON.stringify({
+                success: true,
+                docId,
+                heading,
+                added: lines.length,
+              })
+            );
+          } catch (error) {
+            return toolError(
+              `Failed to add to section: ${error instanceof Error ? error.message : 'Unknown error'}`
             );
           }
         },
@@ -2862,11 +3042,13 @@ export class WorkspaceMcpProvider {
         createFlashcards,
         createDocument,
         ensureJournal,
+        fileTask,
         updateDocument,
         updateDocumentMeta,
         linkDocument,
         updateTask,
         updateBlock,
+        appendToSection,
         reportMonitorValue,
         createDiagram,
         drawOnCanvasTool

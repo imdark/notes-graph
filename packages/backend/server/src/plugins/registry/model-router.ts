@@ -236,11 +236,14 @@ export function routeModel(input: RouteInput): ModelRoute {
   }
 
   const cap = input.maxCostUsd;
-  if (typeof cap === 'number' && cap > 0 && cap < SMALL_BUDGET_USD) {
-    if (model === 'opus') {
-      model = 'sonnet';
-      reasons.push(`$${cap} budget`);
-    }
+  if (
+    typeof cap === 'number' &&
+    cap > 0 &&
+    cap < SMALL_BUDGET_USD &&
+    model === 'opus'
+  ) {
+    model = 'sonnet';
+    reasons.push(`$${cap} budget`);
   }
 
   const override = overridesIn(input.context);

@@ -93,7 +93,8 @@ function findVideoSources() {
       });
       srcs.forEach(function (s) {
         // blob: is a stream (MSE), not a file; .m3u8/.mpd are manifests.
-        if (!s || s.startsWith('blob:') || /\.(m3u8|mpd)(\?|$)/i.test(s)) return;
+        if (!s || s.startsWith('blob:') || /\.(m3u8|mpd)(\?|$)/i.test(s))
+          return;
         push(s, heightFromUrl(s), 'page', 10 + entry.order);
       });
     });

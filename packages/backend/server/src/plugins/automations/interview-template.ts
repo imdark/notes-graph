@@ -108,7 +108,7 @@ export const INTERVIEW_TEMPLATES = [
     id: 'interview-events',
     name: 'Tag interview events and add the candidate CV and LinkedIn',
     description:
-      'Every 30 minutes, find upcoming calendar events that look like interviews and queue an agent for each: it classifies the event, tags it #interview, and adds the candidate\'s CV and LinkedIn link found in the Slack-synced notes. Set the agent device at the top of the code.',
+      "Every 30 minutes, find upcoming calendar events that look like interviews and queue an agent for each: it classifies the event, tags it #interview, and adds the candidate's CV and LinkedIn link found in the Slack-synced notes. Set the agent device at the top of the code.",
     triggers: [{ type: 'interval', minutes: 30 }],
     code: INTERVIEW_EVENTS_TEMPLATE,
     timeoutSeconds: 5 * 60,

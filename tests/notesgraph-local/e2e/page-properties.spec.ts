@@ -74,16 +74,25 @@ test('allow create tag on journals page', async ({ page }) => {
   await waitForEditorLoad(page);
   await ensurePagePropertiesVisible(page);
 
+  // A journal page gets the special Journal tag a couple of seconds after it
+  // opens (enable_special_tags). Wait for it so the counts below don't race.
+  await expect(
+    page
+      .getByTestId('property-tags-value')
+      .getByTestId('inline-tags-list')
+      .locator('[data-tag-value="Journal"]')
+  ).toBeVisible({ timeout: 10_000 });
+
   await openTagsEditor(page);
   await searchAndCreateTag(page, 'Test1');
   await searchAndCreateTag(page, 'Test2');
   await closeTagsEditor(page);
-  await expectTagsVisible(page, ['Test1', 'Test2']);
+  await expectTagsVisible(page, ['Journal', 'Test1', 'Test2']);
 
   await openTagsEditor(page);
   await removeSelectedTag(page, 'Test1');
   await closeTagsEditor(page);
-  await expectTagsVisible(page, ['Test2']);
+  await expectTagsVisible(page, ['Journal', 'Test2']);
 });
 
 test('add custom property', async ({ page }) => {

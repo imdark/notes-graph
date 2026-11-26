@@ -92,7 +92,11 @@ test('readiness table', t => {
     [{}, 'none', 'unknown'],
   ];
   for (const [pull, checks, readiness] of cases) {
-    t.is(pullReadiness(pull, checks), readiness, JSON.stringify([pull, checks]));
+    t.is(
+      pullReadiness(pull, checks),
+      readiness,
+      JSON.stringify([pull, checks])
+    );
   }
 });
 
@@ -281,7 +285,10 @@ test('production status', t => {
     'deploying'
   );
   t.is(
-    productionStatus([run(2, sha('b'), 'failure'), run(1, sha('a'), 'success')]),
+    productionStatus([
+      run(2, sha('b'), 'failure'),
+      run(1, sha('a'), 'success'),
+    ]),
     'failed'
   );
   t.is(
@@ -299,7 +306,10 @@ test('production status', t => {
     'rolled-back'
   );
   t.is(
-    productionStatus([run(2, sha('b'), 'skipped'), run(1, sha('a'), 'success')]),
+    productionStatus([
+      run(2, sha('b'), 'skipped'),
+      run(1, sha('a'), 'success'),
+    ]),
     'live'
   );
 });

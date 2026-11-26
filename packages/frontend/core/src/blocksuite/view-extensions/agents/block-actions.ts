@@ -1,4 +1,4 @@
-import { AiIcon, PlusIcon } from '@blocksuite/icons/lit';
+import { AiIcon, NoNetworkIcon, PlusIcon } from '@blocksuite/icons/lit';
 import {
   menu,
   popMenu,
@@ -10,17 +10,21 @@ import type { BlockModel } from '@blocksuite/notesgraph/store';
 import { IconType } from '@notesgraph/component';
 import {
   type Agent,
+  AGENT_DOWN_TITLE,
   AgentRunSessionService,
   AgentsService,
   type AgentTarget,
   FleetService,
+  onDownDevice,
 } from '@notesgraph/core/modules/agents';
+import { downMark as downMarkClass } from '@notesgraph/core/modules/agents/views/agent-down-mark.css';
 import { WorkspaceDialogService } from '@notesgraph/core/modules/dialogs';
 import { WorkbenchService } from '@notesgraph/core/modules/workbench';
 import type { FrameworkProvider } from '@notesgraph/infra';
 import { html } from 'lit';
 
 import { addRowAfter } from './add-row';
+import { assignProjectMenu, projectsLoaded } from './assign-project';
 
 /**
  * What a line offers from the assign-to-agent pill and, on a phone, the
@@ -49,7 +53,15 @@ const agentMenuIcon = (agent: Agent) => {
   return agent.emoji ? html`<span>${agent.emoji}</span>` : AiIcon();
 };
 
-export function blockTarget(std: BlockStdScope, model: BlockModel): AgentTarget {
+/** After an agent whose machine monitoring reports down; see AgentDownMark. */
+const downMark = html`<span class=${downMarkClass} title=${AGENT_DOWN_TITLE}
+  >${NoNetworkIcon()} Offline</span
+>`;
+
+export function blockTarget(
+  std: BlockStdScope,
+  model: BlockModel
+): AgentTarget {
   return { kind: 'block', docId: std.store.id, blockId: model.id };
 }
 
@@ -90,14 +102,17 @@ export function openAssignToAgentMenu({
   onClose?: () => void;
 }) {
   const target = blockTarget(std, model);
-  const assign = (agent: Agent) =>
-    assignBlockToAgent(framework, target, agent);
+  const assign = (agent: Agent) => assignBlockToAgent(framework, target, agent);
 
-  // Nothing may have fetched the machines yet this session; wait a moment
-  // for them, but open unsorted rather than keep the menu waiting.
+  // Nothing may have fetched the machines or the projects yet this session;
+  // wait a moment for them, but open without rather than keep the menu
+  // waiting.
   const fleet = framework.get(FleetService);
   Promise.race([
-    fleet.ensureLoaded(),
+    Promise.all([
+      fleet.ensureLoaded(),
+      projectsLoaded(framework).catch(() => {}),
+    ]),
     new Promise(resolve => setTimeout(resolve, FLEET_WAIT_MS)),
   ])
     .then(() => {
@@ -108,16 +123,20 @@ export function openAssignToAgentMenu({
       const agents = fleet.downLastNow(
         framework.get(AgentsService).agentsFor$('block').value
       );
+      const down = fleet.downKeysNow();
+      const project = assignProjectMenu(framework, std, model);
       popMenu(popupTargetFromElement(anchor), {
         options: {
           title: { text: 'Assign to agent' },
           onClose,
           items: [
+            ...(project ? [menu.group({ items: [project] })] : []),
             menu.group({
               items: agents.map(agent =>
                 menu.action({
                   name: agent.name,
                   prefix: agentMenuIcon(agent),
+                  postfix: onDownDevice(agent, down) ? downMark : undefined,
                   select: () => assign(agent),
                 })
               ),

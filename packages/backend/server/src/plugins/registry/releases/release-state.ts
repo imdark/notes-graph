@@ -123,7 +123,8 @@ export function firstParentMerges(commits: GhCommit[], head: string): number[] {
   let sha: string | undefined = head;
   while (sha && bySha.has(sha) && !seen.has(sha)) {
     seen.add(sha);
-    const commit: GhCommit = bySha.get(sha)!;
+    const commit: GhCommit | undefined = bySha.get(sha);
+    if (!commit) break;
     if (commit.parents.length === 2) {
       const match = MERGE_PR_RE.exec(commit.commit.message);
       if (match) numbers.push(Number(match[1]));

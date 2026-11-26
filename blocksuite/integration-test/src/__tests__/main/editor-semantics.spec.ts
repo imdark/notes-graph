@@ -8,7 +8,7 @@ import { insertContent } from '@blocksuite/notesgraph-rich-text';
 import { REFERENCE_NODE } from '@blocksuite/notesgraph-shared/consts';
 import { createDefaultDoc } from '@blocksuite/notesgraph-shared/utils';
 import { TextSelection } from '@blocksuite/std';
-import type { InlineMarkdownMatch } from '@blocksuite/std/inline';
+import type { InlineEditor, InlineMarkdownMatch } from '@blocksuite/std/inline';
 import { Text } from '@blocksuite/store';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 
@@ -359,5 +359,136 @@ describe('slash-menu action semantics', () => {
     await wait();
     const richText = getRichTextByBlockId(first.id);
     expect(richText.inlineEditor.yTextString).toMatch(/\d{4}-\d{2}-\d{2}/);
+  });
+});
+
+describe('composition ending after a tap elsewhere', () => {
+  function inlineEditorOf(blockId: string) {
+    return getRichTextByBlockId(blockId)
+      .inlineEditor as unknown as InlineEditor;
+  }
+
+  async function twoParagraphs(a: string, b: string) {
+    const { noteId, paragraphId } = await createParagraph(a);
+    const secondId = doc.addBlock(
+      'notesgraph:paragraph',
+      { text: new Text(b) },
+      noteId
+    );
+    await wait();
+    return { aId: paragraphId, bId: secondId };
+  }
+
+  /** Put the DOM caret in a block the way a tap does; the editor follows. */
+  function caretIn(blockId: string, index: number) {
+    const inline = inlineEditorOf(blockId);
+    inline.eventSource!.focus();
+    const native = document.getSelection()!;
+    native.removeAllRanges();
+    native.addRange(inline.toDomRange({ index, length: 0 })!);
+  }
+
+  /**
+   * Gboard's order on a tap in another block mid-word, as logged on Android:
+   * the press moves the DOM selection into the tapped block while the word
+   * is still composing, and compositionend arrives ~200 ms later. Every
+   * paragraph shares the page root as its event source.
+   */
+  test('a tap on another block mid-word leaves the caret in the tapped block', async () => {
+    const { aId, bId } = await twoParagraphs('ab', 'xyz');
+    caretIn(bId, 3);
+    await wait();
+
+    const a = inlineEditorOf(aId);
+    const b = inlineEditorOf(bId);
+    const source = b.eventSource!;
+    source.dispatchEvent(
+      new CompositionEvent('compositionstart', { bubbles: true })
+    );
+
+    a.rootElement!.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    const native = document.getSelection()!;
+    native.removeAllRanges();
+    native.addRange(a.toDomRange({ index: 2, length: 0 })!);
+    await wait(50);
+
+    source.dispatchEvent(
+      new CompositionEvent('compositionend', { bubbles: true, data: 'cd' })
+    );
+    await wait(100);
+
+    expect(b.yTextString).toBe('xyzcd');
+    expect(a.yTextString).toBe('ab');
+    const text = editor.host!.selection.find(TextSelection);
+    expect(text?.from.blockId).toBe(aId);
+    const range = document.getSelection()!.getRangeAt(0);
+    expect(a.rootElement!.contains(range.startContainer)).toBe(true);
+  });
+
+  /**
+   * A tap right after a word in another block: Gboard moves its composing
+   * region onto that word without a compositionend (logged on Android as a
+   * bare compositionupdate with the tapped word), and ends it later there.
+   */
+  test('a composition that moves to another block commits its word where it was typed, once', async () => {
+    const { aId, bId } = await twoParagraphs('ab', 'xyz');
+    caretIn(aId, 2);
+    await wait();
+
+    const a = inlineEditorOf(aId);
+    const b = inlineEditorOf(bId);
+    const source = a.eventSource!;
+    source.dispatchEvent(
+      new CompositionEvent('compositionstart', { bubbles: true })
+    );
+    source.dispatchEvent(
+      new CompositionEvent('compositionupdate', { bubbles: true, data: 'k' })
+    );
+
+    b.rootElement!.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    const native = document.getSelection()!;
+    native.removeAllRanges();
+    native.addRange(b.toDomRange({ index: 3, length: 0 })!);
+    source.dispatchEvent(
+      new CompositionEvent('compositionupdate', { bubbles: true, data: 'xyz' })
+    );
+    await wait(50);
+    // Committing the word in A must not pull the caret back out of B.
+    expect(a.yTextString).toBe('abk');
+    expect(editor.host!.selection.find(TextSelection)?.from.blockId).toBe(bId);
+    const range = document.getSelection()!.getRangeAt(0);
+    expect(b.rootElement!.contains(range.startContainer)).toBe(true);
+
+    source.dispatchEvent(
+      new CompositionEvent('compositionend', { bubbles: true, data: 'xyzm' })
+    );
+    await wait(100);
+
+    expect(a.yTextString).toBe('abk');
+  });
+
+  test('a word composed without a tap elsewhere keeps the caret in its block', async () => {
+    const { bId } = await twoParagraphs('ab', 'xyz');
+    caretIn(bId, 3);
+    await wait();
+
+    const b = inlineEditorOf(bId);
+    const source = b.eventSource!;
+    source.dispatchEvent(
+      new CompositionEvent('compositionstart', { bubbles: true })
+    );
+    await wait(50);
+    source.dispatchEvent(
+      new CompositionEvent('compositionend', { bubbles: true, data: 'cd' })
+    );
+    await wait(100);
+
+    expect(b.yTextString).toBe('xyzcd');
+    // Where in the word the caret lands is the commit's caret math, covered
+    // by the inline editor's own tests; here it only must stay in this block.
+    const text = editor.host!.selection.find(TextSelection);
+    expect(text?.from.blockId).toBe(bId);
+    const range = document.getSelection()!.getRangeAt(0);
+    expect(b.rootElement!.contains(range.startContainer)).toBe(true);
   });
 });

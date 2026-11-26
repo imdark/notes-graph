@@ -24,6 +24,7 @@ import type {
 } from './automations';
 import { runTargetsBlock } from './block-runs';
 import type { AgentContext } from './context';
+import { ReleaseActionQueue } from './release-queue';
 import {
   type AndroidApkState,
   type ApkRun,
@@ -1152,10 +1153,24 @@ export function productionPill(state: ReleaseState): {
 }
 
 /**
- * The Release button: how many pull requests it takes out, and why it is
- * off when it is. A failed deploy leaves it on, so a fix can go out.
+ * What is on the release screen's queue, as the Release button and its
+ * confirm weigh it: how many jobs are ahead, and how many of those merge.
  */
-export function releaseAction(state: ReleaseState): {
+export interface ReleaseQueueAhead {
+  jobs: number;
+  merges: number;
+}
+
+/**
+ * The Release button: how many pull requests it takes out, and why it is
+ * off when it is. A failed deploy leaves it on, so a fix can go out. While
+ * a deploy runs, or with merges queued and nothing yet to release, it
+ * queues the release instead, and `reason` says so.
+ */
+export function releaseAction(
+  state: ReleaseState,
+  ahead: ReleaseQueueAhead = { jobs: 0, merges: 0 }
+): {
   label: string;
   count: number;
   disabled: boolean;
@@ -1166,28 +1181,54 @@ export function releaseAction(state: ReleaseState): {
   const deploy = state.settings?.deployBranch ?? 'main';
   const base = state.settings?.baseBranch ?? 'stage';
   const off = (reason: string) => ({ label, count, disabled: true, reason });
+  const on = (reason: string | null) => ({
+    label,
+    count,
+    disabled: false,
+    reason,
+  });
   if (!state.settings) return off('Set up releases first.');
-  if (state.production.status === 'deploying') {
-    return off('A deploy is running.');
-  }
   if (state.production.diverged) {
     return off(
       `${deploy} has commits ${base} lacks (a hotfix?). Merge ${deploy} into ${base} first, then release.`
     );
   }
-  if (!state.next.sha || state.next.commits === 0) {
+  if ((!state.next.sha || state.next.commits === 0) && ahead.merges === 0) {
     return off(`${deploy} is at ${base}: nothing to release.`);
   }
-  return { label, count, disabled: false, reason: null };
+  if (state.production.status === 'deploying') {
+    return on('A deploy is running: this release is queued until it ends.');
+  }
+  if (ahead.jobs > 0) {
+    return on(
+      `Queued behind ${plural(ahead.jobs, 'action')}; it releases what ${base} has then.`
+    );
+  }
+  return on(null);
 }
 
 /** What the Release confirm says it does. */
-export function releaseConfirmText(state: ReleaseState): string {
+export function releaseConfirmText(
+  state: ReleaseState,
+  ahead: ReleaseQueueAhead = { jobs: 0, merges: 0 }
+): string {
   const settings = state.settings;
   const base = settings?.baseBranch ?? 'stage';
   const deploy = settings?.deployBranch ?? 'main';
   const workflow = settings?.workflowFile ?? 'deploy-prod.yml';
-  return `Fast-forwards ${deploy} to ${base} (${sha7(state.next.sha)}, ${plural(state.next.prs.length, 'PR')}) and starts ${workflow}.`;
+  const deploying = state.production.status === 'deploying';
+  if (!deploying && ahead.jobs === 0) {
+    return `Fast-forwards ${deploy} to ${base} (${sha7(state.next.sha)}, ${plural(state.next.prs.length, 'PR')}) and starts ${workflow}.`;
+  }
+  const wait = [
+    deploying ? 'the running deploy ends' : null,
+    ahead.jobs > 0
+      ? `${plural(ahead.jobs, 'queued action')} ahead of it finish`
+      : null,
+  ]
+    .filter(Boolean)
+    .join(' and ');
+  return `Queued: once ${wait}, fast-forwards ${deploy} to what ${base} has then and starts ${workflow}.${ahead.merges > 0 ? ' The merges queued ahead of it go out with it.' : ''}`;
 }
 
 /** What the Merge confirm says it does. */
@@ -1645,11 +1686,38 @@ export class DeploymentsService extends Service {
     return result;
   }
 
+  /**
+   * The screen's merges, releases and the like, run one at a time so more
+   * can be asked for while one is under way. A release holds while a deploy
+   * runs. It goes on while the screen is closed.
+   */
+  readonly releaseQueue = new ReleaseActionQueue({
+    deployRunning: () => this.release$.value?.production.status === 'deploying',
+    refresh: () => this.refreshRelease({ fresh: true }),
+  });
+
+  override dispose() {
+    this.releaseQueue.dispose();
+    super.dispose();
+  }
+
   /** Fast-forward the deploy branch to `sha` and start the deploy. */
   async release(sha: string) {
     const result = await this.remote.release(this.workspaceId, { sha });
     this.setRelease(result.state);
     return result;
+  }
+
+  /**
+   * Release what the base branch has as last read (a queued release reads
+   * it at its turn, so merges queued before it go out with it). Null when
+   * the deploy branch already has it all.
+   */
+  async releaseNext() {
+    const next = this.release$.value?.next;
+    if (!next?.sha || next.commits === 0) return null;
+    const sha = next.sha;
+    return { sha, ...(await this.release(sha)) };
   }
 
   async redeploy() {

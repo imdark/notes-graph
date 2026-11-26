@@ -1,6 +1,9 @@
 import type { Memento } from '@notesgraph/infra';
 
-import { linkCardNewsImageEndpoint } from '../../../../modules/link-card';
+import {
+  linkCardNewsFeedEndpoint,
+  linkCardNewsImageEndpoint,
+} from '../../../../modules/link-card';
 import {
   proxyFetchText,
   tagText,
@@ -21,6 +24,8 @@ export interface DiscoverItem {
   origin?: 'news' | 'record';
   /** A record's own preview image, if its source has one (e.g. YouTube). */
   thumbnail?: string;
+  /** A news item's preview image, when the shared feed already resolved it. */
+  image?: string;
 }
 
 const TOPICS_KEY = 'notesgraph:discover:topics';
@@ -52,19 +57,54 @@ function stringList(value: unknown): string[] | null {
     : null;
 }
 
-/**
- * The user's selected topics, persisted in localStorage. The defaults apply
- * only until the user has saved a selection; an empty selection stays empty.
- */
-export function loadTopics(): string[] {
+/** The selection this browser last saved, or null if it never saved one. */
+export function loadSavedTopics(): string[] | null {
   try {
     const raw = globalThis.localStorage?.getItem(TOPICS_KEY);
-    const parsed = raw ? stringList(JSON.parse(raw)) : null;
-    if (parsed) return parsed;
+    return raw ? stringList(JSON.parse(raw)) : null;
   } catch {
-    // ignore malformed storage
+    return null; // malformed storage
   }
-  return DEFAULT_TOPICS;
+}
+
+/**
+ * The user's selected topics as this browser last saw them. The server's copy
+ * (`fetchServerTopics`) wins once it loads. The defaults apply only until the
+ * user has saved a selection; an empty selection stays empty.
+ */
+export function loadTopics(): string[] {
+  return loadSavedTopics() ?? DEFAULT_TOPICS;
+}
+
+const SERVER_TOPICS_PATH = '/api/notes/discover/topics';
+
+/** Fetch on the signed-in server (FetchService.fetch). */
+export type ServerFetch = (
+  input: string,
+  init?: RequestInit
+) => Promise<Response>;
+
+/**
+ * The selection saved on the server, where the morning preseed automation
+ * reads it. Null when none is saved yet; throws when signed out or offline.
+ */
+export async function fetchServerTopics(
+  fetch: ServerFetch
+): Promise<string[] | null> {
+  const res = await fetch(SERVER_TOPICS_PATH, { cache: 'no-store' });
+  const body = (await res.json()) as { topics?: unknown };
+  return stringList(body.topics);
+}
+
+export async function saveServerTopics(
+  fetch: ServerFetch,
+  topics: string[]
+): Promise<void> {
+  await fetch(SERVER_TOPICS_PATH, {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ topics: uniqueTopics(topics) }),
+  });
 }
 
 export function saveTopics(topics: string[]): void {
@@ -181,20 +221,68 @@ function parseRss(xml: string, topic: string): DiscoverItem[] {
   return items;
 }
 
+interface SharedFeed {
+  items?: Array<{
+    title?: unknown;
+    link?: unknown;
+    source?: unknown;
+    publishedAt?: unknown;
+    image?: unknown;
+  }>;
+}
+
+/** Items of a /clip/news-feed reply, dropping any malformed entry. */
+export function sharedFeedItems(
+  data: SharedFeed,
+  topic: string
+): DiscoverItem[] {
+  const items: DiscoverItem[] = [];
+  for (const raw of data.items ?? []) {
+    if (typeof raw.title !== 'string' || typeof raw.link !== 'string') continue;
+    items.push({
+      id: raw.link,
+      title: raw.title,
+      link: raw.link,
+      source:
+        typeof raw.source === 'string' && raw.source
+          ? raw.source
+          : hostFromUrl(raw.link),
+      publishedAt:
+        typeof raw.publishedAt === 'number' ? raw.publishedAt : undefined,
+      topic,
+      image: typeof raw.image === 'string' ? raw.image : undefined,
+    });
+  }
+  return items;
+}
+
+/**
+ * One topic's news. The sidecar keeps each topic's feed for every client and
+ * a daily automation preseeds it with images; a sidecar without that
+ * endpoint (an older desktop one) is read the old way, through its RSS proxy.
+ */
+async function fetchTopic(topic: string): Promise<DiscoverItem[]> {
+  try {
+    const res = await fetch(linkCardNewsFeedEndpoint(topic));
+    if (res.ok) {
+      return sharedFeedItems((await res.json()) as SharedFeed, topic);
+    }
+  } catch {
+    // fall through to the RSS proxy
+  }
+  return parseRss(await proxyFetchText(googleNewsRssUrl(topic)), topic);
+}
+
 /**
  * Fetch and merge the discover feed for the given interest topics. Each topic
- * is a Google News RSS search, fetched server-side through the link-card
- * sidecar (no CORS). Results are de-duplicated by headline and sorted newest
- * first. A failing topic is skipped, not fatal.
+ * is a Google News RSS search, read through the link-card sidecar (no CORS).
+ * Results are de-duplicated by headline and sorted newest first. A failing
+ * topic is skipped, not fatal.
  */
 export async function fetchDiscoverFeed(
   topics: string[]
 ): Promise<DiscoverItem[]> {
-  const settled = await Promise.allSettled(
-    topics.map(topic =>
-      proxyFetchText(googleNewsRssUrl(topic)).then(xml => parseRss(xml, topic))
-    )
-  );
+  const settled = await Promise.allSettled(topics.map(fetchTopic));
 
   const byKey = new Map<string, DiscoverItem>();
   for (const result of settled) {
@@ -216,6 +304,16 @@ const MAX_FEED_ITEMS = 80;
 const FEED_CACHE_PREFIX = 'discover:feed:v1:';
 /** A pulled feed stays fresh for a day; older than this we pull a new one. */
 export const FEED_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * A cached feed is pulled again once it is a day old or was pulled on an
+ * earlier day, so the first visit of a day shows that day's news (which the
+ * daily preseed has already put on the sidecar).
+ */
+export function isFeedStale(fetchedAt: number, now = Date.now()): boolean {
+  if (now - fetchedAt > FEED_MAX_AGE_MS) return true;
+  return new Date(fetchedAt).toDateString() !== new Date(now).toDateString();
+}
 
 export interface CachedFeed {
   items: DiscoverItem[];
@@ -273,6 +371,10 @@ export async function fetchCardImage(
   const key = CACHE_PREFIX + item.id;
   const cached = cache.get<string>(key);
   if (cached !== undefined) return cached;
+  if (item.image) {
+    cache.set(key, item.image);
+    return item.image;
+  }
 
   let pending = inflight.get(key);
   if (!pending) {

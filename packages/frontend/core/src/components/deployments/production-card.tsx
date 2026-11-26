@@ -5,13 +5,14 @@ import {
   productionPill,
   productionTimes,
   releaseAction,
+  type ReleaseQueueAhead,
   type ReleaseState,
   rollbackTargets,
   sha7,
 } from '@notesgraph/core/modules/agents';
 import { NOTESGRAPH_FLAGS } from '@notesgraph/core/modules/feature-flag';
 
-import { pillClass, when } from './shared';
+import { elapsedSince, pillClass, when } from './shared';
 import * as styles from './styles.css';
 
 /**
@@ -49,7 +50,8 @@ const FlagsLine = ({
  */
 export const ProductionCard = ({
   state,
-  busy,
+  ahead,
+  queued,
   onRelease,
   onRedeploy,
   onRollback,
@@ -57,8 +59,10 @@ export const ProductionCard = ({
   onOpenFlags,
 }: {
   state: ReleaseState;
-  /** An action of the screen's is under way. */
-  busy: boolean;
+  /** What is on the screen's queue, which a release goes behind. */
+  ahead: ReleaseQueueAhead;
+  /** Whether a job with this key is on the queue already. */
+  queued: (key: string) => boolean;
   onRelease: () => void;
   onRedeploy: () => void;
   onRollback: (imageSha: string) => void;
@@ -71,7 +75,7 @@ export const ProductionCard = ({
   const run = production.run ?? state.history[0] ?? null;
   const pill = productionPill(state);
   const deploying = status === 'deploying';
-  const release = releaseAction(state);
+  const release = releaseAction(state, ahead);
   const targets = rollbackTargets(state);
   const commit =
     status === 'rolled-back'
@@ -79,7 +83,6 @@ export const ProductionCard = ({
       : (deployInfo?.commit ?? run?.sha);
   const times = productionTimes(state);
   const liveRun = times.live.run ?? (deploying ? null : run);
-  const off = busy || deploying;
 
   return (
     <section className={styles.card} data-testid="release-production">
@@ -126,10 +129,7 @@ export const ProductionCard = ({
             Deploying{' '}
             <code className={styles.sha}>{sha7(times.deploying.sha)}</code>,
             started {when(times.deploying.startedAt)} (
-            {formatDuration(
-              Date.now() - Date.parse(times.deploying.startedAt)
-            ) || 'just now'}{' '}
-            so far)
+            {elapsedSince(times.deploying.startedAt)} so far)
           </span>
           <a
             className={styles.link}
@@ -158,7 +158,7 @@ export const ProductionCard = ({
           <span className={styles.runError}>The last deploy failed.</span>
           <Button
             size="default"
-            disabled={busy}
+            disabled={queued(`retry:${run.id}`)}
             onClick={() => onRetry(run.id)}
             data-testid="release-retry"
           >
@@ -191,7 +191,7 @@ export const ProductionCard = ({
         ) : null}
         <Button
           variant="primary"
-          disabled={busy || release.disabled}
+          disabled={release.disabled}
           tooltip={release.reason ?? undefined}
           onClick={onRelease}
           data-testid="release-release"
@@ -199,7 +199,7 @@ export const ProductionCard = ({
           {release.label}
         </Button>
         <Button
-          disabled={off || !state.settings}
+          disabled={deploying || queued('redeploy') || !state.settings}
           tooltip={`Deploys ${state.settings?.deployBranch ?? 'main'} again as it is`}
           onClick={onRedeploy}
           data-testid="release-redeploy"
@@ -223,7 +223,10 @@ export const ProductionCard = ({
             )
           }
         >
-          <Button disabled={off} data-testid="release-rollback">
+          <Button
+            disabled={deploying || queued('rollback')}
+            data-testid="release-rollback"
+          >
             Roll back ▾
           </Button>
         </Menu>

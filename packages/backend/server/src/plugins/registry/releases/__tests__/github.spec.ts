@@ -13,7 +13,11 @@ const headers = (values: Record<string, string> = {}) => ({
 
 /** A fetch that answers each call in turn and records what was asked. */
 function stubFetch(
-  answers: { status: number; body?: unknown; headers?: Record<string, string> }[]
+  answers: {
+    status: number;
+    body?: unknown;
+    headers?: Record<string, string>;
+  }[]
 ) {
   const calls: { url: string; method: string; body: unknown; auth: string }[] =
     [];
