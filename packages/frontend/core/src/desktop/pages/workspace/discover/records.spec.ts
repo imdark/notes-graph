@@ -6,8 +6,10 @@ import type {
 } from '../../../../modules/virtual-views';
 import type { DiscoverItem } from './feed';
 import {
+  appendNewToFeed,
   interleaveFeed,
   MAX_FEED_RECORDS,
+  nextShownFeed,
   virtualItemsToFeed,
 } from './records';
 
@@ -104,5 +106,65 @@ describe('interleaveFeed', () => {
 
   test('shows records alone when there is no news', () => {
     expect(interleaveFeed([], [news('r1')]).map(i => i.id)).toEqual(['r1']);
+  });
+});
+
+const record = (id: string): DiscoverItem => ({
+  ...news(id),
+  origin: 'record',
+});
+const ids = (items: DiscoverItem[]) => items.map(i => i.id);
+
+describe('appendNewToFeed', () => {
+  test('keeps shown cards in place and appends only new ones', () => {
+    const shown = [news('n1'), news('n2'), record('r1')];
+    const refreshed = [news('n3'), news('n1'), record('r2'), news('n4')];
+    expect(ids(appendNewToFeed(shown, refreshed))).toEqual([
+      'n1',
+      'n2',
+      'r1',
+      'n3',
+      'n4',
+      'r2',
+    ]);
+  });
+
+  test('keeps cards the update no longer has', () => {
+    const shown = [news('n1'), news('n2')];
+    expect(ids(appendNewToFeed(shown, [news('n3')]))).toEqual([
+      'n1',
+      'n2',
+      'n3',
+    ]);
+  });
+
+  test('returns the same list when nothing is new', () => {
+    const shown = [news('n1'), record('r1')];
+    expect(appendNewToFeed(shown, [record('r1')])).toBe(shown);
+  });
+});
+
+describe('nextShownFeed', () => {
+  test('starts over when the news is for a new selection', () => {
+    const prev = { selection: 'a', items: [news('n1')] };
+    expect(ids(nextShownFeed(prev, 'b', [news('n2')]).items)).toEqual(['n2']);
+  });
+
+  test('appends when the selection is unchanged', () => {
+    const prev = { selection: 'a', items: [news('n1')] };
+    expect(ids(nextShownFeed(prev, 'a', [news('n2')]).items)).toEqual([
+      'n1',
+      'n2',
+    ]);
+  });
+
+  test('replaces records shown before the first news arrived', () => {
+    const prev = { selection: null, items: [record('r1')] };
+    const next = [news('n1'), news('n2'), record('r1')];
+    expect(ids(nextShownFeed(prev, 'a', next).items)).toEqual([
+      'n1',
+      'n2',
+      'r1',
+    ]);
   });
 });

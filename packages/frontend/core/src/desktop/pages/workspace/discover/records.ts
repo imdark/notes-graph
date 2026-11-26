@@ -72,3 +72,46 @@ export function interleaveFeed(
   out.push(...news.slice(n), ...records.slice(r));
   return out;
 }
+
+/**
+ * Fold an updated feed into the one on screen without moving what the user
+ * is reading: cards already shown keep their place, and only cards not shown
+ * yet go at the end (news and records mixed as usual). Returns `shown` itself
+ * when nothing is new.
+ */
+export function appendNewToFeed(
+  shown: DiscoverItem[],
+  next: DiscoverItem[]
+): DiscoverItem[] {
+  const seen = new Set(shown.map(item => item.id));
+  const fresh = next.filter(item => !seen.has(item.id));
+  if (fresh.length === 0) return shown;
+  return [
+    ...shown,
+    ...interleaveFeed(
+      fresh.filter(item => item.origin !== 'record'),
+      fresh.filter(item => item.origin === 'record')
+    ),
+  ];
+}
+
+/** The feed on screen, and the user selection its news was loaded for. */
+export interface ShownFeed {
+  selection: string | null;
+  items: DiscoverItem[];
+}
+
+/**
+ * The next feed to show. When the news was loaded for a different selection
+ * (the user changed topics or interests), the feed starts over; any other
+ * update (a background refresh, a re-crawled record) only appends.
+ */
+export function nextShownFeed(
+  prev: ShownFeed,
+  selection: string | null,
+  next: DiscoverItem[]
+): ShownFeed {
+  if (prev.selection !== selection) return { selection, items: next };
+  const items = appendNewToFeed(prev.items, next);
+  return items === prev.items ? prev : { selection, items };
+}
