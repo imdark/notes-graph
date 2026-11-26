@@ -335,6 +335,7 @@ import { AgentRunSessionService } from './services/run-session';
 import { AgentTaskClaimService } from './services/task-claim';
 import { TaskProjectService } from './services/task-project';
 import { TerminalService } from './services/terminal';
+import { VerifyService } from './services/verify';
 import { AgentRunLogsStore } from './stores/agent-run-logs';
 import { AgentRunsStore } from './stores/agent-runs';
 import { AgentsStore } from './stores/agents';
@@ -381,6 +382,11 @@ export function configureAgentsModule(framework: Framework) {
       AgentsService,
       AgentRunSessionService,
     ])
+    .service(VerifyService, [
+      DocsService,
+      AgentsService,
+      AgentRunSessionService,
+    ])
     .service(DeploymentsService, [
       DocsSearchService,
       DocsService,
@@ -422,3 +428,10 @@ export {
   RunReviewService,
   type StartedReview,
 } from './services/run-review';
+export {
+  type StartedVerification,
+  VERIFICATIONS_DOC_TITLE,
+  verifyKey,
+  VerifyService,
+  type VerifyTarget,
+} from './services/verify';

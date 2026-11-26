@@ -1,12 +1,12 @@
 import { Text } from '@blocksuite/notesgraph/store';
 import { Service } from '@notesgraph/infra';
-import { filter, firstValueFrom, map, race, timer } from 'rxjs';
 
 import type { DocsService } from '../../doc';
 import type { Agent } from '../stores/agents';
 import type { AgentTemplate } from './agent-templates';
 import type { AgentsService } from './agents';
 import { CLAUDE_CODE_MODEL, CLOUD_DEVICE_KEY } from './remote-runner';
+import { awaitRunRecord } from './run-record';
 import type { AgentRunSessionService } from './run-session';
 
 /**
@@ -96,9 +96,6 @@ export interface StartedReview {
   runId: string | null;
 }
 
-/** How long to wait for a started run to get its record. */
-const RUN_RECORD_WAIT_MS = 15_000;
-
 /** The Run review agent, found by name or, renamed, by its instructions. */
 export function findRunReviewAgent(agents: Agent[]): Agent | undefined {
   return (
@@ -162,39 +159,12 @@ export class RunReviewService extends Service {
       docId,
       blockId,
     });
-    const runId = await this.runRecord(agent.id, blockId, running);
+    const runId = await awaitRunRecord(
+      this.sessions,
+      agent.id,
+      blockId,
+      running
+    );
     return { docId, blockId, runId };
-  }
-
-  /**
-   * The record of the session started for this agent on this block. A start
-   * that fails before it has one rejects; one that ends first, or is slow,
-   * gives null.
-   */
-  private async runRecord(
-    agentId: string,
-    blockId: string,
-    running: Promise<void>
-  ): Promise<string | null> {
-    const recorded$ = this.sessions.sessions$.pipe(
-      map(
-        sessions =>
-          sessions.find(
-            session =>
-              session.agentId === agentId &&
-              session.target.kind === 'block' &&
-              session.target.blockId === blockId &&
-              session.runId
-          )?.runId ?? null
-      ),
-      filter((runId): runId is string => !!runId)
-    );
-    return firstValueFrom(
-      race(
-        recorded$,
-        timer(RUN_RECORD_WAIT_MS).pipe(map(() => null)),
-        running.then(() => null)
-      )
-    );
   }
 }

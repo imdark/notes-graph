@@ -17,6 +17,7 @@ import { useMemo, useState } from 'react';
 
 import { badgeClass, READINESS, TaskLinks } from './shared';
 import * as styles from './styles.css';
+import { VerifyAction, VerifyBranch } from './verify-action';
 
 /** What a pull request's Fix with Claude run is doing, for its row. */
 const FIX_STATUS: Record<
@@ -162,6 +163,7 @@ export const OpenPulls = ({
   onFix: (pr: ReleasePull) => void;
 }) => {
   const base = state.settings?.baseBranch ?? 'stage';
+  const repo = state.settings?.repo ?? '';
   const ready = readyPulls(state.open).filter(pr => !queued.has(pr.number));
   const runsStore = useService(AgentRunsStore);
   const runs = useLiveData(useMemo(() => runsStore.watchRuns(), [runsStore]));
@@ -260,6 +262,19 @@ export const OpenPulls = ({
                       onFix={onFix}
                     />
                   ) : null}
+                  <VerifyAction
+                    target={{
+                      kind: 'pull',
+                      repo,
+                      number: pr.number,
+                      url: pr.url,
+                      title: pr.title,
+                      branch: pr.branch,
+                      merged: false,
+                      base,
+                      tasks: state.tasks[pr.number],
+                    }}
+                  />
                   <Button
                     variant="plain"
                     disabled={!!job}
@@ -275,6 +290,7 @@ export const OpenPulls = ({
           })}
         </div>
       )}
+      {repo ? <VerifyBranch repo={repo} base={base} /> : null}
       {!agent && state.open.some(pr => canFixToMerge(pr.readiness)) ? (
         <div className={styles.sectionHint}>{NO_FIX_AGENT}</div>
       ) : null}
