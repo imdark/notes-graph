@@ -155,9 +155,7 @@ describe('moveToProject', () => {
     const task = todo('Cache the build', work);
     const note = store.getModelById(noteId)!;
     store.deleteBlock(
-      note.children.find(
-        model => model.text?.toString() === 'Inbox'
-      )!
+      note.children.find(model => model.text?.toString() === 'Inbox')!
     );
 
     moveToProject(store, [task], null);
