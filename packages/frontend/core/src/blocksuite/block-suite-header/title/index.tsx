@@ -1,3 +1,4 @@
+import type { Store } from '@blocksuite/store';
 import type { InlineEditProps } from '@notesgraph/component';
 import { InlineEdit } from '@notesgraph/component';
 import { useGuard } from '@notesgraph/core/components/guard';
@@ -6,7 +7,6 @@ import { DocService, DocsService } from '@notesgraph/core/modules/doc';
 import { WorkspaceService } from '@notesgraph/core/modules/workspace';
 import { useLiveData, useService } from '@notesgraph/infra';
 import { track } from '@notesgraph/track';
-import type { Store } from '@blocksuite/store';
 import clsx from 'clsx';
 import type { HTMLAttributes } from 'react';
 import { useCallback, useSyncExternalStore } from 'react';
@@ -69,8 +69,7 @@ export const BlocksuiteHeaderTitle = (props: BlockSuiteHeaderTitleProps) => {
   const docsService = useService(DocsService);
   const docService = useService(DocService);
   const metaTitle = useLiveData(docService.doc.record.title$);
-  const docTitle =
-    useLiveRootTitle(docService.doc.blockSuiteDoc) ?? metaTitle;
+  const docTitle = useLiveRootTitle(docService.doc.blockSuiteDoc) ?? metaTitle;
 
   const onChange = useAsyncCallback(
     async (v: string) => {
