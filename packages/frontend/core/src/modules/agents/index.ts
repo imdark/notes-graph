@@ -241,6 +241,7 @@ export {
 export {
   askTranscript,
   continuationBrief,
+  type RunChatContext,
   runChatMessages,
   runDied,
 } from './services/run-chat';

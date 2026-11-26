@@ -1,19 +1,28 @@
 import {
+  AgentContextService,
   AgentExecutorService,
   type AgentRun,
   AgentRunLogsStore,
+  AgentRunSessionService,
   AgentRunsStore,
   AgentsService,
   askTranscript,
+  continuationBrief,
   forkTranscript,
   RemoteAgentRunnerService,
+  type RunChatContext,
   runChatMessages,
+  runDied,
 } from '@notesgraph/core/modules/agents';
 import { WorkspaceService } from '@notesgraph/core/modules/workspace';
 import { useService } from '@notesgraph/infra';
 import { useCallback, useMemo, useRef } from 'react';
 
-import { AgentSideChat, type SideChatRecord } from './agent-side-chat';
+import {
+  AgentSideChat,
+  type SideChatFollowUp,
+  type SideChatRecord,
+} from './agent-side-chat';
 
 /**
  * Ask about a run that has ended — what it did, why it failed, what is left —
@@ -45,6 +54,8 @@ export const AgentRunChat = ({
   const workspaceService = useService(WorkspaceService);
   const executor = useService(AgentExecutorService);
   const agentsService = useService(AgentsService);
+  const contextService = useService(AgentContextService);
+  const sessionService = useService(AgentRunSessionService);
 
   // Asked of the agent that ran it, on the same runtime — a run on a device's
   // Claude Code is asked there, not on the server's model.
@@ -58,23 +69,67 @@ export const AgentRunChat = ({
     return executor.chatFor(agent);
   }, [agentsService, executor, run.agentId, run.agentName]);
 
-  const opening = useCallback(async () => {
-    // Without the transcript the chat can still go on the input and answer.
+  // Without the transcript the chat can still go on the input and answer.
+  const runRecord = useCallback(async (): Promise<RunChatContext> => {
     if (run.remoteJobId) {
       const job = await remoteRunner
         .get(workspaceService.workspace.id, run.remoteJobId)
         .catch(() => null);
-      return runChatMessages(run, {
+      return {
         transcript: forkTranscript(job?.log ?? ''),
         output: output ?? job?.result ?? undefined,
-      });
+      };
     }
     const log = await logsStore.get(run.id).catch(() => undefined);
-    return runChatMessages(run, {
-      transcript: forkTranscript(log ?? ''),
-      output,
-    });
+    return { transcript: forkTranscript(log ?? ''), output };
   }, [logsStore, output, remoteRunner, run, workspaceService]);
+
+  const opening = useCallback(
+    async () => runChatMessages(run, await runRecord()),
+    [run, runRecord]
+  );
+
+  // A run whose session died is carried on by a new one, rebuilt from its
+  // transcript: the agent, the task, what it did and what the reader asks.
+  const followUp = useMemo<SideChatFollowUp | undefined>(
+    () =>
+      runDied(run)
+        ? {
+            label: 'Continue the run',
+            title:
+              'Start a new run of the agent on this task, given this run’s transcript, this chat and what you typed',
+            start: async (message, chat) => {
+              const agent = agentsService.agents$.value.find(
+                a => a.id === run.agentId
+              );
+              if (!agent) {
+                throw new Error(
+                  `${run.agentName} has been deleted, so there is no agent to continue it.`
+                );
+              }
+              const target = runsStore.targetOf(run);
+              if (!target) {
+                throw new Error(
+                  "Which blocks the run was on wasn't recorded, so it can't be continued. Select them and run the agent with Ctrl/⌘ K."
+                );
+              }
+              const [task, record] = await Promise.all([
+                contextService.build(target),
+                runRecord(),
+              ]);
+              sessionService
+                .start(
+                  agent,
+                  target,
+                  continuationBrief(task, run, record, message, chat)
+                )
+                .catch(console.error);
+              return `Continued in a new run of ${run.agentName}, given this run's transcript and this chat. It is in the run list and in the note's Agents panel.`;
+            },
+          }
+        : undefined,
+    [agentsService, contextService, run, runRecord, runsStore, sessionService]
+  );
 
   // The chat is a row of its own beside the runs, made as it is first asked,
   // so its turns and errors can be found in the run list and gone on with.
@@ -134,15 +189,22 @@ export const AgentRunChat = ({
   return (
     <AgentSideChat
       title="Ask about this run"
-      hint="A chat with what the run was given, what it did and how it ended. It can explain, not act: the agent doesn't see it and nothing changes in the note."
+      hint={
+        followUp
+          ? "A chat with what the run was given, what it did and how it ended. Asking only explains. To carry on the work, type what to do and press Continue the run: a new run picks up from this one's transcript."
+          : "A chat with what the run was given, what it did and how it ended. It can explain, not act: the agent doesn't see it and nothing changes in the note."
+      }
       placeholder={
         run.status === 'error'
-          ? 'Why did it fail? What did it get done first?'
-          : 'What did it change? What is left to do?'
+          ? 'Why did it fail? Or what should a new run do?'
+          : run.status === 'cancelled'
+            ? 'What did it get done? Or what should a new run do?'
+            : 'What did it change? What is left to do?'
       }
       opening={opening}
       openModel={openModel}
       record={record}
+      followUp={followUp}
       onClose={onClose}
       fill={fill}
       testId="agent-run-chat"

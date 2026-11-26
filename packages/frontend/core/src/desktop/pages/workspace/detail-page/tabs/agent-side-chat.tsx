@@ -72,6 +72,22 @@ export interface SideChatRecord {
 }
 
 /**
+ * A second way to send what is typed: not asked of the chat but handed to a
+ * new run that carries on the work (see AgentRunChat).
+ */
+export interface SideChatFollowUp {
+  /** The button's text. */
+  label: string;
+  /** What pressing it does, for its tooltip. */
+  title: string;
+  /**
+   * Start the run with the message (files inlined) and the chat so far;
+   * resolves to what to show in the chat once it has started.
+   */
+  start: (message: string, chat: SavedAskChat['turns']) => Promise<string>;
+}
+
+/**
  * The models behind a side chat (a device's Claude Code, the local model,
  * the server's) all take text, so a file is read here and sent as text.
  */
@@ -157,6 +173,7 @@ export const AgentSideChat = ({
   renderReply = renderFormattedReply,
   openModel,
   record,
+  followUp,
   waiting,
   onClose,
   fill,
@@ -172,6 +189,8 @@ export const AgentSideChat = ({
   openModel?: () => Promise<ChatModel>;
   /** Keep the chat; without it, it is gone once the panel closes. */
   record?: SideChatRecord;
+  /** Send what is typed to a new run instead; see SideChatFollowUp. */
+  followUp?: SideChatFollowUp;
   /** Why the reply hasn't started, shown under it while it is awaited. */
   waiting?: string | null;
   onClose?: () => void;
@@ -362,6 +381,43 @@ export const AgentSideChat = ({
     ask(text.trim(), files).catch(() => {});
   }, [ask, canSend, files, text]);
 
+  // Nothing typed is fine: the run then just finishes what was left.
+  const canContinue = !!followUp && !busy && loaded;
+  const continueRun = useCallback(async () => {
+    if (!followUp || !canContinue) return;
+    const message = text.trim();
+    const attached = files;
+    setBusy(true);
+    setError(null);
+    const before = shown.current;
+    const question: Turn = {
+      role: 'user',
+      content: message || 'Continue the run.',
+      files: attached.map(file => file.name),
+      at: Date.now(),
+    };
+    try {
+      const note = await followUp.start(withFiles(message, attached), before);
+      setText('');
+      setFiles([]);
+      const answer: Turn = { role: 'assistant', content: note, at: Date.now() };
+      shown.current = [...before, question, answer];
+      setTurns(shown.current);
+      // Kept as a turn, so the chat's record says the run was continued.
+      recordRef.current?.asking();
+      recordRef.current?.ended(
+        { turns: shown.current, history: sent.current },
+        [question, answer],
+        { status: 'done' }
+      );
+    } catch (err) {
+      // What was typed stays, to try again.
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  }, [canContinue, files, followUp, text]);
+
   const onKeyDown = useCallback(
     (e: KeyboardEvent<HTMLTextAreaElement>) => {
       if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
@@ -530,6 +586,19 @@ export const AgentSideChat = ({
                 e.target.value = '';
               }}
             />
+            {followUp ? (
+              <button
+                className={styles.chatContinueButton}
+                aria-disabled={!canContinue}
+                onClick={() => {
+                  continueRun().catch(() => {});
+                }}
+                title={followUp.title}
+                data-testid={`${testId}-continue`}
+              >
+                {followUp.label}
+              </button>
+            ) : null}
             <button
               className={styles.chatSendButton}
               aria-disabled={!canSend}
