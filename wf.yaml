@@ -1,0 +1,19 @@
+# Settings `wf` reads from this repository.
+#
+# lint: what `wf lint` and the wf-tools `lint` MCP tool run before a commit,
+# on the files the branch changed (`{files}`), filtered by each step's globs.
+# The same three checks as `yarn lint` and CI's Lint job, scoped to the change.
+# `wf lint --fix` runs each step's fix; `wf lint --all` lints the whole repo.
+
+lint:
+  - name: oxlint
+    run: npx oxlint --deny-warnings {files}
+    fix: npx oxlint --fix {files}
+    files: ['*.ts', '*.tsx', '*.js', '*.jsx', '*.mjs', '*.cjs']
+  - name: eslint
+    run: npx eslint --no-warn-ignored --report-unused-disable-directives-severity=off {files}
+    fix: npx eslint --no-warn-ignored --report-unused-disable-directives-severity=off --fix {files}
+    files: ['*.ts', '*.tsx', '*.js', '*.jsx', '*.mjs', '*.cjs']
+  - name: prettier
+    run: npx prettier --ignore-unknown --check {files}
+    fix: npx prettier --ignore-unknown --write {files}
