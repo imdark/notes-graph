@@ -1,8 +1,17 @@
+/**
+ * @vitest-environment happy-dom
+ */
+import { UserFriendlyError } from '@notesgraph/error';
 import { describe, expect, test } from 'vitest';
 
 import type { AgentRun } from '../stores/agent-runs';
-import { ADOPT_WITHIN_MS, isLostStart, planAdoptions } from './adopt-runs';
-import type { RemoteJob } from './remote-runner';
+import {
+  ADOPT_WITHIN_MS,
+  isLostFollow,
+  isLostStart,
+  planAdoptions,
+} from './adopt-runs';
+import { isTransient, type RemoteJob } from './remote-runner';
 
 const NOW = Date.UTC(2026, 10, 26, 23, 0);
 
@@ -112,5 +121,62 @@ describe('taking on runs this browser has no record of', () => {
         run({ status: 'error', error: 'Network error: x', remoteJobId: 'j' })
       )
     ).toBe(false);
+  });
+});
+
+describe('runs a slow poll recorded as failed', () => {
+  const followed = (patch: Partial<AgentRun> = {}) =>
+    run({
+      id: 'followed',
+      status: 'error',
+      error: 'Network error: timeout after 15000ms',
+      remoteJobId: 'job-1',
+      ...patch,
+    });
+
+  test('take how their job really went', () => {
+    expect(isLostFollow(followed())).toBe(true);
+    expect(planAdoptions([job({ status: 'done' })], [followed()], NOW)).toEqual(
+      [
+        {
+          kind: 'resettle',
+          runId: 'followed',
+          job: expect.objectContaining({ id: 'job-1' }),
+        },
+      ]
+    );
+    expect(
+      planAdoptions([job({ status: 'running' })], [followed()], NOW)[0].kind
+    ).toBe('resettle');
+  });
+
+  test('keep their failure when the job failed too, or failed for another reason', () => {
+    expect(
+      planAdoptions([job({ status: 'error' })], [followed()], NOW)
+    ).toEqual([]);
+    expect(
+      planAdoptions(
+        [job({ status: 'done' })],
+        [followed({ error: 'The run failed on its device.' })],
+        NOW
+      )
+    ).toEqual([]);
+  });
+});
+
+describe('what is worth retrying', () => {
+  test('a request that gave up after its timeout (499) is', () => {
+    const err = (status: number) =>
+      new UserFriendlyError({
+        status,
+        code: 'X',
+        type: 'X',
+        name: 'X',
+        message: 'Network error: timeout after 15000ms',
+      } as any);
+    expect(isTransient(err(499))).toBe(true);
+    expect(isTransient(err(504))).toBe(true);
+    expect(isTransient(err(404))).toBe(false);
+    expect(isTransient(err(403))).toBe(false);
   });
 });

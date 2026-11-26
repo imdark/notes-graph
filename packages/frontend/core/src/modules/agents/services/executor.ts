@@ -834,10 +834,15 @@ export class AgentExecutorService extends Service implements AgentExecutor {
       for (const step of plan) {
         const runId =
           step.kind === 'adopt' ? this.runsStore.adopt(step.job) : step.runId;
-        if (step.kind === 'reattach') {
+        if (step.kind === 'reattach' || step.kind === 'resettle') {
+          // Running again until the job says otherwise: settleFromJob
+          // finishes it now if the job has ended.
           this.runsStore.reattach(runId, step.job.id, step.job.deviceKey);
         }
         this.settleFromJob(runId, step.job);
+        // A repaired run ended a while ago: correcting its record isn't news
+        // to put under "To review".
+        if (step.kind !== 'adopt') this.runsStore.settleReview(runId);
       }
     } finally {
       this.adopting = false;
