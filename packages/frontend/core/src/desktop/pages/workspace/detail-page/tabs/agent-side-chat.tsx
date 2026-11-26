@@ -581,6 +581,8 @@ export const AgentSideChat = ({
               type="file"
               multiple
               hidden
+              // A global input style sets display, which beats `hidden`.
+              style={{ display: 'none' }}
               onChange={e => {
                 attach(Array.from(e.target.files ?? []));
                 e.target.value = '';
