@@ -527,6 +527,15 @@ export const NOTESGRAPH_FLAGS = {
     configurable: true,
     defaultState: true,
   },
+  enable_discover_relevance: {
+    commit: 'f16427995195796d78b0cb737448ed5a9fe50f19',
+    category: 'notesgraph',
+    displayName: 'Not interesting, and why this story',
+    description:
+      'On Discover, a story can be marked Not interesting: it is hidden, saved to your account so every device hides it, and stories much like it are hidden too while ones a little like it, or from a topic you keep dismissing, move lower. Why this? on each story says where it came from: a topic you picked, an interest you added, a tag or words in your notes, a broader area, something new, or a folder.',
+    configurable: true,
+    defaultState: true,
+  },
 } satisfies { [key in string]: FlagInfo };
 
 // oxlint-disable-next-line no-redeclare
