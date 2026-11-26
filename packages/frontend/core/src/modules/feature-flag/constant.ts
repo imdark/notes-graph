@@ -519,7 +519,7 @@ export const NOTESGRAPH_FLAGS = {
     defaultState: true,
   },
   enable_verify_buttons: {
-    commit: '',
+    commit: 'ae10a4cf03ecbae78ca38c80755d73ab1155a5ec',
     category: 'notesgraph',
     displayName: 'Verify runs, branches and pull requests',
     description:
