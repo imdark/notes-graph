@@ -24,9 +24,20 @@ export const isLostStart = (run: AgentRun) =>
   !run.remoteJobId &&
   /Network error|timeout after/i.test(run.error ?? '');
 
+/**
+ * A run with its job that a network error recorded as failed while its
+ * device went on: one slow poll used to end it (see isTransient).
+ */
+export const isLostFollow = (run: AgentRun) =>
+  run.status === 'error' &&
+  !!run.remoteJobId &&
+  /Network error|timeout after/i.test(run.error ?? '');
+
 export type Adoption =
   /** A lost start: the run is this job; attach it and settle from the job. */
   | { kind: 'reattach'; runId: string; job: RemoteJob }
+  /** A lost follow: the run has this job; settle it from how the job went. */
+  | { kind: 'resettle'; runId: string; job: RemoteJob }
   /** A job this browser has no run for: record it. */
   | { kind: 'adopt'; job: RemoteJob & { docId: string; createdAt: number } };
 
@@ -49,8 +60,19 @@ export function planAdoptions(
     run.agentId === job.agentId &&
     run.docId === job.docId &&
     Math.abs(run.startedAt - queuedAt) <= SAME_START_MS;
+  const lostFollows = new Map(
+    runs
+      .filter(isLostFollow)
+      .map(run => [run.remoteJobId as string, run] as const)
+  );
   const plan: Adoption[] = [];
   for (const job of jobs) {
+    const lostFollow = lostFollows.get(job.id);
+    // Its job failed too: the recorded failure stands.
+    if (lostFollow && job.status !== 'error') {
+      plan.push({ kind: 'resettle', runId: lostFollow.id, job });
+      continue;
+    }
     if (known.has(job.id) || dismissed.has(job.id)) continue;
     // Health checks and other jobs on no note aren't runs a person started.
     if (!job.docId || !job.createdAt) continue;

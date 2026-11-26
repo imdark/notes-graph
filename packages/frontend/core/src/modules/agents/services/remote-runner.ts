@@ -565,9 +565,18 @@ const WATCH_OUTAGE_MS = 3 * 60_000;
  * no network) rather than an answer: a 4xx says the job is gone or not ours,
  * and asking again won't change that.
  */
-const isTransient = (err: unknown) =>
+/**
+ * Whether a failed request is worth trying again. A request that gives up
+ * after its 15 seconds comes back as 499 (REQUEST_ABORTED), not as a network
+ * error: it is an outage like any other. (watch() checks its own signal
+ * first, so a 499 there is never the run being stopped.) Before this, one
+ * slow poll failed the run with "Network error: timeout after 15000ms"
+ * while its device carried on and finished it.
+ */
+export const isTransient = (err: unknown) =>
   !(err instanceof UserFriendlyError) ||
   err.status === 429 ||
+  err.status === 499 ||
   err.status < 400 ||
   err.status >= 500;
 
