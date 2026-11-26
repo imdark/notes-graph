@@ -129,7 +129,11 @@ test('adds a missing heading at the end when there is no Inbox', t => {
 
   t.deepEqual(
     outline(original, delta).map(b => b.line),
-    ['paragraph/text: Just a line.', 'paragraph/h2: workflow', 'list/todo: A task']
+    [
+      'paragraph/text: Just a line.',
+      'paragraph/h2: workflow',
+      'list/todo: A task',
+    ]
   );
 });
 

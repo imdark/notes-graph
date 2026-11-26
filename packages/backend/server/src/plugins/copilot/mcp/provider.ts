@@ -2148,7 +2148,12 @@ export class WorkspaceMcpProvider {
               userId
             );
             return toolText(
-              JSON.stringify({ success: true, docId, heading, added: lines.length })
+              JSON.stringify({
+                success: true,
+                docId,
+                heading,
+                added: lines.length,
+              })
             );
           } catch (error) {
             return toolError(

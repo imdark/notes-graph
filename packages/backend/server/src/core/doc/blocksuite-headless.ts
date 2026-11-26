@@ -311,15 +311,15 @@ export function insertUnderHeading(
       (_, i) => i > start && i < end && isEmptyTodo(at(i))
     );
     let insertAt: number;
-    if (empty !== -1) {
-      const block = at(empty)!;
-      let text = block.get('prop:text');
+    const emptyBlock = empty === -1 ? undefined : at(empty);
+    if (emptyBlock) {
+      let text = emptyBlock.get('prop:text');
       if (text instanceof Y.Text) {
         text.delete(0, text.length);
       } else {
         // An empty item may have no text at all yet.
         text = new Y.Text();
-        block.set('prop:text', text);
+        emptyBlock.set('prop:text', text);
       }
       (text as Y.Text).applyDelta(linkDelta(rest[0]));
       rest = rest.slice(1);
