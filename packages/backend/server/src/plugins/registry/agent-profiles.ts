@@ -138,9 +138,55 @@ you; if they deny one, find another way or explain what you could not do.
 Finish with your answer to the task itself.
 `;
 
-// Shell and file edits are left out: they go through the permission prompt.
+const wfCommands = (commands: string[]) =>
+  commands.map(command => `Bash(wf ${command}:*)`);
+
+// wf commands that only look things up: projects, tasks, notes, sessions.
+const WF_READ_COMMANDS = wfCommands([
+  'project list',
+  'project current',
+  'task list',
+  'task show',
+  'task comment list',
+  'notes find',
+  'notes ls',
+  'notes read',
+  'notes links',
+  'notes tools',
+  'skill list',
+  'skill drafts',
+  'skill usage',
+  'mem sessions',
+  'mem show',
+  'mem search',
+  'mem facts',
+  'status',
+  'github-comments',
+  'search-context',
+  'rag-info',
+  'list-categories',
+  'ai-mcp-status',
+]);
+
+// wf commands that write notes or tasks and nothing else, as mcp__notesgraph
+// does. `wf done` pushes, so it is not here: it rides on "Allow all".
+const WF_WRITE_COMMANDS = wfCommands([
+  'task create',
+  'task update',
+  'task transition',
+  'task comment add',
+  'notes new',
+  'notes edit',
+  'notes rename',
+  'notes file',
+]);
+
+// Other shell commands and file edits are left out: they go through the
+// permission prompt.
 const CLAUDE_CODE_ALLOWED_TOOLS = [
   'mcp__notesgraph',
+  ...WF_WRITE_COMMANDS,
+  ...WF_READ_COMMANDS,
   'mcp__run__ask_user',
   'mcp__run__set_title',
   'mcp__run__upload_artifact',
@@ -755,7 +801,8 @@ const PROFILES: Record<string, AgentProfile> = {
  *
  *   read    reads notes, files and the web; anything else is refused without
  *           asking (jobs.ts)
- *   write   also writes notes; shell and file edits ask (the profiles' default)
+ *   write   also writes notes and tasks; other shell and file edits ask (the
+ *           profiles' default)
  *   manage  also edits files; shell asks
  *   full    everything, as if "Allow all" were pressed when it started
  *
@@ -794,7 +841,9 @@ function withAccess(profile: AgentProfile, access: AccessLevel): AgentProfile {
   );
   const read = [
     ...NOTESGRAPH_READ_TOOLS,
-    ...CLAUDE_CODE_ALLOWED_TOOLS.filter(tool => tool !== 'mcp__notesgraph'),
+    ...CLAUDE_CODE_ALLOWED_TOOLS.filter(
+      tool => tool !== 'mcp__notesgraph' && !WF_WRITE_COMMANDS.includes(tool)
+    ),
     ...extras,
   ];
   const allowedTools =
