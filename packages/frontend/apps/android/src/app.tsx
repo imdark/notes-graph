@@ -65,6 +65,7 @@ import { RouterProvider } from 'react-router-dom';
 
 import { setupAgentPush } from './agent-push-glue';
 import { setupBackgroundSyncManifest } from './background-sync-glue';
+import { ModalConfigProvider } from './modal-config';
 import { setupNoteWidget } from './note-widget-glue';
 import { AgentPush } from './plugins/agent-push';
 import { AIButton } from './plugins/ai-button';
@@ -199,6 +200,20 @@ framework.impl(ClientSchemeProvider, {
 const keyboardSubscribers = new Set<(change: KeyboardChange) => void>();
 let listeningToKeyboard = false;
 
+// A dialog lifted above the keyboard is shorter than it was when its text box
+// was focused, which can leave the box scrolled out of the dialog's view.
+// Centred, so the buttons under it (Send) show too.
+function revealFocusedField() {
+  const field = document.activeElement;
+  if (
+    (field instanceof HTMLTextAreaElement ||
+      field instanceof HTMLInputElement) &&
+    field.closest('[role="dialog"]')
+  ) {
+    field.scrollIntoView({ block: 'center' });
+  }
+}
+
 // One pair of native listeners for the app's lifetime, shared by every editor.
 // Capacitor's bridge keeps each listener's callback in a global map that
 // `handle.remove()` never clears, so a listener per editor kept every closed
@@ -221,6 +236,7 @@ function listenToKeyboard() {
           height: info.keyboardHeight - navBarHeight,
         };
       })
+      .then(revealFocusedField)
       .catch(console.error);
   }).catch(console.error);
   Keyboard.addListener('keyboardWillHide', () => {
@@ -654,11 +670,13 @@ export function App() {
         <I18nProvider>
           <NotesGraphContext store={getCurrentStore()}>
             <ThemeProvider />
-            <RouterProvider
-              fallbackElement={<AppFallback />}
-              router={router}
-              future={future}
-            />
+            <ModalConfigProvider>
+              <RouterProvider
+                fallbackElement={<AppFallback />}
+                router={router}
+                future={future}
+              />
+            </ModalConfigProvider>
           </NotesGraphContext>
         </I18nProvider>
       </FrameworkRoot>

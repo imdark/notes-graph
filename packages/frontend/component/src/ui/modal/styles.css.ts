@@ -2,6 +2,7 @@ import { cssVar } from '@toeverything/theme';
 import { cssVarV2 } from '@toeverything/theme/v2';
 import {
   createVar,
+  fallbackVar,
   generateIdentifier,
   globalStyle,
   keyframes,
@@ -12,6 +13,8 @@ import { vtScopeSelector } from '../../utils/view-transition';
 export const widthVar = createVar('widthVar');
 export const heightVar = createVar('heightVar');
 export const minHeightVar = createVar('minHeightVar');
+/** What the phone keyboard covers below the dialog; unset elsewhere. */
+export const keyboardHeightVar = createVar('keyboardHeightVar');
 
 export const modalVTScope = generateIdentifier('modal');
 
@@ -156,7 +159,9 @@ export const modalContent = style({
   width: widthVar,
   height: heightVar,
   minHeight: minHeightVar,
-  maxHeight: 'calc(100dvh - 32px)',
+  // The keyboard doesn't shrink the page, so a sheet lifted above it is
+  // capped by what is left; otherwise its top runs off the screen.
+  maxHeight: `calc(100dvh - 32px - ${fallbackVar(keyboardHeightVar, '0px')})`,
   maxWidth: 'calc(100dvw - 20px)',
   boxSizing: 'border-box',
   fontSize: cssVar('fontBase'),
