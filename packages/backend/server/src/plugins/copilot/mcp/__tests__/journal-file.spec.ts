@@ -56,7 +56,9 @@ function journal(sections: Spec[]): Uint8Array {
     add({
       id: 'page',
       flavour: 'notesgraph:page',
-      children: [{ id: 'note', flavour: 'notesgraph:note', children: sections }],
+      children: [
+        { id: 'note', flavour: 'notesgraph:note', children: sections },
+      ],
     });
   });
   return Y.encodeStateAsUpdate(doc);
@@ -66,7 +68,10 @@ const DAY = () =>
   journal([
     h2('work', 'Work', [todo('work-empty')]),
     taskList('work-list', 'p-work'),
-    h2('graph', 'notes graph', [todo('graph-1', 'when an'), todo('graph-empty')]),
+    h2('graph', 'notes graph', [
+      todo('graph-1', 'when an'),
+      todo('graph-empty'),
+    ]),
     taskList('graph-list', 'p-graph'),
     h2('inbox', 'Inbox', [todo('inbox-empty')]),
     taskList('inbox-list', ''),
@@ -87,11 +92,20 @@ function apply(base: Uint8Array, update: Uint8Array) {
 
 test('a task goes under its project heading, above the empty to-do', t => {
   const base = DAY();
-  const filed = fileTaskInJournal(base, 'day', { name: 'notes graph', projectId: 'p-graph' }, 'PERSONAL-330 Fix it');
+  const filed = fileTaskInJournal(
+    base,
+    'day',
+    { name: 'notes graph', projectId: 'p-graph' },
+    'PERSONAL-330 Fix it'
+  );
   const after = apply(base, filed.update);
 
   t.false(filed.createdSection);
-  t.deepEqual(after.children('graph'), ['graph-1', filed.blockId, 'graph-empty']);
+  t.deepEqual(after.children('graph'), [
+    'graph-1',
+    filed.blockId,
+    'graph-empty',
+  ]);
   t.is(after.text(filed.blockId), 'PERSONAL-330 Fix it');
   t.is(after.block(filed.blockId).get('sys:flavour'), 'notesgraph:list');
   t.is(after.block(filed.blockId).get('prop:type'), 'todo');
@@ -101,7 +115,12 @@ test('a task goes under its project heading, above the empty to-do', t => {
 test('nothing outside the section changes: no tables, no copies', t => {
   const base = DAY();
   const before = apply(base, Y.encodeStateAsUpdate(new Y.Doc()));
-  const filed = fileTaskInJournal(base, 'day', { name: 'Work', projectId: 'p-work' }, 'Ship');
+  const filed = fileTaskInJournal(
+    base,
+    'day',
+    { name: 'Work', projectId: 'p-work' },
+    'Ship'
+  );
   const after = apply(base, filed.update);
 
   t.deepEqual(after.children('note'), before.children('note'));
@@ -113,13 +132,23 @@ test('nothing outside the section changes: no tables, no copies', t => {
 
 test('the heading matches as the app matches it', t => {
   const base = DAY();
-  const filed = fileTaskInJournal(base, 'day', { name: 'Notes_Graph', projectId: 'p-graph' }, 'x');
+  const filed = fileTaskInJournal(
+    base,
+    'day',
+    { name: 'Notes_Graph', projectId: 'p-graph' },
+    'x'
+  );
   t.true(apply(base, filed.update).children('graph').includes(filed.blockId));
 });
 
 test('a missing section is made above Inbox: heading, empty to-do, todos: list', t => {
   const base = DAY();
-  const filed = fileTaskInJournal(base, 'day', { name: 'workflow', projectId: 'p-wf' }, 'CLOUD-150 Add a flag');
+  const filed = fileTaskInJournal(
+    base,
+    'day',
+    { name: 'workflow', projectId: 'p-wf' },
+    'CLOUD-150 Add a flag'
+  );
   const after = apply(base, filed.update);
 
   t.true(filed.createdSection);
@@ -141,12 +170,16 @@ test('a missing section is made above Inbox: heading, empty to-do, todos: list',
   t.is(String(database.get('prop:title')), 'todos:');
   t.is(database.get('prop:queryProjectId'), 'p-wf');
   t.false(database.get('prop:queryNoProject') as boolean);
-  const columns = (database.get('prop:columns') as Y.Array<Y.Map<unknown>>).toArray();
+  const columns = (
+    database.get('prop:columns') as Y.Array<Y.Map<unknown>>
+  ).toArray();
   t.deepEqual(
     columns.map(c => c.get('name')),
     ['Status', 'Deadline', 'Scheduled']
   );
-  const [view] = (database.get('prop:views') as Y.Array<Y.Map<unknown>>).toArray();
+  const [view] = (
+    database.get('prop:views') as Y.Array<Y.Map<unknown>>
+  ).toArray();
   t.is(view.get('mode'), 'list');
 });
 
@@ -162,15 +195,26 @@ test('Inbox made on a page without it goes last and lists no project', t => {
 
 test('a heading with nothing under it takes the task as its child', t => {
   const base = journal([h2('work', 'Work')]);
-  const filed = fileTaskInJournal(base, 'day', { name: 'Work', projectId: 'p' }, 'one');
+  const filed = fileTaskInJournal(
+    base,
+    'day',
+    { name: 'Work', projectId: 'p' },
+    'one'
+  );
   t.deepEqual(apply(base, filed.update).children('work'), [filed.blockId]);
 });
 
 test('a markdown task line is filed as a to-do of its words', t => {
   t.deepEqual(taskLine('- [ ] Fix it'), { text: 'Fix it', checked: false });
   t.deepEqual(taskLine('[x] Done one'), { text: 'Done one', checked: true });
-  t.deepEqual(taskLine('* plain bullet'), { text: 'plain bullet', checked: false });
-  t.deepEqual(taskLine('  QUEUED  KEY-1\nmore '), { text: 'QUEUED KEY-1 more', checked: false });
+  t.deepEqual(taskLine('* plain bullet'), {
+    text: 'plain bullet',
+    checked: false,
+  });
+  t.deepEqual(taskLine('  QUEUED  KEY-1\nmore '), {
+    text: 'QUEUED KEY-1 more',
+    checked: false,
+  });
   t.throws(() => fileTaskInJournal(DAY(), 'day', { name: 'Work' }, '- [ ] '));
 });
 

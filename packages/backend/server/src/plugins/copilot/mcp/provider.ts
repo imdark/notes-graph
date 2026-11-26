@@ -1632,7 +1632,9 @@ export class WorkspaceMcpProvider {
         title: string,
         agent: string | undefined,
         signal: AbortSignal
-      ): Promise<{ docId: string; created: boolean } | WorkspaceMcpToolResult> => {
+      ): Promise<
+        { docId: string; created: boolean } | WorkspaceMcpToolResult
+      > => {
         for (const docId of await this.models.doc.findIdsByExactTitle(
           workspaceId,
           title

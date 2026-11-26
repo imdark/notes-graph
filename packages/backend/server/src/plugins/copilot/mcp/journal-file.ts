@@ -17,7 +17,8 @@ import * as Y from 'yjs';
 export const INBOX = 'Inbox';
 
 /** Heading names match as the app's do: case, spaces, `-` and `_` aside. */
-export const nameKey = (name: string) => name.toLowerCase().replace(/[\s_-]+/g, '');
+export const nameKey = (name: string) =>
+  name.toLowerCase().replace(/[\s_-]+/g, '');
 
 export interface JournalSection {
   name: string;
@@ -55,7 +56,7 @@ const blockText = (block: Y.Map<unknown>): string => {
   return text instanceof Y.Text ? text.toString() : '';
 };
 
-const isH2 = (block: Y.Map<unknown> | undefined) =>
+const isH2 = (block: Y.Map<unknown> | undefined): block is Y.Map<unknown> =>
   block?.get('sys:flavour') === 'notesgraph:paragraph' &&
   block.get('prop:type') === 'h2';
 
@@ -66,12 +67,15 @@ const isEmptyTodo = (block: Y.Map<unknown> | undefined) =>
 
 function newBlock(
   blocks: Y.Map<Y.Map<unknown>>,
-  fill: (block: Y.Map<unknown>) => void
+  fill: (block: Y.Map<unknown>) => void,
+  under: string[] = []
 ): string {
   const id = nanoid(10);
   const block = new Y.Map<unknown>();
+  const children = new Y.Array<string>();
+  children.push(under);
   block.set('sys:id', id);
-  block.set('sys:children', new Y.Array<string>());
+  block.set('sys:children', children);
   fill(block);
   blocks.set(id, block);
   return id;
@@ -116,13 +120,21 @@ function toY(value: unknown): unknown {
 // that view's filter names.
 const STATUS_COLUMN_ID = 'task-status';
 const STATUS_OPTIONS = [
-  { id: 'task-status-todo', value: 'Todo', color: 'var(--notesgraph-tag-blue)' },
+  {
+    id: 'task-status-todo',
+    value: 'Todo',
+    color: 'var(--notesgraph-tag-blue)',
+  },
   {
     id: 'task-status-in-progress',
     value: 'In Progress',
     color: 'var(--notesgraph-tag-yellow)',
   },
-  { id: 'task-status-done', value: 'Done', color: 'var(--notesgraph-tag-green)' },
+  {
+    id: 'task-status-done',
+    value: 'Done',
+    color: 'var(--notesgraph-tag-green)',
+  },
 ];
 
 const taskList = (section: JournalSection) => (block: Y.Map<unknown>) => {
@@ -198,35 +210,39 @@ export function fileTaskInJournal(
   if (!note) throw new Error(`Doc ${docId} has no page body to file into.`);
   const noteChildren = note.get('sys:children') as Y.Array<string>;
 
+  const noteIds = childIds(note);
   const headingId = (name: string) =>
-    childIds(note as Y.Map<unknown>).find(id => {
+    noteIds.find(id => {
       const block = blocks.get(id);
-      return isH2(block) && nameKey(blockText(block!)) === nameKey(name);
+      return isH2(block) && nameKey(blockText(block)) === nameKey(name);
     });
 
   let blockId = '';
-  let heading = headingId(section.name);
-  const createdSection = !heading;
+  const existing = headingId(section.name);
   doc.transact(() => {
+    let heading = existing ? blocks.get(existing) : undefined;
     if (!heading) {
-      const ids = childIds(note as Y.Map<unknown>);
-      const inbox = nameKey(section.name) === nameKey(INBOX) ? undefined : headingId(INBOX);
-      const at = inbox ? ids.indexOf(inbox) : ids.length;
-      heading = newBlock(blocks, block => {
-        block.set('sys:flavour', 'notesgraph:paragraph');
-        block.set('sys:version', 1);
-        block.set('prop:type', 'h2');
-        block.set('prop:text', plainText(section.name));
-        block.set('prop:collapsed', false);
-      });
-      const empty = newBlock(blocks, todo(''));
-      (blocks.get(heading)!.get('sys:children') as Y.Array<string>).push([
-        empty,
+      const inbox =
+        nameKey(section.name) === nameKey(INBOX) ? undefined : headingId(INBOX);
+      const id = newBlock(
+        blocks,
+        block => {
+          block.set('sys:flavour', 'notesgraph:paragraph');
+          block.set('sys:version', 1);
+          block.set('prop:type', 'h2');
+          block.set('prop:text', plainText(section.name));
+          block.set('prop:collapsed', false);
+        },
+        [newBlock(blocks, todo(''))]
+      );
+      noteChildren.insert(inbox ? noteIds.indexOf(inbox) : noteIds.length, [
+        id,
+        newBlock(blocks, taskList(section)),
       ]);
-      noteChildren.insert(at, [heading, newBlock(blocks, taskList(section))]);
+      heading = blocks.get(id) as Y.Map<unknown>;
     }
 
-    const parent = blocks.get(heading)!;
+    const parent = heading;
     let children = parent.get('sys:children');
     if (!(children instanceof Y.Array)) {
       children = new Y.Array<string>();
@@ -244,6 +260,6 @@ export function fileTaskInJournal(
   return {
     update: Y.encodeStateAsUpdate(doc, before),
     blockId,
-    createdSection,
+    createdSection: !existing,
   };
 }
