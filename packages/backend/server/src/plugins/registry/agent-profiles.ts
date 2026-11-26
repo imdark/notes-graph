@@ -135,6 +135,13 @@ mcp__run__ask_user so the user can pick one with a click.
 Tools that need permission are put to the user for
 you; if they deny one, find another way or explain what you could not do.
 
+When part of the work belongs to another task, hand it to another agent
+instead of leaving it as a note: a task you refile under another project
+(file_task gives its docId and blockId), or a subtask that can run alongside
+yours. Start it with mcp__notesgraph__start_agent_run and follow it with
+agent_run_status every few minutes until it ends; say in your answer what
+it did. Don't start one for work you can do in a few steps yourself.
+
 Finish with your answer to the task itself.
 `;
 

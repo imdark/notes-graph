@@ -181,3 +181,76 @@ describe('AgentRunsStore ask chats', () => {
     expect(store.latestAsk('p')).toBeUndefined();
   });
 });
+
+describe('AgentRunsStore runs it did not start', () => {
+  const withStorage = () => {
+    const data = new Map<string, string>();
+    (globalThis as any).localStorage = {
+      getItem: (k: string) => data.get(k) ?? null,
+      setItem: (k: string, v: string) => data.set(k, v),
+    };
+    return () => delete (globalThis as any).localStorage;
+  };
+
+  test('adopt records a device job as a run on its note, from when it was queued', () => {
+    const { store, rows } = setup({});
+    const id = store.adopt({
+      id: 'job-9',
+      agentId: 'subtask-workflow',
+      agentName: 'Subtask (wf task)',
+      deviceKey: 'cloud',
+      title: 'CLOUD-150 Lift the sheet',
+      targetKind: 'block',
+      docId: 'journal',
+      blockId: 'todo-1',
+      createdAt: 1_795_000_000,
+    });
+    expect(rows[id]).toMatchObject({
+      status: 'running',
+      remoteJobId: 'job-9',
+      deviceKey: 'cloud',
+      docId: 'journal',
+      blockId: 'todo-1',
+      title: 'CLOUD-150 Lift the sheet',
+      startedAt: 1_795_000_000_000,
+    });
+  });
+
+  test('reattach gives a lost start its job and counts it as running again', () => {
+    const { store, rows } = setup({
+      r1: {
+        id: 'r1',
+        status: 'error',
+        error: 'Network error: timeout after 15000ms',
+        durationMs: 15_000,
+        startedAt: 0,
+      },
+    });
+    store.reattach('r1', 'job-1', 'laptop');
+    expect(rows.r1).toMatchObject({
+      status: 'running',
+      remoteJobId: 'job-1',
+      deviceKey: 'laptop',
+      error: undefined,
+      durationMs: undefined,
+    });
+  });
+
+  test("deleting a run remembers its job, so it isn't taken on again", () => {
+    const restore = withStorage();
+    try {
+      const rows: Record<string, Record<string, unknown>> = {
+        r1: { id: 'r1', remoteJobId: 'job-1', startedAt: 0 },
+        r2: { id: 'r2', startedAt: 0 },
+      };
+      const { store } = setup(rows);
+      (store as any).table.delete = (id: string) => delete rows[id];
+      (store as any).logsStore = { delete: async () => {} };
+      store.delete(['r1', 'r2']);
+      expect([...store.dismissedJobIds()]).toEqual(['job-1']);
+      expect(rows).toEqual({});
+    } finally {
+      restore();
+    }
+  });
+});
