@@ -41,6 +41,13 @@ export class EventService<TextAttributes extends BaseTextAttributes> {
 
   private _isComposing = false;
 
+  /**
+   * Whether the last pointer press landed in another inline editor. A tap on
+   * another block ends the composition here, and the commit must then leave
+   * the caret where the tap put it.
+   */
+  private _pressedAnotherRoot = false;
+
   private _inputQueue: Promise<void> = Promise.resolve();
 
   private _pendingInputs = 0;
@@ -492,6 +499,7 @@ export class EventService<TextAttributes extends BaseTextAttributes> {
       textInserted: boolean;
       embedTrim: CompositionEmbedTrim;
       caret: number | null;
+      pressedAnotherRoot: boolean;
     }
   ) => {
     this._isComposing = false;
@@ -500,13 +508,17 @@ export class EventService<TextAttributes extends BaseTextAttributes> {
     }
 
     if (this.editor.isReadonly) return;
-    // Dropping the commit would lose the whole composed word, so only bail
-    // when the selection demonstrably moved to another live editor (the
-    // event fired on this editor's event source, so it owns the commit
-    // otherwise).
-    if (this._isNativeSelectionInAnotherLiveRoot()) return;
+    // A tap on another block ends the composition. The word composed here is
+    // still committed, but the caret stays where the tap put it: setting it
+    // here would pull the selection back into this block. The tap can reach
+    // the selection before or after this runs, so check both.
+    const movedAway = () =>
+      composition.pressedAnotherRoot ||
+      this._pressedAnotherRoot ||
+      this._isNativeSelectionInAnotherLiveRoot();
 
     if (IS_ANDROID && !composition.textInserted) {
+      if (movedAway()) return;
       // Nothing was typed: this is Gboard re-committing the word its moved
       // composing region covers, which is already in the model. Inserting it
       // at the range captured at compositionstart duplicated it there (e.g.
@@ -555,6 +567,7 @@ export class EventService<TextAttributes extends BaseTextAttributes> {
         newData,
         ctx.attributes
       );
+      if (movedAway()) return;
       this.editor.setInlineRange({
         index: Math.min(
           this._caretAfterCommit(
@@ -569,6 +582,7 @@ export class EventService<TextAttributes extends BaseTextAttributes> {
         length: 0,
       });
     } else {
+      if (movedAway()) return;
       // Keep the caret anchored where the composition happened — the rerender
       // above wiped the composed DOM, and without an explicit range the
       // WebView re-seats the selection in whatever editable it finds next
@@ -586,7 +600,7 @@ export class EventService<TextAttributes extends BaseTextAttributes> {
     // resyncing here would stomp it back onto the block that was just edited.
     if (IS_ANDROID) {
       await this.editor.waitForUpdate();
-      if (!this._isNativeSelectionInAnotherLiveRoot()) {
+      if (!movedAway()) {
         this.editor.rangeService.syncInlineRange();
       }
     }
@@ -594,8 +608,26 @@ export class EventService<TextAttributes extends BaseTextAttributes> {
     this.editor.slots.inputting.next(event.data ?? '');
   };
 
+  private readonly _onDocumentPointerDown = (event: PointerEvent) => {
+    const rootElement = this.editor.rootElement;
+    if (!rootElement || !(event.target instanceof Node)) return;
+    if (rootElement.contains(event.target)) {
+      this._pressedAnotherRoot = false;
+      return;
+    }
+    const otherRoot = this._getClosestInlineRoot(event.target);
+    // A press on a toolbar or other chrome is not a move to another block.
+    if (otherRoot) this._pressedAnotherRoot = true;
+  };
+
+  /** A press that turned into a scroll did not move the caret. */
+  private readonly _onDocumentPointerCancel = () => {
+    this._pressedAnotherRoot = false;
+  };
+
   private readonly _onCompositionStart = (event: CompositionEvent) => {
     this._isComposing = true;
+    this._pressedAnotherRoot = false;
     this._compositionRangeFrozen = false;
     this._compositionTextInserted = false;
     this._compositionEmbedTrim = { start: false, end: false };
@@ -765,6 +797,19 @@ export class EventService<TextAttributes extends BaseTextAttributes> {
     }
 
     this.editor.disposables.addFromEvent(
+      document,
+      'pointerdown',
+      this._onDocumentPointerDown,
+      { capture: true }
+    );
+    this.editor.disposables.addFromEvent(
+      document,
+      'pointercancel',
+      this._onDocumentPointerCancel,
+      { capture: true }
+    );
+
+    this.editor.disposables.addFromEvent(
       eventSource,
       'beforeinput',
       this._onBeforeInput
@@ -790,6 +835,7 @@ export class EventService<TextAttributes extends BaseTextAttributes> {
         textInserted: this._compositionTextInserted,
         embedTrim: this._compositionEmbedTrim,
         caret: this._compositionEndCaret(),
+        pressedAnotherRoot: this._pressedAnotherRoot,
       };
       this._enqueueInput(() => this._onCompositionEnd(e, composition));
     });
