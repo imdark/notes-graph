@@ -136,9 +136,18 @@ jobs:
       # rspack's module caches for the web, admin and mobile bundles: a warm
       # web build compiles in ~1.5 s instead of ~11 s. Changes every deploy,
       # so like the compressed assets it's kept per commit, newest restored.
+      # It grows with every deploy (2.1 GB by 2026-11-26, when its export
+      # stalled for 22 min), so past 1 GB it's dropped: one cold build
+      # (~10 s more), and the cache saved after it starts small again.
       - name: Restore the bundler cache
         if: inputs.image_sha == ''
-        run: scripts/ci/s3-cache.sh restore rspack-cache rspack-cache-${{ github.sha }} rspack-cache-
+        run: |
+          scripts/ci/s3-cache.sh restore rspack-cache rspack-cache-${{ github.sha }} rspack-cache-
+          size_mb=$(du -sm rspack-cache 2>/dev/null | cut -f1)
+          if [ "${size_mb:-0}" -gt 1024 ]; then
+            echo "bundler cache is ${size_mb} MB, over 1 GB: dropping it for a cold build"
+            rm -rf rspack-cache
+          fi
 
       - name: Build contexts
         if: inputs.image_sha == ''
@@ -249,6 +258,7 @@ jobs:
         id: native_export
         if: ${{ !cancelled() && steps.build.outcome == 'success' && steps.native.outputs.hit != 'true' }}
         continue-on-error: true
+        timeout-minutes: 10
         run: |
           docker buildx build --platform linux/amd64 \
             -f .github/deployment/node/Dockerfile.selfhost \
@@ -260,6 +270,7 @@ jobs:
       - name: Save the Rust addon
         if: ${{ !cancelled() && steps.native_export.outcome == 'success' }}
         continue-on-error: true
+        timeout-minutes: 10
         env:
           KEY: server-native-${{ hashFiles('Cargo.toml', 'Cargo.lock', 'rust-toolchain.toml', 'packages/backend/native/**', 'packages/common/native/**', 'packages/frontend/mobile-native/**', 'packages/frontend/native/**') }}-${{ steps.native_stages.outputs.hash }}
         run: scripts/ci/s3-cache.sh save native-prebuilt "$KEY"
@@ -272,6 +283,7 @@ jobs:
         id: compress_export
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         continue-on-error: true
+        timeout-minutes: 10
         env:
           NATIVE_STAGE: ${{ steps.native.outputs.hit == 'true' && 'native-prebuilt' || 'native' }}
         run: |
@@ -290,12 +302,14 @@ jobs:
       - name: Save compressed assets
         if: ${{ !cancelled() && steps.compress_export.outcome == 'success' }}
         continue-on-error: true
+        timeout-minutes: 10
         run: scripts/ci/s3-cache.sh save compress-cache compressed-assets-${{ github.sha }}
 
       - name: Export the bundler cache
         id: rspack_export
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         continue-on-error: true
+        timeout-minutes: 10
         env:
           NATIVE_STAGE: ${{ steps.native.outputs.hit == 'true' && 'native-prebuilt' || 'native' }}
         run: |
@@ -314,6 +328,7 @@ jobs:
       - name: Save the bundler cache
         if: ${{ !cancelled() && steps.rspack_export.outcome == 'success' }}
         continue-on-error: true
+        timeout-minutes: 10
         run: scripts/ci/s3-cache.sh save rspack-cache rspack-cache-${{ github.sha }}
 
       # Only when yarn.lock changed (no exact cache): the cache after this
@@ -322,6 +337,7 @@ jobs:
         id: yarn_export
         if: ${{ !cancelled() && steps.build.outcome == 'success' && steps.yarn.outputs.hit != 'true' }}
         continue-on-error: true
+        timeout-minutes: 10
         env:
           NATIVE_STAGE: ${{ steps.native.outputs.hit == 'true' && 'native-prebuilt' || 'native' }}
         run: |
@@ -340,6 +356,7 @@ jobs:
       - name: Save the yarn cache
         if: ${{ !cancelled() && steps.yarn_export.outcome == 'success' }}
         continue-on-error: true
+        timeout-minutes: 10
         env:
           KEY: yarn-cache-${{ hashFiles('yarn.lock', '.yarnrc.yml') }}
         run: scripts/ci/s3-cache.sh save yarn-cache "$KEY"
