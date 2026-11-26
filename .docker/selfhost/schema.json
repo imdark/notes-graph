@@ -988,6 +988,47 @@
         }
       }
     },
+    "indexer": {
+      "type": "object",
+      "description": "Configuration for indexer module",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Enable indexer plugin\n@default false\n@environment `NOTESGRAPH_INDEXER_ENABLED`",
+          "default": false
+        },
+        "provider.type": {
+          "type": "string",
+          "description": "Indexer search service provider name\n@default \"manticoresearch\"\n@environment `NOTESGRAPH_INDEXER_SEARCH_PROVIDER`",
+          "default": "manticoresearch"
+        },
+        "provider.endpoint": {
+          "type": "string",
+          "description": "Indexer search service endpoint\n@default \"http://localhost:9308\"\n@environment `NOTESGRAPH_INDEXER_SEARCH_ENDPOINT`",
+          "default": "http://localhost:9308"
+        },
+        "provider.apiKey": {
+          "type": "string",
+          "description": "Indexer search service api key. Optional for elasticsearch\n@default \"\"\n@environment `NOTESGRAPH_INDEXER_SEARCH_API_KEY`\n@link https://www.elastic.co/guide/server/current/api-key.html",
+          "default": ""
+        },
+        "provider.username": {
+          "type": "string",
+          "description": "Indexer search service auth username, if not set, basic auth will be disabled. Optional for elasticsearch\n@default \"\"\n@environment `NOTESGRAPH_INDEXER_SEARCH_USERNAME`\n@link https://www.elastic.co/guide/en/elasticsearch/reference/current/http-clients.html",
+          "default": ""
+        },
+        "provider.password": {
+          "type": "string",
+          "description": "Indexer search service auth password, if not set, basic auth will be disabled. Optional for elasticsearch\n@default \"\"\n@environment `NOTESGRAPH_INDEXER_SEARCH_PASSWORD`",
+          "default": ""
+        },
+        "autoIndex.batchSize": {
+          "type": "number",
+          "description": "Number of workspaces automatically indexed per batch\n@default 10",
+          "default": 10
+        }
+      }
+    },
     "headroom": {
       "type": "object",
       "description": "Configuration for headroom module",
@@ -1547,47 +1588,6 @@
               "path": "~/.notesgraph/storage"
             }
           }
-        }
-      }
-    },
-    "indexer": {
-      "type": "object",
-      "description": "Configuration for indexer module",
-      "properties": {
-        "enabled": {
-          "type": "boolean",
-          "description": "Enable indexer plugin\n@default false\n@environment `NOTESGRAPH_INDEXER_ENABLED`",
-          "default": false
-        },
-        "provider.type": {
-          "type": "string",
-          "description": "Indexer search service provider name\n@default \"manticoresearch\"\n@environment `NOTESGRAPH_INDEXER_SEARCH_PROVIDER`",
-          "default": "manticoresearch"
-        },
-        "provider.endpoint": {
-          "type": "string",
-          "description": "Indexer search service endpoint\n@default \"http://localhost:9308\"\n@environment `NOTESGRAPH_INDEXER_SEARCH_ENDPOINT`",
-          "default": "http://localhost:9308"
-        },
-        "provider.apiKey": {
-          "type": "string",
-          "description": "Indexer search service api key. Optional for elasticsearch\n@default \"\"\n@environment `NOTESGRAPH_INDEXER_SEARCH_API_KEY`\n@link https://www.elastic.co/guide/server/current/api-key.html",
-          "default": ""
-        },
-        "provider.username": {
-          "type": "string",
-          "description": "Indexer search service auth username, if not set, basic auth will be disabled. Optional for elasticsearch\n@default \"\"\n@environment `NOTESGRAPH_INDEXER_SEARCH_USERNAME`\n@link https://www.elastic.co/guide/en/elasticsearch/reference/current/http-clients.html",
-          "default": ""
-        },
-        "provider.password": {
-          "type": "string",
-          "description": "Indexer search service auth password, if not set, basic auth will be disabled. Optional for elasticsearch\n@default \"\"\n@environment `NOTESGRAPH_INDEXER_SEARCH_PASSWORD`",
-          "default": ""
-        },
-        "autoIndex.batchSize": {
-          "type": "number",
-          "description": "Number of workspaces automatically indexed per batch\n@default 10",
-          "default": 10
         }
       }
     },
