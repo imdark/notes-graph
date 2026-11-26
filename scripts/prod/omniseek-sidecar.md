@@ -42,7 +42,9 @@ omniseek:
     - /opt/notesgraph/data/omniseek:/root/.omniseek
   expose:
     - '8765'
-  mem_limit: 1g
+  # Its feed crawl passed 1g and was OOM-killed in a loop (3833 restarts by
+  # 2026-11-26), so runs needing search found it down. Raised to 2g then.
+  mem_limit: 2g
   restart: unless-stopped
   networks: [agents]
 ```
