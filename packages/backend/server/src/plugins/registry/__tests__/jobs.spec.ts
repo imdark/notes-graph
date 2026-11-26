@@ -860,7 +860,8 @@ function makeReportService() {
 
 test('a run stopped by the session limit goes back in the queue', async t => {
   const { service, calls } = makeReportService();
-  const reset = Math.floor(Date.now() / 1000) + 2 * 60 * 60;
+  // Within the re-check interval, so the hold runs to the reset itself.
+  const reset = Math.floor(Date.now() / 1000) + 10 * 60;
   const dto = await service.report(workspaceId, 'job-1', {
     status: 'error',
     error: `Claude AI usage limit reached|${reset}`,
