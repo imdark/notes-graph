@@ -24,6 +24,7 @@ import type {
 } from './automations';
 import { runTargetsBlock } from './block-runs';
 import type { AgentContext } from './context';
+import { ReleaseActionQueue } from './release-queue';
 import {
   type AndroidApkState,
   type ApkRun,
@@ -41,7 +42,6 @@ import {
   type RemoteJob,
   RESEARCH_MODEL,
 } from './remote-runner';
-import { ReleaseActionQueue } from './release-queue';
 import type { AgentRunSessionService } from './run-session';
 import type { AgentTarget } from './target';
 import { readTaskStatus, setTaskStatus, taskTitle } from './task-claim';
