@@ -3,6 +3,7 @@ import { TestWorkspace } from '@blocksuite/notesgraph/store/test';
 import { getStoreManager } from '@notesgraph/core/blocksuite/manager/store';
 import { beforeEach, describe, expect, test } from 'vitest';
 
+import { scaffoldJournalSections } from '../../doc/utils/journal-sections';
 import { projectOf } from './context';
 import { moveToProject } from './task-project';
 
@@ -39,16 +40,31 @@ const todo = (text: string, parent = noteId) =>
     parent
   );
 
-/** The note's outline: each top-level block with the lines nested under it. */
+/**
+ * The note's outline: each top-level block with the lines nested under it,
+ * a Task List by its scope.
+ */
 const outline = () =>
-  store
-    .getModelById(noteId)!
-    .children.map(model =>
-      [
-        model.text?.toString() ?? '',
-        ...model.children.map(c => `  - ${c.text?.toString() ?? ''}`),
-      ].join('\n')
-    );
+  store.getModelById(noteId)!.children.map(model => {
+    if (model.flavour === 'notesgraph:database') {
+      const props = model.props as {
+        queryProjectId?: string;
+        queryNoProject?: boolean;
+      };
+      return `[todos: ${props.queryNoProject ? 'no project' : props.queryProjectId}]`;
+    }
+    return [
+      model.text?.toString() ?? '',
+      ...model.children.map(c => `  - ${c.text?.toString() ?? ''}`),
+    ].join('\n');
+  });
+
+/** A journal day with a Work section and Inbox, as the app makes one. */
+const journalDay = () => {
+  scaffoldJournalSections(store, noteId, [PROJECTS[0]]);
+  const [work] = store.getModelById(noteId)!.children;
+  return work.id;
+};
 
 const projectIdOf = (id: string) =>
   projectOf(store, 'doc', store.getModelById(id)!, PROJECTS)?.id ?? null;
@@ -115,6 +131,62 @@ describe('moveToProject', () => {
 
     expect(outline()).toEqual(['Work', 'notes graph\n  - A\n  - B']);
     expect(store.getParent(sub)?.id).toBe(a);
+  });
+
+  test('a journal without the project gets its whole section, above Inbox', () => {
+    const work = journalDay();
+    const task = todo('Cache the build', work);
+
+    expect(moveToProject(store, [task], PROJECTS[1])).toBe(true);
+
+    expect(outline()).toEqual([
+      'Work\n  - ',
+      '[todos: p-work]',
+      'notes graph\n  - Cache the build\n  - ',
+      '[todos: p-ng]',
+      'Inbox\n  - ',
+      '[todos: no project]',
+    ]);
+    expect(projectIdOf(task)).toBe('p-ng');
+  });
+
+  test('a journal missing its Inbox heading gets one above the Inbox list', () => {
+    const work = journalDay();
+    const task = todo('Cache the build', work);
+    const note = store.getModelById(noteId)!;
+    store.deleteBlock(
+      note.children.find(
+        model => model.text?.toString() === 'Inbox'
+      )!
+    );
+
+    moveToProject(store, [task], null);
+
+    expect(outline()).toEqual([
+      'Work\n  - ',
+      '[todos: p-work]',
+      'Inbox\n  - Cache the build\n  - ',
+      '[todos: no project]',
+    ]);
+    expect(projectIdOf(task)).toBeNull();
+  });
+
+  test('a list line filed in a journal becomes a to-do', () => {
+    const work = journalDay();
+    const line = store.addBlock(
+      'notesgraph:list',
+      { type: 'bulleted', text: new Text('Cache the build') },
+      work
+    );
+
+    moveToProject(store, [line], PROJECTS[1]);
+
+    const props = store.getModelById(line)!.props as {
+      type: string;
+      checked: boolean;
+    };
+    expect(props.type).toBe('todo');
+    expect(props.checked).toBe(false);
   });
 
   test('nothing to move without the blocks', () => {

@@ -1,3 +1,4 @@
+import { addProjectTaskListBlock } from '@blocksuite/notesgraph/blocks/database';
 import {
   type BlockModel,
   type Store,
@@ -40,6 +41,77 @@ const noteOf = (store: Store, model: BlockModel) =>
   [...ancestors(store, model)].find(a => a.flavour === 'notesgraph:note') ??
   null;
 
+type Scope = { projectId?: string; noProject?: boolean };
+
+const listsScope = (model: BlockModel, scope: Scope) => {
+  if (model.flavour !== 'notesgraph:database') return false;
+  const props = model.props as {
+    queryProjectId?: string;
+    queryNoProject?: boolean;
+  };
+  return scope.noProject
+    ? !!props.queryNoProject
+    : !!scope.projectId && props.queryProjectId === scope.projectId;
+};
+
+/**
+ * A journal day as scaffoldJournalSections lays one out: its Inbox section,
+ * the heading or the Task List of tasks in no project, sits in the note.
+ */
+const isJournal = (note: BlockModel) =>
+  note.children.some(
+    child =>
+      (isHeading(child) && sameName(child.text?.toString() ?? '', INBOX)) ||
+      listsScope(child, { noProject: true })
+  );
+
+/**
+ * Give a journal the section it lacks, as scaffoldJournalSections makes one:
+ * an h2 with an empty to-do under it, then the section's "todos:" Task List
+ * unless the page already has one for it. It goes in above Inbox, which
+ * stays last; Inbox's own heading goes above Inbox's Task List if there is
+ * one. Returns the heading.
+ */
+function addJournalSection(
+  store: Store,
+  note: BlockModel,
+  name: string,
+  scope: Scope
+): BlockModel | null {
+  const inboxAt = (scope.noProject ? [] : note.children).findIndex(
+    child => isHeading(child) && sameName(child.text?.toString() ?? '', INBOX)
+  );
+  const listAt = note.children.findIndex(child =>
+    listsScope(child, { noProject: true })
+  );
+  const at = inboxAt >= 0 ? inboxAt : listAt >= 0 ? listAt : undefined;
+
+  const headingId = store.addBlock(
+    'notesgraph:paragraph' as never, // TODO(eyhn): fix type
+    { type: 'h2', text: new Text(name) },
+    note.id,
+    at
+  );
+  store.addBlock(
+    'notesgraph:list' as never, // TODO(eyhn): fix type
+    { type: 'todo', text: new Text('') },
+    headingId
+  );
+  const heading = store.getModelById(headingId);
+  if (!heading) return null;
+  const hasList = store
+    .getBlocksByFlavour('notesgraph:database')
+    .some(block => listsScope(block.model, scope));
+  if (!hasList) {
+    addProjectTaskListBlock(store, note.id, {
+      ...scope,
+      name: 'todos:',
+      index: note.children.indexOf(heading) + 1,
+    });
+  }
+  return heading;
+}
+
 /**
  * Put blocks in another project, the way {@link projectOf} reads one: under
  * the note's heading named for the project, or a new one at the end of the
@@ -47,12 +119,14 @@ const noteOf = (store: Store, model: BlockModel) =>
  * else out at the note's top level, after the section the first block was
  * in. A block nested under another being moved goes with it. In a journal
  * the blocks go in above the section's empty to-do, which stays last to type
- * into. False when there was nothing to move.
+ * into; a section the day lacks (Inbox too) is made whole, heading, empty
+ * to-do and Task List, and a moved list line becomes a to-do. False when
+ * there was nothing to move.
  */
 export function moveToProject(
   store: Store,
   blockIds: string[],
-  project: Pick<Project, 'name'> | null
+  project: Pick<Project, 'id' | 'name'> | null
 ): boolean {
   const models = blockIds
     .map(id => store.getBlock(id)?.model)
@@ -68,16 +142,26 @@ export function moveToProject(
     moving.includes(model) ||
     [...ancestors(store, model)].some(a => moving.includes(a));
   const name = project?.name ?? INBOX;
-  const heading = store
-    .getBlocksByFlavour('notesgraph:paragraph')
-    .map(block => block.model)
-    .find(
-      model =>
-        isHeading(model) &&
-        sameName(model.text?.toString() ?? '', name) &&
-        noteOf(store, model) === note &&
-        !inMoved(model)
-    );
+  const journal = isJournal(note);
+  const heading =
+    store
+      .getBlocksByFlavour('notesgraph:paragraph')
+      .map(block => block.model)
+      .find(
+        model =>
+          isHeading(model) &&
+          sameName(model.text?.toString() ?? '', name) &&
+          noteOf(store, model) === note &&
+          !inMoved(model)
+      ) ??
+    (journal
+      ? addJournalSection(
+          store,
+          note,
+          name,
+          project ? { projectId: project.id } : { noProject: true }
+        )
+      : null);
 
   let parent: BlockModel;
   if (heading) {
@@ -110,6 +194,14 @@ export function moveToProject(
   for (const model of rest) {
     store.moveBlocks([model], parent, previous, false);
     previous = model;
+  }
+  if (journal) {
+    for (const model of moving) {
+      const { type } = model.props as { type?: string };
+      if (model.flavour === 'notesgraph:list' && type !== 'todo') {
+        store.updateBlock(model, { type: 'todo', checked: false });
+      }
+    }
   }
   return true;
 }
