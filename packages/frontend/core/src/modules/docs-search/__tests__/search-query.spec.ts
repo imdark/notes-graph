@@ -34,6 +34,8 @@ describe('parseSearchQuery', () => {
       ],
       include: ['fly.io'],
       exclude: ['staging'],
+      kinds: [],
+      notKinds: [],
     });
     expect(hasScopeFilters(filters)).toBe(true);
   });
