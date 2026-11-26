@@ -16,3 +16,13 @@ export function useAgentsDownLast<T extends { deviceKey?: string }>(
   useEffect(() => fleet.watch(), [fleet]);
   return useLiveData(useMemo(() => fleet.downLast$(agents$), [fleet, agents$]));
 }
+
+/**
+ * Keys of the devices monitoring reports down, for marking the agents on
+ * them. Keeps the machines' health fresh while shown.
+ */
+export function useDownDeviceKeys(): Set<string> {
+  const fleet = useService(FleetService);
+  useEffect(() => fleet.watch(), [fleet]);
+  return useLiveData(fleet.downKeys$);
+}

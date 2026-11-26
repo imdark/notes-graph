@@ -4,6 +4,7 @@ import { saveAnswerAsDoc } from '@notesgraph/core/blocksuite/ai/utils/save-answe
 import {
   type Agent,
   AgentContextService,
+  AgentDownMark,
   AgentIcon,
   type AgentRunSession,
   AgentRunSessionService,
@@ -15,6 +16,7 @@ import {
   compileSourceOf,
   findCompileAgent,
   useAgentsDownLast,
+  useDownDeviceKeys,
 } from '@notesgraph/core/modules/agents';
 import { WorkspaceDialogService } from '@notesgraph/core/modules/dialogs';
 import { DocService } from '@notesgraph/core/modules/doc';
@@ -348,6 +350,7 @@ export const EditorAgentsPanel = () => {
   const docAgents = useAgentsDownLast(
     useMemo(() => agentsService.agentsFor$('doc'), [agentsService])
   );
+  const down = useDownDeviceKeys();
   const allAgents = useLiveData(agentsService.agents$);
   const sessions = useLiveData(sessionService.sessions$);
   const queue = useLiveData(sessionService.queue$);
@@ -512,6 +515,7 @@ export const EditorAgentsPanel = () => {
                       <AgentIcon agent={agent} />
                     </span>
                     <span className={styles.agentName}>{agent.name}</span>
+                    <AgentDownMark agent={agent} down={down} />
                     {sessions.some(
                       session => session.running && session.agentId === agent.id
                     ) ? (

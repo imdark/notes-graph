@@ -1,10 +1,12 @@
 import { Button, Checkbox, notify } from '@notesgraph/component';
 import {
   type Agent,
+  AgentDownMark,
   AgentIcon,
   AgentRunSessionService,
   AgentsService,
   useAgentsDownLast,
+  useDownDeviceKeys,
 } from '@notesgraph/core/modules/agents';
 import { WorkspaceDialogService } from '@notesgraph/core/modules/dialogs';
 import { WorkbenchService } from '@notesgraph/core/modules/workbench';
@@ -66,6 +68,7 @@ export const CaptureHandOff = ({
     ],
     [blockAgents, docAgents]
   );
+  const down = useDownDeviceKeys();
 
   const [picked, setPicked] = useState<string[]>(readLastPicked);
   const pickedAgents = useMemo(
@@ -160,6 +163,7 @@ export const CaptureHandOff = ({
               <AgentIcon agent={agent} />
             </span>
             <span className={styles.handOffName}>{agent.name}</span>
+            <AgentDownMark agent={agent} down={down} />
           </label>
         ))}
       </div>

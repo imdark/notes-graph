@@ -30,7 +30,7 @@ export {
   type ChatModel,
   CloudAgentRunnerService,
 } from './services/cloud-runner';
-export { AgentContextService } from './services/context';
+export { AgentContextService, projectOf } from './services/context';
 export {
   apkConfirmText,
   apkPendingText,
@@ -94,15 +94,6 @@ export {
   verifyBrief,
 } from './services/deployments';
 export {
-  queueAhead,
-  queuedPulls,
-  ReleaseActionQueue,
-  type ReleaseJob,
-  type ReleaseJobKind,
-  type ReleaseJobSpec,
-  type ReleaseJobStatus,
-} from './services/release-queue';
-export {
   AgentAlreadyRunningError,
   type AgentEvent,
   type AgentExecutor,
@@ -132,6 +123,7 @@ export {
   type LogPattern,
   type MonitoringAgent,
   type MonitoringDecision,
+  onDownDevice,
   openDecisions,
   type RegistryDevice,
   STALE_AFTER_SECONDS,
@@ -185,6 +177,15 @@ export {
   forkTranscript,
   splitSuggestion,
 } from './services/question-fork';
+export {
+  queueAhead,
+  queuedPulls,
+  ReleaseActionQueue,
+  type ReleaseJob,
+  type ReleaseJobKind,
+  type ReleaseJobSpec,
+  type ReleaseJobStatus,
+} from './services/release-queue';
 export {
   AGENT_SKILLS,
   type AgentBudget,
@@ -263,6 +264,7 @@ export {
   QUEUED_STATUS,
   releaseQueuedTasks,
 } from './services/task-claim';
+export { moveToProject, TaskProjectService } from './services/task-project';
 export {
   configureTerminalSocketAuth,
   TERMINAL_HARNESSES,
@@ -291,8 +293,12 @@ export {
   type AgentTargetKind,
   DEFAULT_MAX_STEPS,
 } from './stores/agents';
+export { AGENT_DOWN_TITLE, AgentDownMark } from './views/agent-down-mark';
 export { AgentIcon, agentIconData } from './views/agent-icon';
-export { useAgentsDownLast } from './views/use-agents-down-last';
+export {
+  useAgentsDownLast,
+  useDownDeviceKeys,
+} from './views/use-agents-down-last';
 
 import { type Framework } from '@notesgraph/infra';
 
@@ -320,6 +326,7 @@ import { RemoteAgentRunnerService } from './services/remote-runner';
 import { ResearchToolsService } from './services/research-tools';
 import { AgentRunSessionService } from './services/run-session';
 import { AgentTaskClaimService } from './services/task-claim';
+import { TaskProjectService } from './services/task-project';
 import { TerminalService } from './services/terminal';
 import { AgentRunLogsStore } from './stores/agent-run-logs';
 import { AgentRunsStore } from './stores/agent-runs';
@@ -352,6 +359,7 @@ export function configureAgentsModule(framework: Framework) {
       AgentRulesService,
     ])
     .service(AgentTaskClaimService, [DocsService])
+    .service(TaskProjectService, [DocsService])
     .service(AgentRunSessionService, [
       AgentExecutorService,
       AgentTaskClaimService,
