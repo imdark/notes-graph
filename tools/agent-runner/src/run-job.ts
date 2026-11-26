@@ -18,6 +18,7 @@ import type {
   McpServerConfig,
   Options,
   query as sdkQuery,
+  SDKUserMessage,
 } from '@anthropic-ai/claude-agent-sdk';
 
 import type { Job, ModelRoute, NotesGraphApi } from './api';
@@ -426,7 +427,7 @@ export async function runJob(job: Job, deps: RunDeps): Promise<RunOutcome> {
 
     const recorder = new ChangeRecorder(cwd);
     const narrator = new Narrator(say, maxTurns, recorder);
-    const prompt = handed.prompt ?? jobPrompt(job);
+    const prompt = userTurn(handed.prompt ?? jobPrompt(job));
     for await (const message of deps.query({ prompt, options })) {
       narrator.feed(message);
     }
@@ -456,6 +457,23 @@ export async function runJob(job: Job, deps: RunDeps): Promise<RunOutcome> {
     ).catch(() => {});
     await workdir.dispose().catch(() => {});
   }
+}
+
+/**
+ * The prompt as a one-message stream rather than a string. The SDK takes a
+ * string prompt as a single user turn and closes the CLI's stdin at its
+ * first result; a run that goes on past that (a background task finishing
+ * wakes the agent) then has no channel for permission requests or hooks,
+ * and every tool that needs permission fails with "Tool permission request
+ * failed: AbortError: Stream closed". With a stream, the SDK keeps stdin
+ * open until the session is idle.
+ */
+async function* userTurn(text: string): AsyncIterable<SDKUserMessage> {
+  yield {
+    type: 'user',
+    message: { role: 'user', content: text },
+    parent_tool_use_id: null,
+  };
 }
 
 /**
