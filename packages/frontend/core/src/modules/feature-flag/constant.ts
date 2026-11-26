@@ -510,7 +510,7 @@ export const NOTESGRAPH_FLAGS = {
     defaultState: true,
   },
   enable_run_review: {
-    commit: '',
+    commit: '25ef8b1a2b8f8f041fd61b78eb22d712fcc2a79b',
     category: 'notesgraph',
     displayName: 'Review recent runs',
     description:
