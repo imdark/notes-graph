@@ -14,6 +14,19 @@ test('a level narrows or widens the profile it starts from', t => {
   t.true(read.allowedTools.includes('mcp__notesgraph__read_document'));
   t.false(read.allowedTools.includes('mcp__notesgraph__update_document'));
   t.true(read.allowedTools.includes('WebSearch'));
+  // wf lookups run at every level; wf writes need "write".
+  t.true(read.allowedTools.includes('Bash(wf project list:*)'));
+  t.false(read.allowedTools.includes('Bash(wf task create:*)'));
+  t.true(base.allowedTools.includes('Bash(wf task create:*)'));
+  t.true(base.allowedTools.includes('Bash(wf done:*)'));
+  t.false(read.allowedTools.includes('Bash(wf done:*)'));
+  // Commands that delete, deploy or run any tool still ask.
+  for (const command of ['task delete', 'deploy', 'notes call', 'prune']) {
+    t.false(
+      base.allowedTools.some(tool => tool.startsWith(`Bash(wf ${command}`)),
+      command
+    );
+  }
 
   t.deepEqual(
     profileFor('claude-code', undefined, 'write')!.allowedTools,
