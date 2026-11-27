@@ -509,6 +509,15 @@ export const NOTESGRAPH_FLAGS = {
     configurable: true,
     defaultState: true,
   },
+  enable_generate_note_title: {
+    commit: 'cdb337312aef60dcd28e8de126120bac6c3df84f',
+    category: 'notesgraph',
+    displayName: 'Generate a title for untitled notes',
+    description:
+      'An untitled note gets a Generate title item in its … menu (the page header and the notes list). The AI you chose in Settings (cloud or on-device) reads the note and gives it a short title.',
+    configurable: true,
+    defaultState: true,
+  },
   enable_run_review: {
     commit: '25ef8b1a2b8f8f041fd61b78eb22d712fcc2a79b',
     category: 'notesgraph',

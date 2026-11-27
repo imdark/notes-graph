@@ -1,4 +1,5 @@
 import {
+  AiOutlineIcon,
   DuplicateIcon,
   EdgelessIcon,
   EditIcon,
@@ -26,6 +27,7 @@ import { useGuard } from '@notesgraph/core/components/guard';
 import { useBlockSuiteMetaHelper } from '@notesgraph/core/components/hooks/notesgraph/use-block-suite-meta-helper';
 import { useEnableCloud } from '@notesgraph/core/components/hooks/notesgraph/use-enable-cloud';
 import { useExportPage } from '@notesgraph/core/components/hooks/notesgraph/use-export-page';
+import { useGenerateDocTitle } from '@notesgraph/core/components/hooks/notesgraph/use-generate-doc-title';
 import { useAsyncCallback } from '@notesgraph/core/components/hooks/notesgraph-async-hooks';
 import { PageHistoryModal } from '@notesgraph/core/components/notesgraph/page-history-modal';
 import { Export, MoveToTrash } from '@notesgraph/core/components/page-list';
@@ -156,6 +158,7 @@ const PageHeaderMenuItem = ({
   const openInAppService = useServiceOptional(OpenInAppService);
 
   const { favorite, toggleFavorite } = useFavorite(pageId);
+  const generateTitle = useGenerateDocTitle(pageId);
 
   const { duplicate } = useBlockSuiteMetaHelper();
   const docsService = useService(DocsService);
@@ -370,6 +373,16 @@ const PageHeaderMenuItem = ({
           disabled={!canEdit}
         >
           {t['Rename']()}
+        </MenuItem>
+      )}
+      {generateTitle.available && (
+        <MenuItem
+          prefixIcon={<AiOutlineIcon />}
+          data-testid="editor-option-menu-generate-title"
+          onSelect={generateTitle.generate}
+          disabled={generateTitle.generating}
+        >
+          Generate title
         </MenuItem>
       )}
       {docModes.length > 1 && (

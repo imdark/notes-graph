@@ -75,6 +75,7 @@ export const actionDefinitions = {
     },
   },
   summary: textAction('summary', 'Summary'),
+  generateTitle: textAction('generateTitle', 'Summary as title'),
   translate: {
     ...textAction('translate', 'Translate to'),
     buildParams: options => ({ language: options.lang }),

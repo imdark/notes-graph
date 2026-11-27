@@ -1,4 +1,5 @@
 import {
+  AiOutlineIcon,
   DeleteIcon,
   EdgelessIcon,
   FolderIcon,
@@ -23,6 +24,7 @@ import {
 } from '@notesgraph/component/ui/menu';
 import { useFavorite } from '@notesgraph/core/blocksuite/block-suite-header/favorite';
 import { Guard, useGuard } from '@notesgraph/core/components/guard';
+import { useGenerateDocTitle } from '@notesgraph/core/components/hooks/notesgraph/use-generate-doc-title';
 import { IsFavoriteIcon } from '@notesgraph/core/components/pure/icons';
 import {
   DocInfoSheet,
@@ -67,6 +69,7 @@ export const PageHeaderMenuButton = () => {
   const title = useLiveData(editorService.editor.doc.title$);
 
   const { favorite, toggleFavorite } = useFavorite(docId);
+  const generateTitle = useGenerateDocTitle(docId);
   const { openConfirmModal } = useConfirmModal();
 
   const handleSwitchMode = useCallback(() => {
@@ -173,6 +176,16 @@ export const PageHeaderMenuButton = () => {
           {primaryMode === 'page'
             ? t['com.notesgraph.editorDefaultMode.edgeless']()
             : t['com.notesgraph.editorDefaultMode.page']()}
+        </MobileMenuItem>
+      )}
+      {generateTitle.available && (
+        <MobileMenuItem
+          prefixIcon={<AiOutlineIcon />}
+          data-testid="editor-option-menu-generate-title"
+          onSelect={generateTitle.generate}
+          disabled={generateTitle.generating}
+        >
+          Generate title
         </MobileMenuItem>
       )}
       <MobileMenuItem
