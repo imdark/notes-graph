@@ -1,5 +1,5 @@
 import { PlusIcon } from '@blocksuite/icons/rc';
-import { Button, useConfirmModal } from '@notesgraph/component';
+import { Button, notify, useConfirmModal } from '@notesgraph/component';
 import {
   type Agent,
   AgentIcon,
@@ -7,8 +7,12 @@ import {
   AgentRunsStore,
   AgentsService,
   deviceHarnessName,
+  RemoteAgentRunnerService,
+  RUN_REVIEW_DAYS,
+  RunReviewService,
 } from '@notesgraph/core/modules/agents';
 import { WorkspaceDialogService } from '@notesgraph/core/modules/dialogs';
+import { FeatureFlagService } from '@notesgraph/core/modules/feature-flag';
 import {
   ViewBody,
   ViewHeader,
@@ -16,6 +20,7 @@ import {
   ViewTitle,
   WorkbenchService,
 } from '@notesgraph/core/modules/workbench';
+import { WorkspaceService } from '@notesgraph/core/modules/workspace';
 import { useLiveData, useService } from '@notesgraph/infra';
 import { useCallback, useMemo, useState } from 'react';
 
@@ -38,6 +43,7 @@ import {
   useRemoteRunStates,
 } from '../detail-page/tabs/use-run-questions';
 import * as styles from './agents-page.css';
+import { approvalSummary, pendingApprovals } from './approve-all';
 import { BudgetLine } from './budget-line';
 import { MonitorsSection } from './monitors-section';
 import { SpendByProject } from './spend-by-project';
@@ -153,6 +159,31 @@ const AgentsPage = () => {
   const openSettings = useCallback(() => {
     dialogService.open('setting', { activeTab: 'workspace:agents' });
   }, [dialogService]);
+
+  const runReview = useService(RunReviewService);
+  const runReviewEnabled = useLiveData(
+    useService(FeatureFlagService).flags.enable_run_review.$
+  );
+  const [reviewing, setReviewing] = useState(false);
+  const startReview = useCallback(() => {
+    setReviewing(true);
+    runReview
+      .review(RUN_REVIEW_DAYS)
+      .then(({ runId }) => {
+        notify.success({
+          title: 'Reviewing recent runs',
+          message: `The review of the last ${RUN_REVIEW_DAYS} days goes in the Run reviews note.`,
+        });
+        if (runId) openLog(runId);
+      })
+      .catch(err => {
+        notify.error({
+          title: "Couldn't start the review",
+          message: err instanceof Error ? err.message : String(err),
+        });
+      })
+      .finally(() => setReviewing(false));
+  }, [runReview, openLog]);
   const openDoc = useCallback(
     (docId: string) => workbench.openDoc(docId, { at: 'active' }),
     [workbench]
@@ -242,6 +273,49 @@ const AgentsPage = () => {
       ),
     [runs, remote]
   );
+  // Approve all: every permission request open under Needs you, at once.
+  const approveAllOn = useLiveData(
+    useService(FeatureFlagService).flags.enable_approve_all_button.$
+  );
+  const remoteRunner = useService(RemoteAgentRunnerService);
+  const workspaceId = useService(WorkspaceService).workspace.id;
+  const approvals = useMemo(
+    () => pendingApprovals(waiting, run => remote.get(run.id)?.questions),
+    [waiting, remote]
+  );
+  const [approving, setApproving] = useState(false);
+  const approveAll = useCallback(() => {
+    const pending = approvals;
+    openConfirmModal({
+      title: `Approve ${pending.length} permission ${pending.length === 1 ? 'request' : 'requests'}?`,
+      description: `${approvalSummary(pending)}. Each run goes on with that tool; what they ask next still waits for you. Questions that need an answer aren't touched.`,
+      confirmText: 'Approve all',
+      onConfirm: async () => {
+        setApproving(true);
+        const results = await Promise.allSettled(
+          pending.map(p =>
+            remoteRunner.answer(workspaceId, p.jobId, p.questionId, {
+              allowed: true,
+            })
+          )
+        );
+        setApproving(false);
+        const failed = results.filter(r => r.status === 'rejected').length;
+        if (failed) {
+          notify.error({
+            title: `${failed} of ${pending.length} couldn't be approved`,
+            message:
+              'They may have been answered elsewhere already. The rest went through.',
+          });
+        } else {
+          notify.success({
+            title: `Approved ${pending.length} ${pending.length === 1 ? 'request' : 'requests'}`,
+          });
+        }
+      },
+    });
+  }, [approvals, openConfirmModal, remoteRunner, workspaceId]);
+
   // Finished runs waiting to be approved sit beside them.
   const toReview = useMemo(() => runs.filter(run => run.reviewPending), [runs]);
   const needsYou = waiting.length + toReview.length;
@@ -259,6 +333,17 @@ const AgentsPage = () => {
       <ViewIcon icon="ai" />
       <ViewHeader>
         <div className={styles.headerBar}>
+          {runReviewEnabled ? (
+            <Button
+              onClick={startReview}
+              loading={reviewing}
+              disabled={reviewing}
+              tooltip={`An agent checks the last ${RUN_REVIEW_DAYS} days of runs: what shipped, what failed and why, work left unpushed, and repeats.`}
+              data-testid="agents-page-review-runs"
+            >
+              Review recent runs
+            </Button>
+          ) : null}
           <Button onClick={openSettings} data-testid="agents-page-manage">
             Manage agents
           </Button>
@@ -283,6 +368,18 @@ const AgentsPage = () => {
                 <div className={styles.sectionTitle}>
                   Needs you
                   <span className={styles.sectionCount}>{needsYou}</span>
+                  {approveAllOn && approvals.length > 0 ? (
+                    <Button
+                      className={styles.sectionTitleAction}
+                      onClick={approveAll}
+                      loading={approving}
+                      disabled={approving}
+                      tooltip="Approve every permission request waiting here. Questions that need an answer are left for you."
+                      data-testid="agents-page-approve-all"
+                    >
+                      Approve all ({approvals.length})
+                    </Button>
+                  ) : null}
                 </div>
                 {waiting.map(run => (
                   <div key={run.id} className={styles.waitingCard}>

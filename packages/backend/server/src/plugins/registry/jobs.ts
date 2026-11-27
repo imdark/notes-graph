@@ -1,6 +1,11 @@
 import { randomBytes } from 'node:crypto';
 
-import { Injectable, Logger, Optional } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  NotFoundException,
+  Optional,
+} from '@nestjs/common';
 import type {
   Prisma,
   RegistryJob,
@@ -70,12 +75,20 @@ declare global {
 }
 
 /** Wire shape for a job. Epoch seconds, matching the device DTO. */
+/** The server's own runner's device: it runs each job afresh. */
+export const CLOUD_RUNNER_KEY = 'cloud';
+
 export interface JobDto {
   id: string;
   /** 'agent' or 'automation'; see JOB_KINDS. */
   kind: string;
   /** What an automation job runs; null for an agent run. */
   payload: unknown;
+  /**
+   * The ended job this one follows up: the runner (wf agent serve) resumes
+   * that run's Claude session in the worktree it left. Null for a fresh run.
+   */
+  continues: string | null;
   deviceKey: string;
   agentId: string;
   agentName: string;
@@ -244,6 +257,7 @@ export function toJobDto(
     id: job.id,
     kind: job.kind,
     payload: job.payload ?? null,
+    continues: job.continues ?? null,
     deviceKey: job.deviceKey,
     agentId: job.agentId,
     agentName: job.agentName,
@@ -687,6 +701,11 @@ export class RegistryJobService {
 
     const docId = body.docId ? String(body.docId) : null;
     const agentId = String(body.agentId ?? '');
+    const continues = await this.followedJob(
+      workspaceId,
+      deviceKey,
+      body.continues
+    );
     // A gate (an automation's prestart hook) may need to see the job before
     // any runner can take it.
     const held =
@@ -714,6 +733,7 @@ export class RegistryJobService {
       runAfter,
       maxCostUsd: parseUsd(body.maxCostUsd),
       access,
+      continues,
     });
     // Full access is "Allow all" from the start.
     if (access === 'full') {
@@ -995,16 +1015,154 @@ export class RegistryJobService {
     workspaceId: string,
     deviceKey?: string,
     status?: string,
-    options: { kind?: string; finishedSince?: Date; limit?: number } = {}
+    options: {
+      kind?: string;
+      finishedSince?: Date;
+      createdSince?: Date;
+      docId?: string;
+      agentId?: string;
+      text?: string;
+      limit?: number;
+    } = {}
   ): Promise<JobDto[]> {
     const jobs = await this.models.registryJob.list(workspaceId, {
       deviceKey,
       status,
       kind: options.kind,
       finishedSince: options.finishedSince,
+      createdSince: options.createdSince,
+      docId: options.docId,
+      agentId: options.agentId,
+      text: options.text,
       limit: options.limit,
     });
     return jobs.map(job => toJobDto(job));
+  }
+
+  /**
+   * The job a follow-up continues, checked: one of this workspace's, ended,
+   * and on the device the follow-up goes to, since only that device has the
+   * run's session and worktree. The cloud runner can't resume a session.
+   */
+  private async followedJob(
+    workspaceId: string,
+    deviceKey: string,
+    value: unknown
+  ): Promise<string | null> {
+    if (value === undefined || value === null || value === '') return null;
+    const id = String(value);
+    if (deviceKey === CLOUD_RUNNER_KEY) {
+      throw new BadRequest(
+        "The cloud runner can't resume a run's session; continue it from its transcript instead."
+      );
+    }
+    const earlier = await this.models.registryJob.get(workspaceId, id);
+    if (!earlier) {
+      throw new BadRequest(`No job '${id}' in this workspace to follow up`);
+    }
+    if (!['done', 'error', 'cancelled'].includes(earlier.status)) {
+      throw new BadRequest(
+        `Job '${id}' hasn't ended yet: tell it more from its log instead`
+      );
+    }
+    if (earlier.deviceKey !== deviceKey) {
+      throw new BadRequest(
+        `Job '${id}' ran on ${earlier.deviceKey}: follow it up there, where its session and files are`
+      );
+    }
+    return id;
+  }
+
+  /**
+   * What a job changed, in full: notes created and edited, files, and its
+   * git work with the patch, which the run's list entry leaves out. The
+   * patch is how work a run never pushed can still be recovered.
+   */
+  async changes(workspaceId: string, id: string): Promise<unknown> {
+    const job = await this.models.registryJob.get(workspaceId, id);
+    if (!job) throw new NotFoundException(`No job '${id}' in this workspace`);
+    return job.changes ?? null;
+  }
+
+  /** Every question still waiting across the workspace's runs: Needs you. */
+  async openQuestions(workspaceId: string) {
+    const rows = await this.models.registryJob.openQuestions(workspaceId);
+    return rows.map(({ job, ...question }) => ({
+      ...toQuestionDto(question),
+      job: {
+        id: job.id,
+        title: job.title,
+        agentId: job.agentId,
+        agentName: job.agentName,
+        deviceKey: job.deviceKey,
+        status: job.status,
+        docId: job.docId,
+        blockId: job.blockId,
+        createdAt: job.createdAt.getTime() / 1000,
+      },
+    }));
+  }
+
+  /**
+   * Queue a job again as it was asked for: the same device, agent, brief,
+   * note and limits, as a new job. Its transcript, outcome and changes
+   * aren't carried over.
+   */
+  async rerun(
+    workspaceId: string,
+    userId: string,
+    id: string
+  ): Promise<JobDto> {
+    const job = await this.models.registryJob.get(workspaceId, id);
+    if (!job) throw new NotFoundException(`No job '${id}' in this workspace`);
+    if (job.kind !== 'agent') {
+      throw new BadRequest('Only agent runs can be run again from here.');
+    }
+    return this.enqueue(workspaceId, userId, job.deviceKey, {
+      agentId: job.agentId,
+      agentName: job.agentName,
+      instructions: job.instructions,
+      context: job.context,
+      model: job.model,
+      tools: job.tools,
+      skills: job.skills,
+      maxSteps: job.maxSteps,
+      maxCostUsd: job.maxCostUsd,
+      access: job.access,
+      targetKind: job.targetKind,
+      docId: job.docId,
+      blockId: job.blockId,
+      title: job.title,
+      taskIds: job.taskIds,
+    });
+  }
+
+  /** How a device's job runner stands: when it last asked for work, its build, its load. */
+  async runnerStatus(workspaceId: string, deviceKey: string) {
+    const device = await this.models.registryDevice.get(workspaceId, deviceKey);
+    if (!device) {
+      throw new NotFoundException(`No device '${deviceKey}' in this workspace`);
+    }
+    const [running, queued] = await Promise.all([
+      this.models.registryJob.list(workspaceId, {
+        deviceKey,
+        status: 'running',
+        limit: 100,
+      }),
+      this.models.registryJob.list(workspaceId, {
+        deviceKey,
+        status: 'queued',
+        limit: 100,
+      }),
+    ]);
+    return {
+      deviceKey,
+      seenAt: device.runnerSeenAt ? device.runnerSeenAt.getTime() / 1000 : null,
+      version: device.runnerVersion ?? null,
+      maxJobs: device.maxJobs ?? null,
+      running: running.length,
+      queued: queued.length,
+    };
   }
 
   async claim(
@@ -1038,12 +1196,18 @@ export class RegistryJobService {
     deviceKey: string,
     runnerId: string,
     leaseSeconds?: number,
-    kinds?: readonly JobKind[]
+    kinds?: readonly JobKind[],
+    /** What the runner says it is (its build), shown as the device's runner. */
+    runnerVersion?: string | null
   ): Promise<{ job: JobDto | null; maxJobs: number | null }> {
     // Asking is what "a runner is listening" means, whether or not there is
     // work to hand out. Best effort: never fail a claim over it.
     try {
-      await this.models.registryDevice.touchRunner(workspaceId, deviceKey);
+      await this.models.registryDevice.touchRunner(
+        workspaceId,
+        deviceKey,
+        runnerVersion
+      );
     } catch (err) {
       this.logger.warn(`touchRunner failed: ${err}`);
     }

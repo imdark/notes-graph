@@ -363,3 +363,11 @@ export const dialogActions = style({
   justifyContent: 'flex-end',
   gap: 8,
 });
+
+/** Open pull requests' "Verify a branch" box: the name, then Verify. */
+export const verifyBranch = style({
+  display: 'flex',
+  alignItems: 'center',
+  gap: 6,
+  maxWidth: 560,
+});

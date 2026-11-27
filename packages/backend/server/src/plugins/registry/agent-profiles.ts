@@ -135,12 +135,80 @@ mcp__run__ask_user so the user can pick one with a click.
 Tools that need permission are put to the user for
 you; if they deny one, find another way or explain what you could not do.
 
+When part of the work belongs to another task, hand it to another agent
+instead of leaving it as a note: a task you refile under another project
+(file_task gives its docId and blockId), or a subtask that can run alongside
+yours. Start it with mcp__notesgraph__start_agent_run and follow it with
+agent_run_status every few minutes until it ends; say in your answer what
+it did. Don't start one for work you can do in a few steps yourself.
+
 Finish with your answer to the task itself.
 `;
 
-// Shell and file edits are left out: they go through the permission prompt.
+const wfCommands = (commands: string[]) =>
+  commands.map(command => `Bash(wf ${command}:*)`);
+
+// wf commands that only look things up: projects, tasks, notes, sessions.
+const WF_READ_COMMANDS = wfCommands([
+  'project list',
+  'project current',
+  'task list',
+  'task show',
+  'task comment list',
+  'notes find',
+  'notes ls',
+  'notes read',
+  'notes links',
+  'notes tools',
+  'skill list',
+  'skill drafts',
+  'skill usage',
+  'mem sessions',
+  'mem show',
+  'mem search',
+  'mem facts',
+  'status',
+  'github-comments',
+  'search-context',
+  'rag-info',
+  'list-categories',
+  'ai-mcp-status',
+]);
+
+// wf commands that write notes or tasks, as mcp__notesgraph does, and `wf
+// done`, which ships a run's branch as a PR: the person chose (2026-11-26) to
+// let it through without asking.
+const WF_WRITE_COMMANDS = wfCommands([
+  'done',
+  'create',
+  'task create',
+  'task update',
+  'task transition',
+  'task comment add',
+  'notes new',
+  'notes edit',
+  'notes rename',
+  'notes file',
+]);
+
+// GitHub lookups agents make to follow their own pull request and its CI:
+// they only read. wf agent serve allows the same on laptops (workflow #83).
+const GH_READ_COMMANDS = [
+  'pr view',
+  'pr list',
+  'pr checks',
+  'pr diff',
+  'run view',
+  'run list',
+].map(command => `Bash(gh ${command}:*)`);
+
+// Other shell commands and file edits are left out: they go through the
+// permission prompt.
 const CLAUDE_CODE_ALLOWED_TOOLS = [
   'mcp__notesgraph',
+  ...WF_WRITE_COMMANDS,
+  ...WF_READ_COMMANDS,
+  ...GH_READ_COMMANDS,
   'mcp__run__ask_user',
   'mcp__run__set_title',
   'mcp__run__upload_artifact',
@@ -273,12 +341,20 @@ const withGitLock = (command: string, waitSeconds: number) =>
  * without pushing (cloud-125 and cloud-130 on 2026-11-25, whose permission
  * requests all failed) otherwise leaves its work only in the runner's
  * clone, where nobody sees it. A run that pushed has nothing to add here.
+ *
+ * Changes the run never committed (CLOUD-148 on 2026-11-26) are committed
+ * first, as a "wip" commit on the run's own branch, so they go too.
  */
 export const keepUnpushed = (dir: string): AutomationStep => ({
   name: 'keep unpushed work',
   // The push writes the clone's remote-tracking ref, so it takes the lock.
   run: withGitLock(
     `cd ${dir} 2>/dev/null && b="$(git symbolic-ref --short -q HEAD)" && ` +
+      '{ if [ -n "$(git status --porcelain)" ]; then git add -A && ' +
+      'git -c user.name="NotesGraph agent runner" ' +
+      '-c user.email=agent-runner@notesgraph.invalid ' +
+      'commit -q --no-verify -m "wip: work the run left uncommitted" && ' +
+      'echo "committed the changes the run left uncommitted"; fi; } && ' +
       'n="$(git rev-list --count HEAD --not --remotes=origin)" && ' +
       'if [ "$n" -gt 0 ]; then git push -q origin "HEAD:refs/heads/$b" && ' +
       'echo "pushed $n unpushed commit(s) to $b"; fi',
@@ -765,7 +841,8 @@ const PROFILES: Record<string, AgentProfile> = {
  *
  *   read    reads notes, files and the web; anything else is refused without
  *           asking (jobs.ts)
- *   write   also writes notes; shell and file edits ask (the profiles' default)
+ *   write   also writes notes and tasks; other shell and file edits ask (the
+ *           profiles' default)
  *   manage  also edits files; shell asks
  *   full    everything, as if "Allow all" were pressed when it started
  *
@@ -804,7 +881,9 @@ function withAccess(profile: AgentProfile, access: AccessLevel): AgentProfile {
   );
   const read = [
     ...NOTESGRAPH_READ_TOOLS,
-    ...CLAUDE_CODE_ALLOWED_TOOLS.filter(tool => tool !== 'mcp__notesgraph'),
+    ...CLAUDE_CODE_ALLOWED_TOOLS.filter(
+      tool => tool !== 'mcp__notesgraph' && !WF_WRITE_COMMANDS.includes(tool)
+    ),
     ...extras,
   ];
   const allowedTools =
@@ -847,8 +926,8 @@ export function profileFor(
 }
 
 // Shell commands that deploy, spend money or delete. Pushing a branch is not
-// among them: a run that ships its work ends with `wf done`, and the person
-// chose (2026-10-14) to let that through once they press "Allow all".
+// among them: the person chose (2026-10-14) to let that through once they
+// press "Allow all" (and `wf done`, which pushes, doesn't ask at all).
 const ALWAYS_ASK_COMMANDS: RegExp[] = [
   /\bdeploy/i,
   /\bwf\s+(release|ship)\b/,

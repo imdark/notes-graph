@@ -135,8 +135,12 @@ jobs:
             echo "::error::git diff $prev $SHA failed"
             exit 1
           fi
-          changed=$(printf '%s\n' "$files" | node scripts/android/app-changed.mjs)
-          case $? in
+          # The runner's bash has -e on, which `set -uo` doesn't undo: a
+          # bare assignment exiting 1 ("no app changes") would end the step
+          # as a failure before the case reads it (2026-11-26, 378eec79).
+          rc=0
+          changed=$(printf '%s\n' "$files" | node scripts/android/app-changed.mjs) || rc=$?
+          case $rc in
             0)
               echo "App changes since ${prev:0:7}:"
               echo "$changed"

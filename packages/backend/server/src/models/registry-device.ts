@@ -111,13 +111,21 @@ export class RegistryDeviceModel extends BaseModel {
    * every 30s — runners poll every few seconds — and without bumping
    * `updated_at`, which tracks registration and status, not polling.
    */
-  async touchRunner(workspaceId: string, key: string): Promise<void> {
+  async touchRunner(
+    workspaceId: string,
+    key: string,
+    /** What the runner says it is; a new one is kept at once. */
+    version?: string | null
+  ): Promise<void> {
+    const v = version?.trim().slice(0, 100) || null;
     await this.db.$executeRaw`
       UPDATE "registry_devices"
-      SET "runner_seen_at" = NOW()
+      SET "runner_seen_at" = NOW(),
+        "runner_version" = COALESCE(${v}, "runner_version")
       WHERE "workspace_id" = ${workspaceId} AND "key" = ${key}
         AND ("runner_seen_at" IS NULL
-          OR "runner_seen_at" < NOW() - INTERVAL '30 seconds')`;
+          OR "runner_seen_at" < NOW() - INTERVAL '30 seconds'
+          OR "runner_version" IS DISTINCT FROM COALESCE(${v}, "runner_version"))`;
   }
 
   /** How many jobs the device's runners may run at once; null for theirs. */

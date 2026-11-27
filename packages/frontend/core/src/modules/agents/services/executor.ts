@@ -9,6 +9,7 @@ import {
   type AgentHarness,
   DEFAULT_MAX_STEPS,
 } from '../stores/agents';
+import { planAdoptions } from './adopt-runs';
 import {
   agentRulesSection,
   type AgentRulesService,
@@ -759,6 +760,7 @@ export class AgentExecutorService extends Service implements AgentExecutor {
   /** Run records this tab is driving, which only this tab may settle. */
   private readonly liveRuns = new Set<string>();
   private reconciling = false;
+  private adopting = false;
 
   /**
    * Record how a device job ended on its run row, if it has ended. The tab
@@ -812,6 +814,41 @@ export class AgentExecutorService extends Service implements AgentExecutor {
    * is recorded as interrupted. Rows this tab is driving are left alone, and
    * so are ones that may still be going in another tab.
    */
+  /**
+   * Take on the device jobs this browser has no run for, and give runs whose
+   * start went unanswered their jobs back: see planAdoptions. A job still
+   * going is left running for reconcileRuns and the Agents page to follow.
+   */
+  async adoptRemoteRuns(): Promise<void> {
+    const workspaceId = this.workspaceId;
+    if (this.adopting || !workspaceId) return;
+    this.adopting = true;
+    try {
+      const jobs = await this.remoteRunner.listJobs(workspaceId);
+      const plan = planAdoptions(
+        jobs,
+        this.runsStore.runs(),
+        Date.now(),
+        this.runsStore.dismissedJobIds()
+      );
+      for (const step of plan) {
+        const runId =
+          step.kind === 'adopt' ? this.runsStore.adopt(step.job) : step.runId;
+        if (step.kind === 'reattach' || step.kind === 'resettle') {
+          // Running again until the job says otherwise: settleFromJob
+          // finishes it now if the job has ended.
+          this.runsStore.reattach(runId, step.job.id, step.job.deviceKey);
+        }
+        this.settleFromJob(runId, step.job);
+        // A repaired run ended a while ago: correcting its record isn't news
+        // to put under "To review".
+        if (step.kind !== 'adopt') this.runsStore.settleReview(runId);
+      }
+    } finally {
+      this.adopting = false;
+    }
+  }
+
   async reconcileRuns(): Promise<void> {
     if (this.reconciling) return;
     this.reconciling = true;
@@ -1153,6 +1190,8 @@ export class AgentExecutorService extends Service implements AgentExecutor {
       docId: target.docId,
       blockId: agentTargetBlockIds(target)[0],
       taskIds: context.taskIds,
+      // A follow-up in an ended run's own session (see resumeBrief).
+      ...(context.continues ? { continues: context.continues } : {}),
     });
     this.runsStore.attachRemote(runId, job.id, agent.deviceKey);
     // The folder the device works in, from its registry entry. Only for the

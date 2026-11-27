@@ -1,4 +1,5 @@
 import { Injectable, Optional } from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
 import { pick } from 'lodash-es';
 import z from 'zod/v3';
 
@@ -15,6 +16,7 @@ import {
   SearchQueryOccur,
   SearchQueryType,
 } from '../../indexer/types';
+import { RegistryJobService } from '../../registry/jobs';
 import { CopilotContextService } from '../context/service';
 import {
   filterDocIdsByDates,
@@ -29,6 +31,7 @@ import {
   parseSearchQuery,
   searchText,
 } from '../search-query';
+import { agentRunsAnswer } from './agent-runs';
 import {
   CanvasError,
   canvasSvg,
@@ -62,6 +65,12 @@ import {
 } from './outline';
 import { applyBudget, fuseRanked } from './rrf';
 import { findSecret, guardSecrets, secretRefusal } from './secret-guard';
+import {
+  runStatusAnswer,
+  SUBTASK_KINDS,
+  subtaskJobBody,
+  type SubtaskKind,
+} from './subtask-runs';
 
 function first(value: unknown): string {
   const item = Array.isArray(value) ? value[0] : value;
@@ -71,6 +80,8 @@ function first(value: unknown): string {
 const SEMANTIC_SEARCH_TOP_K = 5;
 const KEYWORD_SEARCH_LIMIT = 20;
 const HYBRID_DEFAULT_ITEMS = 8;
+/** Runs list_agent_runs reads before keeping the last `days` of them. */
+const MAX_LISTED_RUNS = 300;
 const HYBRID_DEFAULT_CHARS = 6000;
 /** A widget is stored in the doc and synced to every device. */
 const MAX_WIDGET_HTML = 100_000;
@@ -255,8 +266,48 @@ export class WorkspaceMcpProvider {
     private readonly indexer: IndexerService,
     private readonly models: Models,
     // Tells open editors a comment thread changed; absent in unit tests.
-    @Optional() private readonly realtime?: RealtimePublisher
+    @Optional() private readonly realtime?: RealtimePublisher,
+    // The registry's job service, looked up when a tool starts or follows an
+    // agent run: the registry module already imports copilot code, so the
+    // copilot module doesn't import it back. Absent in unit tests.
+    @Optional() private readonly moduleRef?: ModuleRef
   ) {}
+
+  private registryJobs(): RegistryJobService | null {
+    try {
+      return this.moduleRef?.get(RegistryJobService, { strict: false }) ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  /** A task block's text from the search index, when it is indexed yet. */
+  private async indexedBlockText(
+    workspaceId: string,
+    docId: string,
+    blockId: string
+  ): Promise<string | null> {
+    const result = await this.indexer.search({
+      table: SearchTable.block,
+      query: {
+        type: SearchQueryType.boolean,
+        occur: SearchQueryOccur.must,
+        queries: [
+          {
+            type: SearchQueryType.match,
+            field: 'workspaceId',
+            match: workspaceId,
+          },
+          { type: SearchQueryType.match, field: 'docId', match: docId },
+          { type: SearchQueryType.match, field: 'blockId', match: blockId },
+        ],
+      },
+      options: { fields: ['content'], pagination: { limit: 1 } },
+    });
+    const content = result.nodes[0]?.fields?.content;
+    const text = Array.isArray(content) ? content.join(' ') : content;
+    return typeof text === 'string' && text.trim() ? text : null;
+  }
 
   async for(userId: string, workspaceId: string): Promise<WorkspaceMcpServer> {
     await this.ac.user(userId).workspace(workspaceId).assert('Workspace.Read');
@@ -1502,6 +1553,47 @@ export class WorkspaceMcpProvider {
         ),
     });
 
+    const listAgentRunsTool = defineTool({
+      name: 'list_agent_runs',
+      title: 'List Agent Runs',
+      description:
+        "The workspace's agent runs started in the last few days, newest first, running and queued ones included: each run's title, agent, device, status, when it started and ended, its error and result (clipped), its git branch and commit subjects when it had any, how many notes it created or edited, how many tool permission requests failed, and the end of its log. Use it to review recent runs: which ended without pushing or opening a pull request, which failed or stopped early, and which repeat each other. Pair with deploy_info to check whether their pull requests are live. It only reads.",
+      parser: z.object({
+        days: z.number().int().min(1).max(30).optional(),
+        status: z.string().optional(),
+        search: z.string().max(200).optional(),
+      }),
+      inputSchema: {
+        type: 'object',
+        properties: {
+          days: {
+            type: 'number',
+            description: 'How many days back to look (1-30, default 3).',
+          },
+          status: {
+            type: 'string',
+            description:
+              'Only runs with this status: queued, running, done, error, blocked or cancelled.',
+          },
+          search: {
+            type: 'string',
+            description:
+              'Only runs whose title or transcript contains this, any case: a task key (CLOUD-147), a branch, an error ("Stream closed").',
+          },
+        },
+        additionalProperties: false,
+      },
+      execute: async ({ days, status, search }) => {
+        const jobs = await this.models.registryJob.list(workspaceId, {
+          kind: 'agent',
+          status: status || undefined,
+          text: search?.trim() || undefined,
+          limit: MAX_LISTED_RUNS,
+        });
+        return toolText(JSON.stringify(agentRunsAnswer(jobs, days ?? 3)));
+      },
+    });
+
     const tools = [
       readDocument,
       readComments,
@@ -1520,6 +1612,7 @@ export class WorkspaceMcpProvider {
       getLinks,
       notesHealthTool,
       deployInfoTool,
+      listAgentRunsTool,
     ];
 
     if (env.dev || env.namespaces.canary || env.mcpWriteToolsEnabled) {
@@ -1867,6 +1960,63 @@ export class WorkspaceMcpProvider {
           } catch (error) {
             return toolError(
               `Failed to update document: ${error instanceof Error ? error.message : 'Unknown error'}`
+            );
+          }
+        },
+      });
+
+      const deleteDocument = defineTool({
+        name: 'delete_document',
+        title: 'Delete Document',
+        description:
+          "Move a note to the trash, as deleting it in the app does. It isn't gone: the person can restore it from Trash. Use it for notes you made that are no longer wanted (a test note, a duplicate you merged elsewhere), or that the person asked you to delete; never to tidy notes the person wrote without their say. A journal day or the workspace itself can't be deleted this way. Returns {docId, trashed}, trashed false when it was already in the trash." +
+          firstPersonGuidance,
+        parser: z.object({
+          docId: z.string(),
+          agent: z.string().optional(),
+        }),
+        inputSchema: {
+          type: 'object',
+          properties: {
+            docId: {
+              type: 'string',
+              description: 'The note to move to the trash.',
+            },
+            agent: agentInputSchema,
+          },
+          required: ['docId'],
+          additionalProperties: false,
+        },
+        execute: async ({ docId }, options) => {
+          if (docId === workspaceId) {
+            return toolError("The workspace itself can't be deleted.");
+          }
+          const allowed = await this.ac
+            .user(userId)
+            .workspace(workspaceId)
+            .doc(docId)
+            .can('Doc.Trash');
+          if (!allowed) return toolError(`Can't delete ${docId}.`);
+          const aborted = abortIfNeeded(options.signal);
+          if (aborted) return aborted;
+          try {
+            // A journal day holds the day's tasks and calendar; losing it to a
+            // stray call costs far more than keeping a note by mistake.
+            const content = await this.reader.getDocContent(workspaceId, docId);
+            if (content?.title && JOURNAL_DATE_RE.test(content.title.trim())) {
+              return toolError(
+                `${content.title} is a journal day: delete it in the app if it really should go.`
+              );
+            }
+            const trashed = await this.writer.trashDoc(
+              workspaceId,
+              docId,
+              userId
+            );
+            return toolText(JSON.stringify({ docId, trashed }));
+          } catch (error) {
+            return toolError(
+              `Failed to delete the document: ${error instanceof Error ? error.message : 'Unknown error'}`
             );
           }
         },
@@ -3034,6 +3184,157 @@ export class WorkspaceMcpProvider {
         },
       });
 
+      const startAgentRun = defineTool({
+        name: 'start_agent_run',
+        title: 'Start Agent Run',
+        description:
+          "Start another agent on a task block and get its jobId to follow it with agent_run_status. Use it to hand off a task you refiled under another project (file_task gives its docId and blockId), or to run a subtask in parallel while you go on. kind 'workflow' (default) is a code task in a repo, worked as a wf task on its own branch, ending with a pull request; 'claude-code' is Claude Code in a fresh checkout; 'research' reads and cites sources. It runs on device 'cloud' (the server's runner) unless you name another. It starts at once and does not wait: poll agent_run_status, every minute or two, until ended is true, then read its result. A run you start shows on the Agents page, and its questions go to the person under Needs you. Returns {jobId, status, device}." +
+          firstPersonGuidance,
+        parser: z.object({
+          docId: z.string(),
+          blockId: z.string(),
+          task: z.string().max(4000).optional(),
+          kind: z.enum(SUBTASK_KINDS).optional(),
+          device: z.string().max(100).optional(),
+          instructions: z.string().max(8000).optional(),
+          parentJobId: z.string().max(100).optional(),
+          agent: z.string().optional(),
+        }),
+        inputSchema: {
+          type: 'object',
+          properties: {
+            docId: { type: 'string', description: 'The note the task is in.' },
+            blockId: {
+              type: 'string',
+              description: 'The task block (a to-do) the run works on.',
+            },
+            task: {
+              type: 'string',
+              description:
+                "The task's text, when you have it (a task you just filed may not be searchable yet).",
+            },
+            kind: {
+              type: 'string',
+              enum: [...SUBTASK_KINDS],
+              description: "What runs it (default 'workflow').",
+            },
+            device: {
+              type: 'string',
+              description: "The device to run it on (default 'cloud').",
+            },
+            instructions: {
+              type: 'string',
+              description:
+                'How to work it, when it needs more than the task says: what to build on, what to leave alone, what to report back.',
+            },
+            parentJobId: {
+              type: 'string',
+              description:
+                "Your own run's job id, when you know it, so the run says who started it.",
+            },
+            agent: agentInputSchema,
+          },
+          required: ['docId', 'blockId'],
+          additionalProperties: false,
+        },
+        execute: async (
+          {
+            docId,
+            blockId,
+            task,
+            kind,
+            device,
+            instructions,
+            parentJobId,
+            agent,
+          },
+          options
+        ) => {
+          const secret = guardSecrets(task, instructions, agent);
+          if (secret) return toolError(secret);
+          const jobs = this.registryJobs();
+          if (!jobs)
+            return toolError('Agent runs are not available on this server.');
+          const allowed = await this.ac
+            .user(userId)
+            .workspace(workspaceId)
+            .doc(docId)
+            .can('Doc.Update');
+          if (!allowed) return toolError(`Can't work on tasks in ${docId}.`);
+          const aborted = abortIfNeeded(options.signal);
+          if (aborted) return aborted;
+          try {
+            const content = await this.reader.getDocContent(workspaceId, docId);
+            const text =
+              task?.trim() ||
+              (await this.indexedBlockText(workspaceId, docId, blockId));
+            const body = subtaskJobBody({
+              kind: (kind ?? 'workflow') as SubtaskKind,
+              docId,
+              blockId,
+              task: text,
+              noteTitle: content?.title ?? null,
+              instructions,
+              parentJobId,
+              startedBy: agent,
+            });
+            const job = await jobs.enqueue(
+              workspaceId,
+              userId,
+              device?.trim() || 'cloud',
+              body
+            );
+            return toolText(
+              JSON.stringify({
+                jobId: job.id,
+                status: job.status,
+                device: job.deviceKey,
+                heldUntil: job.runAfter,
+                title: job.title,
+              })
+            );
+          } catch (error) {
+            return toolError(
+              `Couldn't start the run: ${error instanceof Error ? error.message : 'Unknown error'}`
+            );
+          }
+        },
+      });
+
+      const agentRunStatus = defineTool({
+        name: 'agent_run_status',
+        title: 'Agent Run Status',
+        description:
+          "Follow an agent run you started with start_agent_run (or any run, by job id): its status, whether it has ended, what it waits for a person to answer, its result or error, and the end of its log. Check every minute or two until ended is true; don't wait on it in a tight loop. It only reads.",
+        parser: z.object({ jobId: z.string() }),
+        inputSchema: {
+          type: 'object',
+          properties: {
+            jobId: { type: 'string', description: 'From start_agent_run.' },
+          },
+          required: ['jobId'],
+          additionalProperties: false,
+        },
+        execute: async ({ jobId }) => {
+          const jobs = this.registryJobs();
+          if (!jobs)
+            return toolError('Agent runs are not available on this server.');
+          const job = await jobs.get(
+            workspaceId,
+            jobId,
+            Number.MAX_SAFE_INTEGER
+          );
+          if (!job) return toolError(`No run '${jobId}' in this workspace.`);
+          // The log's end: ask again from its last 1500 characters.
+          const full = await jobs.get(
+            workspaceId,
+            jobId,
+            Math.max(0, (job.logEnd ?? 0) - 1500)
+          );
+          return toolText(JSON.stringify(runStatusAnswer(full ?? job)));
+        },
+      });
+
       tools.push(
         replyToComment,
         createWidget,
@@ -3045,13 +3346,16 @@ export class WorkspaceMcpProvider {
         fileTask,
         updateDocument,
         updateDocumentMeta,
+        deleteDocument,
         linkDocument,
         updateTask,
         updateBlock,
         appendToSection,
         reportMonitorValue,
         createDiagram,
-        drawOnCanvasTool
+        drawOnCanvasTool,
+        startAgentRun,
+        agentRunStatus
       );
     }
 

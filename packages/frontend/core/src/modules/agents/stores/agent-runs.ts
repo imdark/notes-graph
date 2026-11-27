@@ -78,6 +78,35 @@ export type AgentRunDetails = Partial<
  * than the last few dozen has never once been the one anybody wanted.
  */
 const MAX_RUNS = 60;
+/**
+ * The device jobs of runs deleted here, by hand or by pruning, so the Agents
+ * page doesn't take them on again (see adopt-runs.ts). Per browser; the
+ * newest are kept.
+ */
+const DISMISSED_JOBS_KEY = 'notesgraph:agent-runs:dismissed-jobs';
+const MAX_DISMISSED = 1000;
+
+const readDismissed = (): string[] => {
+  try {
+    const list: unknown = JSON.parse(
+      globalThis.localStorage?.getItem(DISMISSED_JOBS_KEY) ?? '[]'
+    );
+    return Array.isArray(list) ? list.filter(id => typeof id === 'string') : [];
+  } catch {
+    return [];
+  }
+};
+
+const writeDismissed = (ids: string[]) => {
+  try {
+    globalThis.localStorage?.setItem(
+      DISMISSED_JOBS_KEY,
+      JSON.stringify(ids.slice(-MAX_DISMISSED))
+    );
+  } catch {
+    // Without storage a deleted run's job may come back; nothing worse.
+  }
+};
 
 /** How much of a result to keep for the run list. */
 const SUMMARY_CHARS = 200;
@@ -196,6 +225,60 @@ export class AgentRunsStore extends Store {
   }
 
   /** Record which device job a remote run became, so its log can be found. */
+  /** Every run this browser has recorded, as it stands now. */
+  runs(): AgentRun[] {
+    return this.table.find() as AgentRun[];
+  }
+
+  /**
+   * A run recorded as failed because its start went unanswered, though its
+   * job was queued: attach the job and count it as running again, so it is
+   * settled from the job like any other.
+   */
+  reattach(runId: string, remoteJobId: string, deviceKey: string): void {
+    if (!this.table.get(runId)) return;
+    this.table.update(runId, {
+      remoteJobId,
+      deviceKey,
+      status: 'running',
+      error: undefined,
+      durationMs: undefined,
+    });
+  }
+
+  /**
+   * Record a device job this browser didn't start (another agent's
+   * subtask, a run started on another device, an automation's) so it shows
+   * on the Agents page with its questions. It starts as running; the caller
+   * settles it from the job. Returns the new run's id.
+   */
+  adopt(job: {
+    id: string;
+    agentId: string;
+    agentName: string;
+    deviceKey: string;
+    title?: string | null;
+    targetKind?: string | null;
+    docId: string;
+    blockId?: string | null;
+    createdAt: number;
+  }): string {
+    const row = this.table.create({
+      agentId: job.agentId,
+      agentName: job.agentName,
+      targetKind: job.targetKind || 'block',
+      docId: job.docId,
+      blockId: job.blockId || undefined,
+      title: job.title || undefined,
+      status: 'running',
+      startedAt: job.createdAt * 1000,
+      remoteJobId: job.id,
+      deviceKey: job.deviceKey,
+    });
+    this.prune();
+    return row.id;
+  }
+
   attachRemote(runId: string, remoteJobId: string, deviceKey: string): void {
     if (!this.table.get(runId)) return;
     this.table.update(runId, { remoteJobId, deviceKey });
@@ -307,7 +390,16 @@ export class AgentRunsStore extends Store {
   }
 
   /** Remove runs from the history, and their transcripts. */
+  /** Device jobs whose runs were deleted here: not to be taken on again. */
+  dismissedJobIds(): Set<string> {
+    return new Set(readDismissed());
+  }
+
   delete(runIds: string[]): void {
+    const jobs = runIds
+      .map(id => (this.table.get(id) as AgentRun | null)?.remoteJobId)
+      .filter((id): id is string => !!id);
+    if (jobs.length) writeDismissed([...readDismissed(), ...jobs]);
     runIds.forEach(id => this.table.delete(id));
     this.logsStore.delete(runIds).catch(() => {
       // A transcript left behind is harmless; it just isn't reachable.

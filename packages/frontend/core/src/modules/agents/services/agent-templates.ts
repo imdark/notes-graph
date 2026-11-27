@@ -8,6 +8,8 @@ import {
   RESEARCH_MODEL,
   VIDEO_EDITOR_MODEL,
 } from './remote-runner';
+import { RUN_REVIEW_TEMPLATE } from './run-review';
+import { VERIFY_TEMPLATE } from './verify';
 
 /** A starting point for a new agent: the editor opens pre-filled with it. */
 export interface AgentTemplate {
@@ -333,6 +335,8 @@ export const AGENT_TEMPLATES: AgentTemplate[] = [
   COMPILE_SOURCE_TEMPLATE,
   NOTES_HEALTH_TEMPLATE,
   FIX_AGENT_TEMPLATE,
+  RUN_REVIEW_TEMPLATE,
+  VERIFY_TEMPLATE,
   VIDEO_EDITOR_TEMPLATE,
   PONYTAIL_REVIEW_TEMPLATE,
 ];

@@ -56,8 +56,12 @@ RUN node -e "const d=require('/tmp/runner-package.json').dependencies; \
 COPY --from=build /agent-runner.mjs /app/agent-runner.mjs
 
 USER node
+# The image's source hash (scripts/prod/sidecar-hash.sh), which the runner
+# reports with each claim so the app can say which build is running.
+ARG RUNNER_VERSION=dev
 # HOME is on the work volume: wf's tickets (~/.wf) and Claude's sessions
 # outlast the container.
 ENV HOME=/work/home \
-    RUNNER_WORK_ROOT=/work
+    RUNNER_WORK_ROOT=/work \
+    RUNNER_VERSION=$RUNNER_VERSION
 CMD ["node", "/app/agent-runner.mjs"]

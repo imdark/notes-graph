@@ -509,6 +509,42 @@ export const NOTESGRAPH_FLAGS = {
     configurable: true,
     defaultState: true,
   },
+  enable_run_review: {
+    commit: '25ef8b1a2b8f8f041fd61b78eb22d712fcc2a79b',
+    category: 'notesgraph',
+    displayName: 'Review recent runs',
+    description:
+      'A Review recent runs button on the Agents page starts a Claude Code agent on the server that reviews the last few days of agent runs: whether each run’s pull request merged and is live, which runs failed or stopped early and why, work left unpushed, and runs that repeat each other. It writes the review, with a to-do per follow-up, in a Run reviews note.',
+    configurable: true,
+    defaultState: true,
+  },
+  enable_verify_buttons: {
+    commit: 'ae10a4cf03ecbae78ca38c80755d73ab1155a5ec',
+    category: 'notesgraph',
+    displayName: 'Verify runs, branches and pull requests',
+    description:
+      'A Verify button on an agent run\u2019s log and on each pull request on the Deployments page, plus a box there to verify any branch. It starts a Claude Code agent on the server that checks the work exists, builds, passes its tests and does what its task asked, and writes its verdict in a Verifications note. It changes nothing.',
+    configurable: true,
+    defaultState: true,
+  },
+  enable_discover_relevance: {
+    commit: 'f16427995195796d78b0cb737448ed5a9fe50f19',
+    category: 'notesgraph',
+    displayName: 'Not interesting, and why this story',
+    description:
+      'On Discover, a story can be marked Not interesting: it is hidden, saved to your account so every device hides it, and stories much like it are hidden too while ones a little like it, or from a topic you keep dismissing, move lower. Why this? on each story says where it came from: a topic you picked, an interest you added, a tag or words in your notes, a broader area, something new, or a folder.',
+    configurable: true,
+    defaultState: true,
+  },
+  enable_approve_all_button: {
+    commit: 'f17ba6aafbf71b846c6e42b258c1055fbe8550a7',
+    category: 'notesgraph',
+    displayName: 'Approve all under Needs you',
+    description:
+      'An Approve all button in the Agents page\u2019s Needs you section approves every permission request the waiting runs have open, after a confirm naming how many and which tools. Questions that need an answer are left alone, and what the runs ask next still waits for you.',
+    configurable: true,
+    defaultState: true,
+  },
 } satisfies { [key in string]: FlagInfo };
 
 // oxlint-disable-next-line no-redeclare

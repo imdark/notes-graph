@@ -3,6 +3,7 @@ import type { AgentRun } from '../stores/agent-runs';
 import type { ChatMessage } from './cloud-runner';
 import type { AgentContext } from './context';
 import { stampLines } from './log-lines';
+import { CLOUD_DEVICE_KEY } from './remote-runner';
 
 /**
  * A chat about a run that has ended — done, failed or stopped — so the reader
@@ -163,6 +164,60 @@ export function continuationBrief(
   const title = `Continue: ${task?.title || run.title || run.agentName}`;
   if (!task) return { text: earlier, label: run.title || title, title };
   return { ...task, title, text: `${task.text}\n\n${earlier}` };
+}
+
+/**
+ * Whether an ended run can be carried on in its own session rather than a
+ * new one rebuilt from its transcript: it ran as a job on a device whose
+ * runner (wf agent serve) keeps the session and worktree. The server's
+ * cloud runner starts every job afresh.
+ */
+export const canResume = (run: AgentRun): boolean =>
+  !!run.remoteJobId &&
+  !!run.deviceKey &&
+  run.deviceKey !== CLOUD_DEVICE_KEY &&
+  run.status !== 'running';
+
+/**
+ * What a follow-up in the run's own session reads: only what's new, the
+ * chat about the run and what the reader wants. The session already has the
+ * task, the transcript and the work; wf passes this on as the next request.
+ */
+export function resumeBrief(
+  task: AgentContext | null,
+  run: AgentRun,
+  followUp: string,
+  chat: SavedAskChat['turns'] = []
+): AgentContext {
+  const talk = chat
+    .filter(turn => turn.content.trim())
+    .map(turn =>
+      turn.role === 'user'
+        ? `Reader: ${turn.content}`
+        : `About the run: ${turn.content}`
+    )
+    .join('\n\n');
+  const talked =
+    talk.length > FOLLOW_UP_CHAT_CHARS
+      ? `…${talk.slice(-(FOLLOW_UP_CHAT_CHARS - 1))}`
+      : talk;
+  const text = [
+    talked
+      ? `The reader talked this run over after it ended:\n<chat>\n${talked}\n</chat>`
+      : null,
+    followUp.trim()
+      ? `What the reader wants now:\n${followUp.trim()}`
+      : 'Finish what you set out to do.',
+  ]
+    .filter(Boolean)
+    .join('\n\n');
+  const title = `Continue: ${task?.title || run.title || run.agentName}`;
+  return {
+    ...(task ?? { label: run.title || title }),
+    title,
+    text,
+    continues: run.remoteJobId,
+  };
 }
 
 /**

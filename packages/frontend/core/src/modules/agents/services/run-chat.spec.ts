@@ -1,11 +1,16 @@
+/**
+ * @vitest-environment happy-dom
+ */
 import { describe, expect, test } from 'vitest';
 
 import type { AgentRun } from '../stores/agent-runs';
 import { parseLogLines } from './log-lines';
 import {
   askTranscript,
+  canResume,
   continuationBrief,
   FOLLOW_UP_CHAT_CHARS,
+  resumeBrief,
   RUN_CHAT_OUTPUT_CHARS,
   runChatMessages,
   runDied,
@@ -212,5 +217,42 @@ describe('askTranscript', () => {
       '? And then?',
       '✗ The device is offline.',
     ]);
+  });
+});
+
+describe('carrying on a run in its own session', () => {
+  const ended = {
+    id: 'r1',
+    agentId: 'a1',
+    agentName: 'Claude Code',
+    targetKind: 'block',
+    docId: 'd1',
+    title: 'Fix the share menu',
+    status: 'error',
+    startedAt: 0,
+    remoteJobId: 'job-1',
+    deviceKey: 'laptop',
+  } as AgentRun;
+
+  test('a device run whose runner keeps sessions can; a cloud or in-tab one cannot', () => {
+    expect(canResume(ended)).toBe(true);
+    expect(canResume({ ...ended, deviceKey: 'cloud' })).toBe(false);
+    expect(canResume({ ...ended, remoteJobId: undefined })).toBe(false);
+    expect(canResume({ ...ended, status: 'running' })).toBe(false);
+  });
+
+  test("the follow-up reads only what's new, and names the job it continues", () => {
+    const brief = resumeBrief(null, ended, 'Now add a test for it', [
+      { role: 'user', content: 'Why did it stop?' },
+      { role: 'assistant', content: 'A permission prompt timed out.' },
+    ] as any);
+    expect(brief.continues).toBe('job-1');
+    expect(brief.title).toBe('Continue: Fix the share menu');
+    expect(brief.text).toContain(
+      'What the reader wants now:\nNow add a test for it'
+    );
+    expect(brief.text).toContain('Reader: Why did it stop?');
+    // No transcript: the session has it.
+    expect(brief.text).not.toContain('previous-transcript');
   });
 });

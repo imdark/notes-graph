@@ -167,7 +167,8 @@ sidecar_image() {
   fi
   # The label is what the next deploy compares against. A failed build leaves
   # no new label, so the rebuild is retried rather than silently skipped.
-  docker build -f "$dockerfile" --label "notesgraph.src-hash=$hash" -t "$local_tag" . \
+  docker build -f "$dockerfile" --label "notesgraph.src-hash=$hash" \
+    --build-arg "RUNNER_VERSION=$hash" -t "$local_tag" . \
     || echo "WARN $name image build failed"
 }
 
