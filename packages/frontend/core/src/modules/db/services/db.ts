@@ -17,6 +17,7 @@ import {
   type NotesGraphWorkspaceDbSchema,
   type NotesGraphWorkspaceUserdataDbSchema,
 } from '../schema';
+import { tableStorageName } from '../storage-names';
 
 const WorkspaceDBClient = createORMClient(NotesGraph_WORKSPACE_DB_SCHEMA);
 const WorkspaceUserdataDBClient = createORMClient(
@@ -39,15 +40,16 @@ export class WorkspaceDBService extends Service {
     private readonly workspaceServerService: WorkspaceServerService
   ) {
     super();
+    const cloud = this.workspaceService.workspace.meta.flavour !== 'local';
     this.db = this.framework.createEntity(
       WorkspaceDB<NotesGraphWorkspaceDbSchema>,
       {
         db: new WorkspaceDBClient(
           new YjsDBAdapter(NotesGraph_WORKSPACE_DB_SCHEMA, {
-            getDoc: guid => {
+            getDoc: tableName => {
               const ydoc = new YDoc({
-                // guid format: db${guid}
-                guid: `db$${guid}`,
+                // guid format: db${storage name of the table}
+                guid: `db$${tableStorageName(tableName, cloud)}`,
               });
               this.workspaceService.workspace.engine.doc.connectDoc(ydoc);
               this.workspaceService.workspace.engine.doc.addPriority(
@@ -59,7 +61,7 @@ export class WorkspaceDBService extends Service {
           })
         ),
         schema: NotesGraph_WORKSPACE_DB_SCHEMA,
-        storageDocId: tableName => `db$${tableName}`,
+        storageDocId: tableName => `db$${tableStorageName(tableName, cloud)}`,
       }
     ) as WorkspaceDBWithTables<NotesGraphWorkspaceDbSchema>;
   }

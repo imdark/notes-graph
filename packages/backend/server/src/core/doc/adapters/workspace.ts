@@ -14,6 +14,7 @@ import {
 import { retryable } from '../../../base/utils/promise';
 import { Models } from '../../../models';
 import { DocStorageOptions } from '../options';
+import { rebuiltTableDocIds, RebuiltTableSeeder } from '../rebuilt-tables';
 import {
   DocRecord,
   DocStorageAdapter,
@@ -49,6 +50,45 @@ export class PgWorkspaceDocStorageAdapter extends DocStorageAdapter {
     private readonly queue: JobQueue
   ) {
     super(options);
+  }
+
+  /**
+   * Fills a rebuilt table (see ../rebuilt-tables) from the doc it replaces,
+   * the first time the table is read.
+   */
+  private readonly rebuiltTables = new RebuiltTableSeeder(
+    {
+      getDoc: (workspaceId, docId) => this.readDoc(workspaceId, docId),
+      pushDocUpdates: (workspaceId, docId, updates) =>
+        this.pushDocUpdates(workspaceId, docId, updates),
+      lock: (workspaceId, docId) => this.lockDocForUpdate(workspaceId, docId),
+    },
+    message => this.logger.log(message)
+  );
+
+  /** The plain read, which the seeder uses for both docs. */
+  private readDoc(workspaceId: string, docId: string) {
+    return super.getDoc(workspaceId, docId);
+  }
+
+  private async seedRebuiltTable(workspaceId: string, docId: string) {
+    try {
+      await this.rebuiltTables.ensure(workspaceId, docId);
+    } catch (e) {
+      // The read goes ahead without the copy, which is tried again on the
+      // next read and merges with whatever has been written by then.
+      this.logger.error(`Failed to seed ${docId} in ${workspaceId}`, e);
+    }
+  }
+
+  override async getDoc(workspaceId: string, docId: string) {
+    await this.seedRebuiltTable(workspaceId, docId);
+    return super.getDoc(workspaceId, docId);
+  }
+
+  override async getDocBinNative(workspaceId: string, docId: string) {
+    await this.seedRebuiltTable(workspaceId, docId);
+    return super.getDocBinNative(workspaceId, docId);
   }
 
   async pushDocUpdates(
@@ -143,6 +183,13 @@ export class PgWorkspaceDocStorageAdapter extends DocStorageAdapter {
   }
 
   async getSpaceDocTimestamps(workspaceId: string, after?: number) {
+    // A client pulls the docs listed here, at the start of its sync. A
+    // rebuilt table has to be in the list before the client first looks, or
+    // it would start from an empty table and never ask for the copy.
+    for (const docId of rebuiltTableDocIds(workspaceId)) {
+      await this.seedRebuiltTable(workspaceId, docId);
+    }
+
     return await this.models.doc.findTimestampsByWorkspaceId(
       workspaceId,
       after

@@ -68,6 +68,7 @@ import {
   GraphQLService,
   WorkspaceServerService,
 } from '../../cloud';
+import { tableStorageName } from '../../db/storage-names';
 import { type GlobalState, NbstoreService } from '../../storage';
 import type {
   Workspace,
@@ -612,8 +613,9 @@ class CloudWorkspaceFlavourProvider implements WorkspaceFlavourProvider {
         ?.map(page => page.get('id'))
         .filter(Boolean) as string[];
 
-      const propertiesDBBuffer = await docStorage.getDoc('db$docProperties');
-      const propertiesDB = new YDoc({ guid: 'db$docProperties' });
+      const propertiesDocId = `db$${tableStorageName('docProperties', true)}`;
+      const propertiesDBBuffer = await docStorage.getDoc(propertiesDocId);
+      const propertiesDB = new YDoc({ guid: propertiesDocId });
       if (propertiesDBBuffer) {
         applyUpdate(propertiesDB, propertiesDBBuffer.bin);
       }
@@ -625,7 +627,7 @@ class CloudWorkspaceFlavourProvider implements WorkspaceFlavourProvider {
       }
 
       await docStorage.pushDocUpdate({
-        docId: 'db$docProperties',
+        docId: propertiesDocId,
         bin: encodeStateAsUpdate(propertiesDB),
       });
     } catch (error) {
