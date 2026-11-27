@@ -244,6 +244,12 @@ class LocalSpeechToTextPlugin : Plugin() {
         private var started = false
         private var ended = false
         private val decodingPartial = AtomicBoolean(false)
+        /** Record thread only: the mic's recent audio, to cut speech with its surroundings. */
+        private val padding = SpeechPadding(
+            sampleRate = SAMPLE_RATE,
+            historySeconds = MAX_SPEECH_S + HISTORY_MARGIN_S,
+            maxSpeechSeconds = MAX_SPEECH_S,
+        )
 
         @SuppressLint("MissingPermission") // checked in start()
         fun open(): Boolean {
@@ -353,9 +359,12 @@ class LocalSpeechToTextPlugin : Plugin() {
                     }
                     writeWav(pcm, n)
                     val samples = FloatArray(n) { pcm[it] / 32768f }
+                    padding.add(samples)
                     vad.acceptWaveform(samples)
                     if (vad.isSpeechDetected()) {
-                        live += samples
+                        // Speech has just begun: start from a little before
+                        // it, where the phrase's first sound is.
+                        live = if (live.isEmpty()) padding.leadIn() else live + samples
                         sinceLastPartial += n
                         if (sinceLastPartial >= PARTIAL_EVERY_SAMPLES && decodingPartial.compareAndSet(false, true)) {
                             sinceLastPartial = 0
@@ -396,7 +405,10 @@ class LocalSpeechToTextPlugin : Plugin() {
         private fun drain(vad: Vad): Boolean {
             var any = false
             while (!vad.empty()) {
-                val segment = vad.front().samples
+                // The VAD's segment with the audio just before and after it,
+                // which holds the sounds it was too late or too early for.
+                val speech = vad.front()
+                val segment = padding.padded(speech.start, speech.samples.size)
                 vad.pop()
                 any = true
                 queue {
@@ -619,6 +631,11 @@ class LocalSpeechToTextPlugin : Plugin() {
         private const val MIN_SPEECH_S = 0.3f
         /** Longer speech is cut here so text keeps appearing. */
         private const val MAX_SPEECH_S = 20f
+        /**
+         * Audio kept beyond the longest segment: its padding, and the pause
+         * the VAD waits out before it hands the segment over.
+         */
+        private const val HISTORY_MARGIN_S = 5f
         private const val MIN_DECODE_SAMPLES = SAMPLE_RATE / 4
         /** Re-transcribe the utterance in progress after this much more speech. */
         private const val PARTIAL_EVERY_SAMPLES = SAMPLE_RATE * 7 / 10
