@@ -220,6 +220,81 @@ test('learn finds a stuck run and writes the proposals note under ai / proposals
   );
 });
 
+test('learn ends a finding with the repo its runs worked in', async t => {
+  const failingIn = (dir: string) =>
+    transcript([
+      ...[1, 2, 3].flatMap(() => [
+        `→ Bash  {"command":"cd ${dir} && make lint"}`,
+        '  ✗ Exit code 2 make: lint target broke',
+      ]),
+      `→ Read  {"file_path":"${dir}/README.md"}`,
+      '  ← ok',
+    ]);
+  const logs: Record<string, string> = {
+    // A task worktree: the repo is the name without the task suffix.
+    worktree: failingIn(
+      '/Users/someone/code/notes-graph-personal-12-Fix-the-thing'
+    ),
+    // A plain checkout on another machine.
+    checkout: transcript([
+      ...[1, 2, 3].flatMap(() => [
+        '→ Bash  {"command":"pytest /home/ubuntu/code/robots_realtime/tests"}',
+        '  ✗ Exit code 1 pytest: collection error',
+      ]),
+    ]),
+    // No path under a code folder: nothing to say.
+    nowhere: transcript([
+      ...[1, 2, 3].flatMap(() => [
+        '→ Bash  {"command":"curl https://example.com/x"}',
+        '  ✗ Exit code 7 curl: could not connect',
+      ]),
+    ]),
+    // Half in one repo, half in another: not clearly either.
+    split: transcript([
+      ...[1, 2, 3].flatMap(() => [
+        '→ Bash  {"command":"diff /Users/someone/code/workflow/a /Users/someone/code/notes-graph/a"}',
+        '  ✗ Exit code 3 diff: files differ',
+      ]),
+    ]),
+  };
+  const jobs = Object.keys(logs).map(id => ({
+    id,
+    title: id,
+    status: 'done',
+  }));
+  const { calls } = await run(LEARN_FROM_RUNS_TEMPLATE, (method, path) => {
+    if (path.startsWith('/api/registry/workspaces/ws1/jobs?')) return { jobs };
+    const one = /\/jobs\/([^/?]+)\?logFrom=0$/.exec(path);
+    if (one) {
+      return {
+        job: {
+          ...jobs.find(j => j.id === one[1]),
+          log: logs[one[1]],
+          questions: [],
+        },
+      };
+    }
+    if (path.startsWith('/api/notes/workspaces/ws1/docs?q='))
+      return { docs: [] };
+    if (method === 'POST' && path === '/api/notes/workspaces/ws1/docs') {
+      return { docId: 'note-1', folderId: 'f' };
+    }
+    throw new Error(`unexpected ${method} ${path}`);
+  });
+  const { markdown } = calls.find(c => c.method === 'POST')!.body as {
+    markdown: string;
+  };
+  const item = (run: string) =>
+    markdown
+      .split('\n\n')
+      .find(block => block.includes(`seen in: ${run}`))!
+      .split('\n')[0];
+  t.regex(item('worktree'), / #repo:notes-graph$/);
+  t.regex(item('checkout'), / #repo:robots_realtime$/);
+  t.notRegex(item('nowhere'), /#repo:/);
+  t.notRegex(item('split'), /#repo:/);
+});
+
 test('learn keeps a ticked finding ticked on the next night and updates in place', async t => {
   let previous = '';
   const route = (method: string, path: string, body: unknown) => {

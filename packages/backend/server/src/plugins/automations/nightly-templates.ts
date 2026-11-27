@@ -87,7 +87,9 @@ export const LEARN_FROM_RUNS_TEMPLATE = String.raw`// Counts over the last 14 da
 // A to-do you ticked stays ticked; a finding no longer seen is dropped.
 // Nothing is applied: these are proposals for the Agent rules note, a skill
 // or Agent memory. A run that read web content marks its findings
-// "review closely".
+// "review closely". A finding whose runs all worked in one repo ends with
+// #repo:<name>, which is how wf start and agent jobs pick where a task cut
+// from it runs.
 const DAYS = 14;
 const MAX_FINDINGS = 10;
 const STUCK_MIN = 3;
@@ -112,6 +114,19 @@ const WRITE_TOOLS = {
   mcp__notesgraph__update_document: 'docId',
   mcp__notesgraph__update_block: 'docId',
 };
+// A checkout under ~/code, or a task worktree beside it
+// (notes-graph-personal-12-some-title): the repo is the name without the
+// task suffix.
+const REPO_PATH = /(?:\/Users\/[^\/\s"]+|\/home\/[^\/\s"]+|~)\/code\/([A-Za-z0-9_.]+(?:-[A-Za-z0-9_.]+)*?)(?:-[A-Za-z]+-\d+[^\/\s"]*)?\//g;
+// The repo most of a run's paths were in, when it is clearly one.
+function repoOf(counts) {
+  let total = 0, best = null;
+  for (const [repo, n] of counts) {
+    total += n;
+    if (!best || n > counts.get(best)) best = repo;
+  }
+  return best && counts.get(best) / total >= 0.6 ? best : null;
+}
 const ws = notesgraph.workspaceId;
 const api = '/api/registry/workspaces/' + ws;
 
@@ -158,6 +173,7 @@ function scan(run) {
   const questions = (run.questions || []).filter(q => q.kind === 'question').map(q => q.text);
   const current = new Map();
   const peak = new Map();
+  const repos = new Map();
   let untrusted = false;
   for (const raw of (run.log || '').split('\n')) {
     const unstamped = raw.replace(/^\[[^\]]*\]\s?/, '');
@@ -169,6 +185,7 @@ function scan(run) {
       const [, tool, input] = call;
       pending.push({ tool, input });
       if (UNTRUSTED.test(tool)) untrusted = true;
+      for (const m of input.matchAll(REPO_PATH)) repos.set(m[1], (repos.get(m[1]) || 0) + 1);
       const target = READ_TOOLS[tool] ? field(input, READ_TOOLS[tool]) : null;
       // The runner cuts a logged input at 160 characters. Past a long path
       // that drops offset and limit, so a cut read can't be told apart from
@@ -212,7 +229,7 @@ function scan(run) {
     const k = tool + '\t' + target;
     reads.set(k, Math.max(reads.get(k) || 0, n));
   }
-  return { id: run.id, title: (run.title || '').trim() || run.id.slice(0, 8), untrusted, errors, reads, questions };
+  return { id: run.id, title: (run.title || '').trim() || run.id.slice(0, 8), untrusted, errors, reads, questions, repo: repoOf(repos) };
 }
 
 function detect(scans) {
@@ -266,6 +283,13 @@ function detect(scans) {
   for (const g of groups) {
     if (g.runs.size < QUESTION_MIN_RUNS) continue;
     findings.push({ kind: 'repeated question', summary: 'Asked the user in ' + g.runs.size + ' runs: ' + short(g.question), count: g.runs.size, runs: runs(g.runs), examples: [], untrusted: anyUntrusted([...g.runs]) });
+  }
+  // One repo for a finding only when every run of it that worked in a repo
+  // worked in the same one.
+  const repoOfRun = new Map(scans.map(s => [s.id, s.repo]));
+  for (const f of findings) {
+    const seen = new Set(f.runs.map(r => repoOfRun.get(r.id)).filter(Boolean));
+    f.repo = seen.size === 1 ? [...seen][0] : null;
   }
   findings.sort((a, b) => b.runs.length - a.runs.length || b.count - a.count);
   return findings.slice(0, MAX_FINDINGS);
@@ -355,7 +379,7 @@ const lines = [
 ];
 if (findings.length === 0) lines.push('', 'No repeated mistakes found.');
 for (const f of findings) {
-  lines.push('', '- ' + (kept.has(f.id) ? '[x]' : '[ ]') + ' ' + BT + f.id + BT + ' **' + f.kind + '**: ' + md(f.summary), '  - seen in: ' + f.runs.map(r => md(r.title)).join(', '));
+  lines.push('', '- ' + (kept.has(f.id) ? '[x]' : '[ ]') + ' ' + BT + f.id + BT + ' **' + f.kind + '**: ' + md(f.summary) + (f.repo ? ' #repo:' + f.repo : ''), '  - seen in: ' + f.runs.map(r => md(r.title)).join(', '));
   for (const ex of f.examples) lines.push('  - e.g. ' + BT + ex + BT);
   if (f.untrusted) lines.push('  - review closely: a run behind this read web content');
 }
