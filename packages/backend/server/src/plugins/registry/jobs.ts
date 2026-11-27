@@ -75,12 +75,20 @@ declare global {
 }
 
 /** Wire shape for a job. Epoch seconds, matching the device DTO. */
+/** The server's own runner's device: it runs each job afresh. */
+export const CLOUD_RUNNER_KEY = 'cloud';
+
 export interface JobDto {
   id: string;
   /** 'agent' or 'automation'; see JOB_KINDS. */
   kind: string;
   /** What an automation job runs; null for an agent run. */
   payload: unknown;
+  /**
+   * The ended job this one follows up: the runner (wf agent serve) resumes
+   * that run's Claude session in the worktree it left. Null for a fresh run.
+   */
+  continues: string | null;
   deviceKey: string;
   agentId: string;
   agentName: string;
@@ -249,6 +257,7 @@ export function toJobDto(
     id: job.id,
     kind: job.kind,
     payload: job.payload ?? null,
+    continues: job.continues ?? null,
     deviceKey: job.deviceKey,
     agentId: job.agentId,
     agentName: job.agentName,
@@ -692,6 +701,11 @@ export class RegistryJobService {
 
     const docId = body.docId ? String(body.docId) : null;
     const agentId = String(body.agentId ?? '');
+    const continues = await this.followedJob(
+      workspaceId,
+      deviceKey,
+      body.continues
+    );
     // A gate (an automation's prestart hook) may need to see the job before
     // any runner can take it.
     const held =
@@ -719,6 +733,7 @@ export class RegistryJobService {
       runAfter,
       maxCostUsd: parseUsd(body.maxCostUsd),
       access,
+      continues,
     });
     // Full access is "Allow all" from the start.
     if (access === 'full') {
@@ -1022,6 +1037,40 @@ export class RegistryJobService {
       limit: options.limit,
     });
     return jobs.map(job => toJobDto(job));
+  }
+
+  /**
+   * The job a follow-up continues, checked: one of this workspace's, ended,
+   * and on the device the follow-up goes to, since only that device has the
+   * run's session and worktree. The cloud runner can't resume a session.
+   */
+  private async followedJob(
+    workspaceId: string,
+    deviceKey: string,
+    value: unknown
+  ): Promise<string | null> {
+    if (value === undefined || value === null || value === '') return null;
+    const id = String(value);
+    if (deviceKey === CLOUD_RUNNER_KEY) {
+      throw new BadRequest(
+        "The cloud runner can't resume a run's session; continue it from its transcript instead."
+      );
+    }
+    const earlier = await this.models.registryJob.get(workspaceId, id);
+    if (!earlier) {
+      throw new BadRequest(`No job '${id}' in this workspace to follow up`);
+    }
+    if (!['done', 'error', 'cancelled'].includes(earlier.status)) {
+      throw new BadRequest(
+        `Job '${id}' hasn't ended yet: tell it more from its log instead`
+      );
+    }
+    if (earlier.deviceKey !== deviceKey) {
+      throw new BadRequest(
+        `Job '${id}' ran on ${earlier.deviceKey}: follow it up there, where its session and files are`
+      );
+    }
+    return id;
   }
 
   /**

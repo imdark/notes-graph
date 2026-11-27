@@ -240,8 +240,10 @@ export {
 } from './services/run-changes';
 export {
   askTranscript,
+  canResume,
   continuationBrief,
   FOLLOW_UP_TRANSCRIPT_CHARS,
+  resumeBrief,
   type RunChatContext,
   runChatMessages,
   runDied,

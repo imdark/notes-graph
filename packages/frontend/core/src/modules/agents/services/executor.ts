@@ -1190,6 +1190,8 @@ export class AgentExecutorService extends Service implements AgentExecutor {
       docId: target.docId,
       blockId: agentTargetBlockIds(target)[0],
       taskIds: context.taskIds,
+      // A follow-up in an ended run's own session (see resumeBrief).
+      ...(context.continues ? { continues: context.continues } : {}),
     });
     this.runsStore.attachRemote(runId, job.id, agent.deviceKey);
     // The folder the device works in, from its registry entry. Only for the
