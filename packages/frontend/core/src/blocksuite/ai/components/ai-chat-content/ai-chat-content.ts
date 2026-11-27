@@ -42,6 +42,7 @@ import {
   isChatMessage,
 } from '../ai-chat-messages';
 import type { ChatContextValue } from './type';
+import type { ChatSpeechToText } from '../ai-chat-input/dictation';
 
 const DEFAULT_CHAT_CONTEXT_VALUE: ChatContextValue = {
   quote: '',
@@ -169,6 +170,10 @@ export class AIChatContent extends SignalWatcher(
 
   @property({ attribute: false })
   accessor aiToolsConfigService!: AIToolsConfigService;
+
+  /** The app's recognizer, for the message box's microphone button. */
+  @property({ attribute: false })
+  accessor speechToText: ChatSpeechToText | undefined;
 
   @property({ attribute: false })
   accessor aiModelService!: AIModelService;
@@ -409,6 +414,7 @@ export class AIChatContent extends SignalWatcher(
         .notificationService=${this.notificationService}
         .aiDraftService=${this.aiDraftService}
         .aiToolsConfigService=${this.aiToolsConfigService}
+        .speechToText=${this.speechToText}
         .subscriptionService=${this.subscriptionService}
         .aiModelService=${this.aiModelService}
         .onAISubscribe=${this.onAISubscribe}

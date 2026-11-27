@@ -55,6 +55,7 @@ import {
 } from '../ai-chat-chips';
 import type { AIChatInputContext, AIReasoningConfig } from '../ai-chat-input';
 import { MAX_IMAGE_COUNT } from '../ai-chat-input/const';
+import type { ChatSpeechToText } from '../ai-chat-input/dictation';
 
 /**
  * Open pages the reader took out of a chat's context, as `<session>:<doc>`,
@@ -142,6 +143,10 @@ export class AIChatComposer extends SignalWatcher(
   @property({ attribute: false })
   accessor aiToolsConfigService!: AIToolsConfigService;
 
+  /** The app's recognizer, for the message box's microphone button. */
+  @property({ attribute: false })
+  accessor speechToText: ChatSpeechToText | undefined;
+
   @property({ attribute: false })
   accessor notesgraphFeatureFlagService!: FeatureFlagService;
 
@@ -197,6 +202,7 @@ export class AIChatComposer extends SignalWatcher(
         .notesgraphFeatureFlagService=${this.notesgraphFeatureFlagService}
         .aiDraftService=${this.aiDraftService}
         .aiToolsConfigService=${this.aiToolsConfigService}
+        .speechToText=${this.speechToText}
         .notificationService=${this.notificationService}
         .subscriptionService=${this.subscriptionService}
         .aiModelService=${this.aiModelService}

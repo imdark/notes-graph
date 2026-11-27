@@ -1,6 +1,10 @@
 import { combine } from '@atlaskit/pragmatic-drag-and-drop/combine';
 import { dropTargetForElements } from '@atlaskit/pragmatic-drag-and-drop/element/adapter';
-import { ArrowUpBigIcon, CloseIcon } from '@blocksuite/icons/lit';
+import {
+  ArrowUpBigIcon,
+  CloseIcon,
+  MicrophoneIcon,
+} from '@blocksuite/icons/lit';
 import {
   SignalWatcher,
   WithDisposable,
@@ -38,6 +42,11 @@ import type { SearchMenuConfig } from '../ai-chat-add-context';
 import { addFilesToChat } from '../ai-chat-chips/attachment-utils';
 import type { ChatChip, DocDisplayConfig } from '../ai-chat-chips/type';
 import { isDocChip } from '../ai-chat-chips/utils';
+import {
+  ChatDictation,
+  type ChatSpeechToText,
+  dictationErrorMessage,
+} from './dictation';
 import type { AIChatInputContext, AIReasoningConfig } from './type';
 
 function getFirstTwoLines(text: string) {
@@ -328,6 +337,43 @@ export class AIChatInput extends SignalWatcher(
     .chat-input-footer-spacer {
       flex: 1;
     }
+    .chat-panel-mic {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      width: 28px;
+      height: 28px;
+      flex-shrink: 0;
+      border-radius: 50%;
+      font-size: 20px;
+      color: var(--notesgraph-v2-icon-primary);
+      border: none;
+      padding: 0;
+      background: transparent;
+      cursor: pointer;
+    }
+    .chat-panel-mic:hover {
+      background: var(--notesgraph-v2-layer-background-hoverOverlay);
+    }
+    .chat-panel-mic:focus-visible {
+      outline: 2px solid var(--notesgraph-v2-icon-activated);
+      outline-offset: 1px;
+    }
+    .chat-panel-mic[aria-pressed='true'] {
+      color: var(--notesgraph-v2-layer-pureWhite);
+      background: var(--notesgraph-v2-status-error);
+      animation: chat-panel-mic-listening 1.6s ease-in-out infinite;
+    }
+    @keyframes chat-panel-mic-listening {
+      50% {
+        opacity: 0.6;
+      }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .chat-panel-mic[aria-pressed='true'] {
+        animation: none;
+      }
+    }
   `;
 
   @property({ attribute: false })
@@ -439,6 +485,41 @@ export class AIChatInput extends SignalWatcher(
   @property({ attribute: false })
   accessor portalContainer: HTMLElement | null = null;
 
+  /** The app's recognizer. Without one there is no microphone button. */
+  @property({ attribute: false })
+  accessor speechToText: ChatSpeechToText | undefined;
+
+  @state()
+  accessor listening = false;
+
+  private readonly _dictation = new ChatDictation(
+    {
+      read: () => this.textarea?.value ?? '',
+      write: text => {
+        if (!this.textarea) return;
+        this.textarea.value = text;
+        this._handleInput().catch(console.error);
+      },
+    },
+    (listening, error) => {
+      this.listening = listening;
+      if (error) {
+        this.notificationService?.toast(dictationErrorMessage[error]);
+      }
+    }
+  );
+
+  private readonly _toggleDictation = (e: MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!this.speechToText) return;
+    this._dictation.toggle(this.speechToText).catch(error => {
+      console.error(error);
+      this._dictation.stop().catch(console.error);
+      this.notificationService?.toast(dictationErrorMessage.failed);
+    });
+  };
+
   private get _isReasoningActive() {
     return !!this.reasoningConfig.enabled.value;
   }
@@ -508,6 +589,7 @@ export class AIChatInput extends SignalWatcher(
 
   override disconnectedCallback(): void {
     super.disconnectedCallback();
+    this._dictation.stop().catch(console.error);
     this._internalDropCleanup?.();
     this._internalDropCleanup = null;
     window.removeEventListener('dragleave', this._handleWindowDragLeave);
@@ -646,6 +728,19 @@ export class AIChatInput extends SignalWatcher(
           .aiModelService=${this.aiModelService}
           .onAISubscribe=${this.onAISubscribe}
         ></chat-input-preference>
+        ${this.speechToText
+          ? html`<button
+              class="chat-panel-mic"
+              type="button"
+              aria-pressed=${this.listening}
+              aria-label=${this.listening ? 'Stop dictating' : 'Dictate'}
+              title=${this.listening ? 'Stop dictating' : 'Dictate'}
+              @click=${this._toggleDictation}
+              data-testid="chat-panel-mic"
+            >
+              ${MicrophoneIcon()}
+            </button>`
+          : nothing}
         ${status === 'transmitting' || status === 'loading'
           ? html`<button
               class="chat-panel-stop"
@@ -813,6 +908,10 @@ export class AIChatInput extends SignalWatcher(
   private readonly _onTextareaSend = async (e: MouseEvent | KeyboardEvent) => {
     e.preventDefault();
     e.stopPropagation();
+
+    // Sending ends the dictation, so a late word doesn't land in the next
+    // message.
+    await this._dictation.stop();
 
     const value = this.textarea.value.trim();
     if (value.length === 0) return;
