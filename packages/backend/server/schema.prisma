@@ -1862,6 +1862,10 @@ model RegistryJob {
   /// For an automation: {automationId, runId, versionId, code, input,
   /// timeoutSeconds, secrets}. Secret values are revealed only on claim.
   payload        Json?
+  /// The ended job this one follows up (a request from that run's Ask chat):
+  /// the runner resumes that run's session in the worktree it left. Queued
+  /// on the same device, since only that device has the run's files.
+  continues      String?   @db.VarChar
   startedAt      DateTime? @map("started_at") @db.Timestamptz(3)
   finishedAt     DateTime? @map("finished_at") @db.Timestamptz(3)
   createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)

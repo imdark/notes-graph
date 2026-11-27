@@ -7,10 +7,12 @@ import {
   AgentRunsStore,
   AgentsService,
   askTranscript,
+  canResume,
   continuationBrief,
   FOLLOW_UP_TRANSCRIPT_CHARS,
   forkTranscript,
   RemoteAgentRunnerService,
+  resumeBrief,
   type RunChatContext,
   runChatMessages,
 } from '@notesgraph/core/modules/agents';
@@ -118,6 +120,21 @@ export const AgentRunChat = ({
                 throw new Error(
                   "Which blocks the run was on wasn't recorded, so it can't be continued. Select them and run the agent with Ctrl/⌘ K."
                 );
+              }
+              // A run on a device whose runner keeps sessions goes on in its
+              // own session, on that device, where its worktree is.
+              if (canResume(run)) {
+                const task = await contextService
+                  .build(target)
+                  .catch(() => null);
+                sessionService
+                  .start(
+                    { ...agent, deviceKey: run.deviceKey },
+                    target,
+                    resumeBrief(task, run, message, chat)
+                  )
+                  .catch(console.error);
+                return `Continued in ${run.agentName}'s own session on ${run.deviceKey}, with what you typed: it has the run's work and history. It is in the run list and in the note's Agents panel.`;
               }
               const [task, record] = await Promise.all([
                 // Without it, the earlier run's input stands in.

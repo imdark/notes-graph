@@ -526,6 +526,8 @@ export interface AndroidApkState {
 
 export interface EnqueueRemoteJob {
   deviceKey: string;
+  /** The ended job on this device whose session this one carries on. */
+  continues?: string;
   agentId: string;
   agentName: string;
   instructions: string;

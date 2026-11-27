@@ -49,6 +49,8 @@ export interface CreateRegistryJobInput {
    */
   status?: 'queued' | 'held';
   payload?: Prisma.InputJsonValue | null;
+  /** The ended job this one follows up, in that run's session. */
+  continues?: string | null;
 }
 
 /**
@@ -143,6 +145,7 @@ export class RegistryJobModel extends BaseModel {
         access: input.access ?? null,
         kind: input.kind ?? 'agent',
         payload: input.payload ?? Prisma.DbNull,
+        continues: input.continues ?? null,
         status: input.status ?? 'queued',
       },
     });
