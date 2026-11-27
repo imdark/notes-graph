@@ -374,6 +374,25 @@ export class AIChatInput extends SignalWatcher(
         animation: none;
       }
     }
+    /* A finger needs more than the 28px a mouse pointer gets by. */
+    @media (pointer: coarse) {
+      .chat-panel-mic,
+      .chat-panel-send,
+      .chat-panel-stop {
+        width: 40px;
+        height: 40px;
+      }
+      .chat-panel-mic,
+      .chat-panel-send {
+        font-size: 24px;
+      }
+      .chat-panel-stop {
+        font-size: 30px;
+      }
+      .chat-panel-input-actions {
+        gap: 10px;
+      }
+    }
   `;
 
   @property({ attribute: false })
