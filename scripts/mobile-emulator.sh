@@ -29,6 +29,17 @@ JAVA_HOME="${JAVA_HOME:-/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Content
 export ANDROID_HOME ANDROID_SDK_ROOT="$ANDROID_HOME" JAVA_HOME
 export PATH="$ANDROID_HOME/emulator:$ANDROID_HOME/platform-tools:$ANDROID_HOME/cmdline-tools/latest/bin:$JAVA_HOME/bin:$PATH"
 
+# Every adb call goes to the emulator, never to a phone that happens to be
+# plugged in: with one attached, `up` used to say "Emulator already booted"
+# and install, js and profile all hit the phone. A running emulator's serial
+# is used when there is one, else the default first one; set ANDROID_SERIAL
+# to aim at another device on purpose.
+if [ -z "${ANDROID_SERIAL:-}" ]; then
+  ANDROID_SERIAL="$(adb devices 2>/dev/null | awk '$1 ~ /^emulator-/ { print $1; exit }')"
+  ANDROID_SERIAL="${ANDROID_SERIAL:-emulator-5554}"
+fi
+export ANDROID_SERIAL
+
 AVD="${NG_AVD:-ng-test}"
 IMAGE="system-images;android-34;google_apis;arm64-v8a"
 APPID="app.notesgraph.pro"
