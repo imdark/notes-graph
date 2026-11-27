@@ -701,11 +701,12 @@ export class RegistryJobService {
 
     const docId = body.docId ? String(body.docId) : null;
     const agentId = String(body.agentId ?? '');
-    const continues = await this.followedJob(
+    const followed = await this.followedJob(
       workspaceId,
       deviceKey,
       body.continues
     );
+    const continues = followed?.id ?? null;
     // A gate (an automation's prestart hook) may need to see the job before
     // any runner can take it.
     const held =
@@ -735,8 +736,12 @@ export class RegistryJobService {
       access,
       continues,
     });
-    // Full access is "Allow all" from the start.
-    if (access === 'full') {
+    // Full access is "Allow all" from the start. So is a follow-up of a run
+    // that was given Allow all, when the same person asks for it: it builds
+    // on that run's work and would otherwise ask for every tool again.
+    const inheritsAllowAll =
+      !!followed?.allowAllTools && followed.createdBy === userId;
+    if (access === 'full' || inheritsAllowAll) {
       await this.models.registryJob.allowAllTools(job.id, userId);
       job.allowAllTools = true;
     }
@@ -1048,7 +1053,7 @@ export class RegistryJobService {
     workspaceId: string,
     deviceKey: string,
     value: unknown
-  ): Promise<string | null> {
+  ) {
     if (value === undefined || value === null || value === '') return null;
     const id = String(value);
     if (deviceKey === CLOUD_RUNNER_KEY) {
@@ -1070,7 +1075,7 @@ export class RegistryJobService {
         `Job '${id}' ran on ${earlier.deviceKey}: follow it up there, where its session and files are`
       );
     }
-    return id;
+    return earlier;
   }
 
   /**

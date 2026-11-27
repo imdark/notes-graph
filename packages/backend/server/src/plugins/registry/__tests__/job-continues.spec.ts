@@ -7,6 +7,22 @@ import { RegistryJobService } from '../jobs';
 const workspaceId = 'ws-1';
 const jobs: Record<string, any> = {
   ended: { id: 'ended', workspaceId, deviceKey: 'laptop', status: 'error' },
+  allowed: {
+    id: 'allowed',
+    workspaceId,
+    deviceKey: 'laptop',
+    status: 'done',
+    createdBy: 'user-1',
+    allowAllTools: true,
+  },
+  othersAllowed: {
+    id: 'othersAllowed',
+    workspaceId,
+    deviceKey: 'laptop',
+    status: 'done',
+    createdBy: 'user-2',
+    allowAllTools: true,
+  },
   going: { id: 'going', workspaceId, deviceKey: 'laptop', status: 'running' },
   elsewhere: {
     id: 'elsewhere',
@@ -18,6 +34,7 @@ const jobs: Record<string, any> = {
 
 function makeService(deviceKey: string) {
   const created: any[] = [];
+  const allowedAll: string[] = [];
   const models: any = {
     registryDevice: {
       get: async () => ({ key: deviceKey, agentTarget: true }),
@@ -29,6 +46,9 @@ function makeService(deviceKey: string) {
       heldUntil: async () => null,
       getBudget: async () => null,
       spentSince: async () => 0,
+      allowAllTools: async (id: string) => {
+        allowedAll.push(id);
+      },
       create: async (input: any) => {
         const job = {
           id: 'job-new',
@@ -56,7 +76,7 @@ function makeService(deviceKey: string) {
       model: 'claude-code',
       continues,
     });
-  return { enqueue, created };
+  return { enqueue, created, allowedAll };
 }
 
 test('a follow-up of an ended run on the same device carries its job id to the runner', async t => {
@@ -64,6 +84,21 @@ test('a follow-up of an ended run on the same device carries its job id to the r
   const job = await enqueue('ended');
   t.is(created[0].continues, 'ended');
   t.is(job.continues, 'ended');
+});
+
+test('a follow-up of a run that was given Allow all starts with Allow all', async t => {
+  const { enqueue, allowedAll } = makeService('laptop');
+  const job = await enqueue('allowed');
+  t.deepEqual(allowedAll, ['job-new']);
+  t.true(job.allowAllTools);
+});
+
+test("a follow-up asks again when the run had no Allow all, or was someone else's", async t => {
+  const { enqueue, allowedAll } = makeService('laptop');
+  t.falsy((await enqueue('ended')).allowAllTools);
+  t.falsy((await enqueue('othersAllowed')).allowAllTools);
+  t.falsy((await enqueue(undefined)).allowAllTools);
+  t.deepEqual(allowedAll, []);
 });
 
 test('a fresh run continues nothing', async t => {
