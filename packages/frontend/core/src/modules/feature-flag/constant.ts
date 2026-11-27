@@ -537,7 +537,7 @@ export const NOTESGRAPH_FLAGS = {
     defaultState: true,
   },
   enable_approve_all_button: {
-    commit: '',
+    commit: 'f17ba6aafbf71b846c6e42b258c1055fbe8550a7',
     category: 'notesgraph',
     displayName: 'Approve all under Needs you',
     description:
