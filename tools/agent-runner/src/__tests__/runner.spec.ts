@@ -67,10 +67,11 @@ async function promptText(
   prompt: string | AsyncIterable<{ message: { content: unknown } }>
 ): Promise<string> {
   if (typeof prompt === 'string') return prompt;
-  for await (const turn of prompt) {
-    return typeof turn.message.content === 'string' ? turn.message.content : '';
-  }
-  return '';
+  // Only the first turn is the prompt.
+  const first = await prompt[Symbol.asyncIterator]().next();
+  if (first.done) return '';
+  const { content } = first.value.message;
+  return typeof content === 'string' ? content : '';
 }
 
 /** A stand-in for the SDK's query: says what it was given, then these messages. */
