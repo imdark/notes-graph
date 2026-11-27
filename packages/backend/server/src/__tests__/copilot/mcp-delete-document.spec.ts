@@ -62,7 +62,7 @@ test("refuses the workspace, a journal day, and a note it can't delete", async t
   const journal = await deleteTool({ title: '2026-11-26' });
   const day = await journal.call({ docId: 'journal' });
   t.true(day.isError);
-  t.regex(day.content[0].text, /journal day/);
+  t.regex((day.content[0] as { text: string }).text, /journal day/);
 
   const locked = await deleteTool({ canTrash: false });
   t.true((await locked.call({ docId: 'note-1' })).isError);
