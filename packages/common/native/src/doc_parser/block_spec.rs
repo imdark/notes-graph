@@ -211,7 +211,7 @@ impl TableSpec {
     for key in block.keys() {
       if key.starts_with(PROP_ROWS_PREFIX)
         && key.ends_with(PROP_ROW_ID_SUFFIX)
-        && let Some(row_id) = block.get(key).and_then(|value| value_to_string(&value))
+        && let Some(row_id) = block.get(&key).and_then(|value| value_to_string(&value))
       {
         let base = key.trim_end_matches(PROP_ROW_ID_SUFFIX);
         let order_key = format!("{base}{PROP_ORDER_SUFFIX}");
@@ -223,7 +223,7 @@ impl TableSpec {
       }
       if key.starts_with(PROP_COLUMNS_PREFIX)
         && key.ends_with(PROP_COLUMN_ID_SUFFIX)
-        && let Some(column_id) = block.get(key).and_then(|value| value_to_string(&value))
+        && let Some(column_id) = block.get(&key).and_then(|value| value_to_string(&value))
       {
         let base = key.trim_end_matches(PROP_COLUMN_ID_SUFFIX);
         let order_key = format!("{base}{PROP_ORDER_SUFFIX}");
