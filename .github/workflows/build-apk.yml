@@ -53,6 +53,8 @@ env:
   APK_NAME: notesgraph-0.26.3-android.apk
   APK_URL: https://notesgraph.com/download/notesgraph-0.26.3-android.apk
   MANIFEST_URL: https://notesgraph.com/download/notesgraph-android.json
+  # The certificate every published APK is signed with (see Signing key).
+  NOTESGRAPH_CERT_SHA256: 5e4f73654a47c237ce1dbca654ae07096f6d237306f1f31e55da621b03d256c2
   APK_PATH: packages/frontend/apps/android/App/app/build/outputs/apk/stable/debug/app-stable-debug.apk
 
 jobs:
@@ -181,6 +183,21 @@ jobs:
           fi
           printf 'sdk.dir=%s\n' "$ANDROID_HOME" > "$A/local.properties"
 
+      # The signing key every published APK shares, so each one updates the
+      # installed app in place. Without it the runner's own throwaway debug
+      # key signs, and Android refuses the update ("App not installed").
+      - name: Signing key
+        env:
+          KEYSTORE_B64: ${{ secrets.NOTESGRAPH_ANDROID_KEYSTORE_B64 }}
+        run: |
+          set -euo pipefail
+          if [ -z "$KEYSTORE_B64" ]; then
+            echo "::error::The repo secret NOTESGRAPH_ANDROID_KEYSTORE_B64 is missing: without NotesGraph's key the APK can't update an installed app. Set it from the Mac that holds the key: base64 -i ~/.notesgraph/android/notesgraph-android.jks | gh secret set NOTESGRAPH_ANDROID_KEYSTORE_B64 --repo $GITHUB_REPOSITORY"
+            exit 1
+          fi
+          printf '%s' "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/notesgraph-android.jks"
+          echo "NOTESGRAPH_KEYSTORE=$RUNNER_TEMP/notesgraph-android.jks" >> "$GITHUB_ENV"
+
       # The runner ships ~14 GB free; Rust, Gradle and node_modules take more.
       # The Android SDK (/usr/local/lib/android) stays: the build uses it.
       - name: Free disk
@@ -223,7 +240,21 @@ jobs:
         env:
           BUILD_TYPE: stable
           PUBLIC_PATH: /
+          NOTESGRAPH_KEYSTORE_PASSWORD: ${{ secrets.NOTESGRAPH_ANDROID_KEYSTORE_PASSWORD }}
         run: bash scripts/build-android.sh
+
+      # The APK must carry NotesGraph's certificate, or phones won't take it as
+      # an update. Its SHA-256 is public: it's what Android shows for the app.
+      - name: Verify the signature
+        run: |
+          set -euo pipefail
+          apksigner=$(ls -d "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)
+          got=$("$apksigner" verify --print-certs "$APK_PATH" | awk '/SHA-256 digest/ {print $NF; exit}')
+          if [ "$got" != "$NOTESGRAPH_CERT_SHA256" ]; then
+            echo "::error::The APK is signed with $got, not NotesGraph's key ($NOTESGRAPH_CERT_SHA256): installed apps would refuse it as an update"
+            exit 1
+          fi
+          echo "Signed with NotesGraph's key ($got)"
 
       # The gate: a canary build points the app at canary.notesgraph.com.
       - name: Verify the channel

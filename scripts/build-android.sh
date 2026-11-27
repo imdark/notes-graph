@@ -27,6 +27,22 @@ export ANDROID_HOME="${ANDROID_HOME:-/opt/homebrew/share/android-commandlinetool
 export ANDROID_SDK_ROOT="$ANDROID_HOME"
 export PATH="$HOME/.cargo/bin:$JAVA_HOME/bin:$PATH"
 export BUILD_TYPE="${BUILD_TYPE:-stable}"
+
+# Sign with NotesGraph's key, so the APK updates an installed app in place
+# (build.gradle reads NOTESGRAPH_KEYSTORE*). CI sets them from its secrets;
+# here they come from ~/.notesgraph/android/signing.env when it exists.
+SIGNING_ENV="${NOTESGRAPH_SIGNING_ENV:-$HOME/.notesgraph/android/signing.env}"
+if [ -z "${NOTESGRAPH_KEYSTORE:-}" ] && [ -f "$SIGNING_ENV" ]; then
+  set -a
+  # shellcheck disable=SC1090
+  . "$SIGNING_ENV"
+  set +a
+fi
+if [ -n "${NOTESGRAPH_KEYSTORE:-}" ]; then
+  echo "==> signing with NotesGraph's key"
+else
+  echo "==> WARN no NotesGraph signing key: this APK can't update an installed app"
+fi
 export PUBLIC_PATH="${PUBLIC_PATH:-/}"
 
 echo "==> web bundle (BUILD_TYPE=$BUILD_TYPE)"

@@ -42,6 +42,25 @@ android {
         buildConfig true
         viewBinding true
     }
+    // One key for every APK we hand out, so each new one updates the app in
+    // place. Without it Gradle signs with the building machine's own debug key,
+    // which differs per CI runner, and Android refuses the update ("App not
+    // installed"): a phone stayed on a 2026-11-15 build for weeks. The key is
+    // NotesGraph's (~/.notesgraph/android; CI: NOTESGRAPH_ANDROID_KEYSTORE_*);
+    // a build without it falls back to the machine's debug key.
+    def ngKeystore = System.getenv('NOTESGRAPH_KEYSTORE')
+    def ngKeystorePassword = System.getenv('NOTESGRAPH_KEYSTORE_PASSWORD')
+    def ngSigned = ngKeystore && ngKeystorePassword && file(ngKeystore).exists()
+    signingConfigs {
+        if (ngSigned) {
+            notesgraph {
+                storeFile file(ngKeystore)
+                storePassword ngKeystorePassword
+                keyAlias System.getenv('NOTESGRAPH_KEY_ALIAS') ?: 'notesgraph'
+                keyPassword ngKeystorePassword
+            }
+        }
+    }
     buildTypes {
         release {
             minifyEnabled true
@@ -51,6 +70,9 @@ android {
             minifyEnabled false
             debuggable true
             manifestPlaceholders = [usesCleartextTraffic: "true"]
+            if (ngSigned) {
+                signingConfig signingConfigs.notesgraph
+            }
         }
     }
     flavorDimensions = ['chanel']

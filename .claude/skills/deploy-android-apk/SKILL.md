@@ -67,7 +67,17 @@ curl -sI "https://notesgraph.com/download/notesgraph-0.26.3-android.apk?v=$RANDO
 ## Install note for the user
 
 All flavors share appId `app.notesgraph.pro`, so a new install replaces the old.
-Tell them to **uninstall first**, then download fresh with a cache-buster
-(`...apk?v=fresh`). Data re-syncs from the server on sign-in.
+Every published APK is signed with NotesGraph's key (`~/.notesgraph/android`,
+CI secrets `NOTESGRAPH_ANDROID_KEYSTORE_B64` / `_PASSWORD`; certificate SHA-256
+`5e4f7365…d256c2`), so a new one **updates the installed app in place**: download
+with a cache-buster (`...apk?v=fresh`) and install. Only an app signed with a
+different key (any build from before 2026-11-27, or one built without the key,
+whose build log warns about it) has to be uninstalled first; data re-syncs from
+the server on sign-in. If an install says "App not installed", compare
+certificates: `apksigner verify --print-certs <apk>` against
+`adb shell dumpsys package app.notesgraph.pro`.
+
+Keep the key: losing `~/.notesgraph/android/notesgraph-android.jks` (and its
+password in `signing.env`) means every phone has to uninstall once more.
 
 To visually confirm the build before/after shipping, use the `test-mobile-emulator` skill.
