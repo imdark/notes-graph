@@ -69,6 +69,43 @@ export const discoverTopics = (value: unknown): string[] => {
   return topics;
 };
 
+/** The most dismissed stories kept per user; the oldest go first. */
+export const MAX_DISCOVER_DISMISSED = 500;
+
+/**
+ * Discover's dismissed stories as saved: well-formed entries only, one per
+ * story (the latest), oldest first, capped.
+ */
+export const discoverDismissed = (value: unknown) => {
+  if (!Array.isArray(value) || value.length > 2000) {
+    throw new BadRequestException('dismissed must be a list of stories');
+  }
+  const clip = (text: unknown, max: number) =>
+    typeof text === 'string' ? text.slice(0, max) : '';
+  const byId = new Map<
+    string,
+    { id: string; title: string; topic: string; source: string; at: number }
+  >();
+  for (const raw of value) {
+    if (!raw || typeof raw !== 'object') continue;
+    const entry = raw as Record<string, unknown>;
+    const id = clip(entry.id, 2000);
+    const at = Number(entry.at);
+    if (!id || !Number.isFinite(at)) continue;
+    byId.delete(id);
+    byId.set(id, {
+      id,
+      title: clip(entry.title, 500),
+      topic: clip(entry.topic, 200),
+      source: clip(entry.source, 200),
+      at,
+    });
+  }
+  return [...byId.values()]
+    .sort((a, b) => a.at - b.at)
+    .slice(-MAX_DISCOVER_DISMISSED);
+};
+
 /**
  * User-facing (Personal Access Token authenticated) doc API for the notes CLI
  * and, later, the MCP server. Unlike the internal `/rpc` controller, these
@@ -119,6 +156,25 @@ export class NotesApiController {
     const topics = discoverTopics(body.topics);
     await this.models.userSettings.set(user.id, { discoverTopics: topics });
     return { topics };
+  }
+
+  /** The stories the caller marked "Not interesting" on Discover. */
+  @Get('/discover/dismissed')
+  async getDiscoverDismissed(@CurrentUser() user: CurrentUserType) {
+    const settings = await this.models.userSettings.get(user.id);
+    return { dismissed: settings.discoverDismissed ?? [] };
+  }
+
+  @Put('/discover/dismissed')
+  async setDiscoverDismissed(
+    @CurrentUser() user: CurrentUserType,
+    @Body() body: { dismissed?: unknown }
+  ) {
+    const dismissed = discoverDismissed(body.dismissed);
+    await this.models.userSettings.set(user.id, {
+      discoverDismissed: dismissed,
+    });
+    return { dismissed };
   }
 
   private async assertReadable(

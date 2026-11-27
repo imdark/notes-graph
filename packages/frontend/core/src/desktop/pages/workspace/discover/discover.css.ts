@@ -1,12 +1,19 @@
 import { cssVarV2 } from '@toeverything/theme/v2';
 import { style } from '@vanilla-extract/css';
 
+/**
+ * How wide the feed runs, one card per row: most of a desktop window rather
+ * than a narrow column. The header and interests bar take the same width so
+ * they line up with it.
+ */
+const FEED_WIDTH = 1200;
+
 export const header = style({
   display: 'flex',
   alignItems: 'center',
   gap: 8,
   width: '100%',
-  maxWidth: 720,
+  maxWidth: FEED_WIDTH,
 });
 
 export const topicsPicker = style({
@@ -47,7 +54,7 @@ export const feed = style({
   display: 'flex',
   flexDirection: 'column',
   gap: 12,
-  maxWidth: 720,
+  maxWidth: FEED_WIDTH,
   margin: '0 auto',
 });
 
@@ -55,7 +62,7 @@ export const interests = style({
   display: 'flex',
   flexDirection: 'column',
   gap: 8,
-  maxWidth: 720,
+  maxWidth: FEED_WIDTH,
   margin: '0 auto 16px',
   fontSize: 13,
   color: cssVarV2('text/secondary'),
@@ -151,6 +158,8 @@ export const cardImageWrap = style({
   display: 'block',
   width: '100%',
   aspectRatio: '16 / 9',
+  // A wide card's picture would otherwise take a whole screen; it crops.
+  maxHeight: 400,
   padding: 0,
   border: 'none',
   background: cssVarV2('layer/background/secondary'),
@@ -231,5 +240,32 @@ export const cardSnippet = style({
 export const cardActions = style({
   display: 'flex',
   justifyContent: 'flex-end',
+  gap: 4,
   padding: '0 12px 12px',
+});
+
+/** "Why this?": the reasons a story is in the feed, under it. */
+export const cardWhy = style({
+  margin: '0 16px 8px',
+  padding: '8px 12px 8px 28px',
+  borderRadius: 8,
+  background: cssVarV2('layer/background/secondary'),
+  color: cssVarV2('text/secondary'),
+  fontSize: 13,
+  lineHeight: '20px',
+});
+
+/** The offer to stop following an interest whose stories keep being dismissed. */
+export const dropSuggestion = style({
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  gap: 12,
+  maxWidth: FEED_WIDTH,
+  margin: '0 auto 12px',
+  padding: '8px 12px',
+  borderRadius: 8,
+  border: `1px solid ${cssVarV2('layer/insideBorder/border')}`,
+  color: cssVarV2('text/secondary'),
+  fontSize: 13,
 });

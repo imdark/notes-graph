@@ -226,6 +226,29 @@ const useRunningCount = () => {
   );
 };
 
+/** How often the device jobs this browser has no run for are looked for. */
+const ADOPT_RUNS_MS = 60_000;
+
+/**
+ * Runs this browser didn't start (an agent's subtask, another device's run,
+ * an automation's) and ones whose start went unanswered: take them on, so
+ * they and their questions show on the Agents page. See adoptRemoteRuns.
+ */
+const RunAdopter = () => {
+  const executor = useService(AgentExecutorService);
+  useEffect(() => {
+    const adopt = () => {
+      executor.adoptRemoteRuns().catch(() => {
+        // Best effort: the next pass tries again.
+      });
+    };
+    adopt();
+    const id = setInterval(adopt, ADOPT_RUNS_MS);
+    return () => clearInterval(id);
+  }, [executor]);
+  return null;
+};
+
 /**
  * A run whose tab closed mid-way would say running forever; while any do,
  * check now and then whether they have in fact ended. Mounted on its own so
@@ -513,6 +536,7 @@ export const RootAppSidebar = memo((): ReactElement => {
           <AddPageButton />
         </div>
         <RunReconciler />
+        <RunAdopter />
         {shown('graph') && <GraphButton />}
         {shown('discover') && <DiscoverButton />}
         {shown('journals') && <AppSidebarJournalButton />}

@@ -1,6 +1,7 @@
 import { Button, Checkbox, Input, notify } from '@notesgraph/component';
 import { FetchService } from '@notesgraph/core/modules/cloud';
 import { DocsService } from '@notesgraph/core/modules/doc';
+import { FeatureFlagService } from '@notesgraph/core/modules/feature-flag';
 import { JournalService } from '@notesgraph/core/modules/journal';
 import { GlobalCacheService } from '@notesgraph/core/modules/storage';
 import { TagService } from '@notesgraph/core/modules/tag';
@@ -58,6 +59,18 @@ import {
   type ShownFeed,
   virtualItemsToFeed,
 } from './records';
+import {
+  type Dismissal,
+  dismissalOf,
+  fetchServerDismissals,
+  interestsToDrop,
+  loadDismissals,
+  mergeDismissals,
+  rankFeed,
+  saveDismissals,
+  saveServerDismissals,
+  whyShown,
+} from './relevance';
 import { TopicsPicker } from './topics-picker';
 
 /** How long the picker waits after the last change before refetching. */
@@ -111,12 +124,18 @@ const FeedCard = ({
   item,
   onOpen,
   onSave,
+  why,
+  onDismiss,
 }: {
   item: DiscoverItem;
   onOpen: (item: DiscoverItem) => void;
   onSave: (item: DiscoverItem) => void;
+  /** Why it's in the feed; null hides "Why this?" and "Not interesting". */
+  why: string[] | null;
+  onDismiss: (item: DiscoverItem) => void;
 }) => {
   const t = useI18n();
+  const [showWhy, setShowWhy] = useState(false);
   const globalCache = useService(GlobalCacheService).globalCache;
   const [image, setImage] = useState<string | null>(null);
   const [imageOk, setImageOk] = useState(true);
@@ -190,7 +209,35 @@ const FeedCard = ({
           <div className={styles.cardSnippet}>{item.snippet}</div>
         ) : null}
       </button>
+      {why && showWhy ? (
+        <ul className={styles.cardWhy} data-testid="discover-why">
+          {why.map(reason => (
+            <li key={reason}>{reason}</li>
+          ))}
+        </ul>
+      ) : null}
       <div className={styles.cardActions}>
+        {why ? (
+          <>
+            <Button
+              variant="plain"
+              size="default"
+              onClick={() => setShowWhy(prev => !prev)}
+              data-testid="discover-why-toggle"
+            >
+              {showWhy ? 'Hide why' : 'Why this?'}
+            </Button>
+            <Button
+              variant="plain"
+              size="default"
+              tooltip="Hide this story, and show fewer like it"
+              onClick={() => onDismiss(item)}
+              data-testid="discover-not-interesting"
+            >
+              Not interesting
+            </Button>
+          </>
+        ) : null}
         <Button variant="secondary" size="default" onClick={() => onSave(item)}>
           {t['com.notesgraph.discover.save']()}
         </Button>
@@ -526,6 +573,83 @@ const DiscoverPage = () => {
     return shownRef.current.items;
   }, [latestFeed, news.selection]);
 
+  // Not interesting: dismissed stories, and fewer like them (relevance.ts).
+  const relevanceOn = useLiveData(
+    useService(FeatureFlagService).flags.enable_discover_relevance.$
+  );
+  const [dismissed, setDismissed] = useState<Dismissal[]>(loadDismissals);
+  useEffect(() => {
+    let cancelled = false;
+    fetchServerDismissals(fetchService.fetch)
+      .then(server => {
+        if (cancelled) return;
+        setDismissed(local => {
+          const merged = mergeDismissals(server, local);
+          saveDismissals(merged);
+          // This device dismissed some the server hasn't seen: send them.
+          if (merged.length !== server.length) {
+            saveServerDismissals(fetchService.fetch, merged).catch(
+              console.error
+            );
+          }
+          return merged;
+        });
+      })
+      .catch(() => {
+        // Signed out or offline: this device's list stands.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [fetchService]);
+  const storeDismissed = useCallback(
+    (next: Dismissal[]) => {
+      setDismissed(next);
+      saveDismissals(next);
+      saveServerDismissals(fetchService.fetch, next).catch(console.error);
+    },
+    [fetchService]
+  );
+  const dismissedRef = useRef(dismissed);
+  dismissedRef.current = dismissed;
+  const onDismiss = useCallback(
+    (item: DiscoverItem) => {
+      const before = dismissedRef.current;
+      storeDismissed(mergeDismissals(before, [dismissalOf(item)]));
+      notify({
+        title: 'Marked not interesting',
+        message: 'You’ll see fewer stories like it.',
+        actions: [
+          {
+            key: 'undo',
+            label: 'Undo',
+            onClick: () =>
+              storeDismissed(
+                dismissedRef.current.filter(d => d.id !== item.id)
+              ),
+          },
+        ],
+      });
+    },
+    [storeDismissed]
+  );
+  const ranked = useMemo(
+    () =>
+      relevanceOn
+        ? rankFeed(feed, dismissed)
+        : { items: feed, lowered: new Map(), hidden: 0 },
+    [relevanceOn, feed, dismissed]
+  );
+  const sources = useMemo(
+    () => ({ manualTopics, interests, edits }),
+    [manualTopics, interests, edits]
+  );
+  const toDrop = useMemo(
+    () =>
+      relevanceOn ? interestsToDrop(dismissed, interestTopics)[0] : undefined,
+    [relevanceOn, dismissed, interestTopics]
+  );
+
   const refresh = useCallback(
     async (
       activeTopics: string[],
@@ -657,6 +781,24 @@ const DiscoverPage = () => {
             onAdd={onAddInterest}
             onReset={onResetInterests}
           />
+          {toDrop ? (
+            <div
+              className={styles.dropSuggestion}
+              data-testid="discover-drop-interest"
+            >
+              <span>
+                You marked {toDrop.count} stories on “{toDrop.topic}” not
+                interesting lately.
+              </span>
+              <Button
+                variant="secondary"
+                size="default"
+                onClick={() => onRemoveInterest(toDrop.topic)}
+              >
+                Stop following “{toDrop.topic}”
+              </Button>
+            </div>
+          ) : null}
           {feed.length === 0 ? (
             <div className={styles.status}>
               {topics.length === 0
@@ -668,12 +810,18 @@ const DiscoverPage = () => {
           ) : (
             <>
               <div className={styles.feed}>
-                {feed.map(item => (
+                {ranked.items.map(item => (
                   <FeedCard
                     key={item.id}
                     item={item}
                     onOpen={onOpen}
                     onSave={onSave}
+                    why={
+                      relevanceOn
+                        ? whyShown(item, sources, ranked.lowered.get(item.id))
+                        : null
+                    }
+                    onDismiss={onDismiss}
                   />
                 ))}
               </div>

@@ -240,8 +240,10 @@ export {
 } from './services/run-changes';
 export {
   askTranscript,
+  canResume,
   continuationBrief,
   FOLLOW_UP_TRANSCRIPT_CHARS,
+  resumeBrief,
   type RunChatContext,
   runChatMessages,
   runDied,
@@ -330,10 +332,12 @@ import { FleetService } from './services/fleet';
 import { MonitorsService } from './services/monitors';
 import { RemoteAgentRunnerService } from './services/remote-runner';
 import { ResearchToolsService } from './services/research-tools';
+import { RunReviewService } from './services/run-review';
 import { AgentRunSessionService } from './services/run-session';
 import { AgentTaskClaimService } from './services/task-claim';
 import { TaskProjectService } from './services/task-project';
 import { TerminalService } from './services/terminal';
+import { VerifyService } from './services/verify';
 import { AgentRunLogsStore } from './stores/agent-run-logs';
 import { AgentRunsStore } from './stores/agent-runs';
 import { AgentsStore } from './stores/agents';
@@ -375,6 +379,16 @@ export function configureAgentsModule(framework: Framework) {
       AgentsService,
       AgentRunSessionService,
     ])
+    .service(RunReviewService, [
+      DocsService,
+      AgentsService,
+      AgentRunSessionService,
+    ])
+    .service(VerifyService, [
+      DocsService,
+      AgentsService,
+      AgentRunSessionService,
+    ])
     .service(DeploymentsService, [
       DocsSearchService,
       DocsService,
@@ -409,3 +423,17 @@ export {
   type HealthFailure,
   type StartedFix,
 } from './services/fix-task';
+export {
+  RUN_REVIEW_DAYS,
+  RUN_REVIEW_TEMPLATE,
+  RUN_REVIEWS_DOC_TITLE,
+  RunReviewService,
+  type StartedReview,
+} from './services/run-review';
+export {
+  type StartedVerification,
+  VERIFICATIONS_DOC_TITLE,
+  verifyKey,
+  VerifyService,
+  type VerifyTarget,
+} from './services/verify';

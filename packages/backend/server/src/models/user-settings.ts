@@ -24,6 +24,22 @@ export const UserSettingsSchema = z.object({
     .array(z.string().trim().min(1).max(200))
     .max(100)
     .optional(),
+  /**
+   * Stories marked "Not interesting" on Discover, newest last, so every
+   * device hides them and shows fewer like them.
+   */
+  discoverDismissed: z
+    .array(
+      z.object({
+        id: z.string().min(1).max(2000),
+        title: z.string().max(500),
+        topic: z.string().max(200),
+        source: z.string().max(200),
+        at: z.number(),
+      })
+    )
+    .max(500)
+    .optional(),
 });
 
 export type UserSettingsInput = z.input<typeof UserSettingsSchema>;

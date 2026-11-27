@@ -7,6 +7,7 @@ import {
 
 import { ago, TaskLinks } from './shared';
 import * as styles from './styles.css';
+import { VerifyAction } from './verify-action';
 
 /**
  * What the next release takes out: pull requests merged into the base
@@ -24,6 +25,7 @@ export const NextRelease = ({
 }) => {
   const base = state.settings?.baseBranch ?? 'stage';
   const deploy = state.settings?.deployBranch ?? 'main';
+  const repo = state.settings?.repo ?? '';
   const { prs, commits } = state.next;
   const release = releaseAction(state, ahead);
   return (
@@ -73,6 +75,23 @@ export const NextRelease = ({
                   <TaskLinks tasks={state.tasks[pr.number]} />
                 </span>
               </div>
+              {repo ? (
+                <div className={styles.rowActions}>
+                  <VerifyAction
+                    target={{
+                      kind: 'pull',
+                      repo,
+                      number: pr.number,
+                      url: pr.url,
+                      title: pr.title,
+                      branch: pr.branch,
+                      merged: true,
+                      base,
+                      tasks: state.tasks[pr.number],
+                    }}
+                  />
+                </div>
+              ) : null}
             </div>
           ))}
         </div>

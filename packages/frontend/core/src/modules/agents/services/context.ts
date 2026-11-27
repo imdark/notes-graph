@@ -43,6 +43,11 @@ const TITLE_CHARS = 80;
 export interface AgentContext {
   /** The prose handed to the model. */
   text: string;
+  /**
+   * The ended device job this run follows up in that run's own session
+   * (wf agent serve resumes it where it left off); see resumeBrief.
+   */
+  continues?: string;
   /** Human-readable description of what was targeted, for the run record. */
   label: string;
   /** What the run starts out called in run lists: the gist of its target. */

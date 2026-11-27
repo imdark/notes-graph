@@ -12,6 +12,15 @@ export interface Interest {
   label: string;
   /** Higher is stronger: notes mentioning it, with recent notes counting double. */
   weight: number;
+  /**
+   * Where it came from, to say why a story is in the feed: how many notes
+   * name it, and whether as a tag (else as words in their titles). For a
+   * general area, the interests that point to it. Absent from interests
+   * cached before these were kept.
+   */
+  notes?: number;
+  tag?: boolean;
+  from?: string[];
 }
 
 export interface UserInterests {
@@ -19,6 +28,8 @@ export interface UserInterests {
   general: Interest[];
   /** Areas adjacent to the general ones that the notes don't mention yet. */
   discover: string[];
+  /** For each discovery area, the general area it sits next to. */
+  discoverNear?: Record<string, string>;
   computedAt: number;
 }
 
@@ -341,7 +352,7 @@ const MAX_SPECIFIC = 12;
 const MAX_GENERAL = 5;
 const MAX_DISCOVER = 3;
 
-function tokenize(title: string): string[] {
+export function tokenize(title: string): string[] {
   return title
     .toLowerCase()
     .split(/[^\p{L}\p{N}+#]+/u)
@@ -438,12 +449,15 @@ export function deriveInterests(snapshot: NotesSnapshot): UserInterests {
     specific.push({
       label: tagKeys.has(key) ? s.label : titleCase(s.label),
       weight: s.weight,
+      notes: s.docs,
+      tag: tagKeys.has(key),
     });
   }
 
   // General areas: sum the weight of every specific interest that names one
   // of the area's keywords.
   const areaWeights = new Map<string, number>();
+  const areaFrom = new Map<string, string[]>();
   for (const interest of specific) {
     const key = interest.label.toLowerCase();
     const words = new Set(key.split(/\s+/));
@@ -457,30 +471,40 @@ export function deriveInterests(snapshot: NotesSnapshot): UserInterests {
           area.label,
           (areaWeights.get(area.label) ?? 0) + interest.weight
         );
+        areaFrom.set(area.label, [
+          ...(areaFrom.get(area.label) ?? []),
+          interest.label,
+        ]);
       }
     }
   }
   const general: Interest[] = [...areaWeights.entries()]
     .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
     .slice(0, MAX_GENERAL)
-    .map(([label, weight]) => ({ label, weight }));
+    .map(([label, weight]) => ({
+      label,
+      weight,
+      from: areaFrom.get(label) ?? [],
+    }));
 
   // Discovery: areas next to the strongest general ones, not already covered.
   const covered = new Set(
     [...general, ...specific].map(i => i.label.toLowerCase())
   );
   const discover: string[] = [];
+  const discoverNear: Record<string, string> = {};
   for (const g of general) {
     const area = AREAS.find(a => a.label === g.label);
     for (const rel of area?.related ?? []) {
       if (discover.length >= MAX_DISCOVER) break;
       if (!covered.has(rel.toLowerCase()) && !discover.includes(rel)) {
         discover.push(rel);
+        discoverNear[rel] = g.label;
       }
     }
   }
 
-  return { specific, general, discover, computedAt: now };
+  return { specific, general, discover, discoverNear, computedAt: now };
 }
 
 /** How many of each kind go into the feed's search. */

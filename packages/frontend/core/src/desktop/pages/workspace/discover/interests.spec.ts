@@ -19,6 +19,34 @@ const doc = (title: string, tagIds: string[] = [], ageDays = 90) => ({
 });
 
 describe('deriveInterests', () => {
+  test('keeps where each interest came from, to say why a story shows', () => {
+    const interests = deriveInterests({
+      now: NOW,
+      tagNames: new Map([['t1', 'teleop']]),
+      docs: [
+        doc('reComputer CAN bus setup', ['t1']),
+        doc('CAN bus termination notes', ['t1']),
+        doc('Weekend trip'),
+      ],
+    });
+    expect(interests.specific.find(i => i.label === 'teleop')).toMatchObject({
+      notes: 2,
+      tag: true,
+    });
+    expect(interests.specific.find(i => i.label === 'Can Bus')).toMatchObject({
+      notes: 2,
+      tag: false,
+    });
+    for (const area of interests.general) {
+      expect(area.from?.length).toBeGreaterThan(0);
+    }
+    for (const near of interests.discover) {
+      expect(interests.general.map(g => g.label)).toContain(
+        interests.discoverNear?.[near]
+      );
+    }
+  });
+
   test('picks tags and phrases that recur across titles', () => {
     const interests = deriveInterests({
       now: NOW,

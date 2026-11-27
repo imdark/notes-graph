@@ -45,6 +45,13 @@ export const sectionTitle = style({
   color: cssVarV2('text/secondary'),
 });
 
+/** A button at the right end of a section's title row. */
+export const sectionTitleAction = style({
+  marginLeft: 'auto',
+  textTransform: 'none',
+  letterSpacing: 0,
+});
+
 export const sectionCount = style({
   fontWeight: 500,
   color: cssVarV2('text/tertiary'),
