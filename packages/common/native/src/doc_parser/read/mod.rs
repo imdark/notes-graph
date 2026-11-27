@@ -826,7 +826,7 @@ fn table_cell_texts(block: &Map) -> Vec<String> {
   for key in block.keys() {
     if key.starts_with("prop:cells.")
       && key.ends_with(".text")
-      && let Some(value) = block.get(key).and_then(|value| value_to_string(&value))
+      && let Some(value) = block.get(&key).and_then(|value| value_to_string(&value))
       && !value.is_empty()
     {
       contents.push(value);
@@ -923,9 +923,9 @@ mod tests {
     reference.insert("pageId".into(), Any::String("target-doc".into()));
     let mut params = AHashMap::default();
     params.insert("mode".into(), Any::String("page".into()));
-    reference.insert("params".into(), Any::Object(params));
+    reference.insert("params".into(), Any::Object(Box::new(params)));
     let mut attrs = TextAttributes::new();
-    attrs.insert("reference".into(), Any::Object(reference));
+    attrs.insert("reference".into(), Any::Object(Box::new(reference)));
     cell_text
       .apply_delta(&[
         TextDeltaOp::Insert {

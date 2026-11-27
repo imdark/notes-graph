@@ -67,6 +67,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5a15f179cd60c4584b8a8c596927aadc462e27f2ca70c04e0071964a73ba7a75"
 dependencies = [
  "cfg-if",
+ "const-random",
  "getrandom 0.3.4",
  "once_cell",
  "serde",
@@ -1075,6 +1076,25 @@ name = "const-oid"
 version = "0.10.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a6ef517f0926dd24a1582492c791b6a4818a4d94e789a334894aa15b0d12f55c"
+
+[[package]]
+name = "const-random"
+version = "0.1.20"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d38d4bb3e79c716fd0330d8da84171b0135e59e01076e99f22b75a64c56e952c"
+dependencies = [
+ "const-random-macro",
+]
+
+[[package]]
+name = "const-random-macro"
+version = "0.1.18"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d66bb491e9fc48cb3fed9d57df886880a751d540d645ebc86b6d9d35b8fa8457"
+dependencies = [
+ "getrandom 0.4.2",
+ "tiny-keccak",
+]
 
 [[package]]
 name = "convert_case"
@@ -4103,6 +4123,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "nanoid"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8628de41fe064cc3f0cf07f3d299ee3e73521adaff72278731d5c8cae3797873"
+dependencies = [
+ "rand 0.9.4",
+]
+
+[[package]]
 name = "napi"
 version = "3.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4243,7 +4272,7 @@ dependencies = [
  "assert-json-diff",
  "chrono",
  "criterion",
- "nanoid",
+ "nanoid 0.4.0",
  "napi",
  "pulldown-cmark",
  "rand 0.9.4",
@@ -5549,16 +5578,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "63b8176103e19a2643978565ca18b50549f6101881c443590420e4dc998a3c69"
 
 [[package]]
-name = "rand_distr"
-version = "0.5.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6a8615d50dcf34fa31f7ab52692afec947c4dd0ab803cc87cb3b0b4570ff7463"
-dependencies = [
- "num-traits",
- "rand 0.9.4",
-]
-
-[[package]]
 name = "rayon"
 version = "1.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5999,6 +6018,12 @@ name = "ryu"
 version = "1.0.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9774ba4a74de5f7b1c1451ed6cd5285a32eddb5cccb8cc655a4e50009e06477f"
+
+[[package]]
+name = "ryu-js"
+version = "1.0.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1f232fd0249f55adbe7f15bee58bbbd3d40708000b84e6482066d2ba599e08a9"
 
 [[package]]
 name = "safefetch"
@@ -7244,6 +7269,15 @@ checksum = "2e70e4c5a0e0a8a4823ad65dfe1a6930e4f4d756dcd9dd7939022b5e8c501215"
 dependencies = [
  "num-conv",
  "time-core",
+]
+
+[[package]]
+name = "tiny-keccak"
+version = "2.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2c9d3793400a45f954c52e73d068316d76b6f4e36977e3fcebb13a2721e80237"
+dependencies = [
+ "crunchy",
 ]
 
 [[package]]
@@ -9356,9 +9390,9 @@ checksum = "ec7a2a501ed189703dba8b08142f057e887dfc4b2cc4db2d343ac6376ba3e0b9"
 
 [[package]]
 name = "y-octo"
-version = "0.0.3"
+version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bb412cb21b56fe2b48f460b009b230343f3e0f30b18aaaf97e6a67739a6ec0e7"
+checksum = "0ca83593de45d6f6bd0118d8199ccb2a13ec9a3b572b962c2b9a6149c443443d"
 dependencies = [
  "ahash",
  "arbitrary",
@@ -9366,17 +9400,23 @@ dependencies = [
  "byteorder",
  "log",
  "loom",
- "nanoid",
+ "nanoid 0.5.0",
  "nom 8.0.0",
  "ordered-float",
- "rand 0.9.4",
- "rand_chacha 0.9.0",
- "rand_distr",
+ "rand 0.10.1",
+ "ryu-js",
  "serde",
  "serde_json",
  "smol_str",
  "thiserror 2.0.18",
+ "y-octo-core",
 ]
+
+[[package]]
+name = "y-octo-core"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5ca7f2eed556822e81c35f76c8a27855daca946bf1818707ddcd5b9d4434dc6f"
 
 [[package]]
 name = "yaml-rust"

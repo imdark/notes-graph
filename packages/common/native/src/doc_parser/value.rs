@@ -67,7 +67,7 @@ pub(super) fn value_to_any(value: &Value) -> Option<Any> {
   if let Some(map) = value.to_map() {
     let mut values = AHashMap::default();
     for key in map.keys() {
-      if let Some(entry) = map.get(key) {
+      if let Some(entry) = map.get(&key) {
         if let Some(any) = value_to_any(&entry) {
           values.insert(key.to_string(), any);
         } else if let Some(text) = value_to_string(&entry) {
@@ -75,7 +75,7 @@ pub(super) fn value_to_any(value: &Value) -> Option<Any> {
         }
       }
     }
-    return Some(Any::Object(values));
+    return Some(Any::Object(Box::new(values)));
   }
 
   None

@@ -145,7 +145,7 @@ resolver = "3"
     "Win32_UI_Shell_PropertiesSystem",
   ] }
   windows-core = { version = "0.61" }
-  y-octo = "0.0.3"
+  y-octo = "0.4.2"
   y-sync = { version = "0.4" }
   yrs = "0.23.0"
 

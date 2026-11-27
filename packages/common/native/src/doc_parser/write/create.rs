@@ -291,7 +291,7 @@ mod tests {
       {
         for key in block_map.keys() {
           if key.starts_with("prop:cells.") && key.ends_with(".text") {
-            let text = block_map.get(key).and_then(|v| v.to_text()).expect("cell text");
+            let text = block_map.get(&key).and_then(|v| v.to_text()).expect("cell text");
             for op in text.to_delta() {
               if let TextDeltaOp::Insert {
                 insert: TextInsert::Text(text),
@@ -340,7 +340,7 @@ mod tests {
         for key in block_map.keys() {
           if key.starts_with("prop:cells.") && key.ends_with(".text") {
             // A Y.Text: the editor shows a plain string cell as empty.
-            let value = block_map.get(key).and_then(|v| v.to_text()).map(|t| t.to_string());
+            let value = block_map.get(&key).and_then(|v| v.to_text()).map(|t| t.to_string());
             if let Some(value) = value
               && (value == "A" || value == "1")
             {

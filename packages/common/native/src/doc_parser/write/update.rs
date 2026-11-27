@@ -939,7 +939,7 @@ mod tests {
           if key.starts_with("prop:cells.")
             && key.ends_with(".text")
             // A Y.Text, as the editor binds to; a plain string shows empty.
-            && let Some(value) = block_map.get(key).and_then(|v| v.to_text()).map(|t| t.to_string())
+            && let Some(value) = block_map.get(&key).and_then(|v| v.to_text()).map(|t| t.to_string())
             && value == "9"
           {
             found = true;
