@@ -1965,6 +1965,63 @@ export class WorkspaceMcpProvider {
         },
       });
 
+      const deleteDocument = defineTool({
+        name: 'delete_document',
+        title: 'Delete Document',
+        description:
+          "Move a note to the trash, as deleting it in the app does. It isn't gone: the person can restore it from Trash. Use it for notes you made that are no longer wanted (a test note, a duplicate you merged elsewhere), or that the person asked you to delete; never to tidy notes the person wrote without their say. A journal day or the workspace itself can't be deleted this way. Returns {docId, trashed}, trashed false when it was already in the trash." +
+          firstPersonGuidance,
+        parser: z.object({
+          docId: z.string(),
+          agent: z.string().optional(),
+        }),
+        inputSchema: {
+          type: 'object',
+          properties: {
+            docId: {
+              type: 'string',
+              description: 'The note to move to the trash.',
+            },
+            agent: agentInputSchema,
+          },
+          required: ['docId'],
+          additionalProperties: false,
+        },
+        execute: async ({ docId }, options) => {
+          if (docId === workspaceId) {
+            return toolError("The workspace itself can't be deleted.");
+          }
+          const allowed = await this.ac
+            .user(userId)
+            .workspace(workspaceId)
+            .doc(docId)
+            .can('Doc.Trash');
+          if (!allowed) return toolError(`Can't delete ${docId}.`);
+          const aborted = abortIfNeeded(options.signal);
+          if (aborted) return aborted;
+          try {
+            // A journal day holds the day's tasks and calendar; losing it to a
+            // stray call costs far more than keeping a note by mistake.
+            const content = await this.reader.getDocContent(workspaceId, docId);
+            if (content?.title && JOURNAL_DATE_RE.test(content.title.trim())) {
+              return toolError(
+                `${content.title} is a journal day: delete it in the app if it really should go.`
+              );
+            }
+            const trashed = await this.writer.trashDoc(
+              workspaceId,
+              docId,
+              userId
+            );
+            return toolText(JSON.stringify({ docId, trashed }));
+          } catch (error) {
+            return toolError(
+              `Failed to delete the document: ${error instanceof Error ? error.message : 'Unknown error'}`
+            );
+          }
+        },
+      });
+
       const updateDocumentMeta = defineTool({
         name: 'update_document_meta',
         title: 'Update Document Metadata',
@@ -3289,6 +3346,7 @@ export class WorkspaceMcpProvider {
         fileTask,
         updateDocument,
         updateDocumentMeta,
+        deleteDocument,
         linkDocument,
         updateTask,
         updateBlock,
