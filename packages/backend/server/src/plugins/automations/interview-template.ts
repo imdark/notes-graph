@@ -15,11 +15,13 @@ export const INTERVIEW_EVENTS_TEMPLATE = String.raw`// Every run looks at the ne
 // keeps the events that could be interviews, and queues one agent run for
 // each it has not handed over before. The agent classifies the event, tags
 // the event's note #interview, and adds the candidate's CV and LinkedIn link,
-// searching the notes the Slack sync imported. Set AGENT_DEVICE to the key of
-// a device that runs agents, and CALENDAR to part of the name of the
-// calendar to watch (empty: all of them).
-const AGENT_DEVICE = '';
-const CALENDAR = 'pantheon';
+// searching the notes the Slack sync imported. AGENT_DEVICE is the device
+// that runs the agent ('cloud': the server's runner). CALENDAR, when set,
+// keeps only calendars whose name override contains it; empty watches every
+// calendar (a calendar nobody renamed has no override, so a name filter
+// would skip it).
+const AGENT_DEVICE = 'cloud';
+const CALENDAR = '';
 const LOOKAHEAD_DAYS = 14;
 const LEDGER_TITLE = 'Interview events handed to the agent';
 const LEDGER_FOLDER = ['ai', 'automations'];
@@ -29,6 +31,9 @@ const ws = notesgraph.workspaceId;
 if (!AGENT_DEVICE) {
   throw new Error('set AGENT_DEVICE at the top of the code to the key of a device that runs agents');
 }
+// The cloud runner runs Claude Code agents; a job naming no model would
+// fail there as one for a Mac.
+const AGENT_MODEL = 'claude-code';
 
 const from = new Date();
 const to = new Date(from.getTime() + LOOKAHEAD_DAYS * 24 * 3600 * 1000);
@@ -83,7 +88,7 @@ for (const event of fresh) {
   ].filter(l => l !== '').join('\n');
   const { job } = await notesgraph.fetch('/api/registry/workspaces/' + ws + '/devices/' + encodeURIComponent(AGENT_DEVICE) + '/jobs', {
     method: 'POST',
-    body: { agentId: 'interview-events', agentName: 'Interview events', title: 'Interview: ' + (event.title || 'event').slice(0, 80), instructions },
+    body: { agentId: 'interview-events', agentName: 'Interview events', model: AGENT_MODEL, title: 'Interview: ' + (event.title || 'event').slice(0, 80), instructions },
   });
   queued.push(event.externalEventId);
   console.log('queued ' + job.id + ' for ' + (event.title || event.externalEventId));
@@ -108,7 +113,7 @@ export const INTERVIEW_TEMPLATES = [
     id: 'interview-events',
     name: 'Tag interview events and add the candidate CV and LinkedIn',
     description:
-      "Every 30 minutes, find upcoming calendar events that look like interviews and queue an agent for each: it classifies the event, tags it #interview, and adds the candidate's CV and LinkedIn link found in the Slack-synced notes. Set the agent device at the top of the code.",
+      "Every 30 minutes, find upcoming calendar events that look like interviews and queue an agent for each: it classifies the event, tags it #interview, and adds the candidate's CV and LinkedIn link found in the Slack-synced notes. It runs the agent on the server's runner; change AGENT_DEVICE at the top of the code to run it on a Mac.",
     triggers: [{ type: 'interval', minutes: 30 }],
     code: INTERVIEW_EVENTS_TEMPLATE,
     timeoutSeconds: 5 * 60,
