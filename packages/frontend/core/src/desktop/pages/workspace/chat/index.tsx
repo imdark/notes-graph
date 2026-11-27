@@ -11,6 +11,7 @@ import {
   WorkspaceAIChatSessionStrategy,
 } from '@notesgraph/core/blocksuite/ai';
 import { AIChatContent } from '@notesgraph/core/blocksuite/ai/components/ai-chat-content';
+import { chatSpeechToText } from '@notesgraph/core/blocksuite/ai/components/ai-chat-input/speech';
 import {
   AIChatTabs,
   AIChatToolbar,
@@ -314,6 +315,7 @@ export const Component = () => {
       content.notificationService = notificationService;
       content.aiDraftService = framework.get(AIDraftService);
       content.aiToolsConfigService = framework.get(AIToolsConfigService);
+      content.speechToText = chatSpeechToText(framework);
       content.serverService = framework.get(ServerService);
       content.subscriptionService = framework.get(SubscriptionService);
       content.aiModelService = framework.get(AIModelService);

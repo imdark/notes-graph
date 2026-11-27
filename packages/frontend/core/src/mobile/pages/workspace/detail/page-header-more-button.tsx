@@ -1,4 +1,5 @@
 import {
+  AiIcon,
   AiOutlineIcon,
   DeleteIcon,
   EdgelessIcon,
@@ -48,7 +49,12 @@ import { JournalTodayActivityMenuItem } from './menu/journal-today-activity';
 import { EditorModeSwitch } from './menu/mode-switch';
 import * as styles from './page-header-more-button.css';
 
-export const PageHeaderMenuButton = () => {
+export const PageHeaderMenuButton = ({
+  onOpenChat,
+}: {
+  /** Opens the note's AI chat; without it the menu has no Chat item. */
+  onOpenChat?: () => void;
+}) => {
   const t = useI18n();
 
   const doc = useService(DocService).doc;
@@ -176,6 +182,15 @@ export const PageHeaderMenuButton = () => {
           {primaryMode === 'page'
             ? t['com.notesgraph.editorDefaultMode.edgeless']()
             : t['com.notesgraph.editorDefaultMode.page']()}
+        </MobileMenuItem>
+      )}
+      {onOpenChat && (
+        <MobileMenuItem
+          prefixIcon={<AiIcon />}
+          data-testid="editor-option-menu-chat"
+          onSelect={onOpenChat}
+        >
+          Chat
         </MobileMenuItem>
       )}
       {generateTitle.available && (

@@ -15,6 +15,7 @@ import {
 } from '@notesgraph/core/blocksuite/ai';
 import type { AppSidebarConfig } from '@notesgraph/core/blocksuite/ai/chat-panel/chat-config';
 import { AIChatContent } from '@notesgraph/core/blocksuite/ai/components/ai-chat-content';
+import { chatSpeechToText } from '@notesgraph/core/blocksuite/ai/components/ai-chat-input/speech';
 import {
   AIChatTabs,
   AIChatToolbar,
@@ -386,6 +387,7 @@ export const EditorChatPanel = ({
       content.notificationService = notificationService;
       content.aiDraftService = framework.get(AIDraftService);
       content.aiToolsConfigService = framework.get(AIToolsConfigService);
+      content.speechToText = chatSpeechToText(framework);
       content.peekViewService = framework.get(PeekViewService);
       content.subscriptionService = framework.get(SubscriptionService);
       content.aiModelService = framework.get(AIModelService);

@@ -20,6 +20,7 @@ import {
   PageHeader,
   SuggestedParentBanner,
 } from '@notesgraph/core/mobile/components';
+import { NoteChatSheet } from '@notesgraph/core/mobile/components/note-chat';
 import { VoiceTasksSheet } from '@notesgraph/core/mobile/components/voice-tasks';
 import { AIButtonService } from '@notesgraph/core/modules/ai-button';
 import { ServerService } from '@notesgraph/core/modules/cloud';
@@ -81,10 +82,14 @@ const DetailPageImpl = ({
   immersive,
   chromeVisible,
   immersiveTapHandlers,
+  chatOpen,
+  onChatOpenChange,
 }: {
   immersive: boolean;
   chromeVisible: boolean;
   immersiveTapHandlers?: ImmersiveTapHandlers;
+  chatOpen: boolean;
+  onChatOpenChange: (open: boolean) => void;
 }) => {
   const {
     editorService,
@@ -284,6 +289,7 @@ const DetailPageImpl = ({
         </div>
       </div>
       {!readonly && <VoiceTasksSheet />}
+      <NoteChatSheet open={chatOpen} onOpenChange={onChatOpenChange} />
     </FrameworkScope>
   );
 };
@@ -324,6 +330,7 @@ const MobileDetailPageHeader = ({
   allJournalDates,
   handleDateChange,
   trackScrollTitle,
+  onOpenChat,
 }: {
   date?: string;
   fromTab: boolean;
@@ -331,6 +338,7 @@ const MobileDetailPageHeader = ({
   allJournalDates: Set<string | null | undefined>;
   handleDateChange: (date: string) => void;
   trackScrollTitle: boolean;
+  onOpenChat: () => void;
 }) => {
   const [showTitle, setShowTitle] = useState(getShouldShowTitle);
 
@@ -376,7 +384,7 @@ const MobileDetailPageHeader = ({
       suffix={
         <>
           <PageHeaderShareButton />
-          <PageHeaderMenuButton />
+          <PageHeaderMenuButton onOpenChat={onOpenChat} />
         </>
       }
       bottom={
@@ -417,6 +425,9 @@ const MobileDetailPageContent = ({
 }) => {
   const editor = useService(EditorService).editor;
   const mode = useLiveData(editor.mode$);
+  // The note's chat: opened from the header's menu, shown over the page.
+  const [chatOpen, setChatOpen] = useState(false);
+  const openChat = useCallback(() => setChatOpen(true), []);
   const [isLandscape, setIsLandscape] = useState(getIsLandscape);
   const [chromeVisible, setChromeVisible] = useState(true);
   const tapStateRef = useRef<{
@@ -546,6 +557,7 @@ const MobileDetailPageContent = ({
           allJournalDates={allJournalDates}
           handleDateChange={handleDateChange}
           trackScrollTitle={trackScrollTitle}
+          onOpenChat={openChat}
         />
       )}
       <JournalConflictBlock date={date} />
@@ -553,6 +565,8 @@ const MobileDetailPageContent = ({
         immersive={immersive}
         chromeVisible={chromeVisible}
         immersiveTapHandlers={immersiveTapHandlers}
+        chatOpen={chatOpen}
+        onChatOpenChange={setChatOpen}
       />
       <AppTabs
         background={cssVarV2('layer/background/primary')}
