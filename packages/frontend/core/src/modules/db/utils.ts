@@ -4,6 +4,7 @@ import {
   NotesGraph_WORKSPACE_DB_SCHEMA,
   NotesGraph_WORKSPACE_USERDATA_DB_SCHEMA,
 } from './schema';
+import { tableStorageName } from './storage-names';
 
 export async function transformWorkspaceDBLocalToCloud(
   _localWorkspaceId: string,
@@ -16,7 +17,8 @@ export async function transformWorkspaceDBLocalToCloud(
     const localDocName = `db$${tableName}`;
     const localDoc = await localDocStorage.getDoc(localDocName);
     if (localDoc) {
-      const cloudDocName = `db$${tableName}`;
+      // The cloud workspace may keep the table in another doc.
+      const cloudDocName = `db$${tableStorageName(tableName, true)}`;
       await cloudDocStorage.pushDocUpdate({
         docId: cloudDocName,
         bin: localDoc.bin,

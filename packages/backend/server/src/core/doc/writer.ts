@@ -774,7 +774,9 @@ export class DocWriter {
       return;
     }
 
-    const propertiesDocId = `db$${workspaceId}$docProperties`;
+    // The rebuilt table (see ./rebuilt-tables); `docProperties` is its
+    // source, which only old app versions still write.
+    const propertiesDocId = `db$${workspaceId}$docProperties2`;
     const existingDoc = await this.storage.getDoc(workspaceId, propertiesDocId);
     const existingBinary = existingDoc?.bin
       ? Buffer.isBuffer(existingDoc.bin)
