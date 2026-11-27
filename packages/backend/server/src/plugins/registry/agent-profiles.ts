@@ -191,12 +191,24 @@ const WF_WRITE_COMMANDS = wfCommands([
   'notes file',
 ]);
 
+// GitHub lookups agents make to follow their own pull request and its CI:
+// they only read. wf agent serve allows the same on laptops (workflow #83).
+const GH_READ_COMMANDS = [
+  'pr view',
+  'pr list',
+  'pr checks',
+  'pr diff',
+  'run view',
+  'run list',
+].map(command => `Bash(gh ${command}:*)`);
+
 // Other shell commands and file edits are left out: they go through the
 // permission prompt.
 const CLAUDE_CODE_ALLOWED_TOOLS = [
   'mcp__notesgraph',
   ...WF_WRITE_COMMANDS,
   ...WF_READ_COMMANDS,
+  ...GH_READ_COMMANDS,
   'mcp__run__ask_user',
   'mcp__run__set_title',
   'mcp__run__upload_artifact',

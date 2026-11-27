@@ -20,6 +20,23 @@ test('a level narrows or widens the profile it starts from', t => {
   t.true(base.allowedTools.includes('Bash(wf task create:*)'));
   t.true(base.allowedTools.includes('Bash(wf done:*)'));
   t.false(read.allowedTools.includes('Bash(wf done:*)'));
+  // GitHub lookups on the run's own PR and CI run at every level; anything
+  // that changes GitHub still asks.
+  t.true(read.allowedTools.includes('Bash(gh pr view:*)'));
+  t.true(read.allowedTools.includes('Bash(gh pr checks:*)'));
+  t.true(read.allowedTools.includes('Bash(gh run view:*)'));
+  for (const command of [
+    'pr merge',
+    'pr close',
+    'pr create',
+    'api',
+    'run rerun',
+  ]) {
+    t.false(
+      base.allowedTools.some(tool => tool.startsWith(`Bash(gh ${command}`)),
+      command
+    );
+  }
   // Commands that delete, deploy or run any tool still ask.
   for (const command of ['task delete', 'deploy', 'notes call', 'prune']) {
     t.false(
