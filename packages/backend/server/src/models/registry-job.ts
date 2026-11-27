@@ -20,6 +20,20 @@ export type QuestionKind = (typeof QUESTION_KINDS)[number];
  */
 export const STEER_KIND = 'steer';
 
+/** The job fields an open question is listed with. */
+const OPEN_QUESTION_JOB = {
+  id: true,
+  title: true,
+  agentId: true,
+  agentName: true,
+  deviceKey: true,
+  status: true,
+  docId: true,
+  blockId: true,
+  createdAt: true,
+} as const;
+export type OpenQuestionJob = Pick<RegistryJob, keyof typeof OPEN_QUESTION_JOB>;
+
 export interface CreateRegistryJobInput {
   workspaceId: string;
   deviceKey: string;
@@ -164,6 +178,12 @@ export class RegistryJobModel extends BaseModel {
       kind?: string;
       /** Only runs that ended at or after this. */
       finishedSince?: Date;
+      /** Only runs queued at or after this, ended or not. */
+      createdSince?: Date;
+      /** Only runs on this note. */
+      docId?: string;
+      /** Only runs whose title or transcript contains this (any case). */
+      text?: string;
       limit?: number;
     } = {}
   ): Promise<RegistryJob[]> {
@@ -174,8 +194,20 @@ export class RegistryJobModel extends BaseModel {
         ...(filter.agentId ? { agentId: filter.agentId } : {}),
         ...(filter.status ? { status: filter.status } : {}),
         ...(filter.kind ? { kind: filter.kind } : {}),
+        ...(filter.docId ? { docId: filter.docId } : {}),
         ...(filter.finishedSince
           ? { finishedAt: { gte: filter.finishedSince } }
+          : {}),
+        ...(filter.createdSince
+          ? { createdAt: { gte: filter.createdSince } }
+          : {}),
+        ...(filter.text
+          ? {
+              OR: [
+                { title: { contains: filter.text, mode: 'insensitive' } },
+                { log: { contains: filter.text, mode: 'insensitive' } },
+              ],
+            }
           : {}),
       },
       orderBy: { createdAt: 'desc' },
@@ -610,6 +642,32 @@ export class RegistryJobModel extends BaseModel {
     });
     // Same scoping as `get`: a question id under the wrong job is absent.
     return question && question.jobId === jobId ? question : null;
+  }
+
+  /**
+   * Every question still waiting for an answer across the workspace's jobs
+   * that are still going, oldest first, with its job: what "Needs you" is
+   * made of, whichever device or tab started the run. Steers aren't
+   * questions.
+   */
+  async openQuestions(
+    workspaceId: string,
+    limit = 200
+  ): Promise<(RegistryJobQuestion & { job: OpenQuestionJob })[]> {
+    return this.db.registryJobQuestion.findMany({
+      where: {
+        answeredAt: null,
+        kind: { not: STEER_KIND },
+        job: {
+          workspaceId,
+          status: { in: ['held', 'queued', 'running'] },
+        },
+      },
+      // Not the transcript: a list of questions has no use for megabytes.
+      include: { job: { select: OPEN_QUESTION_JOB } },
+      orderBy: { createdAt: 'asc' },
+      take: Math.min(limit, 500),
+    });
   }
 
   async listQuestions(jobId: string): Promise<RegistryJobQuestion[]> {

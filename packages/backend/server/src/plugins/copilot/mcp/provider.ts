@@ -1561,6 +1561,7 @@ export class WorkspaceMcpProvider {
       parser: z.object({
         days: z.number().int().min(1).max(30).optional(),
         status: z.string().optional(),
+        search: z.string().max(200).optional(),
       }),
       inputSchema: {
         type: 'object',
@@ -1574,13 +1575,19 @@ export class WorkspaceMcpProvider {
             description:
               'Only runs with this status: queued, running, done, error, blocked or cancelled.',
           },
+          search: {
+            type: 'string',
+            description:
+              'Only runs whose title or transcript contains this, any case: a task key (CLOUD-147), a branch, an error ("Stream closed").',
+          },
         },
         additionalProperties: false,
       },
-      execute: async ({ days, status }) => {
+      execute: async ({ days, status, search }) => {
         const jobs = await this.models.registryJob.list(workspaceId, {
           kind: 'agent',
           status: status || undefined,
+          text: search?.trim() || undefined,
           limit: MAX_LISTED_RUNS,
         });
         return toolText(JSON.stringify(agentRunsAnswer(jobs, days ?? 3)));

@@ -579,13 +579,29 @@ export class RegistryController {
     @Query('kind') kind?: string,
     /** ISO time: only runs that ended at or after it. */
     @Query('since') since?: string,
-    @Query('limit') limit?: string
+    @Query('limit') limit?: string,
+    /** ISO time: only runs queued at or after it, ended or not. */
+    @Query('createdSince') createdSince?: string,
+    @Query('docId') docId?: string,
+    @Query('agentId') agentId?: string,
+    /** Only runs whose title or transcript contains this, any case. */
+    @Query('q') q?: string
   ) {
     this.assertEnabled();
     await this.ac.user(user.id).workspace(workspaceId).assert('Workspace.Read');
-    const finishedSince = since ? new Date(since) : undefined;
-    if (finishedSince && Number.isNaN(finishedSince.getTime())) {
-      throw new BadRequest('since must be an ISO date');
+    const isoDate = (value: string | undefined, name: string) => {
+      if (!value) return undefined;
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) {
+        throw new BadRequest(`${name} must be an ISO date`);
+      }
+      return date;
+    };
+    const finishedSince = isoDate(since, 'since');
+    const queuedSince = isoDate(createdSince, 'createdSince');
+    const text = q?.trim();
+    if (text && text.length > 200) {
+      throw new BadRequest('q must be at most 200 characters');
     }
     const take = limit ? Number(limit) : undefined;
     if (take !== undefined && !(Number.isInteger(take) && take > 0)) {
@@ -596,9 +612,68 @@ export class RegistryController {
         workspaceId,
         device || undefined,
         status || undefined,
-        { kind: kind || undefined, finishedSince, limit: take }
+        {
+          kind: kind || undefined,
+          finishedSince,
+          createdSince: queuedSince,
+          docId: docId || undefined,
+          agentId: agentId || undefined,
+          text: text || undefined,
+          limit: take,
+        }
       ),
     };
+  }
+
+  /** Every question still waiting across the workspace's runs (Needs you). */
+  @Get('/workspaces/:workspaceId/questions')
+  async openQuestions(
+    @CurrentUser() user: CurrentUserType,
+    @Param('workspaceId') workspaceId: string
+  ) {
+    this.assertEnabled();
+    await this.ac.user(user.id).workspace(workspaceId).assert('Workspace.Read');
+    return { questions: await this.jobs.openQuestions(workspaceId) };
+  }
+
+  /** A job's recorded changes in full, its git patch included. */
+  @Get('/workspaces/:workspaceId/jobs/:jobId/changes')
+  async jobChanges(
+    @CurrentUser() user: CurrentUserType,
+    @Param('workspaceId') workspaceId: string,
+    @Param('jobId') jobId: string
+  ) {
+    this.assertEnabled();
+    await this.ac.user(user.id).workspace(workspaceId).assert('Workspace.Read');
+    return { changes: await this.jobs.changes(workspaceId, jobId) };
+  }
+
+  /** Queue an agent run again, as it was asked for, as a new job. */
+  @Post('/workspaces/:workspaceId/jobs/:jobId/rerun')
+  async rerunJob(
+    @CurrentUser() user: CurrentUserType,
+    @Param('workspaceId') workspaceId: string,
+    @Param('jobId') jobId: string
+  ) {
+    this.assertEnabled();
+    // As queuing any job does.
+    await this.ac
+      .user(user.id)
+      .workspace(workspaceId)
+      .assert('Workspace.Settings.Update');
+    return { job: await this.jobs.rerun(workspaceId, user.id, jobId) };
+  }
+
+  /** A device's job runner: when it last asked for work, its build, its load. */
+  @Get('/workspaces/:workspaceId/devices/:key/runner')
+  async runnerStatus(
+    @CurrentUser() user: CurrentUserType,
+    @Param('workspaceId') workspaceId: string,
+    @Param('key') key: string
+  ) {
+    this.assertEnabled();
+    await this.ac.user(user.id).workspace(workspaceId).assert('Workspace.Read');
+    return { runner: await this.jobs.runnerStatus(workspaceId, key) };
   }
 
   @Get('/workspaces/:workspaceId/jobs/:jobId')
@@ -645,7 +720,13 @@ export class RegistryController {
     @Param('workspaceId') workspaceId: string,
     @Param('key') key: string,
     @Body()
-    body: { runnerId?: string; leaseSeconds?: number; kinds?: unknown }
+    body: {
+      runnerId?: string;
+      leaseSeconds?: number;
+      kinds?: unknown;
+      /** The runner's build, shown as the device's runner version. */
+      version?: unknown;
+    }
   ) {
     this.assertEnabled();
     const kinds = parseJobKinds(body?.kinds);
@@ -666,7 +747,8 @@ export class RegistryController {
       key,
       body?.runnerId ?? 'runner',
       body?.leaseSeconds,
-      kinds
+      kinds,
+      typeof body?.version === 'string' ? body.version : null
     );
   }
 
