@@ -95,7 +95,7 @@ async function listenOn(
   };
 }
 
-/** Moonshine, the on-device model, only knows English. */
+/** Whisper small.en, the on-device model, only knows English. */
 const onDeviceLanguage = (lang: string) => /^en\b/i.test(lang);
 
 async function modelReady() {

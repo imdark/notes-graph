@@ -10,7 +10,7 @@ export interface LocalSpeechToTextProgressEvent {
   total: number;
 }
 
-/** Dictation on the phone itself (Silero VAD + Moonshine, English). */
+/** Dictation on the phone itself (Silero VAD + Whisper small.en, English). */
 export interface LocalSpeechToTextPlugin {
   status(): Promise<{
     state: 'missing' | 'downloading' | 'ready';

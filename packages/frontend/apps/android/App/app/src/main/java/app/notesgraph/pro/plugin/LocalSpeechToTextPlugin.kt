@@ -8,6 +8,7 @@ import android.media.MediaRecorder
 import android.media.audiofx.NoiseSuppressor
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import android.view.WindowManager
 import com.getcapacitor.JSObject
 import com.getcapacitor.PermissionState
@@ -18,9 +19,9 @@ import com.getcapacitor.annotation.CapacitorPlugin
 import com.getcapacitor.annotation.Permission
 import com.getcapacitor.annotation.PermissionCallback
 import com.k2fsa.sherpa.onnx.OfflineModelConfig
-import com.k2fsa.sherpa.onnx.OfflineMoonshineModelConfig
 import com.k2fsa.sherpa.onnx.OfflineRecognizer
 import com.k2fsa.sherpa.onnx.OfflineRecognizerConfig
+import com.k2fsa.sherpa.onnx.OfflineWhisperModelConfig
 import com.k2fsa.sherpa.onnx.SileroVadModelConfig
 import com.k2fsa.sherpa.onnx.Vad
 import com.k2fsa.sherpa.onnx.VadModelConfig
@@ -44,10 +45,14 @@ import kotlin.concurrent.thread
  * system recognizer (SpeechToTextPlugin). Audio comes from the mic with the
  * platform noise suppressor on; Silero VAD keeps only the stretches that are
  * speech, so background noise never reaches the recognizer; each stretch is
- * transcribed by Moonshine (base, English). While someone is still talking, the
+ * transcribed by Whisper (small, English). While someone is still talking, the
  * speech so far is re-transcribed now and then as the partial text.
  *
- * The models (about 290 MB) aren't in the APK: download() fetches them once
+ * Whisper small.en replaced Moonshine base: on two real captures, cut the way
+ * this plugin cuts them, it got 4 words wrong where Moonshine got 10 (Moonshine
+ * heard "undo that last line" as "undo their flashlight").
+ *
+ * The models (about 375 MB) aren't in the APK: download() fetches them once
  * into app storage, each file checked against its hash.
  *
  * start({ record: true }) also keeps everything the mic heard, as a WAV file
@@ -88,10 +93,14 @@ class LocalSpeechToTextPlugin : Plugin() {
     private val recordingsDir get() = File(context.cacheDir, "capture-recordings")
 
     override fun load() {
-        // Recordings the web layer never got to, from a run that was cut off.
         thread(name = "local-stt-cleanup") {
+            // Recordings the web layer never got to, from a run that was cut off.
             val stale = System.currentTimeMillis() - STALE_RECORDING_MS
             recordingsDir.listFiles()?.forEach { if (it.lastModified() < stale) it.delete() }
+            // A model this version no longer uses (Moonshine, before Whisper).
+            modelDir.parentFile?.listFiles()?.forEach {
+                if (it.isDirectory && it.name != MODEL_NAME) it.deleteRecursively()
+            }
         }
     }
 
@@ -470,14 +479,15 @@ class LocalSpeechToTextPlugin : Plugin() {
             OfflineRecognizer(
                 config = OfflineRecognizerConfig(
                     modelConfig = OfflineModelConfig(
-                        moonshine = OfflineMoonshineModelConfig(
-                            preprocessor = File(modelDir, "preprocess.onnx").absolutePath,
-                            encoder = File(modelDir, "encode.int8.onnx").absolutePath,
-                            uncachedDecoder = File(modelDir, "uncached_decode.int8.onnx").absolutePath,
-                            cachedDecoder = File(modelDir, "cached_decode.int8.onnx").absolutePath,
+                        whisper = OfflineWhisperModelConfig(
+                            encoder = File(modelDir, "small.en-encoder.int8.onnx").absolutePath,
+                            decoder = File(modelDir, "small.en-decoder.int8.onnx").absolutePath,
+                            language = "en",
+                            task = "transcribe",
                         ),
-                        tokens = File(modelDir, "tokens.txt").absolutePath,
+                        tokens = File(modelDir, "small.en-tokens.txt").absolutePath,
                         numThreads = DECODE_THREADS,
+                        modelType = "whisper",
                     ),
                 ),
             ).also { recognizer = it }
@@ -495,9 +505,16 @@ class LocalSpeechToTextPlugin : Plugin() {
         return try {
             val stream = r.createStream()
             try {
+                val began = System.nanoTime()
                 stream.acceptWaveform(samples, SAMPLE_RATE)
                 r.decode(stream)
-                r.getResult(stream).text.trim().takeIf { text -> text.any { it.isLetterOrDigit() } }
+                // How long a stretch takes on this phone: the number to watch
+                // when choosing a model. Straight to logcat, release builds
+                // too: `adb logcat -s LocalSpeechToText`.
+                val audioMs = samples.size * 1000L / SAMPLE_RATE
+                val tookMs = (System.nanoTime() - began) / 1_000_000
+                Log.i("LocalSpeechToText", "decoded $audioMs ms of audio in $tookMs ms")
+                spokenText(r.getResult(stream).text)
             } finally {
                 stream.release()
             }
@@ -640,15 +657,15 @@ class LocalSpeechToTextPlugin : Plugin() {
         /** Re-transcribe the utterance in progress after this much more speech. */
         private const val PARTIAL_EVERY_SAMPLES = SAMPLE_RATE * 7 / 10
         private const val DECODE_THREADS = 4
-        /** The model takes ~300 MB of memory; let it go when dictation stops for a while. */
+        /** The model takes ~400 MB of memory; let it go when dictation stops for a while. */
         private const val RELEASE_IDLE_MS = 120_000L
         /** A recording still in the cache after this long was never collected. */
         private const val STALE_RECORDING_MS = 24 * 60 * 60 * 1000L
 
-        private const val MODEL_NAME = "moonshine-base-en-int8"
+        private const val MODEL_NAME = "whisper-small-en-int8"
         private const val VAD_NAME = "silero_vad.onnx"
         private const val HF =
-            "https://huggingface.co/csukuangfj/sherpa-onnx-moonshine-base-en-int8/resolve/052b0798ad1bf046a140fdd4efcd9426530fa3f5"
+            "https://huggingface.co/csukuangfj/sherpa-onnx-whisper-small.en/resolve/d9533f69affd85061aee349af7fea5cb2996dbbe"
 
         private val FILES = listOf(
             ModelFile(
@@ -657,20 +674,23 @@ class LocalSpeechToTextPlugin : Plugin() {
                 643_854,
                 "9e2449e1087496d8d4caba907f23e0bd3f78d91fa552479bb9c23ac09cbb1fd6",
             ),
-            ModelFile("tokens.txt", "$HF/tokens.txt", 436_688, "1165c2aeb9f72f457a83be2d459a09054f27490acd9b41bd43794dfd25e296ea"),
-            ModelFile("preprocess.onnx", "$HF/preprocess.onnx", 14_077_290, "ffa630d395c5ccf76f5d4954be5b882df76aaf6491519ec01fd82ea7a3819fb2"),
-            ModelFile("encode.int8.onnx", "$HF/encode.int8.onnx", 50_311_494, "7e38770f776f2e5583a53b052936005df2ba5c833d7e09c2a5fd796b94bf73e2"),
             ModelFile(
-                "uncached_decode.int8.onnx",
-                "$HF/uncached_decode.int8.onnx",
-                122_120_451,
-                "c01f4b35093bcac20d352d23a75a539e772964579f9d024a90e5e6f09cae9987",
+                "small.en-tokens.txt",
+                "$HF/small.en-tokens.txt",
+                835_554,
+                "306cd27f03c1a714eca7108e03d66b7dc042abe8c258b44c199a7ed9838dd930",
             ),
             ModelFile(
-                "cached_decode.int8.onnx",
-                "$HF/cached_decode.int8.onnx",
-                99_983_837,
-                "2db74e51cedf64a8b1be3c8192e0bb5e4923af0e90bd9e87f8e8771873f8ea03",
+                "small.en-encoder.int8.onnx",
+                "$HF/small.en-encoder.int8.onnx",
+                112_442_483,
+                "8bdac288f369aa94ee2194059238c465ed82ea9d47ee8fa4a8c0a891873e462f",
+            ),
+            ModelFile(
+                "small.en-decoder.int8.onnx",
+                "$HF/small.en-decoder.int8.onnx",
+                262_223_042,
+                "710ccf890e10f3faa15f51ec346081a2723c9f3adb6e4da81c6573a5a6f877fb",
             ),
         )
         private val TOTAL_BYTES = FILES.sumOf { it.size }
