@@ -365,7 +365,7 @@ export const keepUnpushed = (dir: string): AutomationStep => ({
 });
 
 /**
- * Where install_deps puts corepack's yarn shim, and the PATH every tool runs
+ * Where the tools put corepack's yarn shim, and the PATH every tool runs
  * with so `yarn` finds it. A plain `corepack enable` symlinks into node's own
  * bin directory, which the runner's user may not own: three runs on
  * 2026-11-07 failed with "EACCES: permission denied, symlink".
@@ -374,11 +374,22 @@ const SHIMS = '{cache}/bin';
 const WITH_SHIMS = `export PATH="${SHIMS}:$PATH" && cd "$AGENT_CWD"`;
 
 /**
+ * The worktree's dependencies, linked from an install kept in {cache}/deps
+ * and shared by every job with the same manifests (scripts/shared-deps.sh).
+ * Only the first job after a yarn.lock or package.json change installs, for
+ * a few minutes; the rest link it in seconds, so typecheck and run_tests do
+ * it themselves instead of asking for install_deps first.
+ */
+const WITH_DEPS =
+  `mkdir -p ${SHIMS} && corepack enable --install-directory ${SHIMS} && ` +
+  `${WITH_SHIMS} && scripts/shared-deps.sh {cache}/deps`;
+
+/**
  * A code task works in its own worktree of the repo on a fresh branch, the
  * way wf gives a claude-code job a worktree of the runner's checkout. One
  * blobless mirror is kept in {cache} and fetched first, so a job costs a
- * worktree rather than a clone. Installing and testing are tools the agent
- * calls when it needs them: a full install is minutes and gigabytes.
+ * worktree rather than a clone. Dependencies, tests and typechecks are tools
+ * the agent calls when it needs them.
  */
 const CODE_AUTOMATION: Automation = {
   setup: [
@@ -406,40 +417,39 @@ const CODE_AUTOMATION: Automation = {
     {
       name: 'install_deps',
       description:
-        "Install the repo's dependencies (corepack + yarn install). Needed once " +
-        'before run_tests or typecheck; takes several minutes.',
-      run:
-        `mkdir -p ${SHIMS} && corepack enable --install-directory ${SHIMS} && ` +
-        `${WITH_SHIMS} && yarn install --mode=skip-build`,
+        "Give the checkout the repo's dependencies, linked from an install shared " +
+        'between runs. run_tests and typecheck do this themselves; call it only to ' +
+        'use node_modules another way. Seconds, or a few minutes when the manifests changed.',
+      run: WITH_DEPS,
       timeout: 2400,
     },
     {
       name: 'run_tests',
       description:
         'Run the vitest tests at a path in the repo (e.g. packages/frontend/core/src/modules/agents) ' +
-        'and return the output. Run install_deps first.',
-      run: `${WITH_SHIMS} && yarn vitest run "$ARG_PATH"`,
+        'and return the output. Links the dependencies first if needed.',
+      run: `${WITH_DEPS} && yarn vitest run "$ARG_PATH"`,
       params: {
         path: {
           description: 'File or directory to test, relative to the repo root.',
           required: true,
         },
       },
-      timeout: 1200,
+      timeout: 3600,
     },
     {
       name: 'typecheck',
       description:
         'Typecheck a package of the repo (e.g. packages/frontend/core) with scripts/typecheck.sh. ' +
-        'Run install_deps first.',
-      run: `${WITH_SHIMS} && scripts/typecheck.sh "$ARG_PACKAGE"`,
+        'Links the dependencies first if needed.',
+      run: `${WITH_DEPS} && scripts/typecheck.sh "$ARG_PACKAGE"`,
       params: {
         package: {
           description: 'Package directory, relative to the repo root.',
           required: true,
         },
       },
-      timeout: 1200,
+      timeout: 3600,
     },
   ],
   teardown: [
