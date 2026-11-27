@@ -7,6 +7,7 @@ import {
   AgentRunsStore,
   AgentsService,
   deviceHarnessName,
+  RemoteAgentRunnerService,
   RUN_REVIEW_DAYS,
   RunReviewService,
 } from '@notesgraph/core/modules/agents';
@@ -19,6 +20,7 @@ import {
   ViewTitle,
   WorkbenchService,
 } from '@notesgraph/core/modules/workbench';
+import { WorkspaceService } from '@notesgraph/core/modules/workspace';
 import { useLiveData, useService } from '@notesgraph/infra';
 import { useCallback, useMemo, useState } from 'react';
 
@@ -41,6 +43,7 @@ import {
   useRemoteRunStates,
 } from '../detail-page/tabs/use-run-questions';
 import * as styles from './agents-page.css';
+import { approvalSummary, pendingApprovals } from './approve-all';
 import { BudgetLine } from './budget-line';
 import { MonitorsSection } from './monitors-section';
 import { SpendByProject } from './spend-by-project';
@@ -270,6 +273,49 @@ const AgentsPage = () => {
       ),
     [runs, remote]
   );
+  // Approve all: every permission request open under Needs you, at once.
+  const approveAllOn = useLiveData(
+    useService(FeatureFlagService).flags.enable_approve_all_button.$
+  );
+  const remoteRunner = useService(RemoteAgentRunnerService);
+  const workspaceId = useService(WorkspaceService).workspace.id;
+  const approvals = useMemo(
+    () => pendingApprovals(waiting, run => remote.get(run.id)?.questions),
+    [waiting, remote]
+  );
+  const [approving, setApproving] = useState(false);
+  const approveAll = useCallback(() => {
+    const pending = approvals;
+    openConfirmModal({
+      title: `Approve ${pending.length} permission ${pending.length === 1 ? 'request' : 'requests'}?`,
+      description: `${approvalSummary(pending)}. Each run goes on with that tool; what they ask next still waits for you. Questions that need an answer aren't touched.`,
+      confirmText: 'Approve all',
+      onConfirm: async () => {
+        setApproving(true);
+        const results = await Promise.allSettled(
+          pending.map(p =>
+            remoteRunner.answer(workspaceId, p.jobId, p.questionId, {
+              allowed: true,
+            })
+          )
+        );
+        setApproving(false);
+        const failed = results.filter(r => r.status === 'rejected').length;
+        if (failed) {
+          notify.error({
+            title: `${failed} of ${pending.length} couldn't be approved`,
+            message:
+              'They may have been answered elsewhere already. The rest went through.',
+          });
+        } else {
+          notify.success({
+            title: `Approved ${pending.length} ${pending.length === 1 ? 'request' : 'requests'}`,
+          });
+        }
+      },
+    });
+  }, [approvals, openConfirmModal, remoteRunner, workspaceId]);
+
   // Finished runs waiting to be approved sit beside them.
   const toReview = useMemo(() => runs.filter(run => run.reviewPending), [runs]);
   const needsYou = waiting.length + toReview.length;
@@ -322,6 +368,18 @@ const AgentsPage = () => {
                 <div className={styles.sectionTitle}>
                   Needs you
                   <span className={styles.sectionCount}>{needsYou}</span>
+                  {approveAllOn && approvals.length > 0 ? (
+                    <Button
+                      className={styles.sectionTitleAction}
+                      onClick={approveAll}
+                      loading={approving}
+                      disabled={approving}
+                      tooltip="Approve every permission request waiting here. Questions that need an answer are left for you."
+                      data-testid="agents-page-approve-all"
+                    >
+                      Approve all ({approvals.length})
+                    </Button>
+                  ) : null}
                 </div>
                 {waiting.map(run => (
                   <div key={run.id} className={styles.waitingCard}>

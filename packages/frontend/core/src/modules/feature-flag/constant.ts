@@ -536,6 +536,15 @@ export const NOTESGRAPH_FLAGS = {
     configurable: true,
     defaultState: true,
   },
+  enable_approve_all_button: {
+    commit: '',
+    category: 'notesgraph',
+    displayName: 'Approve all under Needs you',
+    description:
+      'An Approve all button in the Agents page\u2019s Needs you section approves every permission request the waiting runs have open, after a confirm naming how many and which tools. Questions that need an answer are left alone, and what the runs ask next still waits for you.',
+    configurable: true,
+    defaultState: true,
+  },
 } satisfies { [key in string]: FlagInfo };
 
 // oxlint-disable-next-line no-redeclare
