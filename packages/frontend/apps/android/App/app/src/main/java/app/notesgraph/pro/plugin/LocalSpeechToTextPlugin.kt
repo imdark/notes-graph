@@ -253,6 +253,12 @@ class LocalSpeechToTextPlugin : Plugin() {
         private var started = false
         private var ended = false
         private val decodingPartial = AtomicBoolean(false)
+        /**
+         * Counts finished utterances. A partial still queued when its utterance
+         * ends is skipped: a Whisper decode takes as long for a partial as for
+         * the finished stretch, which would wait behind it.
+         */
+        @Volatile private var utterances = 0
         /** Record thread only: the mic's recent audio, to cut speech with its surroundings. */
         private val padding = SpeechPadding(
             sampleRate = SAMPLE_RATE,
@@ -378,9 +384,12 @@ class LocalSpeechToTextPlugin : Plugin() {
                         if (sinceLastPartial >= PARTIAL_EVERY_SAMPLES && decodingPartial.compareAndSet(false, true)) {
                             sinceLastPartial = 0
                             val snapshot = live
+                            val utterance = utterances
                             queue {
                                 try {
-                                    transcribe(snapshot)?.let { emit(id, "partial", it) }
+                                    if (utterance == utterances) {
+                                        transcribe(snapshot)?.let { emit(id, "partial", it) }
+                                    }
                                 } finally {
                                     decodingPartial.set(false)
                                 }
@@ -420,6 +429,7 @@ class LocalSpeechToTextPlugin : Plugin() {
                 val segment = padding.padded(speech.start, speech.samples.size)
                 vad.pop()
                 any = true
+                utterances += 1
                 queue {
                     val text = transcribe(segment)
                     // Clear the partial even when the stretch was only noise.
