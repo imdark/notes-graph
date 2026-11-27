@@ -36,13 +36,13 @@ import { HISTORY_IMAGE_ACTIONS } from '../../utils/history-image-actions';
 import type { SearchMenuConfig } from '../ai-chat-add-context';
 import type { DocDisplayConfig } from '../ai-chat-chips';
 import type { AIReasoningConfig } from '../ai-chat-input';
+import type { ChatSpeechToText } from '../ai-chat-input/dictation';
 import {
   type AIChatMessages,
   type HistoryMessage,
   isChatMessage,
 } from '../ai-chat-messages';
 import type { ChatContextValue } from './type';
-import type { ChatSpeechToText } from '../ai-chat-input/dictation';
 
 const DEFAULT_CHAT_CONTEXT_VALUE: ChatContextValue = {
   quote: '',
