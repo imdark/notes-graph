@@ -633,3 +633,93 @@ describe('ORM entity CRUD', () => {
     expect(doc2).toBe(null);
   });
 });
+
+// A yjs set of the value already there still adds an item and a tombstone and
+// sends an update, which the server answers by merging the whole table.
+describe('writes that change nothing', () => {
+  function setup() {
+    const docs = new Map<string, Doc>();
+    const client = new Client(
+      new YjsDBAdapter(TEST_SCHEMA, {
+        getDoc(guid: string) {
+          let doc = docs.get(guid);
+          if (!doc) {
+            doc = new Doc({ guid });
+            docs.set(guid, doc);
+          }
+          return doc;
+        },
+      })
+    );
+    const updates = { count: 0 };
+    const watch = () => {
+      for (const doc of docs.values()) {
+        doc.on('update', () => updates.count++);
+      }
+    };
+    return { client, updates, watch };
+  }
+
+  test('creating a row again with the same values sends no update', () => {
+    const { client, updates, watch } = setup();
+    client.userInfo.create({ userId: 1, updatedBy: 'u1', tags: ['a', 'b'] });
+    watch();
+
+    client.userInfo.create({ userId: 1, updatedBy: 'u1' });
+    client.userInfo.create({ userId: 1, tags: ['a', 'b'] });
+    expect(updates.count).toBe(0);
+
+    client.userInfo.create({ userId: 1, updatedBy: 'u2' });
+    expect(updates.count).toBe(1);
+    expect(client.userInfo.get(1)).toStrictEqual({
+      userId: 1,
+      updatedBy: 'u2',
+      tags: ['a', 'b'],
+    });
+  });
+
+  test('updating a row to the values it has sends no update', () => {
+    const { client, updates, watch } = setup();
+    const user = client.users.create({ name: 'u1', email: 'a@b.c' });
+    watch();
+
+    client.users.update(user.id, { name: 'u1' });
+    client.users.update(user.id, { name: 'u1', email: 'a@b.c' });
+    expect(updates.count).toBe(0);
+
+    client.users.update(user.id, { name: 'u1', email: 'x@y.z' });
+    expect(updates.count).toBe(1);
+    expect(client.users.get(user.id)?.email).toBe('x@y.z');
+  });
+
+  test('a changed nested value is written', () => {
+    const { client, updates, watch } = setup();
+    client.userInfo.create({ userId: 1, theme: { font: 'Sans', dark: true } });
+    watch();
+
+    client.userInfo.create({ userId: 1, theme: { dark: true, font: 'Sans' } });
+    expect(updates.count).toBe(0);
+
+    client.userInfo.create({ userId: 1, theme: { font: 'Serif', dark: true } });
+    expect(updates.count).toBe(1);
+    expect(client.userInfo.get(1)?.theme).toStrictEqual({
+      font: 'Serif',
+      dark: true,
+    });
+  });
+
+  test('a deleted row comes back when created again', () => {
+    const { client, updates, watch } = setup();
+    client.userInfo.create({ userId: 1, updatedBy: 'u1' });
+    client.userInfo.delete(1);
+    expect(client.userInfo.get(1)).toBe(null);
+    watch();
+
+    client.userInfo.create({ userId: 1, updatedBy: 'u1' });
+    expect(updates.count).toBe(1);
+    expect(client.userInfo.get(1)).toStrictEqual({
+      userId: 1,
+      updatedBy: 'u1',
+    });
+  });
+});

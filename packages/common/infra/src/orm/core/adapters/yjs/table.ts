@@ -1,4 +1,4 @@
-import { pick } from 'lodash-es';
+import { isEqual, pick } from 'lodash-es';
 import {
   type AbstractType,
   type Doc,
@@ -69,10 +69,12 @@ export class YjsTableAdapter implements TableAdapter {
           // skip undefined fields, avoid unexpected override
           continue;
         }
-        record.set(key, data[key]);
+        this.setField(record, key, data[key]);
       }
 
-      record.delete(this.deleteFlagKey);
+      if (record.has(this.deleteFlagKey)) {
+        record.delete(this.deleteFlagKey);
+      }
     }, this.origin);
 
     return this.value(record, select);
@@ -277,7 +279,17 @@ export class YjsTableAdapter implements TableAdapter {
     return val;
   }
 
+  /**
+   * Writes a field unless it already holds that value. A yjs set is never
+   * free: even the same value again adds an item and a tombstone and sends an
+   * update, which the server answers by merging the whole table. Doc
+   * properties got `updatedBy` set to the same user every second of typing,
+   * which grew that table past 1 MB of tombstones and stalled the server.
+   */
   private setField(ty: AbstractType<any>, field: string, value: any) {
+    if (isEqual(YMap.prototype.get.call(ty, field), value)) {
+      return;
+    }
     YMap.prototype.set.call(ty, field, value);
   }
 
