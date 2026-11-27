@@ -31,3 +31,11 @@ export const workspaceWrapper = style({
 export const bottomContainer = style({
   gap: 8,
 });
+
+/**
+ * The top area is inset 14px and the scrolling area 8px; pull the section out
+ * so its header lines up with the section headers below it.
+ */
+export const operationsSection = style({
+  margin: '8px -6px 0 -6px',
+});

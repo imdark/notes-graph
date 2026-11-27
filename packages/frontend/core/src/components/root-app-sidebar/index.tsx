@@ -68,6 +68,7 @@ import { WorkbenchService } from '../../modules/workbench';
 import { WorkspaceNavigator } from '../workspace-selector';
 import {
   bottomContainer,
+  operationsSection,
   quickSearchAndNewPage,
   workspaceAndUserWrapper,
   workspaceWrapper,
@@ -551,18 +552,21 @@ export const RootAppSidebar = memo((): ReactElement => {
             {t['com.notesgraph.settingSidebar.title']()}
           </span>
         </MenuItem>
-      </SidebarContainer>
-      <SidebarScrollableContainer>
+        {/* Up here, not in the scrolling area below: the operations stay in
+            reach however far the notes tree is scrolled. */}
         {showOperations && OPERATIONS_BUTTONS.some(shown) && (
           <CollapsibleSection
             path={['operations']}
             title={t['com.notesgraph.rootAppSidebar.operations']()}
             testId="sidebar-operations-section"
-            contentStyle={{ padding: '6px 8px 0 8px' }}
+            className={operationsSection}
+            contentStyle={{ padding: '6px 6px 0 6px' }}
           >
             {operationsButtons}
           </CollapsibleSection>
         )}
+      </SidebarContainer>
+      <SidebarScrollableContainer>
         {showNotes && <NavigationPanelNotes />}
         {showFavorites && <NavigationPanelFavorites />}
         {showFavorites && <NavigationPanelMigrationFavorites />}
