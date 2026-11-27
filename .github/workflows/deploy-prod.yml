@@ -113,6 +113,9 @@ jobs:
           platforms: linux/amd64
           # What redeploy.sh compares on the box to skip an unchanged image.
           labels: notesgraph.src-hash=${{ steps.src.outputs.hash }}
+          # The agent runner reports it as its version; the others ignore it.
+          build-args: |
+            RUNNER_VERSION=${{ steps.src.outputs.hash }}
           tags: ${{ steps.ecr.outputs.registry }}/notesgraph:${{ steps.src.outputs.tag }}
           push: true
 

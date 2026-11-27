@@ -1777,6 +1777,9 @@ model RegistryDevice {
   checks        Json      @default("[]")
   /// Last time a runner on this device asked for work; null if none has.
   runnerSeenAt  DateTime? @map("runner_seen_at") @db.Timestamptz(3)
+  /// What the device's job runner says it is (the cloud runner: its image's
+  /// source hash), sent with each claim.
+  runnerVersion String?   @map("runner_version") @db.VarChar
   /// Jobs its runners may run at once; null leaves it to the runner's own
   /// setting. Set from the app, never by registration.
   maxJobs       Int?      @map("max_jobs")

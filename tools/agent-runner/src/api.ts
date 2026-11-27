@@ -207,6 +207,11 @@ export class NotesGraphApi {
       runnerId,
       leaseSeconds,
       kinds,
+      // Which build is running, for the app's device page (the image's
+      // source hash; unset outside the image).
+      ...(process.env.RUNNER_VERSION
+        ? { version: process.env.RUNNER_VERSION }
+        : {}),
     });
     return { job: job ?? null, maxJobs: asMaxJobs(maxJobs) };
   }
