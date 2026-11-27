@@ -265,4 +265,19 @@ mapfile -t ROLL_SERVICES < <(docker compose -f compose.yml --env-file .env confi
 docker compose -f compose.yml --env-file .env up -d --no-deps "${ROLL_SERVICES[@]}"
 docker image prune -f > /dev/null
 step_end
+
+# Room for the next deploy. Every deploy pulls tagged images (the server's and
+# the sidecars' from ECR), which the dangling-only prune above never removes:
+# on 2026-11-27 unused ones held 52 GB, the disk was 99% full, and the roll
+# failed inside SSM. Images no container uses go once they're 3 days old (a
+# rollback within that needs no pull; older ones are still in ECR), and the
+# build cache once it's a week old. Never fail the deploy over it.
+step "disk cleanup"
+docker image prune -af --filter "until=72h" > /dev/null 2>&1 || true
+docker builder prune -af --filter "until=168h" > /dev/null 2>&1 || true
+free_gb=$(df -BG --output=avail / 2>/dev/null | tail -1 | tr -dc '0-9')
+if [ -n "$free_gb" ] && [ "$free_gb" -lt 8 ]; then
+  echo "WARN only ${free_gb} GB free on / after cleanup: see docker system df"
+fi
+step_end
 echo "DEPLOY-DONE"
