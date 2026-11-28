@@ -10,11 +10,13 @@ import org.junit.Test
 class SpeechPaddingTest {
     private val rate = 1000
 
-    private fun padding(history: Float = 30f) = SpeechPadding(
+    /** `firstBefore` 0: the first segment is padded like the rest, unless a test says otherwise. */
+    private fun padding(history: Float = 30f, firstBefore: Float = 0f) = SpeechPadding(
         sampleRate = rate,
         historySeconds = history,
         beforeSeconds = 0.3f,
         afterSeconds = 0.25f,
+        firstBeforeSeconds = firstBefore,
         maxSpeechSeconds = 20f,
     )
 
@@ -86,6 +88,33 @@ class SpeechPaddingTest {
         val p = padding()
         p.hear(120)
         assertEquals("0..119", p.leadIn().span())
+    }
+
+    @Test
+    fun theFirstSegmentReachesFurtherBack() {
+        val p = padding(firstBefore = 2f)
+        p.hear(9000)
+        // words before 3000 the VAD didn't count as speech are still in
+        assertEquals("1000..4249", p.padded(3000, 1000).span())
+        // later segments get the usual lead-in
+        assertEquals("5700..7249", p.padded(6000, 1000).span())
+    }
+
+    @Test
+    fun theFirstSegmentReachesBackNoFurtherThanTheStart() {
+        val p = padding(firstBefore = 2f)
+        p.hear(3000)
+        assertEquals("0..1749", p.padded(500, 1000).span())
+    }
+
+    @Test
+    fun theFirstLeadInMatchesTheFirstSegment() {
+        val p = padding(firstBefore = 2f)
+        p.hear(3000)
+        assertEquals("1000..2999", p.leadIn().span())
+        p.padded(2000, 500)
+        p.hear(5000)
+        assertEquals("4700..4999", p.leadIn().span())
     }
 
     @Test
