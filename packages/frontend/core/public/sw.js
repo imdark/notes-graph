@@ -58,6 +58,15 @@ function isStaticAssetUrl(url) {
   return STATIC_EXT_RE.test(url.pathname);
 }
 
+// A build's content hash in the file name: index.47570049.js,
+// npm-react.0080be25.js, 282.631c6908.js. Such a file never changes under
+// its name, so a cached copy is always the right one.
+const CONTENT_HASH_RE = /[.-][0-9a-f]{8,}\.[a-z0-9]+$/i;
+
+function isContentHashed(url) {
+  return CONTENT_HASH_RE.test(url.pathname);
+}
+
 function extractAssetUrls(html, baseUrl) {
   const urls = new Set();
   const add = href => {
@@ -191,8 +200,39 @@ self.addEventListener('fetch', event => {
     }
   }
 
-  // Static-looking assets, same-origin or cross-origin (e.g. a CDN
-  // publicPath on the hosted SaaS) — cache-first, populate on miss.
+  // This app's scripts whose names stay the same across deploys (the workers:
+  // js/nbstore-<app version>.worker.js) — network-first, so a deploy reaches
+  // them, with the cached copy for offline. Cache-first froze them at
+  // whatever was fetched first: on 2026-11-27 a browser was still running the
+  // storage worker it cached on 2026-07-16, four months of fixes behind the
+  // page that loaded it. Only scripts: an unhashed model or wasm file can be
+  // large, and is not code that has to match the page.
+  if (
+    url.origin === self.location.origin &&
+    /\.js$/i.test(url.pathname) &&
+    !isContentHashed(url)
+  ) {
+    event.respondWith(
+      // `no-cache` asks the server whether its copy changed (a 304 when it
+      // hasn't) instead of trusting the browser's HTTP cache.
+      fetch(request, { cache: 'no-cache' })
+        .then(response => {
+          if (response.ok) {
+            const copy = response.clone();
+            caches.open(RUNTIME_CACHE).then(cache => cache.put(request, copy));
+          }
+          return response;
+        })
+        .catch(() =>
+          caches.match(request).then(cached => cached || Response.error())
+        )
+    );
+    return;
+  }
+
+  // Content-hashed static assets, same-origin or cross-origin (e.g. a CDN
+  // publicPath on the hosted SaaS) — cache-first, populate on miss: the
+  // name changes whenever the content does.
   if (isStaticAssetUrl(url)) {
     event.respondWith(
       caches.match(request).then(cached => {
