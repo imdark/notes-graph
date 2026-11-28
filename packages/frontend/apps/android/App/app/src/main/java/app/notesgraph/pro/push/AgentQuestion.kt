@@ -23,6 +23,11 @@ data class AgentQuestion(
     /** What the run is on: its block's text, or the agent's name for it; may be empty. */
     val title: String,
     val text: String,
+    /**
+     * Why a permission is wanted, in the agent's words (Bash's description);
+     * empty for a question, a tool that gave none, or an older server.
+     */
+    val reason: String,
     val detail: String,
     val options: List<String>,
 ) {
@@ -42,6 +47,7 @@ data class AgentQuestion(
         putString("agentName", agentName)
         putString("title", title)
         putString("text", text)
+        putString("reason", reason)
         putString("detail", detail)
         putStringArrayList("options", ArrayList(options))
     }
@@ -55,7 +61,7 @@ data class AgentQuestion(
             return build(
                 data["server"], data["workspaceId"], data["jobId"], data["docId"],
                 data["blockId"], data["questionId"], data["kind"], data["agentName"], data["title"],
-                data["text"], data["detail"], options,
+                data["text"], data["reason"], data["detail"], options,
             )
         }
 
@@ -64,7 +70,7 @@ data class AgentQuestion(
                 it.getString("server"), it.getString("workspaceId"), it.getString("jobId"),
                 it.getString("docId"), it.getString("blockId"), it.getString("questionId"), it.getString("kind"),
                 it.getString("agentName"), it.getString("title"), it.getString("text"),
-                it.getString("detail"),
+                it.getString("reason"), it.getString("detail"),
                 it.getStringArrayList("options") ?: emptyList(),
             )
         }
@@ -72,7 +78,7 @@ data class AgentQuestion(
         private fun build(
             server: String?, workspaceId: String?, jobId: String?, docId: String?,
             blockId: String?, questionId: String?, kind: String?, agentName: String?, title: String?,
-            text: String?, detail: String?, options: List<String>,
+            text: String?, reason: String?, detail: String?, options: List<String>,
         ): AgentQuestion? {
             if (server.isNullOrEmpty() || workspaceId.isNullOrEmpty() ||
                 jobId.isNullOrEmpty() || questionId.isNullOrEmpty()
@@ -88,6 +94,7 @@ data class AgentQuestion(
                 agentName = agentName?.takeIf { it.isNotEmpty() } ?: "Agent",
                 title = title.orEmpty().trim(),
                 text = text.orEmpty(),
+                reason = reason.orEmpty().trim(),
                 detail = detail.orEmpty(),
                 options = options,
             )

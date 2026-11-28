@@ -58,15 +58,21 @@ object AgentNotifications {
         val title = question.title.ifEmpty { "${question.agentName} $asks" }
         val asker = if (question.title.isEmpty()) null else "${question.agentName} $asks"
 
+        // A permission says what the agent wants it for ("Allow Bash? Run the
+        // widget tests"), so it can be answered without opening the run.
+        val summary = listOf(question.text, question.reason)
+            .filter { it.isNotEmpty() }
+            .joinToString(" ")
         val body = buildString {
             append(question.text)
+            if (question.reason.isNotEmpty()) append("\n").append(question.reason)
             if (question.isPermission && question.detail.isNotEmpty()) {
                 append("\n\n").append(question.detail)
             }
         }
         val builder = base(context, question)
             .setContentTitle(title)
-            .setContentText(question.text)
+            .setContentText(summary)
             .setStyle(NotificationCompat.BigTextStyle().bigText(body))
             .setCategory(NotificationCompat.CATEGORY_MESSAGE)
             .setPriority(NotificationCompat.PRIORITY_HIGH)

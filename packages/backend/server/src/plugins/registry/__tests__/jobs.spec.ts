@@ -8,7 +8,7 @@ import {
   RegistryJobService,
   toJobDto,
 } from '../jobs';
-import { questionPushData } from '../push';
+import { permissionReason, questionPushData } from '../push';
 
 /**
  * Dispatch rules, against a stub Models.
@@ -776,6 +776,62 @@ test('push data fits FCM by giving up the tool input first', t => {
   t.is(data.title, 'Fix the phone home-screen widget');
   t.true(Buffer.byteLength(JSON.stringify(data)) <= 3_500);
   t.true(data.detail.length <= 1_200);
+});
+
+const pushJob = {
+  id: 'job-1',
+  workspaceId,
+  agentName: 'coder',
+  docId: 'doc-1',
+  blockId: 'block-1',
+  title: 'Fix the phone home-screen widget',
+};
+
+test('a permission push says why the agent wants the tool', t => {
+  const data = questionPushData('https://app.notesgraph.com', pushJob, {
+    id: 'q1',
+    kind: 'permission',
+    text: 'Allow Bash?',
+    detail: JSON.stringify({
+      command: 'yarn vitest run widget',
+      description: 'Run the widget tests ',
+    }),
+    options: [],
+  });
+  t.is(data.reason, 'Run the widget tests');
+});
+
+test('a permission reason survives a huge tool input', t => {
+  const data = questionPushData('https://app.notesgraph.com', pushJob, {
+    id: 'q1',
+    kind: 'permission',
+    text: 'Allow Bash?',
+    // Clipped by the runner to the server's cap: no longer valid JSON.
+    detail: JSON.stringify({
+      description: 'Write the "seed" fixture',
+      command: `cat > seed.json <<'EOF'\n${'x'.repeat(100_000)}`,
+    }).slice(0, 20_000),
+    options: [],
+  });
+  t.is(data.reason, 'Write the "seed" fixture');
+  t.true(Buffer.byteLength(JSON.stringify(data)) <= 3_500);
+});
+
+test('a tool with no description and a question push no reason', t => {
+  t.is(
+    permissionReason(JSON.stringify({ file_path: '/a.ts', content: 'x' })),
+    ''
+  );
+  t.is(permissionReason(null), '');
+  t.is(permissionReason('rm -rf dist'), '');
+  const data = questionPushData('https://app.notesgraph.com', pushJob, {
+    id: 'q2',
+    kind: 'question',
+    text: 'Which colour?',
+    detail: JSON.stringify({ description: 'not a reason' }),
+    options: [],
+  });
+  t.is(data.reason, '');
 });
 
 test('appended log text gets a stamp at each inner line start', t => {
