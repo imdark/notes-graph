@@ -26,6 +26,11 @@ export interface SavedAskChat {
     files?: string[];
     /** When it was asked or answered. */
     at?: number;
+    /**
+     * The turn failed (a timeout, a network error) and `content` says why.
+     * Shown in the chat where the answer would be; never sent to the model.
+     */
+    error?: boolean;
   }[];
   history: ChatMessage[];
 }

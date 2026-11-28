@@ -59,20 +59,29 @@ async function captureInPage(imageMs) {
       fr.onerror = reject;
       fr.readAsDataURL(blob);
     });
-  const load = async url => {
+  const loadWith = async (url, credentials, signal) => {
     try {
-      // The signal covers the body too, so a stream that stalls midway ends.
-      const res = await fetch(url, {
-        credentials: 'include',
-        signal: AbortSignal.timeout(imageMs),
-      });
+      const res = await fetch(url, { credentials, signal });
       if (!res.ok) return null;
       const blob = await res.blob();
       if (!blob.type.startsWith('image/') || blob.size > 8_000_000) return null;
       return { url, mime: blob.type, dataUrl: await toDataUrl(blob) };
     } catch {
-      return null; // unreachable or too slow: skip it
+      return null; // refused, unreachable or too slow
     }
+  };
+  const load = async url => {
+    // One deadline for both tries. It covers the body too, so a stream that
+    // stalls midway ends.
+    const signal = AbortSignal.timeout(imageMs);
+    // With the page's cookies first, for images only the signed-in user may
+    // see. An image host that allows any origin (`*`, as LinkedIn's does)
+    // makes the browser refuse a request sent with cookies, so that one is
+    // asked for again without them.
+    return (
+      (await loadWith(url, 'include', signal)) ||
+      (signal.aborted ? null : await loadWith(url, 'omit', signal))
+    );
   };
   const loaded = await Promise.all(clip.images.slice(0, 12).map(load));
   return { ...clip, imageData: loaded.filter(Boolean) };
@@ -429,21 +438,44 @@ async function clipActiveTab() {
     url: `${appBase}/clipper/import`,
     active: false,
   });
-  void finishClip(tab, appTab.id).catch(console.error);
+  void chrome.action.setBadgeText({ text: '' });
+  void finishClip(tab, appTab.id).catch(reportClipFailure);
   return { started: true };
+}
+
+/**
+ * The popup has closed by the time a clip fails, so the failure goes on the
+ * toolbar button: a "!" badge, and the reason in its tooltip. The next clip
+ * clears it.
+ */
+function reportClipFailure(err) {
+  console.error(err);
+  const reason = String(err && err.message ? err.message : err);
+  void chrome.action.setBadgeBackgroundColor({ color: '#d93025' });
+  void chrome.action.setBadgeText({ text: '!' });
+  void chrome.action.setTitle({
+    title: `Last clip didn't reach NotesGraph: ${reason}`.slice(0, 300),
+  });
 }
 
 async function finishClip(tab, appTabId) {
   const title = tab.title || 'Clipped page';
-  const noteCreated = waitForTabComplete(appTabId).then(() =>
-    sendToAppTab(appTabId, {
-      pending: true,
-      title,
-      contentMarkdown: `# ${title}\n\n[Original](${tab.url})\n\n_Clipping the page…_`,
-      sourceUrl: tab.url,
-      workspace: 'last-open-workspace',
-    })
-  );
+  const noteCreated = waitForTabComplete(appTabId)
+    .then(() =>
+      sendToAppTab(appTabId, {
+        pending: true,
+        title,
+        contentMarkdown: `# ${title}\n\n[Original](${tab.url})\n\n_Clipping the page…_`,
+        sourceUrl: tab.url,
+        workspace: 'last-open-workspace',
+      })
+    )
+    // The app tab reloading under the script (an update, a sign-in redirect)
+    // rejects this. The page content is still sent below, as one whole clip.
+    .catch(err => {
+      console.error(err);
+      return false;
+    });
   const content = readClip(tab).catch(err => ({
     title,
     contentMarkdown: `# ${title}\n\n[Original](${tab.url})\n\nCouldn't clip the page: ${
