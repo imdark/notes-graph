@@ -4,7 +4,10 @@ import * as Y from 'yjs';
 import { mergeUpdates as yjsMergeUpdatesInCore } from 'yjs';
 
 import { metrics } from '../../base';
-import { mergeUpdatesInApplyWay as nativeMergeUpdatesInApplyWay } from '../../native';
+import {
+  mergeUpdatesInApplyWay as nativeMergeUpdatesInApplyWay,
+  mergeUpdatesInApplyWayAsync as nativeMergeUpdatesInApplyWayAsync,
+} from '../../native';
 
 const SLOW_DOC_UPDATE_CODEC_MS = 250;
 
@@ -131,6 +134,45 @@ export function applyUpdatesWithNative(
     logger,
     () => nativeMergeUpdatesInApplyWay(updates.map(Buffer.from))
   );
+}
+
+export const totalBytes = (updates: Uint8Array[]) =>
+  updates.reduce((sum, update) => sum + update.byteLength, 0);
+
+type NativeAsyncMerge = (updates: Buffer[]) => Promise<Buffer>;
+
+/**
+ * The native merge on a worker thread, for a doc large enough that merging
+ * it on the main thread stalls every other request (a 1.2 MB table took
+ * 0.5-1.3 s on prod). `null` when it threw or returned an empty doc: the
+ * caller then merges with yjs as before.
+ */
+export async function applyUpdatesWithNativeAsync(
+  updates: Uint8Array[],
+  caller: string,
+  logger?: Pick<Logger, 'warn'>,
+  merge: NativeAsyncMerge = nativeMergeUpdatesInApplyWayAsync
+): Promise<Buffer | null> {
+  try {
+    const result = await measureAsyncCodecOperation(
+      'merge_updates',
+      'native',
+      updates,
+      caller,
+      // Off the main thread: a long one stalls nobody, so it isn't "slow".
+      undefined,
+      () => merge(updates.map(update => Buffer.from(update)))
+    );
+    // An empty yjs update is two zero bytes.
+    if (result.length > 2) {
+      return result;
+    }
+    logger?.warn(`native merge in ${caller} returned an empty doc; using yjs`);
+  } catch (error) {
+    logger?.warn(`native merge in ${caller} failed; using yjs: ${error}`);
+  }
+  metrics.doc.counter('native_merge_fallbacks').add(1, { caller });
+  return null;
 }
 
 export function mergeUpdatesWithYjs(

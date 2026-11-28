@@ -119,6 +119,8 @@ import type {
 } from './plugins/copilot/runtime/contracts/tool-contract';
 
 export const mergeUpdatesInApplyWay = serverNativeModule.mergeUpdatesInApplyWay;
+export const mergeUpdatesInApplyWayAsync =
+  serverNativeModule.mergeUpdatesInApplyWayAsync;
 
 export const verifyChallengeResponse = async (
   response: any,
