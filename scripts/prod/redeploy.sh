@@ -266,6 +266,23 @@ docker compose -f compose.yml --env-file .env up -d --no-deps "${ROLL_SERVICES[@
 docker image prune -f > /dev/null
 step_end
 
+# Caddy sends with BBR, not the kernel's default cubic. Cubic halves its rate
+# on every lost packet, so a reader on a lossy link (weak Wi-Fi, a phone) got
+# a fraction of it: on 2026-11-27, with 1.6% loss on the way to a Mac, a 4 MB
+# file took 12-24 s on cubic and about 1.3 s on BBR, alternated every 50 s.
+# The box has it in /etc/sysctl.d/60-tcp-bbr.conf and
+# /etc/modules-load.d/tcp-bbr.conf; this puts it back on a rebuilt box and in
+# a recreated Caddy container (the setting is per network namespace). Never
+# fail the deploy over it.
+step "tcp congestion control"
+{
+  sudo -n modprobe tcp_bbr
+  sudo -n sysctl -qw net.ipv4.tcp_congestion_control=bbr
+  caddy_pid=$(docker inspect -f '{{.State.Pid}}' notesgraph_caddy)
+  sudo -n nsenter -t "$caddy_pid" -n sysctl -qw net.ipv4.tcp_congestion_control=bbr
+} 2> /dev/null || echo "WARN could not set BBR for Caddy: downloads on lossy links will be slow"
+step_end
+
 # Room for the next deploy. Every deploy pulls tagged images (the server's and
 # the sidecars' from ECR), which the dangling-only prune above never removes:
 # on 2026-11-27 unused ones held 52 GB, the disk was 99% full, and the roll
