@@ -24,6 +24,9 @@ document.documentElement.innerHTML = `<head>
     <img src="data:image/gif;base64,AAAA" />
     <img src="/px" width="1" height="1" />
     <p>${'word '.repeat(60)}</p>
+    <iframe src="https://www.youtube.com/embed/dQw4w9WgXcQ?rel=0"></iframe>
+    <iframe src="https://www.youtube.com/embed/dQw4w9WgXcQ?rel=0"></iframe>
+    <iframe src="https://player.vimeo.com/video/1"></iframe>
   </article></body>`;
 
 globalThis.document = document;
@@ -42,6 +45,11 @@ assert.deepStrictEqual(
 );
 assert.ok(clip.text.includes('word'), 'text extracted');
 assert.strictEqual(clip.siteName, 'linkedin.com');
+assert.deepStrictEqual(
+  clip.videoEmbeds,
+  ['https://www.youtube.com/embed/dQw4w9WgXcQ?rel=0'],
+  'YouTube players kept once, other iframes skipped'
+);
 
 console.log('extract-clip smoke test: PASS', {
   title: clip.title,
