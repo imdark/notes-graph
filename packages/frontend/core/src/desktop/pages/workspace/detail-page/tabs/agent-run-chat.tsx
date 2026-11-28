@@ -173,7 +173,9 @@ export const AgentRunChat = ({
       ended: (chat, turn, outcome) => {
         const id = askId.current;
         if (!id) return;
-        const steps = chat.turns.filter(t => t.role === 'assistant').length;
+        const steps = chat.turns.filter(
+          t => t.role === 'assistant' && !t.error
+        ).length;
         const last = chat.turns.at(-1);
         const error =
           outcome.status === 'error'

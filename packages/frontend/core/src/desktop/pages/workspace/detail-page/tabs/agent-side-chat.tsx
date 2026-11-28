@@ -319,7 +319,20 @@ export const AgentSideChat = ({
         const answer: Turn[] = reply
           ? [{ role: 'assistant', content: reply, at: Date.now() }]
           : [];
-        shown.current = [...before, question, ...answer];
+        // A failure is kept where the answer would be, so it is still in the
+        // chat when it is opened again.
+        const failure: Turn[] =
+          outcome.status === 'error'
+            ? [
+                {
+                  role: 'assistant',
+                  content: outcome.error,
+                  at: Date.now(),
+                  error: true,
+                },
+              ]
+            : [];
+        shown.current = [...before, question, ...answer, ...failure];
         recordRef.current?.ended(
           { turns: shown.current, history: sent.current },
           [question, ...answer],
@@ -364,9 +377,9 @@ export const AgentSideChat = ({
         }
         const message = err instanceof Error ? err.message : String(err);
         end({ status: 'error', error: message });
-        // Drop the empty reply; keep the question so it can be re-asked.
+        // The error takes the empty reply's place in the chat; the question
+        // stays above it, to be asked again.
         setTurns(shown.current);
-        setError(message);
       } finally {
         if (!controller.signal.aborted) setBusy(false);
       }
@@ -397,7 +410,11 @@ export const AgentSideChat = ({
       at: Date.now(),
     };
     try {
-      const note = await followUp.start(withFiles(message, attached), before);
+      const note = await followUp.start(
+        withFiles(message, attached),
+        // A failed turn's error is not something that was said about the run.
+        before.filter(turn => !turn.error)
+      );
       setText('');
       setFiles([]);
       const answer: Turn = { role: 'assistant', content: note, at: Date.now() };
@@ -496,6 +513,15 @@ export const AgentSideChat = ({
                     </div>
                   ) : null}
                 </div>
+              ) : turn.error ? (
+                <p
+                  key={i}
+                  className={styles.error}
+                  role="alert"
+                  data-testid={`${testId}-turn-error`}
+                >
+                  {turn.content}
+                </p>
               ) : fill && !turn.content ? null : (
                 <div key={i} className={styles.forkReply}>
                   {renderReply(turn.content, busy && i === turns.length - 1)}
