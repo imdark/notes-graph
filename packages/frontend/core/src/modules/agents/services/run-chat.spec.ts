@@ -14,7 +14,64 @@ import {
   RUN_CHAT_OUTPUT_CHARS,
   runChatMessages,
   runDied,
+  standInAgent,
 } from './run-chat';
+
+describe('standInAgent', () => {
+  const subtask = (over: Partial<AgentRun> = {}) =>
+    run({
+      agentId: 'subtask-claude-code',
+      agentName: 'Subtask (Claude Code)',
+      remoteJobId: 'job-1',
+      deviceKey: 'mac-mini',
+      ...over,
+    });
+
+  test('rebuilds a subtask run as its device and model', () => {
+    const agent = standInAgent(subtask(), {
+      deviceKey: 'mac-mini',
+      model: 'claude-code',
+      maxCostUsd: 2,
+      access: 'manage',
+    });
+    expect(agent).toMatchObject({
+      id: 'subtask-claude-code',
+      name: 'Subtask (Claude Code)',
+      harness: 'remote',
+      deviceKey: 'mac-mini',
+      model: 'claude-code',
+      maxCostUsd: 2,
+      access: 'manage',
+      kind: 'worker',
+    });
+    expect(agent?.instructions).toBeTruthy();
+  });
+
+  test('without the job it goes on the run row', () => {
+    expect(standInAgent(subtask({ model: 'workflow' }))).toMatchObject({
+      deviceKey: 'mac-mini',
+      model: 'workflow',
+    });
+    expect(
+      standInAgent(subtask({ model: 'device default' }))?.model
+    ).toBeUndefined();
+  });
+
+  test('has none for a run that was not on a device', () => {
+    expect(standInAgent(run({ harness: 'on-device' }))).toBeNull();
+  });
+
+  test('has none for a shell command job', () => {
+    expect(
+      standInAgent(subtask(), {
+        deviceKey: 'mac-mini',
+        model: null,
+        maxCostUsd: null,
+        access: null,
+      })
+    ).toBeNull();
+  });
+});
 
 const run = (over: Partial<AgentRun> = {}): AgentRun => ({
   id: 'r1',

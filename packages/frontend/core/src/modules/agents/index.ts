@@ -247,6 +247,7 @@ export {
   type RunChatContext,
   runChatMessages,
   runDied,
+  standInAgent,
 } from './services/run-chat';
 export {
   type AgentRunSession,

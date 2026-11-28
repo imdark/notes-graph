@@ -1,9 +1,14 @@
 import type { SavedAskChat } from '../stores/agent-run-logs';
 import type { AgentRun } from '../stores/agent-runs';
+import { type Agent, DEFAULT_MAX_STEPS } from '../stores/agents';
 import type { ChatMessage } from './cloud-runner';
 import type { AgentContext } from './context';
 import { stampLines } from './log-lines';
-import { CLOUD_DEVICE_KEY } from './remote-runner';
+import {
+  CLOUD_DEVICE_KEY,
+  COMMAND_MODEL,
+  type RemoteJob,
+} from './remote-runner';
 
 /**
  * A chat about a run that has ended — done, failed or stopped — so the reader
@@ -177,6 +182,52 @@ export const canResume = (run: AgentRun): boolean =>
   !!run.deviceKey &&
   run.deviceKey !== CLOUD_DEVICE_KEY &&
   run.status !== 'running';
+
+/** What a stand-in agent is told on a new run; the brief carries the task. */
+const STAND_IN_INSTRUCTIONS =
+  'Work the task above to the end, as its note and any lines under it ' +
+  'describe. Keep its status current with update_task. For code, finish ' +
+  'with the change committed on a branch with a pull request.';
+
+/**
+ * The agent a device run ran as, rebuilt from the run and its job, for when
+ * there is no agent row to look up: a subtask started with start_agent_run
+ * runs as one of the server's profiles (`subtask-claude-code`), which has
+ * none, and a saved agent may have been deleted since. Asking about the run
+ * and continuing it then go to the same device and model it ran on.
+ *
+ * Null for a run that was not on a device, and for a shell command: there
+ * is no model to ask.
+ */
+export function standInAgent(
+  run: AgentRun,
+  job?: Pick<RemoteJob, 'deviceKey' | 'model' | 'maxCostUsd' | 'access'> | null
+): Agent | null {
+  const deviceKey = job?.deviceKey || run.deviceKey;
+  if (!deviceKey) return null;
+  // The run row keeps a label, which says 'device default' for no model.
+  const recorded = run.model === 'device default' ? undefined : run.model;
+  const model = job ? (job.model ?? COMMAND_MODEL) : recorded;
+  if (model === COMMAND_MODEL) return null;
+  return {
+    id: run.agentId,
+    scope: 'personal',
+    name: run.agentName,
+    instructions: STAND_IN_INSTRUCTIONS,
+    kind: 'worker',
+    harness: 'remote',
+    model,
+    deviceKey,
+    tools: [],
+    targets: ['block', 'selection', 'doc'],
+    output: 'panel',
+    maxSteps: DEFAULT_MAX_STEPS,
+    maxCostUsd: job?.maxCostUsd ?? undefined,
+    access: job?.access ?? undefined,
+    enabled: true,
+    createdAt: run.startedAt,
+  };
+}
 
 /**
  * What a follow-up in the run's own session reads: only what's new, the

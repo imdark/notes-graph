@@ -15,6 +15,7 @@ import {
   resumeBrief,
   type RunChatContext,
   runChatMessages,
+  standInAgent,
 } from '@notesgraph/core/modules/agents';
 import { WorkspaceService } from '@notesgraph/core/modules/workspace';
 import { useService } from '@notesgraph/infra';
@@ -59,17 +60,31 @@ export const AgentRunChat = ({
   const contextService = useService(AgentContextService);
   const sessionService = useService(AgentRunSessionService);
 
+  // The agent that ran it. A device run with no agent row (a subtask from
+  // start_agent_run, or an agent deleted since) gets one rebuilt from its job,
+  // on the device and model it ran on.
+  const runAgent = useCallback(async () => {
+    const saved = agentsService.agents$.value.find(a => a.id === run.agentId);
+    if (saved) return saved;
+    const job = run.remoteJobId
+      ? await remoteRunner
+          .get(workspaceService.workspace.id, run.remoteJobId)
+          .catch(() => null)
+      : null;
+    return standInAgent(run, job);
+  }, [agentsService, remoteRunner, run, workspaceService]);
+
   // Asked of the agent that ran it, on the same runtime — a run on a device's
   // Claude Code is asked there, not on the server's model.
   const openModel = useCallback(async () => {
-    const agent = agentsService.agents$.value.find(a => a.id === run.agentId);
+    const agent = await runAgent();
     if (!agent) {
       throw new Error(
         `The agent that ran this (${run.agentName}) no longer exists, so there is no one to ask.`
       );
     }
     return executor.chatFor(agent);
-  }, [agentsService, executor, run.agentId, run.agentName]);
+  }, [executor, runAgent, run.agentName]);
 
   // Without the transcript the chat can still go on the input and answer.
   // A follow-up run is given more of the transcript than the chat is.
@@ -107,9 +122,7 @@ export const AgentRunChat = ({
             title:
               'Start a new run of the agent on this task, given this run’s transcript, this chat and what you typed',
             start: async (message, chat) => {
-              const agent = agentsService.agents$.value.find(
-                a => a.id === run.agentId
-              );
+              const agent = await runAgent();
               if (!agent) {
                 throw new Error(
                   `${run.agentName} has been deleted, so there is no agent to continue it.`
@@ -152,7 +165,7 @@ export const AgentRunChat = ({
             },
           }
         : undefined,
-    [agentsService, contextService, run, runRecord, runsStore, sessionService]
+    [contextService, run, runAgent, runRecord, runsStore, sessionService]
   );
 
   // The chat is a row of its own beside the runs, made as it is first asked,
