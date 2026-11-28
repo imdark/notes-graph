@@ -11,9 +11,12 @@ import {
 import { registerAISharedEffects } from '@notesgraph/core/blocksuite/ai/effects/shared';
 import { useAISpecs } from '@notesgraph/core/components/hooks/notesgraph/use-ai-specs';
 import {
+  type AskTurnState,
+  AskTurnsService,
   type ChatMessage,
   type ChatModel,
   CloudAgentRunnerService,
+  LiveAskTurn,
   type SavedAskChat,
 } from '@notesgraph/core/modules/agents';
 import { AppThemeService } from '@notesgraph/core/modules/theme';
@@ -59,6 +62,13 @@ export type SideChatOutcome =
  * calls it; what is stored, and where, is the caller's.
  */
 export interface SideChatRecord {
+  /**
+   * Which chat this is, once it has one (read after `asking`). With it, a
+   * reply goes on when the panel closes, ends in the record as it would have
+   * with the panel open, and is shown again, still coming, when a panel opens
+   * on the same chat. Without it, closing the panel stops the reply.
+   */
+  key?: () => string | null;
   /** A chat kept earlier, shown and continued; null to start afresh. */
   load: () => Promise<SavedAskChat | null>;
   /** A question was sent. */
@@ -163,7 +173,8 @@ const renderFormattedReply = (reply: string, streaming: boolean) => (
  *
  * The model conversation and its opening are made lazily, on the first
  * message, so opening the panel and closing it again costs nothing on the
- * server.
+ * server. A recorded chat's reply is answered in AskTurnsService rather than
+ * in the panel, so closing the panel mid-answer doesn't stop it.
  */
 export const AgentSideChat = ({
   title,
@@ -233,11 +244,43 @@ export const AgentSideChat = ({
   const shown = useRef<Turn[]>([]);
   const recordRef = useRef(record);
   recordRef.current = record;
-  const abort = useRef<AbortController | null>(null);
+  const askTurns = useService(AskTurnsService);
+  // The turn shown as it is answered, and whether it outlives the panel.
+  const live = useRef<{
+    turn: LiveAskTurn;
+    kept: boolean;
+    unwatch: () => void;
+  } | null>(null);
   const listEnd = useRef<HTMLDivElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
 
-  useEffect(() => () => abort.current?.abort(), []);
+  const watch = useCallback((turn: LiveAskTurn, kept: boolean) => {
+    live.current?.unwatch();
+    const apply = (state: AskTurnState) => {
+      setTurns(state.turns);
+      setBusy(state.busy);
+      if (state.busy) return;
+      shown.current = state.turns;
+      sent.current = state.history;
+      if (live.current?.turn === turn) {
+        live.current.unwatch();
+        live.current = null;
+      }
+    };
+    live.current = { turn, kept, unwatch: turn.subscribe(apply) };
+    apply(turn.state);
+  }, []);
+
+  useEffect(
+    () => () => {
+      const current = live.current;
+      live.current = null;
+      current?.unwatch();
+      // A kept chat's reply goes on without the panel; any other is for no one.
+      if (current && !current.kept) current.turn.cancel();
+    },
+    []
+  );
   useEffect(() => {
     listEnd.current?.scrollIntoView({ block: 'nearest' });
   }, [turns]);
@@ -251,22 +294,30 @@ export const AgentSideChat = ({
   useEffect(() => {
     const kept = recordRef.current;
     if (!kept) return;
-    let live = true;
+    // Closed while answering and opened again: the reply is still coming.
+    const key = kept.key?.();
+    const going = key ? askTurns.get(key) : undefined;
+    if (going) {
+      watch(going, true);
+      setLoaded(true);
+      return;
+    }
+    let mounted = true;
     kept
       .load()
       .then(saved => {
-        if (!live || !saved) return;
+        if (!mounted || !saved) return;
         shown.current = saved.turns;
         sent.current = saved.history;
         setTurns(saved.turns);
       })
       // Unreadable: start afresh rather than not at all.
       .catch(() => {})
-      .finally(() => live && setLoaded(true));
+      .finally(() => mounted && setLoaded(true));
     return () => {
-      live = false;
+      mounted = false;
     };
-  }, []);
+  }, [askTurns, watch]);
 
   const start = useCallback(async (): Promise<ChatModel> => {
     if (model.current) return model.current;
@@ -298,7 +349,6 @@ export const AgentSideChat = ({
 
   const ask = useCallback(
     async (message: string, attached: AttachedFile[]) => {
-      setBusy(true);
       setError(null);
       setText('');
       setFiles([]);
@@ -309,10 +359,24 @@ export const AgentSideChat = ({
         at: Date.now(),
       };
       const before = shown.current;
-      setTurns([...before, question, { role: 'assistant', content: '' }]);
-      recordRef.current?.asking();
-      const controller = new AbortController();
-      abort.current = controller;
+      let history = sent.current;
+      // Read once: the panel may close, and its record change, mid-answer.
+      const record = recordRef.current;
+      record?.asking();
+      const key = record?.key?.() ?? null;
+      const asked = {
+        turns: [
+          ...before,
+          question,
+          { role: 'assistant' as const, content: '' },
+        ],
+        history,
+      };
+      const turn = key
+        ? askTurns.begin(key, asked)
+        : new LiveAskTurn({ ...asked, busy: true });
+      watch(turn, !!key);
+      const controller = turn.controller;
       let reply = '';
       // Keep the question, and the reply if any came; then tell the record.
       const end = (outcome: SideChatOutcome) => {
@@ -332,17 +396,21 @@ export const AgentSideChat = ({
                 },
               ]
             : [];
-        shown.current = [...before, question, ...answer, ...failure];
-        recordRef.current?.ended(
-          { turns: shown.current, history: sent.current },
-          [question, ...answer],
-          outcome
-        );
+        // The error takes the empty reply's place in the chat; the question
+        // stays above it, to be asked again.
+        const chat = {
+          turns: [...before, question, ...answer, ...failure],
+          history,
+        };
+        // The record first, so a panel that opens on it as the turn ends
+        // reads the turn there rather than an answer still coming.
+        record?.ended(chat, [question, ...answer], outcome);
+        turn.end(chat);
       };
       try {
         const chat = await start();
-        sent.current = [
-          ...sent.current,
+        history = [
+          ...history,
           { role: 'user', content: withFiles(message, attached) },
         ];
         // A long reply streams in many small chunks; one render per frame
@@ -350,15 +418,13 @@ export const AgentSideChat = ({
         let frame = 0;
         const show = () => {
           frame = 0;
-          const content = reply;
-          setTurns(prev => [
-            ...prev.slice(0, -1),
-            { role: 'assistant', content },
-          ]);
+          turn.update({
+            turns: [...before, question, { role: 'assistant', content: reply }],
+          });
         };
         try {
           for await (const delta of chat(
-            [...opened.current, ...sent.current],
+            [...opened.current, ...history],
             controller.signal
           )) {
             reply += delta;
@@ -368,23 +434,20 @@ export const AgentSideChat = ({
           if (frame) cancelAnimationFrame(frame);
         }
         show();
-        sent.current = [...sent.current, { role: 'assistant', content: reply }];
+        history = [...history, { role: 'assistant', content: reply }];
         end({ status: 'done' });
       } catch (err) {
         if (controller.signal.aborted) {
           end({ status: 'cancelled' });
           return;
         }
-        const message = err instanceof Error ? err.message : String(err);
-        end({ status: 'error', error: message });
-        // The error takes the empty reply's place in the chat; the question
-        // stays above it, to be asked again.
-        setTurns(shown.current);
-      } finally {
-        if (!controller.signal.aborted) setBusy(false);
+        end({
+          status: 'error',
+          error: err instanceof Error ? err.message : String(err),
+        });
       }
     },
-    [start]
+    [askTurns, start, watch]
   );
 
   const canSend =

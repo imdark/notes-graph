@@ -8,6 +8,7 @@ import {
   deviceHarnessName,
   isAskRun,
   openQuestions,
+  AskTurnsService,
   RemoteAgentRunnerService,
   type RemoteArtifact,
   type RemoteJob,
@@ -397,6 +398,7 @@ export const AgentRunLogDialog = ({
   const sessionService = useService(AgentRunSessionService);
   const remoteRunner = useService(RemoteAgentRunnerService);
   const workspaceService = useService(WorkspaceService);
+  const askTurns = useService(AskTurnsService);
   const sessions = useLiveData(sessionService.sessions$);
   const run = useLiveData(
     useMemo(
@@ -430,15 +432,17 @@ export const AgentRunLogDialog = ({
 
   // A run can be stopped from here when this tab is driving it, or when it
   // is a device job (the server cancels it for whoever asks). An on-device
-  // run in another tab has nothing here to stop.
+  // run in another tab has nothing here to stop. A chat about a run is
+  // answered on in this tab after its panel closes, and stopped here.
   const session = run
     ? sessions.find(({ runId }) => runId === run.id)
     : undefined;
-  const ownsRun = !!session?.running;
+  const ownsRun = !!session?.running || (!!run && !!askTurns.get(run.id));
   const canStop = run?.status === 'running' && (ownsRun || !!run.remoteJobId);
   const [stopping, setStopping] = useState(false);
   const stop = useCallback(() => {
     if (!run) return;
+    if (askTurns.cancel(run.id)) return;
     if (session?.running) {
       sessionService.cancel(session.id);
       return;
@@ -455,7 +459,7 @@ export const AgentRunLogDialog = ({
         })
       )
       .finally(() => setStopping(false));
-  }, [remoteRunner, run, session, sessionService, workspaceService]);
+  }, [askTurns, remoteRunner, run, session, sessionService, workspaceService]);
 
   // "Allow all" up front, for a device run that hasn't finished — before it
   // asks anything, even while it waits to be picked up. Set here at once on

@@ -162,6 +162,7 @@ export const AgentRunChat = ({
   );
   const record = useMemo<SideChatRecord>(
     () => ({
+      key: () => askId.current,
       load: async () =>
         askId.current
           ? ((await logsStore.getChat(askId.current)) ?? null)
@@ -181,7 +182,7 @@ export const AgentRunChat = ({
           outcome.status === 'error'
             ? outcome.error
             : outcome.status === 'cancelled'
-              ? 'Closed before the answer came.'
+              ? 'Stopped before the answer came.'
               : undefined;
         // The log only grows, so an error stays in it after a later answer.
         // It is written before the row ends, which is when the Log tab reads.
