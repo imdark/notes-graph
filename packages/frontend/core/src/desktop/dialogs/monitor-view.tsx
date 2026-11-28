@@ -422,6 +422,7 @@ const AskTab = ({
   const chatKey = `monitor-ask:${monitor.id}`;
   const record = useMemo(
     () => ({
+      key: () => chatKey,
       load: async () => (await logsStore.getChat(chatKey)) ?? null,
       asking: () => {},
       ended: (chat: Parameters<typeof logsStore.putChat>[1]) => {

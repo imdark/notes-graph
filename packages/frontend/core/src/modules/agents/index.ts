@@ -2,6 +2,11 @@ export { Agents } from './entities/agents';
 export { AGENT_RULES_TITLE, AgentRulesService } from './services/agent-rules';
 export { AgentsService, DEFAULT_AGENT_TOOLS } from './services/agents';
 export {
+  type AskTurnState,
+  AskTurnsService,
+  LiveAskTurn,
+} from './services/ask-turns';
+export {
   type Automation,
   AUTOMATION_EVENTS,
   AUTOMATION_RUNTIME_LABELS,
@@ -321,6 +326,7 @@ import { WorkspaceScope, WorkspaceService } from '../workspace';
 import { Agents } from './entities/agents';
 import { AgentRulesService } from './services/agent-rules';
 import { AgentsService } from './services/agents';
+import { AskTurnsService } from './services/ask-turns';
 import { AutomationsService } from './services/automations';
 import { CloudAgentRunnerService } from './services/cloud-runner';
 import { AgentContextService } from './services/context';
@@ -348,6 +354,7 @@ export function configureAgentsModule(framework: Framework) {
     .service(AgentsService, [AgentsStore, Agents])
     .service(AgentContextService, [DocsService, ProjectsService])
     .service(AgentRulesService, [DocsService])
+    .service(AskTurnsService)
     .service(AgentFileToolsService, [FolderSyncService])
     .service(RemoteAgentRunnerService, [WorkspaceServerService])
     .service(CloudAgentRunnerService, [WorkspaceServerService])
