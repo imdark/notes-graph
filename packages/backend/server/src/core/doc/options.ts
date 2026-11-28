@@ -3,7 +3,12 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Config, metrics } from '../../base';
 import { QuotaService } from '../quota';
 import { compareCodecResult } from './codec-compare';
-import { applyUpdatesWithNative, applyUpdatesWithYjs } from './merge-updates';
+import {
+  applyUpdatesWithNative,
+  applyUpdatesWithNativeAsync,
+  applyUpdatesWithYjs,
+  totalBytes,
+} from './merge-updates';
 import { DocStorageOptions as IDocStorageOptions } from './storage';
 
 @Injectable()
@@ -15,7 +20,22 @@ export class DocStorageOptions implements IDocStorageOptions {
     private readonly quota: QuotaService
   ) {}
 
+  /** The off-thread merge; a field so a test can stand in for it. */
+  nativeMerge = applyUpdatesWithNativeAsync;
+
   mergeUpdates = async (updates: Uint8Array[]) => {
+    const nativeMinBytes = this.config.doc.nativeMergeMinBytes;
+    if (nativeMinBytes > 0 && totalBytes(updates) >= nativeMinBytes) {
+      const merged = await this.nativeMerge(
+        updates,
+        'doc.options.native_merge',
+        this.logger
+      );
+      if (merged) {
+        return merged;
+      }
+    }
+
     const yjsResult = await applyUpdatesWithYjs(
       updates,
       'doc.options.merge_updates',

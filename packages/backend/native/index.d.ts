@@ -427,6 +427,13 @@ export declare function llmValidateJsonSchema(schema: any, value: any): any
  */
 export declare function mergeUpdatesInApplyWay(updates: Array<Buffer>): Buffer
 
+/**
+ * `merge_updates_in_apply_way` on a worker thread: a large doc takes
+ * hundreds of milliseconds to merge, and on the main thread every other
+ * request waits for it.
+ */
+export declare function mergeUpdatesInApplyWayAsync(updates: Array<Buffer>): Promise<Buffer>
+
 export declare function mintChallengeResponse(resource: string, bits?: number | undefined | null): Promise<string>
 
 export interface ModelConditionsContract {
