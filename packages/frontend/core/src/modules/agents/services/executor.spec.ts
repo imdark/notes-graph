@@ -176,8 +176,10 @@ describe('AgentExecutorService device runs', () => {
           enqueue: async () => job({ id: 'j8', status: 'queued' }),
           agentTargets: async () => [],
           watch: async function* () {
-            yield { job: job({ id: 'j8', status: 'queued' }), logDelta: '' };
-            yield { job: job({ id: 'j8', status: 'queued' }), logDelta: '' };
+            const queued = job({ id: 'j8', status: 'queued' });
+            yield { job: queued, logDelta: '', waitingForSlot: false };
+            yield { job: queued, logDelta: '', waitingForSlot: true };
+            yield { job: queued, logDelta: '', waitingForSlot: true };
             yield { job: job({ id: 'j8', status: 'running' }), logDelta: '' };
             yield {
               job: job({ id: 'j8', status: 'done', result: 'ok' }),
@@ -189,6 +191,7 @@ describe('AgentExecutorService device runs', () => {
     );
     (executor as any).runsStore.attachRemote = () => {};
     const logs: string[] = [];
+    const statuses: string[] = [];
     for await (const event of executor.run(
       {
         id: 'a1',
@@ -204,16 +207,73 @@ describe('AgentExecutorService device runs', () => {
       new AbortController().signal
     )) {
       if (event.type === 'log') logs.push(event.text);
+      if (event.type === 'status') statuses.push(event.text);
     }
     expect(
       logs.join('').match(/⏳ Waiting for a free job slot on laptop/g)
     ).toHaveLength(1);
     expect(waitingForSlot.map(w => w.waiting)).toEqual([
+      false,
       true,
       true,
       false,
       false,
     ]);
+    // Each status replaces the last, and the device running it clears it.
+    expect(statuses).toEqual([
+      'Queued on laptop…',
+      expect.stringMatching(/^Waiting for a free job slot on laptop/),
+      '',
+    ]);
+  });
+
+  test('a running device run’s answer is not its queue status', async () => {
+    const { executor, finished } = setup(
+      [],
+      {},
+      {
+        context: {
+          build: async () => ({ text: 'x', label: 'a block', title: 'x' }),
+        },
+        remoteRunner: {
+          enqueue: async () => job({ id: 'j7', status: 'queued' }),
+          agentTargets: async () => [],
+          watch: async function* () {
+            yield {
+              job: job({ id: 'j7', status: 'queued' }),
+              logDelta: '',
+              waitingForSlot: true,
+            };
+            yield { job: job({ id: 'j7', status: 'running' }), logDelta: '' };
+            yield {
+              job: job({ id: 'j7', status: 'done', result: '' }),
+              logDelta: '',
+            };
+          },
+        },
+      }
+    );
+    (executor as any).runsStore.attachRemote = () => {};
+    for await (const _ of executor.run(
+      {
+        id: 'a1',
+        name: 'W',
+        harness: 'remote',
+        deviceKey: 'laptop',
+        model: 'workflow',
+        tools: [],
+        instructions: 'go',
+        maxSteps: 4,
+      } as any,
+      { kind: 'block', docId: 'doc', blockId: 'b1' },
+      new AbortController().signal
+    )) {
+      // drain
+    }
+    expect(finished.at(-1)?.outcome).toMatchObject({
+      status: 'done',
+      output: '',
+    });
   });
 
   test('a device run is queued with its cost cap and permission level, and records its cost', async () => {
@@ -567,7 +627,10 @@ describe('AgentExecutorService.chatFor', () => {
         remoteRunner: {
           enqueue: async () => job({ id: 'f1', status: 'queued' }),
           watch: async function* () {
-            yield { job: job({ id: 'f1', status: 'queued' }), logDelta: '' };
+            const queued = job({ id: 'f1', status: 'queued' });
+            // Just queued: the device may simply not have asked yet.
+            yield { job: queued, logDelta: '', waitingForSlot: false };
+            yield { job: queued, logDelta: '', waitingForSlot: true };
             yield { job: job({ id: 'f1', status: 'running' }), logDelta: '' };
             yield {
               job: job({ id: 'f1', status: 'done', result: 'Yes.' }),
@@ -587,8 +650,9 @@ describe('AgentExecutorService.chatFor', () => {
     )) {
       // drain
     }
-    expect(notes[0]).toMatch(/free job slot on cloud[\s\S]*Jobs at once/);
-    expect(notes.slice(1)).toEqual([null, null, null]);
+    expect(notes[0]).toBeNull();
+    expect(notes[1]).toMatch(/free job slot on cloud[\s\S]*Jobs at once/);
+    expect(notes.slice(2)).toEqual([null, null, null]);
   });
 
   test('closing a fork before its answer cancels the turn; after it, nothing', async () => {

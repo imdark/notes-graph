@@ -71,6 +71,12 @@ export type AgentEvent =
   | { type: 'title'; title: string }
   | { type: 'tool'; name: string; args: unknown }
   | { type: 'text'; delta: string }
+  /**
+   * Where a device run is before its device has it ("Queued on laptop…"),
+   * shown in place of an answer. Replaces the previous status; empty once
+   * the device is running it.
+   */
+  | { type: 'status'; text: string }
   | { type: 'done'; output: string }
   | { type: 'error'; message: string };
 
@@ -543,7 +549,7 @@ export class AgentExecutorService extends Service implements AgentExecutor {
       if (signal.aborted) cancel();
       signal.addEventListener('abort', cancel, { once: true });
       try {
-        for await (const { job: update } of remoteRunner.watch(
+        for await (const { job: update, waitingForSlot } of remoteRunner.watch(
           workspaceId,
           job.id,
           signal
@@ -553,7 +559,7 @@ export class AgentExecutorService extends Service implements AgentExecutor {
           onWaiting?.(
             update.status === 'held'
               ? 'Waiting for the workspace’s prestart automations to check this run…'
-              : update.status === 'queued'
+              : update.status === 'queued' && waitingForSlot
                 ? `Waiting for a free job slot on ${deviceKey}. Runs waiting on you hold their slots: answer one, or raise "Jobs at once" for ${deviceKey} on the Monitoring page.`
                 : null
           );
@@ -1205,7 +1211,14 @@ export class AgentExecutorService extends Service implements AgentExecutor {
       })
       .catch(() => {});
 
-    yield { type: 'text', delta: `Queued on ${agent.deviceKey}…\n` };
+    const queued = `Queued on ${agent.deviceKey}…`;
+    let status = queued;
+    yield { type: 'status', text: status };
+    const setStatus = (text: string): AgentEvent | null => {
+      if (text === status) return null;
+      status = text;
+      return { type: 'status', text };
+    };
 
     // Set while the job waits out the device's session limit, so it is said
     // once per wait rather than on every update.
@@ -1213,11 +1226,11 @@ export class AgentExecutorService extends Service implements AgentExecutor {
     // Whether "waiting for a free slot" was said, so it is said once.
     let saidWaiting = false;
     let title = job.title ?? context.title;
-    for await (const { job: update, logDelta } of this.remoteRunner.watch(
-      workspaceId,
-      job.id,
-      signal
-    )) {
+    for await (const {
+      job: update,
+      logDelta,
+      waitingForSlot = false,
+    } of this.remoteRunner.watch(workspaceId, job.id, signal)) {
       if (logDelta) yield { type: 'log', text: logDelta };
       this.runsStore.setUsage(runId, {
         costUsd: update.costUsd,
@@ -1232,31 +1245,36 @@ export class AgentExecutorService extends Service implements AgentExecutor {
         jobId: job.id,
         questions: openQuestions(update),
       };
-      // Queued with no session-limit hold: every job slot on the device is
-      // taken. Said once in the log, and kept on the run so other screens
-      // (the Deployments rows, the run cards) can show it is waiting.
-      const waitingForSlot = update.status === 'queued' && !update.runAfter;
-      if (waitingForSlot && !saidWaiting) {
-        saidWaiting = true;
-        const waiting = `Waiting for a free job slot on ${agent.deviceKey}: every slot is taken, by other runs or runs waiting on you. Raise "Jobs at once" for ${agent.deviceKey} on the Monitoring page to run more at once.`;
-        yield logLine(`⏳ ${waiting}`);
-        yield { type: 'text', delta: `${waiting}\n` };
-      }
-      this.runsStore.setWaitingForSlot(runId, waitingForSlot);
-      if (
-        update.status === 'queued' &&
-        update.runAfter &&
-        update.runAfter !== heldUntil
-      ) {
-        heldUntil = update.runAfter;
-        const at = new Date(update.runAfter * 1000).toLocaleString();
-        const held = `Session limit reached on ${agent.deviceKey}; waiting to run again at ${at}…`;
+      const runAfter =
+        update.status === 'queued' && update.runAfter ? update.runAfter : null;
+      const held = runAfter
+        ? `Session limit reached on ${agent.deviceKey}; waiting to run again at ${new Date(runAfter * 1000).toLocaleString()}…`
+        : null;
+      if (held && runAfter !== heldUntil) {
+        heldUntil = runAfter;
         // In the log too: a held run has nothing else to show there, and an
         // empty log reads as a stuck run.
         yield logLine(`⏸ ${held}`);
-        yield { type: 'text', delta: `${held}\n` };
-        continue;
       }
+      // Still queued after a free device would have claimed it: every job
+      // slot there is taken. Said once in the log, and kept on the run so
+      // other screens (the Deployments rows, the run cards) can show it.
+      const slot = waitingForSlot
+        ? `Waiting for a free job slot on ${agent.deviceKey}: every slot is taken, by other runs or runs waiting on you. Raise "Jobs at once" for ${agent.deviceKey} on the Monitoring page to run more at once.`
+        : null;
+      if (slot && !saidWaiting) {
+        saidWaiting = true;
+        yield logLine(`⏳ ${slot}`);
+      }
+      this.runsStore.setWaitingForSlot(runId, waitingForSlot);
+      // Once the device has the job the status goes, so a running run reads
+      // as working rather than as still queued.
+      const changed = setStatus(
+        update.status === 'queued' || update.status === 'held'
+          ? (held ?? slot ?? queued)
+          : ''
+      );
+      if (changed) yield changed;
       if (update.status === 'running') {
         yield { type: 'step', index: Math.max(0, update.steps - 1) };
         continue;

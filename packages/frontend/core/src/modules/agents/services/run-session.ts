@@ -441,6 +441,8 @@ export class AgentRunSessionService extends Service {
     // only once the device takes its job — so its tasks go from queued to in
     // progress. Resolves to the tasks moved, to hand back when the run ends.
     let started: Promise<string[]> | undefined;
+    // Whether the output shown is a device run's status, not an answer.
+    let showingStatus = false;
 
     try {
       for await (const event of this.executor.run(
@@ -475,13 +477,20 @@ export class AgentRunSessionService extends Service {
           });
         } else if (event.type === 'text') {
           patch(prev => ({ ...prev, output: prev.output + event.delta }));
+        } else if (event.type === 'status') {
+          // A device run's status stands in for its answer until it has
+          // one, and goes once the device is running it.
+          showingStatus = !!event.text;
+          patch(prev => ({ ...prev, output: event.text }));
         } else if (event.type === 'error') {
           patch(prev => ({ ...prev, error: event.message }));
         } else if (event.type === 'done') {
           answered = true;
           // A device or cloud run streams only its status ("Queued on
           // cloud…"); its answer comes with `done`, and replaces that.
-          if (event.output) patch(prev => ({ ...prev, output: event.output }));
+          if (event.output || showingStatus) {
+            patch(prev => ({ ...prev, output: event.output }));
+          }
         }
       }
     } catch (err) {

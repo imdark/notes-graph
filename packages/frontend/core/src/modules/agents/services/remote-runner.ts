@@ -352,6 +352,11 @@ export interface RemoteJobUpdate {
   job: RemoteJob;
   /** Transcript text that is new since the previous update. */
   logDelta: string;
+  /**
+   * Queued, not held for a session limit, and not picked up for longer than
+   * a free device takes to claim a job: every job slot there is taken.
+   */
+  waitingForSlot?: boolean;
 }
 
 /**
@@ -555,6 +560,12 @@ export interface EnqueueRemoteJob {
 
 /** How often to ask the server whether a remote run has moved on. */
 const POLL_MS = 1500;
+/**
+ * How long a device with a free slot can take to claim a job: `wf agent
+ * serve` asks for work every 5 seconds, so a job still queued after several
+ * of those is waiting for a slot rather than for the next ask.
+ */
+export const SLOT_WAIT_AFTER_MS = 20_000;
 /**
  * How long following a run rides out the server being unreachable before
  * giving up on it. A deploy restarts the server for about half a minute; the
@@ -1041,6 +1052,8 @@ export class RemoteAgentRunnerService extends Service {
     let lastWaiting = '';
     let lastTitle: string | null | undefined;
     let lastAllowAll: boolean | undefined;
+    let lastWaitingForSlot = false;
+    let queuedSince: number | null = null;
     let logFrom = 0;
     try {
       let failingSince: number | null = null;
@@ -1072,20 +1085,29 @@ export class RemoteAgentRunnerService extends Service {
         const waiting = waitingSteers(job)
           .map(s => s.id)
           .join(',');
+        const now = Date.now();
+        // Counted from when this watch saw it queued and free to run (not
+        // held for a session limit), so a hold's wait is not counted.
+        const free = job.status === 'queued' && !job.runAfter;
+        queuedSince = free ? (queuedSince ?? now) : null;
+        const waitingForSlot =
+          queuedSince !== null && now - queuedSince >= SLOT_WAIT_AFTER_MS;
         if (
           job.status !== lastStatus ||
           logDelta ||
           open !== lastOpen ||
           waiting !== lastWaiting ||
           job.title !== lastTitle ||
-          job.allowAllTools !== lastAllowAll
+          job.allowAllTools !== lastAllowAll ||
+          waitingForSlot !== lastWaitingForSlot
         ) {
           lastStatus = job.status;
           lastOpen = open;
           lastWaiting = waiting;
           lastTitle = job.title;
           lastAllowAll = job.allowAllTools;
-          yield { job, logDelta };
+          lastWaitingForSlot = waitingForSlot;
+          yield { job, logDelta, waitingForSlot };
         }
         if (['done', 'error', 'cancelled'].includes(job.status)) {
           return;

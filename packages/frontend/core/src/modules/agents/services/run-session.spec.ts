@@ -228,6 +228,51 @@ describe('AgentRunSessionService', () => {
     expect(finished[0]).toMatchObject({ output: 'The answer.' });
   });
 
+  test('a device run shows its queue status only until the device runs it', async () => {
+    let release = () => {};
+    const running = new Promise<void>(resolve => (release = resolve));
+    let finish = () => {};
+    const ended = new Promise<void>(resolve => (finish = resolve));
+    const executor = {
+      harnessFor: (a: Agent) => a.harness ?? 'on-device',
+      async *run(): AsyncIterable<AgentEvent> {
+        yield { type: 'started', runId: 'run-1' };
+        yield { type: 'status', text: 'Queued on laptop…' };
+        yield { type: 'status', text: 'Waiting for a free job slot on laptop' };
+        await running;
+        yield { type: 'status', text: '' };
+        yield { type: 'step', index: 0 };
+        await ended;
+        yield { type: 'done', output: '' };
+      },
+    };
+    const framework = new Framework();
+    framework.service(AgentExecutorService, executor as any);
+    framework.service(AgentTaskClaimService, fakeClaim().claim as any);
+    framework.service(AgentRunSessionService, [
+      AgentExecutorService,
+      AgentTaskClaimService,
+    ]);
+    const sessions = framework.provider().get(AgentRunSessionService);
+
+    void sessions.start(remote, block('b1'));
+    await tick();
+    expect(sessions.sessions$.value[0].output).toBe(
+      'Waiting for a free job slot on laptop'
+    );
+
+    release();
+    await tick();
+    expect(sessions.sessions$.value[0]).toMatchObject({
+      running: true,
+      output: '',
+    });
+
+    finish();
+    await tick();
+    expect(sessions.sessions$.value[0].output).toBe('');
+  });
+
   test('a stopped run is not announced', async () => {
     const { runs, sessions } = fakeExecutor();
     const finished: AgentRunFinished[] = [];
