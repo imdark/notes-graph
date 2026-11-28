@@ -5,7 +5,7 @@ import { FetchService } from '@notesgraph/core/modules/cloud/services/fetch';
 import { WorkspaceServerService } from '@notesgraph/core/modules/cloud/services/workspace-server';
 import { UserFriendlyError } from '@notesgraph/error';
 import { Framework } from '@notesgraph/infra';
-import { describe, expect, test } from 'vitest';
+import { afterEach, describe, expect, test, vi } from 'vitest';
 
 import {
   attachmentKind,
@@ -227,6 +227,68 @@ describe('RemoteAgentRunnerService.watch', () => {
       url: '/api/registry/workspaces/ws-1/jobs/job-1/cancel',
       method: 'POST',
     });
+  });
+});
+
+describe('RemoteAgentRunnerService.watch waiting for a job slot', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  /** Follows a job whose server answers `at(msSinceStart)` on each poll. */
+  const follow = async (at: (ms: number) => RemoteJob) => {
+    vi.useFakeTimers();
+    const start = Date.now();
+    const { runner } = createRunner([() => at(Date.now() - start)]);
+    const updates: { status: string; waitingForSlot?: boolean }[] = [];
+    const watching = (async () => {
+      for await (const { job: update, waitingForSlot } of runner.watch(
+        'ws-1',
+        'job-1',
+        new AbortController().signal
+      )) {
+        updates.push({ status: update.status, waitingForSlot });
+      }
+    })();
+    await vi.advanceTimersByTimeAsync(60_000);
+    await watching;
+    return updates;
+  };
+
+  test('a job the device has yet to claim is not waiting for a slot', async () => {
+    const updates = await follow(ms =>
+      job({ status: ms < 6_000 ? 'queued' : ms < 9_000 ? 'running' : 'done' })
+    );
+    expect(updates).toEqual([
+      { status: 'queued', waitingForSlot: false },
+      { status: 'running', waitingForSlot: false },
+      { status: 'done', waitingForSlot: false },
+    ]);
+  });
+
+  test('a job still queued long after a free device would claim it is', async () => {
+    const updates = await follow(ms =>
+      job({ status: ms < 30_000 ? 'queued' : ms < 33_000 ? 'running' : 'done' })
+    );
+    expect(updates).toEqual([
+      { status: 'queued', waitingForSlot: false },
+      { status: 'queued', waitingForSlot: true },
+      { status: 'running', waitingForSlot: false },
+      { status: 'done', waitingForSlot: false },
+    ]);
+  });
+
+  test('a job held for a session limit is not waiting for a slot', async () => {
+    const runAfter = Date.now() / 1000 + 3600;
+    const updates = await follow(ms =>
+      ms < 30_000
+        ? job({ status: 'queued', runAfter })
+        : job({ status: 'done', runAfter })
+    );
+    expect(updates).toEqual([
+      { status: 'queued', waitingForSlot: false },
+      { status: 'done', waitingForSlot: false },
+    ]);
   });
 });
 
