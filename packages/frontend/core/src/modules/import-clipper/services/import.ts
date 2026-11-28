@@ -8,6 +8,7 @@ import {
   type WorkspaceMetadata,
   type WorkspacesService,
 } from '../../workspace';
+import { addPlayableVideos, isPlayableMedia } from '../utils/playable-video';
 
 export interface ClipperInput {
   title: string;
@@ -16,6 +17,8 @@ export interface ClipperInput {
   attachments: Record<string, Blob>;
   /** The page the content was clipped from, when the clipper sends it. */
   sourceUrl?: string;
+  /** YouTube players the page had (iframe src), kept as players in the note. */
+  videoEmbeds?: string[];
   workspace?: 'select-by-user' | 'last-open-workspace';
   /**
    * Set on the first message of a clip: just the title and link, so the note
@@ -23,6 +26,28 @@ export interface ClipperInput {
    * which {@link ImportClipperService.fillClippedDoc} writes into that note.
    */
   pending?: boolean;
+}
+
+/**
+ * Video and audio go into the note as players (see addPlayableVideos); the
+ * rest, images mostly, through the markdown import.
+ */
+function splitAttachments(attachments: Record<string, Blob> = {}) {
+  const media: Record<string, Blob> = {};
+  const assets: Record<string, Blob> = {};
+  for (const [key, blob] of Object.entries(attachments)) {
+    (isPlayableMedia(blob) ? media : assets)[key] = blob;
+  }
+  return { media, assets };
+}
+
+function playableVideosOf(input: ClipperInput, media: Record<string, Blob>) {
+  return {
+    sourceUrl: input.sourceUrl,
+    title: input.title,
+    videoEmbeds: input.videoEmbeds,
+    media,
+  };
 }
 
 export class ImportClipperService extends Service {
@@ -55,13 +80,19 @@ export class ImportClipperService extends Service {
           store.deleteBlock(child);
         }
       });
+      const { media, assets } = splitAttachments(clipperInput.attachments);
       await MarkdownTransformer.importMarkdownToBlock({
         doc: store,
         blockId: note.id,
         markdown: clipperInput.contentMarkdown,
-        assets: clipperInput.attachments ?? {},
+        assets,
         extensions: getStoreManager().config.init().value.get('store'),
       });
+      await addPlayableVideos(
+        store,
+        note.id,
+        playableVideosOf(clipperInput, media)
+      );
       workspace.engine.doc.addPriority(docId, 100);
       await workspace.engine.doc.waitForSynced(docId);
     } finally {
@@ -79,17 +110,33 @@ export class ImportClipperService extends Service {
         metadata: workspaceMetadata,
       });
     await workspace.engine.doc.waitForDocReady(workspace.id); // wait for root doc ready
+    const { media, assets } = splitAttachments(clipperInput.attachments);
     const docId = await MarkdownTransformer.importMarkdownWithAssets({
       collection: workspace.docCollection,
       schema: getNotesGraphWorkspaceSchema(),
       markdown: clipperInput.contentMarkdown,
       // Persist the clipper's captured media (images/files) as workspace blobs
       // so clipped content is archived, not dropped.
-      assets: clipperInput.attachments ?? {},
+      assets,
       extensions: getStoreManager().config.init().value.get('store'),
     });
     const docsService = workspace.scope.get(DocsService);
     if (docId) {
+      const { doc, release } = docsService.open(docId);
+      try {
+        await doc.waitForSyncReady();
+        const store = doc.blockSuiteDoc;
+        const note = store.getBlocksByFlavour('notesgraph:note')[0];
+        if (note) {
+          await addPlayableVideos(
+            store,
+            note.id,
+            playableVideosOf(clipperInput, media)
+          );
+        }
+      } finally {
+        release();
+      }
       // only support page mode for now
       await docsService.changeDocTitle(docId, clipperInput.title);
       docsService.list.setPrimaryMode(docId, 'page');

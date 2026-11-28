@@ -70,9 +70,27 @@ page, with its cookies), capped at 150 MB, and sends it to the app tab in
 16 MB pieces. The note says "Video downloaded". When no file comes through,
 the clip falls back to the playback capture below.
 
-**YouTube is not covered.** Its pages don't hand the browser a plain file, and
-fetching one means imitating YouTube's own apps to get around its download
-protection, which this extension doesn't do.
+**YouTube is not downloaded.** Its pages don't hand the browser a plain file,
+and fetching one means imitating YouTube's own apps to get around its download
+protection, which this extension doesn't do. Instead the note keeps YouTube's
+own player (below).
+
+## The video plays in the note
+
+The app (`addPlayableVideos` in
+`packages/frontend/core/src/modules/import-clipper/utils/playable-video.ts`)
+puts the video right below the note's **Original** link:
+
+- A downloaded or recorded video file becomes an **inline player** (an
+  embedded attachment; the file is kept as a workspace blob).
+- Clipping a **YouTube video page** (`watch`, `shorts`, `live`, `youtu.be`)
+  adds YouTube's player for that video, titled with the page title.
+- Any page with **YouTube players embedded** (`<iframe src=".../embed/<id>">`)
+  keeps up to four of them, each once. The extractor sends them as
+  `videoEmbeds`.
+
+A YouTube player streams from YouTube, so it stops working if the video is
+taken down; a downloaded file doesn't.
 
 ## Video capture fallback (LinkedIn / Facebook)
 
@@ -99,6 +117,3 @@ clicking Clip. The result shows "+ video"; the note says "(with audio)" or
 - The audio path is **realtime** — only the portion you actually played is
   recorded.
 - Output is **WebM** (audio path) or MP4 (fallback); capped at ~80 MB.
-- The stored blob is linked via `![](video-0.<ext>)`; rendering it as an inline
-  **video player** (vs a thumbnail) is a small app-side follow-up — the bytes
-  are archived regardless and downloadable from the note.

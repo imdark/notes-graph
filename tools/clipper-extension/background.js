@@ -125,6 +125,7 @@ function deliverToApp(payload) {
     contentMarkdown: payload.contentMarkdown,
     contentHtml: payload.contentHtml || '',
     sourceUrl: payload.sourceUrl,
+    videoEmbeds: payload.videoEmbeds || [],
     attachments,
     workspace: payload.workspace,
     pending: !!payload.pending,
@@ -358,18 +359,15 @@ function waitForTabComplete(tabId) {
 function buildMarkdown(clip, imageKeys, videoKey, video) {
   const parts = [`# ${clip.title || clip.siteName || 'Clipped page'}`, ''];
   parts.push(`[Original](${clip.url})`, '');
-  // Captured video: the app turns non-image attachments into an attachment
-  // block (openable/plays), so we DON'T image-ref it here (that'd be a broken
-  // thumbnail). Just leave a note; the blob rides in attachments.
+  // The video rides in attachments, not as an image ref (that'd be a broken
+  // thumbnail): the app puts it in as a player right below the Original link,
+  // and YouTube players on the page too. This line says what was kept.
   if (videoKey && video) {
     if (video.downloaded) {
-      parts.push('> 📹 Video downloaded — attached below.', '');
+      parts.push('> 📹 Video downloaded.', '');
     } else {
       const audioNote = video.hasAudio ? ' (with audio)' : ' (video only)';
-      parts.push(
-        `> 📹 Recorded the played part of the video${audioNote} — attached below.`,
-        ''
-      );
+      parts.push(`> 📹 Recorded the played part of the video${audioNote}.`, '');
     }
   }
   for (const key of imageKeys) parts.push(`![](${key})`, '');
@@ -535,6 +533,7 @@ async function readClip(tab) {
     contentHtml: '',
     attachmentsData,
     videos: clip.videos,
+    videoEmbeds: clip.videoEmbeds || [],
     // Kept on the note as where the clip came from.
     sourceUrl: clip.url,
     workspace: 'last-open-workspace',

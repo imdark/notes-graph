@@ -103,6 +103,23 @@ function extractClip() {
     }
   );
 
+  // ---- YouTube players (the app keeps them as players; the file can't be had) ----
+  const videoEmbeds = [];
+  Array.prototype.forEach.call(
+    document.querySelectorAll(
+      'iframe[src*="youtube.com/embed/"], iframe[src*="youtube-nocookie.com/embed/"]'
+    ),
+    function (frame) {
+      const src = absUrl(frame.getAttribute('src'));
+      if (
+        src &&
+        videoEmbeds.indexOf(src) < 0 &&
+        videoEmbeds.length < MAX_VIDEOS
+      )
+        videoEmbeds.push(src);
+    }
+  );
+
   // ---- text ----
   const titleEl = document.querySelector('title');
   const title = (
@@ -137,6 +154,7 @@ function extractClip() {
     text: text,
     images: images,
     videos: videos,
+    videoEmbeds: videoEmbeds,
     poster: poster,
   };
 }
