@@ -4,7 +4,10 @@ When a device run asks its starter something (a question, or permission for
 a tool), the server pushes it to that person's phones through Firebase Cloud
 Messaging. The Android notification answers it in place:
 
-- **Permission:** Allow · Deny · Deny with note (typed reply goes to the agent)
+- **Permission:** Allow · Deny · Deny with note (typed reply goes to the agent).
+  The text says why the agent wants the tool when the tool input gives a
+  reason, as Bash's `description` does ("Allow Bash? Run the widget
+  tests"); the server sends it as `reason` (`permissionReason` in `push.ts`).
 - **Question:** up to two choices as buttons · Reply (every choice offered as a chip)
 - **Tap:** opens a full view that reads the question back from the server, with
   the whole tool input, a note field, and Allow / Allow all / Deny.

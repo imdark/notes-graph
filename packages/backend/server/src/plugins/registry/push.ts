@@ -10,12 +10,41 @@ const MAX_DATA_BYTES = 3_500;
 const MAX_PUSH_TEXT = 600;
 const MAX_PUSH_DETAIL = 1_200;
 const MAX_PUSH_OPTION = 80;
+const MAX_PUSH_REASON = 300;
 
 const clip = (value: string, max: number) =>
   value.length > max ? `${value.slice(0, max - 1)}…` : value;
 
 const bytes = (data: Record<string, string>) =>
   Buffer.byteLength(JSON.stringify(data), 'utf8');
+
+/**
+ * Why the agent wants a tool, in its own words: Claude Code's Bash and Task
+ * calls carry a one-line `description` of what they are for. The detail is
+ * the tool input as JSON, but a runner clips it to the server's cap, and
+ * clipped JSON no longer parses, so the field is then read out on its own.
+ * Empty when the tool gave no reason (Edit, Write, most MCP tools).
+ */
+export function permissionReason(detail: string | null | undefined): string {
+  if (!detail) return '';
+  let description: unknown;
+  try {
+    const input: unknown = JSON.parse(detail);
+    if (input && typeof input === 'object' && !Array.isArray(input)) {
+      description = (input as Record<string, unknown>).description;
+    }
+  } catch {
+    const literal = /"description"\s*:\s*("(?:[^"\\]|\\.)*")/.exec(detail)?.[1];
+    if (literal) {
+      try {
+        description = JSON.parse(literal);
+      } catch {
+        description = undefined;
+      }
+    }
+  }
+  return typeof description === 'string' ? description.trim() : '';
+}
 
 /**
  * What the phone needs to show a question and answer it from the
@@ -49,17 +78,25 @@ export function questionPushData(
     // so the notification says which task asks, not only which agent.
     title: clip(job.title ?? '', 200),
     text: clip(question.text, MAX_PUSH_TEXT),
+    // Why a permission is asked for, so the notification says what the
+    // command is for and not only which tool wants to run.
+    reason:
+      question.kind === 'permission'
+        ? clip(permissionReason(question.detail), MAX_PUSH_REASON)
+        : '',
     detail: clip(question.detail ?? '', MAX_PUSH_DETAIL),
     options: JSON.stringify(
       (question.options ?? []).map(option => clip(option, MAX_PUSH_OPTION))
     ),
   };
   // The tool input is the first thing to give up: the phone can still open
-  // the run to see it in full.
+  // the run to see it in full. The reason outlasts it, being what a person
+  // decides on from the notification.
   if (bytes(data) > MAX_DATA_BYTES) data.detail = '';
   if (bytes(data) > MAX_DATA_BYTES) data.options = '[]';
   if (bytes(data) > MAX_DATA_BYTES) data.text = clip(data.text, 200);
   if (bytes(data) > MAX_DATA_BYTES) data.title = clip(data.title, 80);
+  if (bytes(data) > MAX_DATA_BYTES) data.reason = clip(data.reason, 120);
   return data;
 }
 
