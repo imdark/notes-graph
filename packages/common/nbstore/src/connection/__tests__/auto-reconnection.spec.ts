@@ -301,3 +301,48 @@ test('connecting timeout', async () => {
   expect(connection.connectCount).toBe(5);
   expect(connection.status).toBe('closed');
 });
+
+test('a stalled connect is recorded in the load log', async () => {
+  class TestConnection extends AutoReconnectConnection {
+    override connectingTimeout = 100;
+    override retryDelay = 50;
+    connectCount = 0;
+    override get shareId() {
+      return 'test:stalled';
+    }
+    override async doConnect() {
+      // The first connect outlives the timeout; the retry is quick.
+      const slow = ++this.connectCount === 1;
+      await new Promise(resolve => setTimeout(resolve, slow ? 250 : 10));
+      return { n: this.connectCount };
+    }
+    override doDisconnect() {}
+  }
+  const log = () =>
+    (
+      (globalThis as { __ngLoadLog?: Record<string, unknown>[] }).__ngLoadLog ??
+      []
+    ).filter(entry => entry.connection === 'test:stalled');
+
+  const connection = new TestConnection();
+  connection.connect();
+
+  await vitest.waitFor(() => {
+    expect(connection.status).toBe('connected');
+    expect(log().map(entry => entry.event)).toEqual([
+      'connection-timeout',
+      // the retry that held, so the stall's end is in the log too
+      'connection-retried',
+      // the first connect, finishing after it was given up on
+      'connection-late',
+    ]);
+  });
+  const [timeout, retry, late] = log();
+  expect(timeout).toMatchObject({ attempt: 1, where: expect.any(String) });
+  expect(timeout.ms as number).toBeGreaterThanOrEqual(90);
+  expect(retry).toMatchObject({ attempt: 2 });
+  expect(late).toMatchObject({ attempt: 1 });
+  expect(late.ms as number).toBeGreaterThanOrEqual(240);
+
+  connection.disconnect();
+});

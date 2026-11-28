@@ -1,6 +1,10 @@
 import EventEmitter2 from 'eventemitter2';
 
 import { MANUALLY_STOP } from '../utils/throw-if-aborted';
+import { recordLoadEvent } from './load-log';
+
+/** A connect this slow is worth a line in the load log. */
+const SLOW_CONNECT_MS = 1000;
 
 export type ConnectionStatus =
   | 'idle'
@@ -33,6 +37,8 @@ export abstract class AutoReconnectConnection<
   retryDelay = 3000;
   connectingTimeout = 15000;
   private refCount = 0;
+  /** Connects tried since the last one that held; 1 is the first. */
+  private attempts = 0;
   private connectingAbort?: AbortController;
   private reconnectingAbort?: AbortController;
 
@@ -40,6 +46,14 @@ export abstract class AutoReconnectConnection<
 
   get shareId(): string | undefined {
     return undefined;
+  }
+
+  /**
+   * Which connection this is, for the load log. The share id names the
+   * database or server; class names are minified in a build.
+   */
+  private get label(): string {
+    return this.shareId ?? this.constructor.name;
   }
 
   get maybeConnection() {
@@ -93,15 +107,38 @@ export abstract class AutoReconnectConnection<
       const connectingAbort = new AbortController();
       this.connectingAbort = connectingAbort;
       const signal = connectingAbort.signal;
+      const started = Date.now();
+      const attempt = ++this.attempts;
+      let timedOut = false;
       const timeout = setTimeout(() => {
         if (!signal.aborted) {
+          timedOut = true;
+          recordLoadEvent('connection-timeout', {
+            connection: this.label,
+            attempt,
+            ms: Date.now() - started,
+          });
           this.handleError(new Error('connecting timeout'));
         }
       }, this.connectingTimeout);
       this.doConnect(signal)
         .then(value => {
           clearTimeout(timeout);
+          const ms = Date.now() - started;
+          // Also when it comes after the timeout gave up on it: how long the
+          // connect really took is what says whether waiting would have won.
+          if (ms >= SLOW_CONNECT_MS || attempt > 1 || timedOut) {
+            recordLoadEvent(
+              timedOut
+                ? 'connection-late'
+                : ms >= SLOW_CONNECT_MS
+                  ? 'connection-slow'
+                  : 'connection-retried',
+              { connection: this.label, attempt, ms }
+            );
+          }
           if (!signal.aborted) {
+            this.attempts = 0;
             this._inner = value;
             this.setStatus('connected');
           } else {
@@ -115,6 +152,12 @@ export abstract class AutoReconnectConnection<
         .catch(error => {
           if (!signal.aborted) {
             clearTimeout(timeout);
+            recordLoadEvent('connection-failed', {
+              connection: this.label,
+              attempt,
+              ms: Date.now() - started,
+              error: String((error as Error)?.message ?? error),
+            });
             console.error('failed to connect', error);
             this.handleError(error as any);
           }
