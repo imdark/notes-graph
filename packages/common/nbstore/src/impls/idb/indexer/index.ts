@@ -1,6 +1,6 @@
 import { merge, Observable, of, Subject, throttleTime } from 'rxjs';
 
-import { share } from '../../../connection';
+import { recordLoadEvent, share } from '../../../connection';
 import type {
   AggregateOptions,
   AggregateResult,
@@ -15,6 +15,39 @@ import { fromPromise } from '../../../utils/from-promise';
 import { IDBConnection, type IDBConnectionOptions } from '../db';
 import { DataStruct } from './data-struct';
 import { backoffRetry, exhaustMapWithTrailing } from './utils';
+
+/** An index read or write this slow goes in the load log. */
+const SLOW_INDEXER_MS = 1000;
+
+/**
+ * Times one index operation. IndexedDB serves a site's requests one after
+ * another, so a long query or write here holds up every other read of the
+ * workspace's data, in every tab: a note opened meanwhile waits behind it.
+ */
+async function timed<T>(
+  op: string,
+  table: string,
+  detail: () => Record<string, unknown>,
+  run: () => Promise<T>
+): Promise<T> {
+  const started = Date.now();
+  try {
+    return await run();
+  } finally {
+    const ms = Date.now() - started;
+    if (ms >= SLOW_INDEXER_MS) {
+      recordLoadEvent('indexer-slow', { op, table, ms, ...detail() });
+    }
+  }
+}
+
+const brief = (value: unknown) => {
+  try {
+    return JSON.stringify(value)?.slice(0, 300);
+  } catch {
+    return undefined;
+  }
+};
 
 export class IndexedDBIndexerStorage extends IndexerStorageBase {
   static readonly identifier = 'IndexedDBIndexerStorage';
@@ -57,8 +90,15 @@ export class IndexedDBIndexerStorage extends IndexerStorageBase {
     T extends keyof IndexerSchema,
     const O extends SearchOptions<T>,
   >(table: T, query: Query<T>, options?: O): Promise<SearchResult<T, O>> {
-    const trx = await this.data.readonly(this.database);
-    return this.data.search(trx, table, query, options);
+    return timed(
+      'search',
+      table,
+      () => ({ query: brief(query) }),
+      async () => {
+        const trx = await this.data.readonly(this.database);
+        return this.data.search(trx, table, query, options);
+      }
+    );
   }
   override async aggregate<
     T extends keyof IndexerSchema,
@@ -69,8 +109,15 @@ export class IndexedDBIndexerStorage extends IndexerStorageBase {
     field: keyof IndexerSchema[T],
     options?: O
   ): Promise<AggregateResult<T, O>> {
-    const trx = await this.data.readonly(this.database);
-    return this.data.aggregate(trx, table, query, field as string, options);
+    return timed(
+      'aggregate',
+      table,
+      () => ({ query: brief(query), field }),
+      async () => {
+        const trx = await this.data.readonly(this.database);
+        return this.data.aggregate(trx, table, query, field as string, options);
+      }
+    );
   }
   override search$<
     T extends keyof IndexerSchema,
@@ -81,8 +128,15 @@ export class IndexedDBIndexerStorage extends IndexerStorageBase {
       exhaustMapWithTrailing(() => {
         return fromPromise(async () => {
           try {
-            const trx = await this.data.readonly(this.database);
-            return await this.data.search(trx, table, query, options);
+            return await timed(
+              'search$',
+              table,
+              () => ({ query: brief(query) }),
+              async () => {
+                const trx = await this.data.readonly(this.database);
+                return this.data.search(trx, table, query, options);
+              }
+            );
           } catch (error) {
             console.error('search error', error);
             throw error;
@@ -105,13 +159,20 @@ export class IndexedDBIndexerStorage extends IndexerStorageBase {
       exhaustMapWithTrailing(() => {
         return fromPromise(async () => {
           try {
-            const trx = await this.data.readonly(this.database);
-            return await this.data.aggregate(
-              trx,
+            return await timed(
+              'aggregate$',
               table,
-              query,
-              field as string,
-              options
+              () => ({ query: brief(query), field }),
+              async () => {
+                const trx = await this.data.readonly(this.database);
+                return this.data.aggregate(
+                  trx,
+                  table,
+                  query,
+                  field as string,
+                  options
+                );
+              }
             );
           } catch (error) {
             console.error('aggregate error', error);
@@ -156,24 +217,48 @@ export class IndexedDBIndexerStorage extends IndexerStorageBase {
   override async refresh<T extends keyof IndexerSchema>(
     table: T
   ): Promise<void> {
-    const trx = await this.data.readwrite(this.database);
     const tables = table ? [table] : (['doc', 'block'] as const);
-    for (const table of tables) {
-      await this.data.batchWrite(
-        trx,
-        table,
-        this.pendingUpdates[table].deleteByQueries,
-        this.pendingUpdates[table].deletes,
-        this.pendingUpdates[table].inserts,
-        this.pendingUpdates[table].updates
-      );
-      this.pendingUpdates[table] = {
-        deleteByQueries: [],
-        deletes: [],
-        inserts: [],
-        updates: [],
-      };
-    }
+    const sizes = Object.fromEntries(
+      tables.map(t => {
+        const p = this.pendingUpdates[t];
+        return [
+          t,
+          {
+            deleteByQueries: p.deleteByQueries.length,
+            deletes: p.deletes.length,
+            inserts: p.inserts.length,
+            updates: p.updates.length,
+          },
+        ];
+      })
+    );
+    await timed(
+      'write',
+      table ?? 'all',
+      () => ({ wrote: sizes }),
+      async () => {
+        const trx = await this.data.readwrite(this.database);
+        for (const table of tables) {
+          await this.data.batchWrite(
+            trx,
+            table,
+            this.pendingUpdates[table].deleteByQueries,
+            this.pendingUpdates[table].deletes,
+            this.pendingUpdates[table].inserts,
+            this.pendingUpdates[table].updates
+          );
+          this.pendingUpdates[table] = {
+            deleteByQueries: [],
+            deletes: [],
+            inserts: [],
+            updates: [],
+          };
+        }
+        // The data is on disk only once the transaction is done, and a
+        // large one can take long to commit.
+        await trx.done;
+      }
+    );
     this.emitTableUpdated(table);
   }
 
