@@ -308,6 +308,67 @@ export class DataStruct {
     return result;
   }
 
+  /**
+   * `exists` matches every record that has a field, by reading the field's
+   * whole range of the inverted index: about 100 ms in a workspace of 1,200
+   * notes, whatever the rest of the query narrows it to. A note page keeps
+   * some 60 live "links from these notes" queries, each with the same
+   * `exists refDocId`, and every index write re-runs them all in every open
+   * tab; IndexedDB serves them one after another, so one write held the
+   * database for about a minute and a note opened meanwhile waited behind
+   * it. The scan's result is the same for all of them, so it is done once and
+   * shared until the index is next written.
+   *
+   * Keyed by table and field. The scans in flight are shared too, which is
+   * why they run here, before the caller's transaction: awaiting another
+   * transaction's request inside one lets it lapse.
+   */
+  private readonly existsScans = new Map<string, Promise<Match>>();
+
+  /** The index was written: every shared `exists` result is out of date. */
+  invalidateExists() {
+    this.existsScans.clear();
+  }
+
+  /**
+   * Resolve the query's `exists` clauses ahead of its transaction. Returns
+   * the cache to hand to {@link search} or {@link aggregate}.
+   *
+   * A write that lands between this and the caller's transaction leaves the
+   * `exists` part one write behind the rest. A live query is re-run by that
+   * same write; a one-off query can be that much out of date.
+   */
+  async prefetchExists(
+    database: IDBPDatabase<DocStorageSchema>,
+    table: keyof IndexerSchema,
+    query: Query<any>
+  ): Promise<QueryCache> {
+    const cache = new QueryCache();
+    for (const exists of existsClauses(query)) {
+      const iidx = this.invertedIndex.get(table)?.get(exists.field as string);
+      if (!iidx) continue;
+      const key = `${table}:${String(exists.field)}`;
+      let scan = this.existsScans.get(key);
+      if (!scan) {
+        const started = (scan = this.readonly(database).then(trx =>
+          iidx.all(trx)
+        ));
+        this.existsScans.set(key, started);
+        started.catch(() => {
+          if (this.existsScans.get(key) === started) {
+            this.existsScans.delete(key);
+          }
+        });
+      }
+      try {
+        cache.set(exists, await scan);
+      } catch {
+        // the query's own transaction scans it, and reports what failed
+      }
+    }
+    return cache;
+  }
+
   async clear(trx: DataStructRWTransaction) {
     await trx.objectStore('indexerRecords').clear();
     await trx.objectStore('invertedIndex').clear();
@@ -318,14 +379,15 @@ export class DataStruct {
     trx: DataStructROTransaction,
     table: keyof IndexerSchema,
     query: Query<any>,
-    options: SearchOptions<any> = {}
+    options: SearchOptions<any> = {},
+    cache?: QueryCache
   ): Promise<SearchResult<any, any>> {
     const pagination = {
       skip: options.pagination?.skip ?? 0,
       limit: options.pagination?.limit ?? 100,
     };
 
-    const match = await this.queryRaw(trx, table, query);
+    const match = await this.queryRaw(trx, table, query, cache);
 
     const nids = match
       .toArray()
@@ -356,7 +418,8 @@ export class DataStruct {
     table: keyof IndexerSchema,
     query: Query<any>,
     field: string,
-    options: AggregateOptions<any> = {}
+    options: AggregateOptions<any> = {},
+    cache?: QueryCache
   ): Promise<AggregateResult<any, any>> {
     const pagination = {
       skip: options.pagination?.skip ?? 0,
@@ -370,7 +433,7 @@ export class DataStruct {
         }
       : { skip: 0, limit: 0 };
 
-    const match = await this.queryRaw(trx, table, query);
+    const match = await this.queryRaw(trx, table, query, cache);
 
     const nids = match.toArray();
 
@@ -531,7 +594,17 @@ export class DataStruct {
     };
   }
 }
-class QueryCache {
+/** Every `exists` clause in a query, however deeply nested. */
+function existsClauses(
+  query: Query<any>
+): Extract<Query<any>, { type: 'exists' }>[] {
+  if (query.type === 'exists') return [query];
+  if (query.type === 'boolean') return query.queries.flatMap(existsClauses);
+  if (query.type === 'boost') return existsClauses(query.query);
+  return [];
+}
+
+export class QueryCache {
   private readonly cache: [Query<any>, Match][] = [];
 
   get(query: Query<any>) {

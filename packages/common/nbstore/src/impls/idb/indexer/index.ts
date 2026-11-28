@@ -95,8 +95,9 @@ export class IndexedDBIndexerStorage extends IndexerStorageBase {
       table,
       () => ({ query: brief(query) }),
       async () => {
+        const cache = await this.prefetchExists(table, query);
         const trx = await this.data.readonly(this.database);
-        return this.data.search(trx, table, query, options);
+        return this.data.search(trx, table, query, options, cache);
       }
     );
   }
@@ -114,8 +115,16 @@ export class IndexedDBIndexerStorage extends IndexerStorageBase {
       table,
       () => ({ query: brief(query), field }),
       async () => {
+        const cache = await this.prefetchExists(table, query);
         const trx = await this.data.readonly(this.database);
-        return this.data.aggregate(trx, table, query, field as string, options);
+        return this.data.aggregate(
+          trx,
+          table,
+          query,
+          field as string,
+          options,
+          cache
+        );
       }
     );
   }
@@ -133,8 +142,9 @@ export class IndexedDBIndexerStorage extends IndexerStorageBase {
               table,
               () => ({ query: brief(query) }),
               async () => {
+                const cache = await this.prefetchExists(table, query);
                 const trx = await this.data.readonly(this.database);
-                return this.data.search(trx, table, query, options);
+                return this.data.search(trx, table, query, options, cache);
               }
             );
           } catch (error) {
@@ -164,13 +174,15 @@ export class IndexedDBIndexerStorage extends IndexerStorageBase {
               table,
               () => ({ query: brief(query), field }),
               async () => {
+                const cache = await this.prefetchExists(table, query);
                 const trx = await this.data.readonly(this.database);
                 return this.data.aggregate(
                   trx,
                   table,
                   query,
                   field as string,
-                  options
+                  options,
+                  cache
                 );
               }
             );
@@ -259,7 +271,27 @@ export class IndexedDBIndexerStorage extends IndexerStorageBase {
         await trx.done;
       }
     );
+    this.data.invalidateExists();
     this.emitTableUpdated(table);
+  }
+
+  /** Channels already watched for another context's index writes. */
+  private readonly watchedChannels = new WeakSet<BroadcastChannel>();
+
+  /**
+   * The query's `exists` clauses, resolved once and shared between queries
+   * until the index is written (see DataStruct.prefetchExists).
+   */
+  private prefetchExists(table: keyof IndexerSchema, query: Query<any>) {
+    // Another tab or worker writing the index says so on the channel.
+    const channel = this.channel;
+    if (!this.watchedChannels.has(channel)) {
+      this.watchedChannels.add(channel);
+      channel.addEventListener('message', (ev: MessageEvent) => {
+        if (ev.data?.type === 'indexer-updated') this.data.invalidateExists();
+      });
+    }
+    return this.data.prefetchExists(this.database, table, query);
   }
 
   override async refreshIfNeed(): Promise<void> {
@@ -281,6 +313,8 @@ export class IndexedDBIndexerStorage extends IndexerStorageBase {
     return new Observable(subscriber => {
       const listener = (ev: MessageEvent) => {
         if (ev.data.type === 'indexer-updated' && ev.data.table === table) {
+          // Before the query this starts, whichever listener runs first.
+          this.data.invalidateExists();
           subscriber.next(1);
         }
       };
