@@ -36,8 +36,54 @@ async function timed<T>(
   } finally {
     const ms = Date.now() - started;
     if (ms >= SLOW_INDEXER_MS) {
-      recordLoadEvent('indexer-slow', { op, table, ms, ...detail() });
+      if (op === 'write') {
+        recordLoadEvent('indexer-slow', { op, table, ms, ...detail() });
+      } else {
+        noteSlowQuery(op, table, ms, detail);
+      }
     }
+  }
+}
+
+/**
+ * Slow queries come in bursts: an index write re-runs every live query, and
+ * they wait on the same thing and finish together, some 70 of them from one
+ * note page. One line each filled the log in three writes, so a burst is
+ * one line: how many, the longest, and that one's query.
+ */
+const SLOW_QUERY_BURST_MS = 2000;
+let slowQueries: {
+  count: number;
+  maxMs: number;
+  ops: Record<string, number>;
+  slowest: Record<string, unknown>;
+} | null = null;
+
+function noteSlowQuery(
+  op: string,
+  table: string,
+  ms: number,
+  detail: () => Record<string, unknown>
+) {
+  if (!slowQueries) {
+    const burst = (slowQueries = { count: 0, maxMs: 0, ops: {}, slowest: {} });
+    const timer = setTimeout(() => {
+      slowQueries = null;
+      recordLoadEvent('indexer-slow', {
+        op: 'queries',
+        count: burst.count,
+        ms: burst.maxMs,
+        ops: burst.ops,
+        slowest: burst.slowest,
+      });
+    }, SLOW_QUERY_BURST_MS);
+    (timer as { unref?: () => void }).unref?.();
+  }
+  slowQueries.count++;
+  slowQueries.ops[op] = (slowQueries.ops[op] ?? 0) + 1;
+  if (ms > slowQueries.maxMs) {
+    slowQueries.maxMs = ms;
+    slowQueries.slowest = { op, table, ms, ...detail() };
   }
 }
 
@@ -244,6 +290,7 @@ export class IndexedDBIndexerStorage extends IndexerStorageBase {
         ];
       })
     );
+    let changed = false;
     await timed(
       'write',
       table ?? 'all',
@@ -251,7 +298,7 @@ export class IndexedDBIndexerStorage extends IndexerStorageBase {
       async () => {
         const trx = await this.data.readwrite(this.database);
         for (const table of tables) {
-          await this.data.batchWrite(
+          const wrote = await this.data.batchWrite(
             trx,
             table,
             this.pendingUpdates[table].deleteByQueries,
@@ -259,6 +306,7 @@ export class IndexedDBIndexerStorage extends IndexerStorageBase {
             this.pendingUpdates[table].inserts,
             this.pendingUpdates[table].updates
           );
+          if (wrote) changed = true;
           this.pendingUpdates[table] = {
             deleteByQueries: [],
             deletes: [],
@@ -271,6 +319,9 @@ export class IndexedDBIndexerStorage extends IndexerStorageBase {
         await trx.done;
       }
     );
+    // A batch that stored nothing new (a note re-indexed with no block
+    // changed) has nothing for the live queries to re-run for.
+    if (!changed) return;
     this.data.invalidateExists();
     this.emitTableUpdated(table);
   }

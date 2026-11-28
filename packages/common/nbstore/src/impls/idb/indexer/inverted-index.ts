@@ -13,11 +13,45 @@ export interface InvertedIndex {
 
   all(trx: DataStructROTransaction): Promise<Match>;
 
+  /**
+   * `stats`, when given, takes a full-text field's count and length instead
+   * of them being read and written for every record: the caller writes the
+   * totals once (see {@link flushFullTextStats}).
+   */
   insert(
     trx: DataStructRWTransaction,
     id: number,
-    terms: string[]
+    terms: string[],
+    stats?: FullTextStats
   ): Promise<void>;
+}
+
+/** Per metadata-key prefix `table:field`: fields added and their length. */
+export type FullTextStats = Map<string, { count: number; length: number }>;
+
+/** Add a batch's full-text counts to the stored totals, once. */
+export async function flushFullTextStats(
+  trx: DataStructRWTransaction,
+  stats: FullTextStats
+) {
+  const store = trx.objectStore('indexerMetadata');
+  for (const [field, added] of stats) {
+    if (added.count === 0) continue;
+    const countKey = `full-text:field-count:${field}`;
+    const avgKey = `full-text:avg-field-length:${field}`;
+    const [countObj, avgObj] = await Promise.all([
+      store.get(countKey),
+      store.get(avgKey),
+    ]);
+    const total = countObj?.value ?? 0;
+    const avg = avgObj?.value ?? 0;
+    const newTotal = total + added.count;
+    const newAvg = (avg * total + added.length) / newTotal;
+    await Promise.all([
+      store.put({ key: countKey, value: newTotal }),
+      store.put({ key: avgKey, value: isNaN(newAvg) ? 0 : newAvg }),
+    ]);
+  }
 }
 
 export class StringInvertedIndex implements InvertedIndex {
@@ -377,7 +411,12 @@ export class FullTextInvertedIndex implements InvertedIndex {
     return match;
   }
 
-  async insert(trx: DataStructRWTransaction, id: number, terms: string[]) {
+  async insert(
+    trx: DataStructRWTransaction,
+    id: number,
+    terms: string[],
+    stats?: FullTextStats
+  ) {
     const promises: Promise<any>[] = [];
     const totalTermLength = terms.reduce((acc, term) => acc + term.length, 0);
     const globalTokenMap = new Map<
@@ -417,6 +456,16 @@ export class FullTextInvertedIndex implements InvertedIndex {
           pos: positions,
         })
       );
+    }
+
+    if (stats) {
+      const field = `${this.table}:${this.fieldKey}`;
+      const added = stats.get(field) ?? { count: 0, length: 0 };
+      added.count += terms.length;
+      added.length += totalTermLength;
+      stats.set(field, added);
+      await Promise.all(promises);
+      return;
     }
 
     const indexerMetadataStore = trx.objectStore('indexerMetadata');
